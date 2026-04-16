@@ -1,0 +1,411 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import {
+  ShoppingBag,
+  ChevronRight,
+  Star,
+  Shield,
+  Truck,
+  RefreshCcw,
+  Plus,
+  Minus,
+  Check,
+  Share2,
+  ExternalLink,
+  User,
+  Bell,
+  BellRing,
+  X,
+} from "lucide-react";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { cn } from "@/lib/utils";
+import ProductReviews from "@/components/products/ProductReviews";
+import StockNotifyModal from "@/components/products/StockNotifyModal";
+import { useCartStore } from "@/store/useCartStore";
+import Navbar from "@/components/Navbar";
+import Footer from "@/components/Footer";
+import { supabase } from "@/lib/supabase";
+
+type Variant = {
+  id: string;
+  sku: string | null;
+  price: number;
+  compare_at_price: number | null;
+  stock: number | null;
+  is_active: boolean | null;
+  variant_option_id: string | null;
+  variant_options: {
+    value: string;
+    variant_groups: { name: string } | null;
+  } | null;
+};
+
+type Product = {
+  id: string;
+  title: string;
+  description: string | null;
+  slug: string;
+  price: number;
+  stock: number;
+  images: string[] | null;
+  image_url: string | null;
+  has_variants: boolean | null;
+  brands: { name: string } | null;
+  categories: { name: string } | null;
+  product_variants: Variant[] | null;
+};
+
+export default function ProductPageClient({ product }: { product: Product }) {
+  const images =
+    product.images && product.images.length > 0
+      ? product.images
+      : [product.image_url || "https://images.unsplash.com/photo-1494438639946-1ebd1d20bf85?q=80&w=800"];
+
+  const activeVariants = product.product_variants?.filter((v) => v.is_active) ?? [];
+
+  const [selectedImage, setSelectedImage] = useState<string>(images[0]);
+  const [quantity, setQuantity] = useState(1);
+  const [selectedVariant, setSelectedVariant] = useState<Variant | null>(
+    activeVariants.length > 0 ? activeVariants[0] : null
+  );
+  const [isAdding, setIsAdding] = useState(false);
+  const [notifyModalOpen, setNotifyModalOpen] = useState(false);
+  // notifiedVariants: başarıyla bildirim kaydedilen variant ID'leri
+  const [notifiedVariants, setNotifiedVariants] = useState<Set<string>>(new Set());
+  const { addItem, items } = useCartStore();
+
+  // OAuth yönlendirmesinden geri döndükten sonra bekleyen bildirimi otomatik gönder
+  useEffect(() => {
+    async function checkPendingNotify() {
+      const raw = localStorage.getItem("pendingStockNotify");
+      if (!raw) return;
+      let pending: { productId: string; variantId?: string } | null = null;
+      try { pending = JSON.parse(raw); } catch {
+        localStorage.removeItem("pendingStockNotify");
+        return;
+      }
+      if (!pending || pending.productId !== product.id) return;
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      localStorage.removeItem("pendingStockNotify");
+      const res = await fetch("/api/stock-notify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productId: pending.productId, variantId: pending.variantId }),
+      });
+      if (res.ok && pending.variantId) {
+        setNotifiedVariants((prev) => new Set(prev).add(pending!.variantId!));
+      }
+    }
+    checkPendingNotify();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [product.id]);
+
+  const currentPrice =
+    product.has_variants && selectedVariant ? selectedVariant.price : product.price;
+  const currentCompareAt =
+    product.has_variants && selectedVariant
+      ? (selectedVariant.compare_at_price ?? null)
+      : null;
+  const currentStock =
+    product.has_variants && selectedVariant ? (selectedVariant.stock ?? 0) : product.stock;
+  const isOutOfStock = currentStock === 0;
+
+  function handleAddToCart() {
+    const cartId =
+      product.has_variants && selectedVariant
+        ? `var_${selectedVariant.id}`
+        : `prod_${product.id}`;
+
+    addItem({
+      id: cartId,
+      product_id: product.id,
+      variant_id: selectedVariant?.id,
+      title: product.title,
+      image: selectedImage,
+      price: currentPrice,
+      quantity,
+      stock: currentStock,
+      variant_name: selectedVariant?.variant_options?.value,
+    });
+
+    setIsAdding(true);
+    setTimeout(() => setIsAdding(false), 1000);
+  }
+
+  return (
+    <div className="min-h-screen bg-white">
+      <Navbar />
+
+      <main className="container mx-auto px-4 py-8 md:py-12">
+        {/* Breadcrumbs */}
+        <nav
+          aria-label="breadcrumb"
+          className="flex items-center gap-2 text-sm text-slate-500 mb-8 overflow-x-auto whitespace-nowrap pb-2"
+        >
+          <Link href="/" className="hover:text-blue-600">Anasayfa</Link>
+          <ChevronRight size={14} />
+          <Link href="#" className="hover:text-blue-600">
+            {product.categories?.name || "Kategori"}
+          </Link>
+          <ChevronRight size={14} />
+          <span className="text-slate-900 font-medium truncate">{product.title}</span>
+        </nav>
+
+        <div className="grid md:grid-cols-2 gap-12 lg:gap-20">
+          {/* Gallery */}
+          <div className="space-y-4">
+            <div className="aspect-[4/5] rounded-3xl overflow-hidden bg-slate-50 border relative group">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={selectedImage}
+                alt={product.title}
+                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+              />
+              <Badge className="absolute top-6 left-6 bg-white/90 text-slate-900 border-none px-3 py-1 font-bold shadow-sm">
+                {product.brands?.name || "Premium"}
+              </Badge>
+            </div>
+            {images.length > 1 && (
+              <div className="grid grid-cols-4 gap-4">
+                {images.map((img, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setSelectedImage(img)}
+                    className={`aspect-square rounded-xl overflow-hidden border-2 transition-all ${
+                      selectedImage === img
+                        ? "border-blue-600 ring-2 ring-blue-100"
+                        : "border-transparent hover:border-slate-200"
+                    }`}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={img}
+                      alt={`${product.title} ${idx + 1}`}
+                      className="w-full h-full object-cover"
+                    />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Product Info */}
+          <div className="space-y-8 animate-in fade-in slide-in-from-right duration-700">
+            <div className="space-y-4">
+              <div className="flex items-center gap-4">
+                <Badge variant="outline" className="text-blue-600 border-blue-100 bg-blue-50/50">
+                  {product.categories?.name}
+                </Badge>
+                <div className="flex items-center text-yellow-500 text-sm font-bold">
+                  <Star size={16} fill="currentColor" />
+                  <Star size={16} fill="currentColor" />
+                  <Star size={16} fill="currentColor" />
+                  <Star size={16} fill="currentColor" />
+                  <Star size={16} fill="currentColor" className="text-slate-200" />
+                  <span className="ml-2 text-slate-500">4.0 (12 Değerlendirme)</span>
+                </div>
+              </div>
+              <h1 className="text-4xl md:text-5xl font-black text-slate-900 leading-tight">
+                {product.title}
+              </h1>
+              <div className="flex items-baseline gap-4">
+                <span className="text-3xl font-black text-blue-600">
+                  ₺{currentPrice.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                </span>
+                {currentCompareAt && currentCompareAt > currentPrice && (
+                  <span className="text-lg text-slate-400 line-through">
+                    ₺{currentCompareAt.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <Separator className="bg-slate-100" />
+
+            <div className="space-y-3">
+              <h3 className="font-bold text-slate-900">Ürün Açıklaması</h3>
+              <div className="text-slate-600 leading-relaxed whitespace-pre-wrap">
+                {product.description ||
+                  "Bu ürün hakkında henüz detaylı bir açıklama girilmemiş. Modern tasarımı ve kaliteli yapısıyla yaşam alanınıza şıklık katacak."}
+              </div>
+            </div>
+
+            {/* Variants */}
+            {product.has_variants && activeVariants.length > 0 && (
+              <div className="space-y-4">
+                <h3 className="font-bold text-slate-900">
+                  {activeVariants[0]?.variant_options?.variant_groups?.name || "Seçenekler"}
+                </h3>
+                <div className="flex flex-wrap gap-3">
+                  {activeVariants.map((v) => {
+                    const hasStock = (v.stock ?? 0) > 0;
+                    const isSelected = selectedVariant?.id === v.id;
+                    const isNotified = notifiedVariants.has(v.id);
+                    return (
+                      <button
+                        key={v.id}
+                        onClick={() => setSelectedVariant(v)}
+                        className={cn(
+                          "relative min-w-[56px] px-4 py-3 rounded-xl border-2 font-bold transition-all text-sm text-center",
+                          isSelected
+                            ? hasStock
+                              ? "border-blue-600 bg-blue-50 text-blue-700 ring-2 ring-blue-100"
+                              : "border-amber-400 bg-amber-50 text-amber-700 ring-2 ring-amber-100"
+                            : hasStock
+                              ? "border-slate-200 hover:border-slate-400 text-slate-700 bg-white"
+                              : "border-slate-200 text-slate-500 bg-slate-50 hover:border-slate-300"
+                        )}
+                      >
+                        {v.variant_options?.value ?? v.sku ?? "?"}
+                        {isSelected && hasStock && (
+                          <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-blue-600 rounded-full flex items-center justify-center">
+                            <Check size={8} className="text-white" />
+                          </span>
+                        )}
+                        {isNotified && (
+                          <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center">
+                            <Check size={8} className="text-white" />
+                          </span>
+                        )}
+                        {!hasStock && !isNotified && (
+                          <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-400 rounded-full flex items-center justify-center">
+                            <X size={8} className="text-white" />
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Add to Cart */}
+            <div className="space-y-4 pt-4">
+              {/* Stokta var → adet seçici */}
+              {!isOutOfStock && (
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center border-2 border-slate-100 rounded-xl p-1 bg-slate-50">
+                    <button
+                      onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                      className="p-3 hover:bg-white rounded-lg transition-colors"
+                    >
+                      <Minus size={18} />
+                    </button>
+                    <span className="w-12 text-center font-bold text-lg">{quantity}</span>
+                    <button
+                      onClick={() => setQuantity(quantity + 1)}
+                      className="p-3 hover:bg-white rounded-lg transition-colors"
+                    >
+                      <Plus size={18} />
+                    </button>
+                  </div>
+                  <span className="text-sm font-medium text-green-600 flex items-center gap-1.5">
+                    <span className="w-2 h-2 bg-green-500 rounded-full inline-block" />
+                    {currentStock} Adet Stokta
+                  </span>
+                </div>
+              )}
+
+              {/* Stokta yok → bilgilendirme bandı */}
+              {isOutOfStock && (
+                <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-100 rounded-2xl">
+                  <BellRing size={18} className="text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-bold text-amber-800">
+                      Bu seçenek şu an stokta yok.
+                    </p>
+                    <p className="text-xs text-amber-600 mt-0.5">
+                      Stok girişinde sizi haberdar edebiliriz.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-4">
+                {!isOutOfStock ? (
+                  <>
+                    <Button
+                      size="lg"
+                      className={cn(
+                        "flex-1 h-16 rounded-2xl text-lg font-bold shadow-xl gap-3 transition-all duration-300",
+                        isAdding
+                          ? "bg-green-600 hover:bg-green-700"
+                          : "bg-blue-600 hover:bg-blue-700 shadow-blue-100"
+                      )}
+                      disabled={isAdding}
+                      onClick={handleAddToCart}
+                    >
+                      {isAdding ? <Check size={22} className="animate-in zoom-in" /> : <ShoppingBag size={22} />}
+                      {isAdding ? "Sepete Eklendi!" : "Sepete Ekle"}
+                    </Button>
+                    <Button size="lg" variant="outline" className="h-16 w-16 rounded-2xl p-0 border-2">
+                      <Star size={22} className="text-slate-400" />
+                    </Button>
+                  </>
+                ) : selectedVariant && notifiedVariants.has(selectedVariant.id) ? (
+                  /* Bildirim zaten kaydedildi */
+                  <div className="flex-1 h-16 rounded-2xl bg-green-50 border border-green-200 flex items-center justify-center gap-2 text-green-700 font-bold text-sm">
+                    <Check size={18} /> Bildirim Kaydedildi
+                  </div>
+                ) : (
+                  /* Bildirim kaydet butonu */
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    className="flex-1 h-16 rounded-2xl border-2 border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100 font-bold gap-3 transition-all"
+                    onClick={() => setNotifyModalOpen(true)}
+                  >
+                    <Bell size={20} />
+                    Stoka Girince Haber Ver
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {/* Benefits */}
+            <div className="grid grid-cols-3 gap-4 pt-4">
+              {[
+                { icon: Truck, label: "Hızlı Kargo" },
+                { icon: RefreshCcw, label: "Kolay İade" },
+                { icon: Shield, label: "Güvenli" },
+              ].map(({ icon: Icon, label }) => (
+                <Card key={label} className="border-none bg-slate-50 shadow-none">
+                  <CardContent className="p-4 flex flex-col items-center text-center space-y-2">
+                    <Icon className="text-blue-600" size={24} />
+                    <span className="text-[10px] font-bold text-slate-900 uppercase">{label}</span>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <ProductReviews productId={product.id} />
+      </main>
+
+      <Footer />
+
+      {/* Stok bildirimi modalı */}
+      <StockNotifyModal
+        open={notifyModalOpen}
+        onClose={() => setNotifyModalOpen(false)}
+        onSuccess={(vid) => {
+          setNotifyModalOpen(false);
+          if (vid) setNotifiedVariants((prev) => new Set(prev).add(vid));
+        }}
+        productId={product.id}
+        productTitle={product.title}
+        variantId={selectedVariant?.id}
+        variantName={selectedVariant?.variant_options?.value}
+      />
+    </div>
+  );
+}

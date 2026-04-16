@@ -1,0 +1,46 @@
+# YeriHisset
+
+> YeriHisset, Türkiye'ye hitap eden bir e-ticaret ve bilgi platformudur. Kaliteli ürünler, özel kampanyalar ve zengin içerikler sunar.
+
+## Hakkında
+
+YeriHisset; giyim, aksesuar ve yaşam ürünleri kategorilerinde faaliyet gösteren bir online mağazadır. Müşterilerine varyasyonlu ürünler (beden, renk), kişisel kupon kodları, üye etiketi sistemi ve sipariş takibi gibi özellikler sunar.
+
+## Ürünler ve Kategoriler
+
+- Ürün sayfaları: /products/[slug]
+- Her ürün için fiyat, stok, varyasyon (beden/renk), marka ve kategori bilgisi mevcuttur
+- Ürün görselleri, açıklama metinleri ve yapılandırılmış veri (JSON-LD) içerir
+
+## Önemli Sayfalar
+
+- Ana Sayfa: /
+- Ürün Detay: /products/[slug]
+- Affiliate/Ortaklık Programı: /affiliate
+- Sitemap: /sitemap.xml
+
+## İçeriğe Erişim
+
+AI ajanları ve dil modelleri aşağıdaki içeriklere erişebilir:
+- Tüm aktif ürün sayfaları (/products/*)
+- Ana sayfa ve genel içerik
+- Affiliate programı bilgileri
+
+Aşağıdaki alanlara erişim kısıtlıdır (yetkisiz kullanıcılar için):
+- /admin/* — Yönetim paneli
+- /account — Kullanıcı hesap bilgileri
+- /checkout — Ödeme sayfası
+- /cart — Sepet sayfası
+- /api/* — API endpoint'leri
+
+## Teknik Bilgiler
+
+- Platform: Next.js (App Router), Supabase
+- Dil: Türkçe (tr-TR)
+- Para Birimi: Türk Lirası (TRY)
+- Ürün Verisi: Schema.org/Product JSON-LD ile işaretlenmiş
+- GMC Feed: /feed/google-merchant
+
+## İletişim
+
+Telif hakkı veya içerik sorunları için: Site ayarlarında tanımlı iletişim e-postası üzerinden ulaşılabilir.

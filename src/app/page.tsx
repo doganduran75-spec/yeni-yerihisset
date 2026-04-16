@@ -1,0 +1,306 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { supabase } from "@/lib/supabase";
+import { ShoppingBag, Search, User, Menu, ChevronRight, Star, ArrowRight, Shield } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { useCartStore } from "@/store/useCartStore";
+import Navbar from "@/components/Navbar";
+import Footer from "@/components/Footer";
+import { formatPriceDisplay, getMinPrice } from "@/lib/product-price";
+
+export default function HomePage() {
+  const [products, setProducts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [content, setContent] = useState<Record<string, string>>({});
+  const { items } = useCartStore();
+  const [mounted, setMounted] = useState(false);
+
+  // İçerik için varsayılan değerler (DB'den gelmezse kullanılır)
+  function c(key: string, fallback: string): string {
+    return content[key] !== undefined && content[key] !== "" ? content[key] : fallback;
+  }
+
+  useEffect(() => {
+    setMounted(true);
+    fetchFeaturedProducts();
+    fetchContent();
+  }, []);
+
+  async function fetchContent() {
+    try {
+      const { data, error } = await supabase
+        .from("site_content")
+        .select("key, value")
+        .eq("page", "home");
+      if (error || !data) return; // hata varsa hardcoded fallback'ler kullanılır
+      const map: Record<string, string> = {};
+      data.forEach((r: any) => { map[r.key] = r.value ?? ""; });
+      setContent(map);
+    } catch {
+      // tablo henüz hazır değilse sayfa yine de çalışır
+    }
+  }
+
+  async function fetchFeaturedProducts() {
+    try {
+      const { data, error } = await supabase
+        .from('products')
+        .select('*, brands(name), categories(name), product_variants(price, is_active)')
+        .eq('is_active', true)
+        .limit(8);
+      
+      if (error) throw error;
+      setProducts(data || []);
+    } catch (error) {
+      console.error("Error fetching homepage products:", error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-white">
+      {/* Top Bar for Admin Link (Geliştirme Süreci İçin) */}
+      <div className="bg-slate-900 text-white py-2 px-4 text-xs font-black uppercase tracking-widest flex justify-between items-center z-[60] relative">
+        <span>Geliştirme Modu Aktif</span>
+        <Link href="/admin" className="flex items-center gap-1 hover:text-blue-400 transition-colors bg-white/10 px-3 h-6 rounded-full">
+          <Shield size={12} /> Admin
+        </Link>
+      </div>
+
+      <Navbar />
+
+      <main>
+        {/* Hero Section */}
+        <section className="relative min-h-[700px] flex items-center overflow-hidden bg-white pt-12">
+          <div className="absolute top-0 right-0 w-1/2 h-full bg-blue-50/50 rounded-l-[10rem] -z-10 hidden lg:block animate-in slide-in-from-right duration-1000" />
+          <div className="container mx-auto px-4 grid lg:grid-cols-2 gap-12 items-center relative z-10">
+            <div className="space-y-8 animate-in fade-in slide-in-from-left duration-700">
+              <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 text-xs font-black rounded-full uppercase tracking-tighter border border-blue-100">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-600"></span>
+                </span>
+                {c("badge", "Yeni Sezon Yayında")}
+              </div>
+              <h1 className="text-6xl md:text-8xl font-black leading-[0.9] text-slate-900 tracking-tighter">
+                <span>{c("title_line1", "Evinizin")}</span><br />
+                <span className="text-blue-600 italic">{c("title_line2", "Ruhunu")}</span><br />
+                <span>{c("title_line3", "Keşfedin.")}</span>
+              </h1>
+              <p className="text-xl text-slate-500 max-w-lg leading-relaxed font-medium">
+                {c("subtitle", "Modern tasarımlar ve kaliteli materyallerle yaşam alanınızı yeniden hayal edin.")}
+              </p>
+              <div className="flex flex-wrap items-center gap-4">
+                <Button size="lg" className="bg-blue-600 hover:bg-blue-700 h-16 px-10 text-lg font-black shadow-2xl shadow-blue-200 rounded-2xl btn-juice">
+                  {c("cta_primary", "ALIŞVERİŞE BAŞLA")}
+                </Button>
+                <Link href="#" className="flex items-center gap-3 font-bold text-slate-900 group hover:text-blue-600 transition-colors px-4 py-2">
+                  {c("cta_secondary", "Koleksiyonları Gör")} <ArrowRight size={20} className="group-hover:translate-x-2 transition-transform" />
+                </Link>
+              </div>
+
+              <div className="pt-8 flex items-center gap-8 border-t border-slate-100 max-w-md">
+                <div>
+                  <p className="text-2xl font-black text-slate-900 italic">{c("stat1_value", "10k+")}</p>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{c("stat1_label", "Mutlu Müşteri")}</p>
+                </div>
+                <Separator orientation="vertical" className="h-10" />
+                <div>
+                  <p className="text-2xl font-black text-slate-900 italic">{c("stat2_value", "500+")}</p>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{c("stat2_label", "Özel Tasarım")}</p>
+                </div>
+              </div>
+            </div>
+            <div className="relative animate-in fade-in zoom-in duration-1000">
+               <div className="absolute -top-20 -right-20 w-[600px] h-[600px] bg-blue-100 rounded-full blur-[100px] opacity-30" />
+               <div className="relative z-10 p-4 bg-white rounded-[3rem] shadow-2xl shadow-slate-200 border border-slate-100 transform rotate-3 hover:rotate-0 transition-transform duration-700 animate-float">
+                 {/* eslint-disable-next-line @next/next/no-img-element */}
+                 <img
+                  src={c("image", "https://images.unsplash.com/photo-1583847268964-b28dc8f51f92?q=80&w=1200")}
+                  alt="Hero Product"
+                  className="w-full h-auto rounded-[2.5rem] object-cover"
+                 />
+                 <div className="absolute -bottom-10 -left-10 glass p-6 rounded-3xl shadow-xl border-white animate-in slide-in-from-bottom-10 duration-1000 hidden md:block">
+                   <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-2xl bg-blue-600 flex items-center justify-center text-white font-bold text-xl uppercase italic shadow-lg shadow-blue-100">Y</div>
+                      <div>
+                        <p className="text-sm font-black text-slate-900 leading-none">{c("card_title", "Modern Berjer")}</p>
+                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">{c("card_badge", "Sınırlı Stok")}</p>
+                      </div>
+                   </div>
+                 </div>
+               </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Bento Discovery Section */}
+        <section className="py-24 bg-[#F8FAFC]">
+          <div className="container mx-auto px-4">
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-16">
+              <div className="space-y-4">
+                <h2 className="text-4xl md:text-5xl font-black text-slate-900 tracking-tighter italic uppercase underline decoration-blue-600 decoration-4 underline-offset-8">Kategorileri Keşfedin</h2>
+                <p className="text-slate-500 font-medium max-w-md">Evinizin her köşesi için özenle seçilmiş ürün gruplarımızla tanışın.</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              {/* Featured Category Card - Large */}
+              <div className="md:col-span-2 md:row-span-2 bento-card bg-slate-900 group">
+                <div className="absolute bottom-0 right-0 w-full h-full opacity-50 transition-opacity group-hover:opacity-70 bg-gradient-to-t from-slate-950 to-transparent z-10" />
+                 {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img 
+                  src="https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?q=80&w=800" 
+                  alt="Living Room"
+                  className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000"
+                />
+                <div className="relative z-20 h-full flex flex-col justify-end gap-4">
+                   <Badge className="w-fit bg-blue-600 text-white border-none font-black text-[10px] uppercase tracking-widest px-3 py-1">En Popüler</Badge>
+                   <h3 className="text-4xl font-black text-white italic tracking-tighter uppercase leading-none">Oturma <br /> Odası</h3>
+                   <Link href="#" className="flex items-center gap-2 text-white font-bold text-sm bg-white/10 hover:bg-white/20 backdrop-blur-md w-fit px-6 h-12 rounded-2xl transition-all border border-white/20">
+                     İncele <ArrowRight size={18} />
+                   </Link>
+                </div>
+              </div>
+
+              {/* Smaller Category Cards */}
+              <div className="bento-card group">
+                <div className="space-y-4">
+                   <div className="w-14 h-14 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors duration-500">
+                      <ShoppingBag size={28} />
+                   </div>
+                   <h4 className="text-2xl font-black text-slate-900 uppercase italic">Aydınlatma</h4>
+                   <p className="text-xs font-medium text-slate-500 leading-relaxed uppercase tracking-widest">320+ Ürün • %15 İndirim</p>
+                </div>
+              </div>
+
+              <div className="bento-card group">
+                <div className="space-y-4">
+                   <div className="w-14 h-14 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors duration-500">
+                      <Star size={28} />
+                   </div>
+                   <h4 className="text-2xl font-black text-slate-900 uppercase italic">Mutfak</h4>
+                   <p className="text-xs font-medium text-slate-500 leading-relaxed uppercase tracking-widest">150+ Ürün • Ücretsiz Kargo</p>
+                </div>
+              </div>
+
+              <div className="md:col-span-2 bento-card bg-white flex items-center justify-between gap-8 group">
+                <div className="space-y-4 flex-1">
+                   <h4 className="text-3xl font-black text-slate-900 uppercase italic leading-none">Yatak Odası <br /> Takımları</h4>
+                   <Button variant="outline" className="rounded-2xl h-12 font-black uppercase text-[10px] tracking-widest border-2">Tümünü İncele</Button>
+                </div>
+                <div className="w-1/3 aspect-square bg-slate-50 rounded-[2rem] overflow-hidden">
+                   {/* eslint-disable-next-line @next/next/no-img-element */}
+                   <img src="https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?q=80&w=400" alt="Bedroom" className="w-full h-full object-cover group-hover:scale-125 transition-transform duration-700" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Featured Products */}
+        <section className="py-24 container mx-auto px-4">
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-20 text-center md:text-left">
+            <div className="space-y-2">
+              <span className="text-blue-600 font-black text-[10px] uppercase tracking-[0.2em] px-1 italic">Haftanın Yıldızları</span>
+              <h2 className="text-4xl md:text-5xl font-black text-slate-900 tracking-tighter uppercase italic">Sizin İçin Seçtiklerimiz</h2>
+            </div>
+            <Link href="#" className="inline-flex items-center gap-3 font-black text-slate-900 group hover:text-blue-600 transition-colors uppercase tracking-tight italic border-b-4 border-blue-100 pb-2">
+              Tüm Ürünleri Gör <ChevronRight size={24} className="group-hover:translate-x-1 transition-transform" />
+            </Link>
+          </div>
+
+          {loading ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-12">
+               {[1,2,3,4].map(i => (
+                 <div key={i} className="space-y-6 animate-pulse">
+                    <div className="aspect-[3/4] bg-slate-100 rounded-[2.5rem]" />
+                    <div className="h-4 bg-slate-100 rounded w-2/3" />
+                    <div className="h-4 bg-slate-100 rounded w-1/3" />
+                 </div>
+               ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-16">
+              {products.map((product) => (
+                <div key={product.id} className="group cursor-pointer">
+                   <div className="relative aspect-[3/4] overflow-hidden rounded-[2.5rem] bg-[#F8FAFC] mb-6 border border-slate-100 shadow-sm transition-all duration-700 hover:shadow-2xl hover:shadow-slate-200">
+                      <Link href={`/products/${product.slug}`} className="block w-full h-full">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img 
+                          src={(product.images && product.images.length > 0) ? product.images[0] : (product.image_url || "https://images.unsplash.com/photo-1494438639946-1ebd1d20bf85?q=80&w=400")} 
+                          alt={product.title}
+                          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000"
+                        />
+                      </Link>
+                      <button className="absolute bottom-6 left-1/2 -translate-x-1/2 w-[85%] h-14 glass rounded-2xl text-slate-900 font-black text-xs uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-all transform translate-y-4 group-hover:translate-y-0 flex items-center justify-center gap-2 hover:bg-blue-600 hover:text-white hover:border-blue-600 active:scale-95 shadow-xl">
+                         <ShoppingBag size={18} /> SEPETE EKLE
+                      </button>
+                      <div className="absolute top-6 left-6 flex flex-col gap-2">
+                         <span className="px-3 py-1 bg-white/90 backdrop-blur-md text-[9px] font-black uppercase tracking-widest rounded-full border border-slate-100 text-slate-900">
+                            {product.brands?.name || "Özel"}
+                         </span>
+                         {getMinPrice(product) > 1000 && (
+                            <span className="px-3 py-1 bg-blue-600 text-white text-[9px] font-black uppercase tracking-widest rounded-full shadow-lg shadow-blue-100">
+                               Ücretsiz Kargo
+                            </span>
+                         )}
+                      </div>
+                   </div>
+                   <div className="space-y-1 px-2">
+                      <div className="flex items-center justify-between">
+                        <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.1em]">{product.categories?.name}</p>
+                        <div className="flex items-center gap-1 text-yellow-400">
+                            <Star size={10} fill="currentColor" />
+                            <span className="text-[10px] text-slate-500 font-bold italic">4.9 (124+)</span>
+                        </div>
+                      </div>
+                      <Link href={`/products/${product.slug}`}>
+                        <h3 className="text-lg font-black text-slate-900 group-hover:text-blue-600 transition-colors tracking-tight uppercase italic">{product.title}</h3>
+                      </Link>
+                      <p className="font-black text-2xl text-blue-600 italic tracking-tighter">{formatPriceDisplay(product)}</p>
+                   </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* Benefits Section */}
+        <section className="bg-white py-32 border-t">
+          <div className="container mx-auto px-4 grid grid-cols-1 sm:grid-cols-3 gap-16 text-center">
+            <div className="space-y-6 group">
+              <div className="w-24 h-24 bg-blue-50 rounded-[2.5rem] flex items-center justify-center mx-auto text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-all duration-700 transform group-hover:rotate-6">
+                 <ShoppingBag size={36} />
+              </div>
+              <h4 className="text-2xl font-black text-slate-900 uppercase italic">Hızlı Teslimat</h4>
+              <p className="text-slate-500 font-medium leading-relaxed">Özenle paketlenmiş ürünleriniz 24 saat içerisinde kargoda.</p>
+            </div>
+            <div className="space-y-6 group">
+              <div className="w-24 h-24 bg-blue-50 rounded-[2.5rem] flex items-center justify-center mx-auto text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-all duration-700 transform group-hover:-rotate-6">
+                 <Shield size={36} />
+              </div>
+              <h4 className="text-2xl font-black text-slate-900 uppercase italic">Güvenli Alışveriş</h4>
+              <p className="text-slate-500 font-medium leading-relaxed">256-bit SSL güvenlik sertifikası ile tüm bilgileriniz koruma altında.</p>
+            </div>
+            <div className="space-y-6 group">
+              <div className="w-24 h-24 bg-blue-50 rounded-[2.5rem] flex items-center justify-center mx-auto text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-all duration-700 transform group-hover:rotate-12">
+                 <ArrowRight className="rotate-180" size={36} />
+              </div>
+              <h4 className="text-2xl font-black text-slate-900 uppercase italic">Kolay İade</h4>
+              <p className="text-slate-500 font-medium leading-relaxed">Koşulsuz şartsız 14 gün içerisinde iade ve değişim garantisi.</p>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <Footer />
+    </div>
+  );
+}

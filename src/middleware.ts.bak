@@ -1,0 +1,50 @@
+import { NextRequest, NextResponse } from "next/server";
+
+export function middleware(req: NextRequest) {
+  try {
+    const ref = req.nextUrl.searchParams.get("ref");
+
+    if (ref && /^[a-zA-Z0-9_-]{3,30}$/.test(ref)) {
+      const cleanUrl = new URL(req.nextUrl.href);
+      cleanUrl.searchParams.delete("ref");
+
+      const response = NextResponse.redirect(cleanUrl, { status: 302 });
+
+      response.cookies.set("affiliate_ref", ref.toLowerCase(), {
+        maxAge: 30 * 24 * 60 * 60, // 30 gün
+        path: "/",
+        sameSite: "lax",
+      });
+
+      // Tıklama kaydı — best effort
+      const ip =
+        req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+        req.headers.get("x-real-ip") ||
+        "";
+
+      const origin = req.nextUrl.origin || "";
+      if (origin) {
+        fetch(`${origin}/api/affiliate/click`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            code: ref.toLowerCase(),
+            path: req.nextUrl.pathname,
+            ip,
+          }),
+        }).catch(() => {/* best effort */});
+      }
+
+      return response;
+    }
+
+    return NextResponse.next();
+  } catch (err) {
+    console.error("Middleware Error:", err);
+    return NextResponse.next();
+  }
+}
+
+export const config = {
+  matcher: ["/((?!_next/static|_next/image|favicon\\.ico|api/).*)", "/"],
+};

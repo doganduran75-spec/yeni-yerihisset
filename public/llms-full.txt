@@ -1,0 +1,71 @@
+# YeriHisset — Tam Bilgi Dosyası
+
+> YeriHisset, Türkiye merkezli bir e-ticaret platformudur. Kaliteli ürünler, kişiselleştirilmiş alışveriş deneyimi ve zengin içerikler sunar.
+
+## Platform Özellikleri
+
+### Ürün Sistemi
+- Basit ürünler ve varyasyonlu ürünler (beden, renk, model gibi seçenekler)
+- Her varyasyon için ayrı fiyat ve stok takibi
+- Ürün görselleri, detaylı açıklamalar, marka ve kategori bilgisi
+- Schema.org Product JSON-LD ile yapılandırılmış veri
+
+### Üyelik ve Hesap
+- E-posta ile kayıt ve giriş
+- Adres defteri (birden fazla teslimat adresi)
+- Sipariş geçmişi ve durum takibi
+- Üye etiket sistemi (satın alınan ürüne göre otomatik atanır)
+- Kupon cüzdanı (kişisel ve genel kupon kodları)
+
+### Kupon Sistemi
+- Yüzde indirim, TL indirim ve ücretsiz kargo türleri
+- Kişiye özel veya herkese açık kodlar
+- Geçerlilik tarihi ve kullanım limiti
+
+### Affiliate / Ortaklık Programı
+- Özel referans linkleri ile komisyon kazanımı
+- Başvuru formu: /affiliate
+- Sipariş bazlı komisyon takibi
+
+### Sipariş Süreci
+1. Ürünü sepete ekle
+2. Adres ve kargo seçimi
+3. Kupon kodu uygulama (opsiyonel)
+4. Ödeme (İyzico entegrasyonu)
+5. E-posta bildirimi
+
+## İçerik Yapısı
+
+### Ürün Sayfası (/products/[slug])
+Her ürün sayfasında bulunur:
+- Ürün adı, açıklama, fiyat (TRY)
+- Varyasyon seçenekleri (beden/renk)
+- Stok durumu
+- Marka adı
+- Kategori hiyerarşisi
+- Schema.org JSON-LD (Product, BreadcrumbList)
+- Open Graph ve Twitter Card meta etiketleri
+
+### Ana Sayfa (/)
+- Öne çıkan ürünler
+- Kampanya/kategori linkleri
+- Genel mağaza tanıtımı
+
+### Affiliate Sayfası (/affiliate)
+- Ortaklık programı detayları
+- Başvuru formu
+
+## SEO ve Yapılandırılmış Veri
+
+- Sitemap: /sitemap.xml (dinamik, aktif ürünleri içerir)
+- Robots: /robots.txt
+- Organization Schema: tüm sayfalarda mevcut
+- WebSite Schema: SearchAction ile Google Sitelinks destekli
+- Product Schema: ürün sayfalarında, Offers + BreadcrumbList dahil
+- Google Merchant Center Feed: /feed/google-merchant
+
+## Dil ve Bölge
+
+- Birincil dil: Türkçe (tr-TR)
+- Para birimi: Türk Lirası (₺ / TRY)
+- Hedef pazar: Türkiye

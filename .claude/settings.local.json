@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(npm ls:*)",
+      "Bash(npx tsc:*)",
+      "Bash(grep -r \"NEXT_PUBLIC_SUPABASE_URL\" /c/Users/dogan/Documents/antigravity/yeni-yerihisset/.env*)",
+      "Bash(xargs grep:*)",
+      "Bash(grep -E \"\\\\.\\(tsx|jsx\\)$\")"
+    ]
+  }
+}
