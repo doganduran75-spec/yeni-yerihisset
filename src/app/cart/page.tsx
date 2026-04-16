@@ -48,7 +48,7 @@ export default function CartPage() {
       <div className="min-h-screen bg-white">
         <header className="border-b">
           <div className="container mx-auto px-4 h-16 flex items-center">
-            <Link href="/" className="text-xl font-black tracking-tighter text-blue-600">
+            <Link href="/" className="text-xl font-black tracking-tighter text-olive-600">
               Yeri<span className="text-slate-900">Hisset</span>
             </Link>
           </div>
@@ -63,7 +63,7 @@ export default function CartPage() {
               Görünüşe göre henüz sepetinize bir ürün eklememişsiniz. Harika ürünlerimizi keşfetmeye ne dersiniz?
             </p>
           </div>
-          <Link href="/" className={cn(buttonVariants({ size: "lg" }), "h-14 px-10 rounded-2xl bg-blue-600 hover:bg-blue-700 shadow-xl shadow-blue-100 font-bold")}>
+          <Link href="/" className={cn(buttonVariants({ size: "lg" }), "h-14 px-10 rounded-2xl bg-olive-600 hover:bg-olive-700 shadow-xl shadow-olive-100 font-bold")}>
             Alışverişe Başla
           </Link>
         </main>
@@ -75,7 +75,7 @@ export default function CartPage() {
     <div className="min-h-screen bg-[#fafbfc]">
       <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <Link href="/" className="text-xl font-black tracking-tighter text-blue-600 group flex items-center gap-2">
+          <Link href="/" className="text-xl font-black tracking-tighter text-olive-600 group flex items-center gap-2">
              <ArrowLeft size={18} className="text-slate-400 group-hover:-translate-x-1 transition-transform" />
              Yeri<span className="text-slate-900">Hisset</span>
           </Link>
@@ -88,7 +88,7 @@ export default function CartPage() {
               className="flex items-center gap-2 p-2 hover:bg-slate-100 rounded-full transition-colors group"
               title="Hesabım"
             >
-              <User size={20} className="text-slate-700 group-hover:text-blue-600 transition-colors" />
+              <User size={20} className="text-slate-700 group-hover:text-olive-600 transition-colors" />
             </Link>
           </div>
         </div>
@@ -130,7 +130,7 @@ export default function CartPage() {
                             </button>
                           </div>
                           {item.variant_name && (
-                            <p className="text-sm font-bold text-blue-600 uppercase tracking-widest">{item.variant_name}</p>
+                            <p className="text-sm font-bold text-olive-600 uppercase tracking-widest">{item.variant_name}</p>
                           )}
                         </div>
 
@@ -162,15 +162,15 @@ export default function CartPage() {
               ))}
             </div>
 
-            <Link href="/" className="inline-flex items-center gap-2 text-sm font-bold text-blue-600 hover:gap-3 transition-all pt-4">
+            <Link href="/" className="inline-flex items-center gap-2 text-sm font-bold text-olive-600 hover:gap-3 transition-all pt-4">
               <ArrowLeft size={16} /> Alışverişe Devam Et
             </Link>
           </div>
 
           {/* Order Summary */}
           <div className="space-y-6">
-            <Card className="border-none shadow-lg shadow-blue-900/5 bg-white rounded-3xl overflow-hidden">
-               <div className="bg-blue-600 p-6 text-white">
+            <Card className="border-none shadow-lg shadow-olive-900/5 bg-white rounded-3xl overflow-hidden">
+               <div className="bg-olive-600 p-6 text-white">
                   <h2 className="text-xl font-black">Ödeme Özeti</h2>
                   <p className="text-blue-100 text-xs font-bold uppercase tracking-widest">Sipariş Onayı Öncesi</p>
                </div>
@@ -192,13 +192,13 @@ export default function CartPage() {
                   
                   <div className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl border border-slate-100/50">
                     <span className="font-bold text-slate-900 uppercase tracking-tighter">Genel Toplam</span>
-                    <span className="text-2xl font-black text-blue-600">
+                    <span className="text-2xl font-black text-olive-600">
                       ₺{(totalPrice + shippingCost).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
                     </span>
                   </div>
 
                   <Link href="/checkout" className="block w-full">
-                    <Button className="w-full h-16 rounded-2xl bg-blue-600 hover:bg-blue-700 text-lg font-bold shadow-xl shadow-blue-100 uppercase tracking-wide group">
+                    <Button className="w-full h-16 rounded-2xl bg-olive-600 hover:bg-olive-700 text-lg font-bold shadow-xl shadow-olive-100 uppercase tracking-wide group">
                       Ödemeye Geç <ChevronRight size={20} className="ml-2 group-hover:translate-x-1 transition-transform" />
                     </Button>
                   </Link>

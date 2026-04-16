@@ -80,7 +80,7 @@ export default function RootLayout({
       <head>
         <GlobalStructuredData />
       </head>
-      <body className="font-sans bg-background text-foreground selection:bg-blue-100 selection:text-blue-900" suppressHydrationWarning>
+      <body className="font-sans bg-background text-foreground selection:bg-olive-100 selection:text-olive-800" suppressHydrationWarning>
         <TooltipProvider>
           {children}
           <PopupBanner />

@@ -42,7 +42,7 @@ type TabType = "orders" | "addresses" | "profile" | "security" | "affiliate" | "
 
 export default function AccountPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center animate-pulse text-blue-600 font-bold">Yükleniyor...</div>}>
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center animate-pulse text-olive-600 font-bold">Yükleniyor...</div>}>
       <AccountPageInner />
     </Suspense>
   );
@@ -327,7 +327,7 @@ function AccountPageInner() {
   if (loading) {
      return (
        <div className="min-h-screen flex items-center justify-center">
-         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-olive-600"></div>
        </div>
      );
   }
@@ -337,7 +337,7 @@ function AccountPageInner() {
       {/* Header */}
       <header className="bg-white border-b sticky top-0 z-40">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <Link href="/" className="text-xl font-black tracking-tighter text-blue-600">
+          <Link href="/" className="text-xl font-black tracking-tighter text-olive-600">
             Yeri<span className="text-slate-900">Hisset</span>
           </Link>
           <div className="flex items-center gap-4">
@@ -357,7 +357,7 @@ function AccountPageInner() {
           <aside className="lg:col-span-1 space-y-4">
             <div className="bg-white p-6 rounded-3xl border shadow-sm space-y-4">
                <div className="flex items-center gap-4 mb-6">
-                  <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center text-blue-600">
+                  <div className="w-12 h-12 bg-olive-100 rounded-full flex items-center justify-center text-olive-600">
                     <User size={24} />
                   </div>
                   <div>
@@ -381,7 +381,7 @@ function AccountPageInner() {
                       onClick={() => setActiveTab(tab.id as TabType)}
                       className={cn(
                         "w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-bold transition-all",
-                        activeTab === tab.id ? "bg-blue-600 text-white shadow-lg shadow-blue-100" : "text-slate-500 hover:bg-slate-50"
+                        activeTab === tab.id ? "bg-olive-600 text-white shadow-lg shadow-olive-100" : "text-slate-500 hover:bg-slate-50"
                       )}
                     >
                       <tab.icon size={18} /> {tab.label}
@@ -406,10 +406,10 @@ function AccountPageInner() {
                   {/* Chat Messages */}
                   <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
                     {messagesLoading ? (
-                      <div className="h-full flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" /></div>
+                      <div className="h-full flex items-center justify-center"><Loader2 className="animate-spin text-olive-600" /></div>
                     ) : messages.length === 0 ? (
                       <div className="h-full flex flex-col items-center justify-center gap-4 text-center p-8">
-                        <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center text-blue-400">
+                        <div className="w-16 h-16 bg-olive-50 rounded-full flex items-center justify-center text-olive-400">
                           <MessageSquare size={28} />
                         </div>
                         <p className="text-sm font-medium text-slate-400 max-w-[200px]">Destek ekibimize ilk mesajınızı hemen gönderin.</p>
@@ -424,7 +424,7 @@ function AccountPageInner() {
                             <div className={cn(
                               "px-4 py-2.5 rounded-2xl text-sm font-medium leading-relaxed",
                               msg.sender_role === "user" 
-                                ? "bg-blue-600 text-white rounded-tr-none" 
+                                ? "bg-olive-600 text-white rounded-tr-none" 
                                 : "bg-slate-100 text-slate-900 rounded-tl-none"
                             )}>
                               {msg.content}
@@ -445,14 +445,14 @@ function AccountPageInner() {
                         placeholder="Mesajınızı yazın..." 
                         value={newMessage}
                         onChange={(e) => setNewMessage(e.target.value)}
-                        className="h-12 pr-12 rounded-2xl border-slate-200 focus:ring-blue-600 bg-white"
+                        className="h-12 pr-12 rounded-2xl border-slate-200 focus:ring-olive-600 bg-white"
                         disabled={sendingMessage}
                       />
                       <Button 
                         type="submit" 
                         size="icon" 
                         disabled={!newMessage.trim() || sendingMessage}
-                        className="absolute right-1 top-1 h-10 w-10 bg-blue-600 hover:bg-blue-700 rounded-xl transition-all active:scale-90"
+                        className="absolute right-1 top-1 h-10 w-10 bg-olive-600 hover:bg-olive-700 rounded-xl transition-all active:scale-90"
                       >
                         {sendingMessage ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
                       </Button>
@@ -478,8 +478,8 @@ function AccountPageInner() {
 
                 {/* Kod ekleme formu */}
                 {showClaimInput && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-2xl p-5 animate-in fade-in slide-in-from-top-2">
-                    <p className="text-sm font-bold text-blue-800 mb-3">Kupon kodunuzu girin</p>
+                  <div className="bg-olive-50 border border-blue-200 rounded-2xl p-5 animate-in fade-in slide-in-from-top-2">
+                    <p className="text-sm font-bold text-olive-800 mb-3">Kupon kodunuzu girin</p>
                     <form onSubmit={handleClaimCoupon} className="flex gap-2">
                       <Input
                         value={claimCode}
@@ -488,7 +488,7 @@ function AccountPageInner() {
                         className="font-mono font-bold tracking-widest max-w-xs"
                         autoFocus
                       />
-                      <Button type="submit" disabled={claimLoading || !claimCode.trim()} className="bg-blue-600 gap-2">
+                      <Button type="submit" disabled={claimLoading || !claimCode.trim()} className="bg-olive-600 gap-2">
                         {claimLoading ? <Loader2 size={14} className="animate-spin" /> : null}
                         Ekle
                       </Button>
@@ -519,7 +519,7 @@ function AccountPageInner() {
                 })()}
 
                 {couponsLoading ? (
-                  <div className="flex justify-center py-16"><Loader2 className="animate-spin text-blue-600" size={28} /></div>
+                  <div className="flex justify-center py-16"><Loader2 className="animate-spin text-olive-600" size={28} /></div>
                 ) : userCoupons.length === 0 ? (
                   <Card className="border-none shadow-sm flex flex-col items-center justify-center py-16 gap-4 text-center">
                     <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center">
@@ -550,7 +550,7 @@ function AccountPageInner() {
                           {/* Üst renk bandı */}
                           <div className={cn(
                             "px-5 py-3 flex items-center justify-between",
-                            c.type === "percentage" && "bg-blue-600",
+                            c.type === "percentage" && "bg-olive-600",
                             c.type === "fixed" && "bg-green-600",
                             c.type === "free_shipping" && "bg-orange-500",
                             (expired || used) && "bg-slate-400"
@@ -579,7 +579,7 @@ function AccountPageInner() {
                               {c.description && <p className="text-xs text-slate-500 mt-0.5">{c.description}</p>}
                             </div>
                             <div className="flex items-center justify-between">
-                              <span className="font-mono font-black text-blue-700 bg-blue-50 px-3 py-1 rounded-lg text-sm tracking-widest border border-blue-100">
+                              <span className="font-mono font-black text-olive-700 bg-olive-50 px-3 py-1 rounded-lg text-sm tracking-widest border border-blue-100">
                                 {c.code}
                               </span>
                               {c.expires_at && !expired && (
@@ -619,7 +619,7 @@ function AccountPageInner() {
                       <h4 className="font-bold text-slate-900">Henüz siparişiniz yok.</h4>
                       <p className="text-sm text-slate-400">Harika ürünlerimizi incelemeye ne dersiniz?</p>
                     </div>
-                    <Link href="/" className={cn(buttonVariants({ variant: "default" }), "bg-blue-600 font-bold px-8 mt-2")}>
+                    <Link href="/" className={cn(buttonVariants({ variant: "default" }), "bg-olive-600 font-bold px-8 mt-2")}>
                       Alışverişe Başla
                     </Link>
                   </Card>
@@ -635,7 +635,7 @@ function AccountPageInner() {
                               </div>
                               <div>
                                 <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">TOPLAM TUTAR</p>
-                                <p className="text-sm font-black text-blue-600">₺{order.total_amount.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</p>
+                                <p className="text-sm font-black text-olive-600">₺{order.total_amount.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</p>
                               </div>
                               <div className="hidden md:block">
                                 <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">SİPARİŞ NO</p>
@@ -648,7 +648,7 @@ function AccountPageInner() {
                                   <CheckCircle2 size={14} /> Teslim Edildi
                                 </Badge>
                               ) : (
-                                <Badge className="bg-blue-50 text-blue-600 hover:bg-blue-50 border-blue-100 font-bold py-1 px-3 flex gap-2">
+                                <Badge className="bg-olive-50 text-olive-600 hover:bg-olive-50 border-blue-100 font-bold py-1 px-3 flex gap-2">
                                   <Clock size={14} /> {order.status === 'processing' ? 'Hazırlanıyor' : order.status === 'shipped' ? 'Kargoya Verildi' : 'Onay Bekliyor'}
                                 </Badge>
                               )}
@@ -688,7 +688,7 @@ function AccountPageInner() {
                    {!showAddressForm && (
                      <Button 
                       onClick={() => setShowAddressForm(true)}
-                      className="bg-blue-600 hover:bg-blue-700 font-bold rounded-2xl gap-2 h-12 shadow-lg shadow-blue-100"
+                      className="bg-olive-600 hover:bg-olive-700 font-bold rounded-2xl gap-2 h-12 shadow-lg shadow-olive-100"
                      >
                        <Plus size={18} /> Yeni Adres Ekle
                      </Button>
@@ -696,10 +696,10 @@ function AccountPageInner() {
                 </div>
 
                 {showAddressForm && (
-                  <Card className="border-none shadow-xl ring-2 ring-blue-100 overflow-hidden animate-in slide-in-from-top duration-300">
+                  <Card className="border-none shadow-xl ring-2 ring-olive-100 overflow-hidden animate-in slide-in-from-top duration-300">
                     <div className="bg-slate-50 p-6 border-b">
                       <h3 className="text-lg font-bold flex items-center gap-2">
-                        <span className="w-1.5 h-6 bg-blue-600 rounded-full" />
+                        <span className="w-1.5 h-6 bg-olive-600 rounded-full" />
                         Yeni Adres Bilgileri
                       </h3>
                     </div>
@@ -735,7 +735,7 @@ function AccountPageInner() {
                           <label className="text-xs font-bold uppercase text-slate-500 px-1">Açık Adres</label>
                           <textarea 
                             required
-                            className="flex min-h-[100px] w-full rounded-2xl border border-input bg-slate-50/50 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 transition-all font-medium"
+                            className="flex min-h-[100px] w-full rounded-2xl border border-input bg-slate-50/50 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-olive-600 transition-all font-medium"
                             value={addressForm.address_detail || ""}
                             onChange={e => setAddressForm({...addressForm, address_detail: e.target.value})}
                             placeholder="Mahalle, sokak, bina ve daire bilgileri..."
@@ -747,7 +747,7 @@ function AccountPageInner() {
                               <input 
                                 type="checkbox" 
                                 id="def_shipping" 
-                                className="w-4 h-4 rounded text-blue-600"
+                                className="w-4 h-4 rounded text-olive-600"
                                 checked={addressForm.is_default_shipping}
                                 onChange={e => setAddressForm({...addressForm, is_default_shipping: e.target.checked})}
                               />
@@ -757,7 +757,7 @@ function AccountPageInner() {
                               <input 
                                 type="checkbox" 
                                 id="def_billing"
-                                className="w-4 h-4 rounded text-blue-600"
+                                className="w-4 h-4 rounded text-olive-600"
                                 checked={addressForm.is_default_billing}
                                 onChange={e => setAddressForm({...addressForm, is_default_billing: e.target.checked})}
                               />
@@ -767,7 +767,7 @@ function AccountPageInner() {
 
                         <div className="flex gap-4 pt-2">
                           <Button type="button" variant="outline" className="flex-1 h-12 rounded-xl font-bold" onClick={() => setShowAddressForm(false)}>Vazgeç</Button>
-                          <Button type="submit" className="flex-1 h-12 rounded-xl font-bold bg-blue-600 shadow-md">Adresi Kaydet</Button>
+                          <Button type="submit" className="flex-1 h-12 rounded-xl font-bold bg-olive-600 shadow-md">Adresi Kaydet</Button>
                         </div>
                       </form>
                     </CardContent>
@@ -780,7 +780,7 @@ function AccountPageInner() {
                        <CardContent className="p-6 space-y-4">
                           <div className="flex justify-between items-start">
                              <div className="flex items-center gap-2">
-                                <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">
+                                <div className="w-8 h-8 rounded-lg bg-olive-50 flex items-center justify-center text-olive-600">
                                    <MapPin size={16} />
                                 </div>
                                 <h4 className="font-bold text-slate-900">{addr.address_name}</h4>
@@ -799,7 +799,7 @@ function AccountPageInner() {
 
                           <div className="flex flex-wrap gap-2 pt-2 border-t mt-4">
                              {addr.is_default_shipping && (
-                               <Badge className="bg-blue-600 text-white border-none px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider">Teslimat</Badge>
+                               <Badge className="bg-olive-600 text-white border-none px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider">Teslimat</Badge>
                              )}
                              {addr.is_default_billing && (
                                <Badge className="bg-slate-900 text-white border-none px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider">Fatura</Badge>
@@ -850,7 +850,7 @@ function AccountPageInner() {
                             </div>
                          </div>
                          <div className="flex justify-end pt-4">
-                            <Button type="submit" className="bg-blue-600 px-12 h-14 rounded-2xl font-black shadow-lg shadow-blue-100 tracking-tighter uppercase transition-transform active:scale-95">DEĞİŞİKLİKLERİ KAYDET</Button>
+                            <Button type="submit" className="bg-olive-600 px-12 h-14 rounded-2xl font-black shadow-lg shadow-olive-100 tracking-tighter uppercase transition-transform active:scale-95">DEĞİŞİKLİKLERİ KAYDET</Button>
                          </div>
                       </form>
                    </CardContent>
@@ -862,21 +862,21 @@ function AccountPageInner() {
               <section className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
                 <div className="flex items-center justify-between">
                   <h2 className="text-2xl font-black text-slate-900">Affiliate Programı</h2>
-                  <Link href="/affiliate" className={cn(buttonVariants({ variant: "ghost" }), "text-blue-600 font-bold text-sm gap-1")}>
+                  <Link href="/affiliate" className={cn(buttonVariants({ variant: "ghost" }), "text-olive-600 font-bold text-sm gap-1")}>
                     Program Hakkında <ChevronRight size={14} />
                   </Link>
                 </div>
 
                 {affiliateLoading ? (
                   <div className="flex items-center justify-center py-20">
-                    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600" />
+                    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-olive-600" />
                   </div>
                 ) : !affiliate ? (
                   /* Başvuru Formu */
                   <Card className="border-none shadow-sm overflow-hidden">
                     <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-8 text-white">
                       <h3 className="text-2xl font-black mb-2">Affiliate Ol, Kazan</h3>
-                      <p className="text-blue-100 font-medium">
+                      <p className="text-olive-100 font-medium">
                         Her satıştan %10 komisyon kazan. Aşağıdaki soruları yanıtla ve hemen başla.
                       </p>
                     </div>
@@ -889,7 +889,7 @@ function AccountPageInner() {
                               required
                               value={appForm.platform}
                               onChange={(e) => setAppForm({ ...appForm, platform: e.target.value })}
-                              className="flex w-full h-12 rounded-xl border border-input bg-slate-50/50 px-4 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-600"
+                              className="flex w-full h-12 rounded-xl border border-input bg-slate-50/50 px-4 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-olive-600"
                             >
                               <option value="">Seçin</option>
                               <option value="instagram">Instagram</option>
@@ -931,13 +931,13 @@ function AccountPageInner() {
                             />
                           </div>
                         </div>
-                        <div className="bg-blue-50 rounded-2xl p-4 border border-blue-100 text-sm text-blue-700 font-medium">
+                        <div className="bg-olive-50 rounded-2xl p-4 border border-blue-100 text-sm text-olive-700 font-medium">
                           Başvurunuz anında onaylanır ve affiliate linkinizi hemen kullanabilirsiniz.
                         </div>
                         <Button
                           type="submit"
                           disabled={affiliateApplying}
-                          className="w-full h-14 rounded-2xl bg-blue-600 font-black text-lg shadow-lg shadow-blue-100"
+                          className="w-full h-14 rounded-2xl bg-olive-600 font-black text-lg shadow-lg shadow-olive-100"
                         >
                           {affiliateApplying ? "Başvuruluyor..." : "Affiliate Olmak İstiyorum"}
                         </Button>
@@ -979,7 +979,7 @@ function AccountPageInner() {
                           <CardContent className="p-5 space-y-2">
                             <div className={cn(
                               "w-10 h-10 rounded-xl flex items-center justify-center",
-                              color === "blue" ? "bg-blue-50 text-blue-600" :
+                              color === "blue" ? "bg-olive-50 text-olive-600" :
                               color === "green" ? "bg-green-50 text-green-600" :
                               color === "emerald" ? "bg-emerald-50 text-emerald-600" :
                               "bg-amber-50 text-amber-600"
@@ -998,7 +998,7 @@ function AccountPageInner() {
                       <CardContent className="p-6">
                         <h4 className="font-bold text-slate-900 mb-3">Link Nasıl Kullanılır?</h4>
                         <p className="text-sm text-slate-600 font-medium leading-relaxed">
-                          İstediğiniz herhangi bir ürün URL'sinin sonuna <code className="bg-white border rounded px-1.5 py-0.5 font-mono text-blue-600 text-xs">?ref={affiliate.code}</code> ekleyin.
+                          İstediğiniz herhangi bir ürün URL'sinin sonuna <code className="bg-white border rounded px-1.5 py-0.5 font-mono text-olive-600 text-xs">?ref={affiliate.code}</code> ekleyin.
                         </p>
                         <div className="mt-3 bg-white border rounded-xl p-3 font-mono text-xs text-slate-500 break-all">
                           {`${typeof window !== "undefined" ? window.location.origin : "https://yerihisset.com"}/products/ornek-urun?ref=${affiliate.code}`}
@@ -1026,7 +1026,7 @@ function AccountPageInner() {
                                 <Badge className={cn(
                                   "text-[10px] font-bold border-none mt-1",
                                   conv.status === "paid" ? "bg-green-100 text-green-700" :
-                                  conv.status === "approved" ? "bg-blue-100 text-blue-700" :
+                                  conv.status === "approved" ? "bg-olive-100 text-olive-700" :
                                   conv.status === "cancelled" ? "bg-red-100 text-red-700" :
                                   "bg-amber-100 text-amber-700"
                                 )}>
@@ -1050,8 +1050,8 @@ function AccountPageInner() {
                 <h2 className="text-2xl font-black text-slate-900">Güvenlik Ayarları</h2>
                 <Card className="border-none shadow-sm">
                    <CardContent className="p-8 space-y-8">
-                      <div className="flex items-center gap-6 p-6 bg-blue-50 rounded-3xl border-2 border-blue-100 border-dashed">
-                         <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-blue-600 shadow-sm">
+                      <div className="flex items-center gap-6 p-6 bg-olive-50 rounded-3xl border-2 border-blue-100 border-dashed">
+                         <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-olive-600 shadow-sm">
                             <ShieldCheck size={32} />
                          </div>
                          <div className="flex-1">

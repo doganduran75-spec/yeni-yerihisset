@@ -19,6 +19,19 @@ const config = {
     },
     extend: {
       colors: {
+        // ─── Terra Form renk paleti ────────────────────────────────────────
+        olive: {
+          50:  "#f4f4ef",   // yüzey-low (krem panel)
+          100: "#e8e8e3",   // yüzey-high (hafif gölge)
+          200: "#c6c8b8",   // outline-variant (ghost border)
+          400: "#879b60",   // primary-container (açık zeytin)
+          600: "#536430",   // primary (ana zeytin yeşili)
+          700: "#3d4a22",   // koyu zeytin hover
+          800: "#2d3818",   // en koyu zeytin
+        },
+        cream: "#fafaf5",   // organik krem canvas
+
+        // ─── shadcn/ui CSS değişken tokenları ─────────────────────────────
         border: "var(--border)",
         input: "var(--input)",
         ring: "var(--ring)",

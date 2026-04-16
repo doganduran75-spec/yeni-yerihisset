@@ -150,9 +150,9 @@ export default function ProductPageClient({ product }: { product: Product }) {
           aria-label="breadcrumb"
           className="flex items-center gap-2 text-sm text-slate-500 mb-8 overflow-x-auto whitespace-nowrap pb-2"
         >
-          <Link href="/" className="hover:text-blue-600">Anasayfa</Link>
+          <Link href="/" className="hover:text-olive-600">Anasayfa</Link>
           <ChevronRight size={14} />
-          <Link href="#" className="hover:text-blue-600">
+          <Link href="#" className="hover:text-olive-600">
             {product.categories?.name || "Kategori"}
           </Link>
           <ChevronRight size={14} />
@@ -181,7 +181,7 @@ export default function ProductPageClient({ product }: { product: Product }) {
                     onClick={() => setSelectedImage(img)}
                     className={`aspect-square rounded-xl overflow-hidden border-2 transition-all ${
                       selectedImage === img
-                        ? "border-blue-600 ring-2 ring-blue-100"
+                        ? "border-olive-600 ring-2 ring-olive-100"
                         : "border-transparent hover:border-slate-200"
                     }`}
                   >
@@ -201,7 +201,7 @@ export default function ProductPageClient({ product }: { product: Product }) {
           <div className="space-y-8 animate-in fade-in slide-in-from-right duration-700">
             <div className="space-y-4">
               <div className="flex items-center gap-4">
-                <Badge variant="outline" className="text-blue-600 border-blue-100 bg-blue-50/50">
+                <Badge variant="outline" className="text-olive-600 border-olive-100 bg-olive-50/50">
                   {product.categories?.name}
                 </Badge>
                 <div className="flex items-center text-yellow-500 text-sm font-bold">
@@ -217,7 +217,7 @@ export default function ProductPageClient({ product }: { product: Product }) {
                 {product.title}
               </h1>
               <div className="flex items-baseline gap-4">
-                <span className="text-3xl font-black text-blue-600">
+                <span className="text-3xl font-black text-olive-600">
                   ₺{currentPrice.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
                 </span>
                 {currentCompareAt && currentCompareAt > currentPrice && (
@@ -257,7 +257,7 @@ export default function ProductPageClient({ product }: { product: Product }) {
                           "relative min-w-[56px] px-4 py-3 rounded-xl border-2 font-bold transition-all text-sm text-center",
                           isSelected
                             ? hasStock
-                              ? "border-blue-600 bg-blue-50 text-blue-700 ring-2 ring-blue-100"
+                              ? "border-olive-600 bg-olive-50 text-olive-700 ring-2 ring-olive-100"
                               : "border-amber-400 bg-amber-50 text-amber-700 ring-2 ring-amber-100"
                             : hasStock
                               ? "border-slate-200 hover:border-slate-400 text-slate-700 bg-white"
@@ -266,7 +266,7 @@ export default function ProductPageClient({ product }: { product: Product }) {
                       >
                         {v.variant_options?.value ?? v.sku ?? "?"}
                         {isSelected && hasStock && (
-                          <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-blue-600 rounded-full flex items-center justify-center">
+                          <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-olive-600 rounded-full flex items-center justify-center">
                             <Check size={8} className="text-white" />
                           </span>
                         )}
@@ -338,7 +338,7 @@ export default function ProductPageClient({ product }: { product: Product }) {
                         "flex-1 h-16 rounded-2xl text-lg font-bold shadow-xl gap-3 transition-all duration-300",
                         isAdding
                           ? "bg-green-600 hover:bg-green-700"
-                          : "bg-blue-600 hover:bg-blue-700 shadow-blue-100"
+                          : "bg-olive-600 hover:bg-olive-700 shadow-olive-100"
                       )}
                       disabled={isAdding}
                       onClick={handleAddToCart}
@@ -379,7 +379,7 @@ export default function ProductPageClient({ product }: { product: Product }) {
               ].map(({ icon: Icon, label }) => (
                 <Card key={label} className="border-none bg-slate-50 shadow-none">
                   <CardContent className="p-4 flex flex-col items-center text-center space-y-2">
-                    <Icon className="text-blue-600" size={24} />
+                    <Icon className="text-olive-600" size={24} />
                     <span className="text-[10px] font-bold text-slate-900 uppercase">{label}</span>
                   </CardContent>
                 </Card>

@@ -8,38 +8,40 @@
     --font-sans: var(--font-inter);
   }
   :root {
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.205 0 0);
-    --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
-    --accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.205 0 0);
+    /* ─── Terra Form renk paleti ────────────────────────────────────────── */
+    --background: #fafaf5;          /* krem canvas */
+    --foreground: #1a1c19;          /* organik koyu */
+    --card: #ffffff;
+    --card-foreground: #1a1c19;
+    --popover: #ffffff;
+    --popover-foreground: #1a1c19;
+    --primary: #536430;             /* zeytin yeşili */
+    --primary-foreground: #ffffff;
+    --secondary: #e8e8e3;           /* yüzey-high */
+    --secondary-foreground: #1a1c19;
+    --muted: #f4f4ef;               /* yüzey-low */
+    --muted-foreground: #46483c;
+    --accent: #879b60;              /* açık zeytin */
+    --accent-foreground: #ffffff;
     --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    --ring: oklch(0.708 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
+    --destructive-foreground: #ffffff;
+    --border: #c6c8b8;              /* outline-variant */
+    --input: #f4f4ef;
+    --ring: #536430;
+    --chart-1: #536430;
+    --chart-2: #879b60;
+    --chart-3: #c6c8b8;
+    --chart-4: #e8e8e3;
+    --chart-5: #1a1c19;
     --radius: 0.625rem;
-    --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.145 0 0);
-    --sidebar-primary: oklch(0.205 0 0);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.97 0 0);
-    --sidebar-accent-foreground: oklch(0.205 0 0);
-    --sidebar-border: oklch(0.922 0 0);
-    --sidebar-ring: oklch(0.708 0 0)
+    --sidebar: #f4f4ef;
+    --sidebar-foreground: #1a1c19;
+    --sidebar-primary: #536430;
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-accent: #e8e8e3;
+    --sidebar-accent-foreground: #1a1c19;
+    --sidebar-border: #c6c8b8;
+    --sidebar-ring: #536430;
   }
   .dark {
     --background: oklch(0.145 0 0);
@@ -112,10 +114,15 @@
   width: 10px;
 }
 ::-webkit-scrollbar-track {
-  @apply bg-slate-50;
+  background: #f4f4ef;
 }
 ::-webkit-scrollbar-thumb {
-  @apply bg-slate-200 rounded-full border-4 border-slate-50 hover:bg-slate-300 transition-colors;
+  background: #c6c8b8;
+  border-radius: 9999px;
+  border: 3px solid #f4f4ef;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #76786b;
 }
 
 @keyframes float {
