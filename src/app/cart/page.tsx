@@ -236,10 +236,11 @@ export default function CartPage() {
 
   // Yeni pending gift geldiğinde otomatik modal aç (ilki)
   useEffect(() => {
-    if (pendingGifts.length > 0 && !activePending) {
-      setActivePending(pendingGifts[0].rule_id);
+    const gifts = pendingGifts ?? [];
+    if (gifts.length > 0 && !activePending) {
+      setActivePending(gifts[0].rule_id);
     }
-    if (pendingGifts.length === 0) {
+    if (gifts.length === 0) {
       setActivePending(null);
     }
   }, [pendingGifts, activePending]);
@@ -270,9 +271,10 @@ export default function CartPage() {
   }
   displayItems.push(...perOrderGifts);
 
-  const totalGifts = items.filter((i) => i.is_gift).length + pendingGifts.length;
+  const safePending = pendingGifts ?? [];
+  const totalGifts = items.filter((i) => i.is_gift).length + safePending.length;
 
-  if (items.length === 0 && pendingGifts.length === 0) {
+  if (items.length === 0 && safePending.length === 0) {
     return (
       <div className="min-h-screen bg-white">
         <header className="border-b">
@@ -300,7 +302,7 @@ export default function CartPage() {
     );
   }
 
-  const activePendingGift = pendingGifts.find((p) => p.rule_id === activePending);
+  const activePendingGift = safePending.find((p) => p.rule_id === activePending);
 
   return (
     <div className="min-h-screen bg-[#fafbfc]">
@@ -316,12 +318,12 @@ export default function CartPage() {
           onConfirm={(variant) => {
             confirmGift(activePendingGift.rule_id, variant);
             // Sıradaki pending varsa ona geç
-            const remaining = pendingGifts.filter((p) => p.rule_id !== activePendingGift.rule_id);
+            const remaining = safePending.filter((p) => p.rule_id !== activePendingGift.rule_id);
             setActivePending(remaining[0]?.rule_id ?? null);
           }}
           onDismiss={() => {
             dismissGift(activePendingGift.rule_id);
-            const remaining = pendingGifts.filter((p) => p.rule_id !== activePendingGift.rule_id);
+            const remaining = safePending.filter((p) => p.rule_id !== activePendingGift.rule_id);
             setActivePending(remaining[0]?.rule_id ?? null);
           }}
         />
@@ -364,7 +366,7 @@ export default function CartPage() {
             </div>
 
             {/* Bekleyen hediye banner'ları (seçim yapılmamış, modal kapalıyken) */}
-            {pendingGifts.filter((p) => p.rule_id !== activePending).map((p) => (
+            {safePending.filter((p) => p.rule_id !== activePending).map((p) => (
               <div
                 key={p.rule_id}
                 className="flex items-center justify-between gap-3 px-4 py-3 bg-olive-50 border border-olive-200 rounded-2xl"

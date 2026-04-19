@@ -311,6 +311,14 @@ export const useCartStore = create<CartStore>()(
       name: 'shopping-cart',
       // Yalnızca items persist edilir; pendingGifts ve dismissedRules oturum bazlıdır
       partialize: (state) => ({ items: state.items }),
+      // Merge: localStorage'dan sadece items alınır, geri kalanlar her zaman
+      // başlangıç değeriyle başlar. Eski kayıtlarda eksik alan olsa da güvenli.
+      merge: (persisted, current) => ({
+        ...current,
+        items: (persisted as any)?.items ?? [],
+        pendingGifts: [],
+        dismissedRules: [],
+      }),
     }
   )
 );
