@@ -9,6 +9,7 @@ type CartItem = {
   title: string;
   price: number;
   quantity: number;
+  is_gift?: boolean;
 };
 
 export async function POST(req: NextRequest) {

@@ -28,6 +28,7 @@ async function getProduct(slug: string) {
     .from("products")
     .select(`
       id, title, description, slug, price, stock, images, image_url, has_variants,
+      category_id,
       brands (name),
       categories (name),
       product_variants (

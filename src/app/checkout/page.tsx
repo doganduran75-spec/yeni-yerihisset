@@ -23,6 +23,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
@@ -156,8 +157,10 @@ export default function CheckoutPage() {
           product_id: item.product_id,
           variant_id: item.variant_id,
           title: item.title,
-          price: item.price,
+          // Hediye ürünlerin fiyatı her zaman 0
+          price: item.is_gift ? 0 : item.price,
           quantity: item.quantity,
+          is_gift: item.is_gift ?? false,
         })),
         shippingAddressId: selectedShippingId,
         affiliateCode,

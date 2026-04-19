@@ -56,6 +56,7 @@ type Product = {
   images: string[] | null;
   image_url: string | null;
   has_variants: boolean | null;
+  category_id: string | null;
   brands: { name: string } | null;
   categories: { name: string } | null;
   product_variants: Variant[] | null;
@@ -78,7 +79,7 @@ export default function ProductPageClient({ product }: { product: Product }) {
   const [notifyModalOpen, setNotifyModalOpen] = useState(false);
   // notifiedVariants: başarıyla bildirim kaydedilen variant ID'leri
   const [notifiedVariants, setNotifiedVariants] = useState<Set<string>>(new Set());
-  const { addItem, items } = useCartStore();
+  const { addItem, items, checkGiftRules } = useCartStore();
 
   // GA4: view_item — ürün sayfası yüklenince
   useEffect(() => {
@@ -131,7 +132,7 @@ export default function ProductPageClient({ product }: { product: Product }) {
     product.has_variants && selectedVariant ? (selectedVariant.stock ?? 0) : product.stock;
   const isOutOfStock = currentStock === 0;
 
-  function handleAddToCart() {
+  async function handleAddToCart() {
     const cartId =
       product.has_variants && selectedVariant
         ? `var_${selectedVariant.id}`
@@ -147,6 +148,7 @@ export default function ProductPageClient({ product }: { product: Product }) {
       quantity,
       stock: currentStock,
       variant_name: selectedVariant?.variant_options?.value,
+      category_id: product.category_id ?? undefined,
     });
 
     // GA4: add_to_cart
@@ -159,6 +161,12 @@ export default function ProductPageClient({ product }: { product: Product }) {
       price: currentPrice,
       quantity,
     });
+
+    // Bedelsiz ürün kurallarını kontrol et
+    if (product.category_id) {
+      const { data: { user } } = await supabase.auth.getUser();
+      await checkGiftRules(product.category_id, cartId, user?.id);
+    }
 
     setIsAdding(true);
     setTimeout(() => setIsAdding(false), 1000);
