@@ -54,13 +54,18 @@ export default function Navbar({ variant = "default" }: NavbarProps) {
           </Link>
           
           <nav className="hidden lg:flex items-center gap-8">
-            {["Yeni Gelenler", "Kategoriler", "İndirimler", "Hakkımızda"].map((item) => (
-              <Link 
-                key={item} 
-                href="#" 
+            {[
+              { label: "Yeni Gelenler", href: "/products" },
+              { label: "Kategoriler",   href: "#" },
+              { label: "İndirimler",    href: "#" },
+              { label: "Bilgi Bankası", href: "/bilgi-bankasi" },
+            ].map((item) => (
+              <Link
+                key={item.label}
+                href={item.href}
                 className="text-sm font-black uppercase tracking-widest text-slate-500 hover:text-olive-600 transition-colors relative group py-2"
               >
-                {item}
+                {item.label}
                 <span className="absolute bottom-0 left-0 w-0 h-1 bg-olive-600 transition-all group-hover:w-full rounded-full" />
               </Link>
             ))}
