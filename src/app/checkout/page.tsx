@@ -26,6 +26,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import { trackBeginCheckout, trackPurchase } from "@/lib/analytics";
 
 function getCookie(name: string): string | null {
   if (typeof document === "undefined") return null;
@@ -57,6 +58,23 @@ export default function CheckoutPage() {
 
   useEffect(() => {
     fetchAddresses();
+  }, []);
+
+  // GA4: begin_checkout — sayfa yüklenince (sepette ürün varsa)
+  useEffect(() => {
+    if (items.length === 0) return;
+    const total = getTotalPrice();
+    trackBeginCheckout({
+      items: items.map((i) => ({
+        id: i.product_id,
+        title: i.title,
+        price: i.price,
+        quantity: i.quantity,
+        variant_name: i.variant_name,
+      })),
+      total,
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function fetchAddresses() {
@@ -125,6 +143,10 @@ export default function CheckoutPage() {
     }
 
     const affiliateCode = getCookie("affiliate_ref") || undefined;
+    const totalPrice = getTotalPrice();
+    const couponDiscount = couponData?.discount_amount ?? 0;
+    const shippingCost = (totalPrice > 500 || couponData?.free_shipping) ? 0 : 29.90;
+    const finalTotal = Math.max(0, totalPrice + shippingCost - couponDiscount);
 
     const res = await fetch("/api/orders/create", {
       method: "POST",
@@ -147,6 +169,21 @@ export default function CheckoutPage() {
     setPlacing(false);
 
     if (data.orderId) {
+      // GA4: purchase
+      trackPurchase({
+        orderId: data.orderId,
+        items: items.map((i) => ({
+          id: i.product_id,
+          title: i.title,
+          price: i.price,
+          quantity: i.quantity,
+          variant_name: i.variant_name,
+        })),
+        total: finalTotal,
+        shipping: shippingCost,
+        couponCode: couponCode || undefined,
+        affiliateCode: affiliateCode || undefined,
+      });
       clearCart();
       setOrderSuccess(data.orderId);
     } else {

@@ -30,6 +30,7 @@ import { useCartStore } from "@/store/useCartStore";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { supabase } from "@/lib/supabase";
+import { trackViewItem, trackAddToCart } from "@/lib/analytics";
 
 type Variant = {
   id: string;
@@ -78,6 +79,18 @@ export default function ProductPageClient({ product }: { product: Product }) {
   // notifiedVariants: başarıyla bildirim kaydedilen variant ID'leri
   const [notifiedVariants, setNotifiedVariants] = useState<Set<string>>(new Set());
   const { addItem, items } = useCartStore();
+
+  // GA4: view_item — ürün sayfası yüklenince
+  useEffect(() => {
+    trackViewItem({
+      productId: product.id,
+      productName: product.title,
+      category: product.categories?.name,
+      brand: product.brands?.name,
+      price: product.price,
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [product.id]);
 
   // OAuth yönlendirmesinden geri döndükten sonra bekleyen bildirimi otomatik gönder
   useEffect(() => {
@@ -134,6 +147,17 @@ export default function ProductPageClient({ product }: { product: Product }) {
       quantity,
       stock: currentStock,
       variant_name: selectedVariant?.variant_options?.value,
+    });
+
+    // GA4: add_to_cart
+    trackAddToCart({
+      productId: product.id,
+      productName: product.title,
+      variantName: selectedVariant?.variant_options?.value,
+      category: product.categories?.name,
+      brand: product.brands?.name,
+      price: currentPrice,
+      quantity,
     });
 
     setIsAdding(true);

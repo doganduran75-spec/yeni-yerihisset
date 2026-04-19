@@ -77,24 +77,6 @@ export default async function KnowledgeBasePage({
     <div className="min-h-screen bg-cream">
       <Navbar />
 
-      {/* ── Hero başlık ──────────────────────────────────────────────────── */}
-      <section className="bg-olive-50 border-b border-olive-100 py-16">
-        <div className="container mx-auto px-4 max-w-5xl">
-          <div className="flex items-center gap-3 text-olive-600 mb-4">
-            <BookOpen size={20} strokeWidth={1.5} />
-            <span className="font-black text-xs uppercase tracking-widest">
-              Bilgi Bankası
-            </span>
-          </div>
-          <h1 className="text-4xl md:text-5xl font-black tracking-tighter text-slate-900">
-            Size nasıl yardımcı olabiliriz?
-          </h1>
-          <p className="text-slate-500 font-medium mt-3 max-w-xl">
-            Ürünler, kargo, iade ve daha fazlası hakkında rehberler ve
-            açıklamalar.
-          </p>
-        </div>
-      </section>
 
       <div className="container mx-auto px-4 max-w-5xl py-12">
         {/* ── Kategori sekmeleri ──────────────────────────────────────────── */}

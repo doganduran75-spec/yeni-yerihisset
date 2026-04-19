@@ -3,6 +3,7 @@ import { Outfit, Inter } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import PopupBanner from "@/components/PopupBanner";
 import GlobalStructuredData from "@/components/GlobalStructuredData";
+import GoogleAnalytics from "@/components/GoogleAnalytics";
 import "./globals.css";
 
 const outfit = Outfit({
@@ -79,6 +80,7 @@ export default function RootLayout({
     <html lang="tr" className={`${outfit.variable} ${inter.variable} antialiased scroll-smooth`}>
       <head>
         <GlobalStructuredData />
+        <GoogleAnalytics />
       </head>
       <body className="font-sans bg-background text-foreground selection:bg-olive-100 selection:text-olive-800" suppressHydrationWarning>
         <TooltipProvider>

@@ -7,7 +7,7 @@ export const metadata: Metadata = {
 import { SidebarProvider, Sidebar, SidebarHeader, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarInset, SidebarGroupLabel } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
-import { LayoutDashboard, ShoppingBag, CreditCard, Settings, Users, ExternalLink, BookOpen, Handshake, MessagesSquare, Link2, Ticket, BellRing, FileEdit } from "lucide-react";
+import { LayoutDashboard, ShoppingBag, CreditCard, Settings, Users, ExternalLink, BookOpen, Handshake, MessagesSquare, Link2, Ticket, BellRing, FileEdit, Send, Gift } from "lucide-react";
 import AdminGuard from "@/components/admin/AdminGuard";
 
 export default function AdminLayout({
@@ -111,6 +111,16 @@ export default function AdminLayout({
                 <SidebarMenuItem>
                   <SidebarMenuButton
                     render={<Link href="/admin/crm/stock-notifications"><BellRing size={18} className="mr-2" /> Stok Bildirimleri</Link>}
+                  />
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    render={<Link href="/admin/crm/bulk-email"><Send size={18} className="mr-2" /> Toplu Email</Link>}
+                  />
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    render={<Link href="/admin/opportunities"><Gift size={18} className="mr-2" /> İş Ortağı Fırsatları</Link>}
                   />
                 </SidebarMenuItem>
               </SidebarMenu>
