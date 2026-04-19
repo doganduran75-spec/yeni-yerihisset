@@ -73,11 +73,11 @@ export const useCartStore = create<CartStore>()(
 
         if (existingItem) {
           set({
-            items: items.map((item) =>
-              item.id === newItem.id
-                ? { ...item, quantity: Math.min(item.quantity + newItem.quantity, item.stock) }
-                : item
-            ),
+            items: items.map((item) => {
+              if (item.id !== newItem.id) return item;
+              const maxQty = item.stock > 0 ? item.stock : 9999;
+              return { ...item, quantity: Math.min(item.quantity + newItem.quantity, maxQty) };
+            }),
           });
         } else {
           set({ items: [...items, newItem] });
@@ -136,11 +136,13 @@ export const useCartStore = create<CartStore>()(
 
       updateQuantity: (id, quantity) => {
         set({
-          items: get().items.map((item) =>
-            item.id === id
-              ? { ...item, quantity: Math.max(1, Math.min(quantity, item.stock)) }
-              : item
-          ),
+          items: get().items.map((item) => {
+            if (item.id !== id) return item;
+            // stock null/undefined/0 ise (varyant stoğu DB'de NULL olabilir)
+            // üst sınır olarak 9999 kullan — sepete zaten eklenmiş, stok > 0 kabul edilir
+            const maxQty = item.stock > 0 ? item.stock : 9999;
+            return { ...item, quantity: Math.max(1, Math.min(quantity, maxQty)) };
+          }),
         });
       },
 
@@ -161,11 +163,12 @@ export const useCartStore = create<CartStore>()(
         const { items, pendingGifts, dismissedRules } = get();
 
         // Aktif kuralları çek
+        // gift_product:products!gift_product_id → FK ile products tablosunu join et, alias "gift_product"
         const { data: rules } = await (supabase as any)
           .from('free_gift_rules')
           .select(`
             id, quantity_mode,
-            gift_product:gift_product_id (
+            gift_product:products!gift_product_id (
               id, title, image_url, price, has_variants, stock,
               product_variants ( id, stock, variant_options ( value ) )
             )
