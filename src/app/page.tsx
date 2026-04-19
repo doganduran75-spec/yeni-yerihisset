@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
-import { ShoppingBag, Search, User, Menu, ChevronRight, Star, ArrowRight, Shield } from "lucide-react";
+import { ShoppingBag, Search, ChevronRight, Star, ArrowRight, Shield, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -17,8 +17,31 @@ export default function HomePage() {
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [content, setContent] = useState<Record<string, string>>({});
-  const { items } = useCartStore();
+  const { addItem, checkGiftRules } = useCartStore();
   const [mounted, setMounted] = useState(false);
+  const [addedId, setAddedId] = useState<string | null>(null); // Sepete ekleme animasyonu
+
+  async function handleQuickAdd(product: any) {
+    const cartId = `prod_${product.id}`;
+    addItem({
+      id: cartId,
+      product_id: product.id,
+      title: product.title,
+      image: (product.images && product.images.length > 0) ? product.images[0] : (product.image_url || ""),
+      price: product.price,
+      quantity: 1,
+      stock: product.stock || 9999,
+      category_id: product.category_id ?? undefined,
+    });
+    setAddedId(product.id);
+    setTimeout(() => setAddedId(null), 1200);
+
+    // Bedelsiz ürün kontrolü
+    if (product.category_id) {
+      const { data: { user } } = await supabase.auth.getUser();
+      await checkGiftRules(product.category_id, cartId, user?.id);
+    }
+  }
 
   // İçerik için varsayılan değerler (DB'den gelmezse kullanılır)
   function c(key: string, fallback: string): string {
@@ -239,9 +262,28 @@ export default function HomePage() {
                           className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000"
                         />
                       </Link>
-                      <button className="absolute bottom-6 left-1/2 -translate-x-1/2 w-[85%] h-14 glass rounded-2xl text-slate-900 font-black text-xs uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-all transform translate-y-4 group-hover:translate-y-0 flex items-center justify-center gap-2 hover:bg-olive-600 hover:text-white hover:border-olive-600 active:scale-95 shadow-xl">
-                         <ShoppingBag size={18} /> SEPETE EKLE
-                      </button>
+                      {product.has_variants ? (
+                        /* Varyantlı ürün → ürün sayfasına yönlendir */
+                        <Link
+                          href={`/products/${product.slug}`}
+                          className="absolute bottom-6 left-1/2 -translate-x-1/2 w-[85%] h-14 glass rounded-2xl text-slate-900 font-black text-xs uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-all transform translate-y-4 group-hover:translate-y-0 flex items-center justify-center gap-2 hover:bg-olive-600 hover:text-white hover:border-olive-600 active:scale-95 shadow-xl"
+                        >
+                          <Search size={18} /> İNCELE
+                        </Link>
+                      ) : (
+                        /* Varyantsız ürün → direkt sepete ekle */
+                        <button
+                          onClick={(e) => { e.preventDefault(); handleQuickAdd(product); }}
+                          className="absolute bottom-6 left-1/2 -translate-x-1/2 w-[85%] h-14 glass rounded-2xl font-black text-xs uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-all transform translate-y-4 group-hover:translate-y-0 flex items-center justify-center gap-2 active:scale-95 shadow-xl hover:border-olive-600"
+                          style={addedId === product.id
+                            ? { background: "#536430", color: "#fff", opacity: 1, transform: "translateY(0)" }
+                            : { color: "#1a1c19" }}
+                        >
+                          {addedId === product.id
+                            ? <><Check size={18} /> EKLENDİ</>
+                            : <><ShoppingBag size={18} /> SEPETE EKLE</>}
+                        </button>
+                      )}
                       <div className="absolute top-6 left-6 flex flex-col gap-2">
                          <span className="px-3 py-1 bg-white/90 backdrop-blur-md text-[9px] font-black uppercase tracking-widest rounded-full border border-slate-100 text-slate-900">
                             {product.brands?.name || "Özel"}
