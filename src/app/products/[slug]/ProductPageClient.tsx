@@ -76,6 +76,7 @@ export default function ProductPageClient({ product }: { product: Product }) {
     activeVariants.length > 0 ? activeVariants[0] : null
   );
   const [isAdding, setIsAdding] = useState(false);
+  const [toast, setToast] = useState(false);
   const [notifyModalOpen, setNotifyModalOpen] = useState(false);
   // notifiedVariants: başarıyla bildirim kaydedilen variant ID'leri
   const [notifiedVariants, setNotifiedVariants] = useState<Set<string>>(new Set());
@@ -169,11 +170,53 @@ export default function ProductPageClient({ product }: { product: Product }) {
     }
 
     setIsAdding(true);
+    setToast(true);
     setTimeout(() => setIsAdding(false), 1000);
+    setTimeout(() => setToast(false), 2800);
   }
 
   return (
     <div className="min-h-screen bg-white">
+      {/* ── Sepete Eklendi Toast ─────────────────────────────── */}
+      <div
+        className={cn(
+          "fixed top-6 right-6 z-[200] flex items-center gap-3 bg-white rounded-2xl shadow-2xl shadow-slate-200 border border-slate-100 px-4 py-3 max-w-xs transition-all duration-300",
+          toast
+            ? "opacity-100 translate-y-0 pointer-events-auto"
+            : "opacity-0 -translate-y-4 pointer-events-none"
+        )}
+      >
+        {/* Ürün küçük görseli */}
+        <div className="w-12 h-12 rounded-xl overflow-hidden bg-slate-50 flex-shrink-0 border border-slate-100">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={selectedImage} alt={product.title} className="w-full h-full object-cover" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 mb-0.5">
+            <div className="w-4 h-4 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
+              <Check size={10} className="text-white" strokeWidth={3} />
+            </div>
+            <span className="text-[11px] font-bold text-green-600 uppercase tracking-wide">Sepete eklendi</span>
+          </div>
+          <p className="text-xs font-semibold text-slate-800 truncate">{product.title}</p>
+          {selectedVariant?.variant_options?.value && (
+            <p className="text-[11px] text-slate-400">{selectedVariant.variant_options.value}</p>
+          )}
+        </div>
+        <Link
+          href="/cart"
+          className="flex-shrink-0 text-[11px] font-bold text-olive-600 hover:text-olive-800 whitespace-nowrap border border-olive-200 rounded-full px-2.5 py-1 hover:bg-olive-50 transition-colors"
+        >
+          Sepete Git →
+        </Link>
+        <button
+          onClick={() => setToast(false)}
+          className="absolute -top-2 -right-2 w-5 h-5 bg-slate-200 hover:bg-slate-300 rounded-full flex items-center justify-center transition-colors"
+        >
+          <X size={10} />
+        </button>
+      </div>
+
       <Navbar />
 
       <main className="container mx-auto px-4 py-8 md:py-12">
