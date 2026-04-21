@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/lib/supabase";
-import { Loader2, Upload, X, ChevronLeft, Save, Copy } from "lucide-react";
+import { Loader2, Upload, X, ChevronLeft, Save, Copy, ImagePlus } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 
@@ -36,8 +36,10 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
     has_variants: false,
     selected_group_id: "",
     variants: [] as any[],
+    variants_have_images: false, // Her varyasyon için ayrı foto?
     is_active: true,
   });
+  const [uploadingVariantIdx, setUploadingVariantIdx] = useState<number | null>(null);
 
   const [tagInput, setTagInput] = useState("");
 
@@ -60,7 +62,10 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
           trendyol_psf: v.trendyol_psf?.toString() || "",
           trendyol_price: v.trendyol_price?.toString() || "",
           value: v.variant_options?.value,
+          image_url: v.image_url || "",
         })) || [],
+        variants_have_images:
+          initialData.product_variants?.some((v: any) => v.image_url) || false,
       });
     }
   }, [initialData]);
@@ -134,6 +139,24 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
     }
   }
 
+  async function handleVariantImageUpload(idx: number, e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingVariantIdx(idx);
+    try {
+      const ext = file.name.split(".").pop();
+      const filePath = `products/variants/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const { error } = await supabase.storage.from("product-images").upload(filePath, file);
+      if (error) throw error;
+      const { data: { publicUrl } } = supabase.storage.from("product-images").getPublicUrl(filePath);
+      handleVariantChange(idx, "image_url", publicUrl);
+    } catch {
+      alert("Görsel yüklenirken hata oluştu.");
+    } finally {
+      setUploadingVariantIdx(null);
+    }
+  }
+
   function handleVariantChange(index: number, field: string, value: any) {
     const newVariants = [...formData.variants];
     newVariants[index] = { ...newVariants[index], [field]: value };
@@ -155,6 +178,7 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
       trendyol_psf: "",
       trendyol_price: "",
       is_active: true,
+      image_url: "",
     }));
 
     setFormData((prev) => ({ ...prev, selected_group_id: groupId, variants: initialVariants }));
@@ -199,6 +223,7 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
           trendyol_psf: v.trendyol_psf !== "" ? parseFloat(v.trendyol_psf) : null,
           trendyol_price: v.trendyol_price !== "" ? parseFloat(v.trendyol_price) : null,
           is_active: v.is_active,
+          image_url: formData.variants_have_images ? (v.image_url || null) : null,
         }));
 
         const { data: savedVariants, error: variantError } = await supabase.from("product_variants").insert(variantsPayload).select();
@@ -263,6 +288,7 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
           trendyol_psf: v.trendyol_psf !== "" ? parseFloat(v.trendyol_psf) : null,
           trendyol_price: v.trendyol_price !== "" ? parseFloat(v.trendyol_price) : null,
           is_active: v.is_active,
+          image_url: formData.variants_have_images ? (v.image_url || null) : null,
         }));
 
         const { data: savedVariants, error: variantError } = await supabase
@@ -443,6 +469,80 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
                       </Table>
                     </div>
 
+                    {/* ── Varyasyon görseli sorusu ── */}
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-3 p-4 bg-slate-50 rounded-2xl border">
+                      <span className="text-sm font-medium shrink-0">Her varyasyon için farklı fotoğraf var mı?</span>
+                      <div className="flex gap-4">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="variants_have_images"
+                            checked={!formData.variants_have_images}
+                            onChange={() => setFormData({ ...formData, variants_have_images: false })}
+                            className="h-4 w-4"
+                          />
+                          <span className="text-sm text-slate-600">Hayır — aynı fotoğrafı kullanır</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="variants_have_images"
+                            checked={formData.variants_have_images}
+                            onChange={() => setFormData({ ...formData, variants_have_images: true })}
+                            className="h-4 w-4"
+                          />
+                          <span className="text-sm text-slate-600">Evet — her varyasyonun ayrı fotoğrafı var</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* ── Per-variant image grid ── */}
+                    {formData.variants_have_images && (
+                      <div className="space-y-3 animate-in fade-in slide-in-from-top-2">
+                        <p className="text-sm font-medium text-slate-700">Varyasyon Fotoğrafları</p>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                          {formData.variants.map((v, idx) => (
+                            <div key={v.id || idx} className="space-y-2">
+                              <p className="text-xs font-bold text-blue-600 text-center truncate">{v.value}</p>
+                              <div className="relative aspect-square rounded-2xl border-2 border-dashed border-slate-200 overflow-hidden group hover:border-blue-400 transition-colors">
+                                {v.image_url ? (
+                                  <>
+                                    <img src={v.image_url} alt={v.value} className="w-full h-full object-cover" />
+                                    <button
+                                      type="button"
+                                      onClick={() => handleVariantChange(idx, "image_url", "")}
+                                      className="absolute top-1.5 right-1.5 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-all shadow"
+                                    >
+                                      <X size={10} />
+                                    </button>
+                                  </>
+                                ) : (
+                                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-slate-400 group-hover:text-blue-500 transition-colors">
+                                    {uploadingVariantIdx === idx ? (
+                                      <Loader2 size={20} className="animate-spin" />
+                                    ) : (
+                                      <>
+                                        <ImagePlus size={20} />
+                                        <span className="text-[10px] font-bold">Fotoğraf Ekle</span>
+                                      </>
+                                    )}
+                                  </div>
+                                )}
+                                {uploadingVariantIdx !== idx && (
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    className="absolute inset-0 opacity-0 cursor-pointer"
+                                    onChange={(e) => handleVariantImageUpload(idx, e)}
+                                    disabled={uploadingVariantIdx !== null}
+                                  />
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </>
                 )}
               </div>

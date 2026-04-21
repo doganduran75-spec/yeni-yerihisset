@@ -32,7 +32,7 @@ async function getProduct(slug: string) {
       brands (name),
       categories (name),
       product_variants (
-        id, sku, price, compare_at_price, stock, is_active, variant_option_id,
+        id, sku, price, compare_at_price, stock, is_active, variant_option_id, image_url,
         variant_options (
           value,
           variant_groups (name)

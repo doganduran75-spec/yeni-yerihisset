@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   Plus, Edit, Trash2, Loader2, ExternalLink,
-  MousePointerClick, Eye, EyeOff, Building2,
+  MousePointerClick, Eye, EyeOff, Building2, Users,
 } from "lucide-react";
 
 type Opportunity = {
@@ -25,17 +25,32 @@ type Opportunity = {
   valid_until: string | null;
   is_active: boolean;
   click_count: number;
+  allowed_role_slugs: string[] | null;
+};
+
+type Partner = {
+  id: string;
+  company_name: string;
+};
+
+type Role = {
+  id: string;
+  name: string;
+  slug: string;
 };
 
 const EMPTY: Omit<Opportunity, "id" | "click_count"> = {
   partner_name: "", title: "", description: "", image_url: "",
   url: "", discount_code: "", valid_until: "", is_active: true,
+  allowed_role_slugs: [],
 };
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com";
 
 export default function OpportunitiesPage() {
   const [opps, setOpps] = useState<Opportunity[]>([]);
+  const [partners, setPartners] = useState<Partner[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [open, setOpen] = useState(false);
@@ -46,11 +61,14 @@ export default function OpportunitiesPage() {
 
   async function load() {
     setLoading(true);
-    const { data } = await (supabase as any)
-      .from("partner_opportunities")
-      .select("*")
-      .order("created_at", { ascending: false });
-    setOpps(data || []);
+    const [{ data: oppsData }, { data: partnersData }, { data: rolesData }] = await Promise.all([
+      (supabase as any).from("partner_opportunities").select("*").order("created_at", { ascending: false }),
+      (supabase as any).from("partners").select("id, company_name").order("company_name", { ascending: true }),
+      (supabase as any).from("roles").select("id, name, slug").order("name", { ascending: true }),
+    ]);
+    setOpps(oppsData || []);
+    setPartners(partnersData || []);
+    setRoles(rolesData || []);
     setLoading(false);
   }
 
@@ -61,8 +79,17 @@ export default function OpportunitiesPage() {
       partner_name: o.partner_name, title: o.title, description: o.description || "",
       image_url: o.image_url || "", url: o.url, discount_code: o.discount_code || "",
       valid_until: o.valid_until || "", is_active: o.is_active,
+      allowed_role_slugs: o.allowed_role_slugs || [],
     });
     setOpen(true);
+  }
+
+  function toggleRoleSlug(slug: string) {
+    const current = form.allowed_role_slugs || [];
+    const updated = current.includes(slug)
+      ? current.filter((s) => s !== slug)
+      : [...current, slug];
+    setForm({ ...form, allowed_role_slugs: updated });
   }
 
   async function handleSave() {
@@ -77,6 +104,7 @@ export default function OpportunitiesPage() {
       discount_code: form.discount_code || null,
       image_url: form.image_url || null,
       description: form.description || null,
+      allowed_role_slugs: form.allowed_role_slugs?.length ? form.allowed_role_slugs : [],
       updated_at: new Date().toISOString(),
     };
     if (editingId) {
@@ -98,6 +126,10 @@ export default function OpportunitiesPage() {
   async function toggleActive(o: Opportunity) {
     await (supabase as any).from("partner_opportunities").update({ is_active: !o.is_active }).eq("id", o.id);
     setOpps((prev) => prev.map((x) => x.id === o.id ? { ...x, is_active: !x.is_active } : x));
+  }
+
+  function getRoleName(slug: string) {
+    return roles.find((r) => r.slug === slug)?.name || slug;
   }
 
   return (
@@ -160,13 +192,26 @@ export default function OpportunitiesPage() {
                       </div>
                     )}
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <span className="text-[10px] font-bold uppercase tracking-widest text-olive-600 bg-olive-50 px-2 py-0.5 rounded">
                           {o.partner_name}
                         </span>
                         {!o.is_active && <Badge variant="secondary" className="text-[10px]">Pasif</Badge>}
                         {o.valid_until && new Date(o.valid_until) < new Date() && (
                           <Badge variant="destructive" className="text-[10px]">Süresi Doldu</Badge>
+                        )}
+                        {/* Rol rozetleri */}
+                        {o.allowed_role_slugs && o.allowed_role_slugs.length > 0 ? (
+                          o.allowed_role_slugs.map((slug) => (
+                            <span key={slug} className="inline-flex items-center gap-1 text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-full">
+                              <Users size={10} />
+                              {getRoleName(slug)}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                            <Users size={10} /> Herkese açık
+                          </span>
                         )}
                       </div>
                       <h3 className="font-semibold text-slate-900 truncate">{o.title}</h3>
@@ -231,7 +276,16 @@ export default function OpportunitiesPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">İş Ortağı Adı *</label>
-                <Input value={form.partner_name} onChange={(e) => setForm({ ...form, partner_name: e.target.value })} placeholder="Örn: Adidas" />
+                <select
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  value={form.partner_name}
+                  onChange={(e) => setForm({ ...form, partner_name: e.target.value })}
+                >
+                  <option value="">— Seçiniz —</option>
+                  {partners.map((p) => (
+                    <option key={p.id} value={p.company_name}>{p.company_name}</option>
+                  ))}
+                </select>
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Fırsat Başlığı *</label>
@@ -267,6 +321,46 @@ export default function OpportunitiesPage() {
                 <Input type="date" value={form.valid_until ?? ""} onChange={(e) => setForm({ ...form, valid_until: e.target.value })} />
               </div>
             </div>
+
+            {/* Roller — Tanımlar > Roller altından besleniyor */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium flex items-center gap-1.5">
+                <Users size={14} className="text-indigo-500" />
+                Erişim Rolleri
+              </label>
+              <p className="text-xs text-slate-400">
+                Seçili roller bu fırsata erişebilir. Hiçbiri seçilmezse fırsat herkese açık olur.
+              </p>
+              {roles.length === 0 ? (
+                <p className="text-xs text-slate-400 italic">Tanımlar &gt; Roller kısmından rol ekleyebilirsiniz.</p>
+              ) : (
+                <div className="flex flex-wrap gap-2 p-3 rounded-md border border-input bg-background">
+                  {roles.map((role) => {
+                    const checked = (form.allowed_role_slugs || []).includes(role.slug);
+                    return (
+                      <label
+                        key={role.id}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border cursor-pointer text-sm transition-colors select-none ${
+                          checked
+                            ? "bg-indigo-50 border-indigo-300 text-indigo-700 font-semibold"
+                            : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          className="hidden"
+                          checked={checked}
+                          onChange={() => toggleRoleSlug(role.slug)}
+                        />
+                        {checked && <span className="text-indigo-500 text-xs">✓</span>}
+                        {role.name}
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
             <div className="flex items-center gap-2">
               <input type="checkbox" id="is_active" checked={form.is_active} onChange={(e) => setForm({ ...form, is_active: e.target.checked })} className="rounded" />
               <label htmlFor="is_active" className="text-sm font-medium cursor-pointer">Aktif (sitede görünsün)</label>

@@ -69,10 +69,6 @@ const nextConfig: NextConfig = {
 
   // ─── X-Powered-By header'ını kaldır (güvenlik) ──────────────────────────
   poweredByHeader: false,
-
-  // ─── Paket import optimizasyonu ─────────────────────────────────────────
-  // Sadece kullanılan icon'ları bundle'a dahil eder (tree-shaking)
-  optimizePackageImports: ["lucide-react"],
 };
 
 export default nextConfig;

@@ -172,9 +172,10 @@ function AccountPageInner() {
     e.preventDefault();
     if (!claimCode.trim()) return;
     setClaimLoading(true);
+    const authHeaders = await getAuthHeaders();
     const res = await fetch("/api/coupons/claim", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders },
       body: JSON.stringify({ code: claimCode.trim() }),
     });
     const data = await res.json();
@@ -188,9 +189,17 @@ function AccountPageInner() {
     }
   }
 
+  async function getAuthHeaders(): Promise<Record<string, string>> {
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.access_token
+      ? { Authorization: `Bearer ${session.access_token}` }
+      : {};
+  }
+
   async function fetchAffiliateData() {
     setAffiliateLoading(true);
-    const res = await fetch("/api/affiliate/stats");
+    const headers = await getAuthHeaders();
+    const res = await fetch("/api/affiliate/stats", { headers });
     const data = await res.json();
     if (data.affiliate) {
       setAffiliate(data.affiliate);
@@ -203,9 +212,10 @@ function AccountPageInner() {
   async function handleAffiliateApply(e: React.FormEvent) {
     e.preventDefault();
     setAffiliateApplying(true);
+    const authHeaders = await getAuthHeaders();
     const res = await fetch("/api/affiliate/apply", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders },
       body: JSON.stringify({ answers: appForm }),
     });
     const data = await res.json();

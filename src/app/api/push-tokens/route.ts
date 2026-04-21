@@ -1,22 +1,9 @@
 import { NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
-import { cookies } from "next/headers";
-import { createServerClient } from "@supabase/ssr";
+import { getAuthUserFromRequest } from "@/lib/auth-from-request";
 
-async function getAuthUser() {
-  const cookieStore = await cookies();
-  const userClient = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { cookies: { getAll: () => cookieStore.getAll(), setAll: () => {} } }
-  );
-  const { data: { user } } = await userClient.auth.getUser();
-  return user;
-}
-
-// Token kaydet / güncelle
 export async function POST(request: NextRequest) {
-  const user = await getAuthUser();
+  const user = await getAuthUserFromRequest(request);
   if (!user) return Response.json({ error: "Yetkisiz" }, { status: 401 });
 
   const { token, platform } = await request.json();
@@ -31,9 +18,8 @@ export async function POST(request: NextRequest) {
   return Response.json({ success: true });
 }
 
-// Token sil (uygulama kaldırıldığında veya bildirim izni iptal edildiğinde)
 export async function DELETE(request: NextRequest) {
-  const user = await getAuthUser();
+  const user = await getAuthUserFromRequest(request);
   if (!user) return Response.json({ error: "Yetkisiz" }, { status: 401 });
 
   const { token } = await request.json();

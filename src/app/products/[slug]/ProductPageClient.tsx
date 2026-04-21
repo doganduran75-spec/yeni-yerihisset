@@ -40,6 +40,7 @@ type Variant = {
   stock: number | null;
   is_active: boolean | null;
   variant_option_id: string | null;
+  image_url: string | null;
   variant_options: {
     value: string;
     variant_groups: { name: string } | null;
@@ -122,6 +123,13 @@ export default function ProductPageClient({ product }: { product: Product }) {
     checkPendingNotify();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [product.id]);
+
+  // Varyasyon değişince — kendi görseli varsa o görseli göster
+  useEffect(() => {
+    if (selectedVariant?.image_url) {
+      setSelectedImage(selectedVariant.image_url);
+    }
+  }, [selectedVariant]);
 
   const currentPrice =
     product.has_variants && selectedVariant ? selectedVariant.price : product.price;

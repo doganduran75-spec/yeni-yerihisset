@@ -27,6 +27,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
             variant_option_id,
             trendyol_psf,
             trendyol_price,
+            image_url,
             variant_options(value)
           )
         `)

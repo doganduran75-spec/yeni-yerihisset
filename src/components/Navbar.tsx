@@ -57,7 +57,7 @@ export default function Navbar({ variant = "default" }: NavbarProps) {
             {[
               { label: "Yeni Gelenler", href: "/products" },
               { label: "Kategoriler",   href: "#" },
-              { label: "İndirimler",    href: "#" },
+              { label: "Fırsatlar",      href: "/firsatlar" },
               { label: "Bilgi Bankası", href: "/bilgi-bankasi" },
             ].map((item) => (
               <Link

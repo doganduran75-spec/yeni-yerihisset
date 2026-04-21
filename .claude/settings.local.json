@@ -6,7 +6,21 @@
       "Bash(npx tsc:*)",
       "Bash(grep -r \"NEXT_PUBLIC_SUPABASE_URL\" /c/Users/dogan/Documents/antigravity/yeni-yerihisset/.env*)",
       "Bash(xargs grep:*)",
-      "Bash(grep -E \"\\\\.\\(tsx|jsx\\)$\")"
+      "Bash(grep -E \"\\\\.\\(tsx|jsx\\)$\")",
+      "Read(//c/Users/dogan/Downloads/**)",
+      "Bash(mkdir -p stitch_extract)",
+      "Bash(tar -xf \"stitch_barefoot_health_hub \\(1\\).zip\" -C stitch_extract)",
+      "Bash(powershell -Command \"Expand-Archive -Path 'stitch_barefoot_health_hub \\(1\\).zip' -DestinationPath 'stitch_extract' -Force\")",
+      "Bash(node -e \"const {Newsreader} = require\\('next/font/google'\\); console.log\\('ok'\\)\")",
+      "Bash(npx next:*)",
+      "Bash(powershell -Command ':*)",
+      "Bash(npm list *)",
+      "Bash(node -e \"const d = require\\('@base-ui/react/dialog'\\); console.log\\(Object.keys\\(d\\)\\)\")",
+      "Bash(find /c/Users/dogan/Documents/antigravity/yeni-yerihisset/supabase/migrations -name \"*.sql\" -exec grep -l \"product_variant\" {} \\\\;)",
+      "Bash(grep -E \"\\\\.\\(ts|tsx|sql\\)$\")",
+      "Bash(grep -r \"CREATE TABLE.*roles\\\\|CREATE TABLE IF NOT EXISTS.*roles\" /c/Users/dogan/Documents/antigravity/yeni-yerihisset/ ! -path \"*/node_modules/*\")",
+      "Bash(find /c/Users/dogan/Documents/antigravity/yeni-yerihisset -type f \\\\\\( -name \"*.sql\" -o -name \"*.json\" \\\\\\) -exec grep -l \"messages\" {} \\\\;)",
+      "Bash(find /c/Users/dogan/Documents/antigravity/yeni-yerihisset/src -name \"*.ts\" -type f -exec grep -l \"CREATE TABLE.*messages\\\\|ALTER TABLE.*profiles.*ADD\" {} \\\\;)"
     ]
   }
 }

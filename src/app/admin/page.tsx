@@ -1,10 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/lib/supabase";
-import { ShoppingBag, Users, CreditCard, TrendingUp, Loader2 } from "lucide-react";
+import { ShoppingBag, Users, CreditCard, TrendingUp, Loader2, MessageCircle, ArrowRight } from "lucide-react";
 
 type Stats = {
   totalSales: number;
@@ -21,9 +22,18 @@ type RecentOrder = {
   profiles: { first_name: string; last_name: string } | null;
 };
 
+type PendingMessage = {
+  user_id: string;
+  content: string;
+  created_at: string;
+  first_name: string;
+  last_name: string;
+};
+
 export default function AdminDashboard() {
   const [stats, setStats] = useState<Stats>({ totalSales: 0, activeOrders: 0, totalProducts: 0, totalMembers: 0 });
   const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
+  const [pendingMessages, setPendingMessages] = useState<PendingMessage[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -32,14 +42,12 @@ export default function AdminDashboard() {
 
   async function fetchDashboardData() {
     try {
-      // 1. Fetch counts
       const [productsCount, ordersCount, membersCount] = await Promise.all([
         supabase.from('products').select('*', { count: 'exact', head: true }),
         supabase.from('orders').select('*', { count: 'exact', head: true }),
         supabase.from('profiles').select('*', { count: 'exact', head: true }),
       ]);
 
-      // 2. Fetch total sales (sum order_items? or order total_amount)
       const { data: salesData } = await supabase.from('orders').select('total_amount');
       const totalSales = salesData?.reduce((acc, curr) => acc + (curr.total_amount || 0), 0) || 0;
 
@@ -47,24 +55,52 @@ export default function AdminDashboard() {
         totalSales,
         activeOrders: ordersCount.count || 0,
         totalProducts: productsCount.count || 0,
-        totalMembers: membersCount.count || 0
+        totalMembers: membersCount.count || 0,
       });
 
-      // 3. Fetch recent orders
       const { data: orders } = await supabase
         .from('orders')
-        .select(`
-          id,
-          total_amount,
-          status,
-          created_at,
-          profiles (first_name, last_name)
-        `)
+        .select('id, total_amount, status, created_at, profiles (first_name, last_name)')
         .order('created_at', { ascending: false })
         .limit(5);
-
       setRecentOrders((orders as any) || []);
 
+      // Cevaplanmayan mesajlar: son mesajı 'user' olan yazışmalar
+      const { data: allMessages } = await (supabase as any)
+        .from('messages')
+        .select('user_id, content, sender_role, created_at')
+        .order('created_at', { ascending: false });
+
+      if (allMessages) {
+        const lastPerUser = new Map<string, { content: string; sender_role: string; created_at: string }>();
+        for (const msg of allMessages) {
+          if (!lastPerUser.has(msg.user_id)) lastPerUser.set(msg.user_id, msg);
+        }
+
+        const unansweredIds = [...lastPerUser.entries()]
+          .filter(([, msg]) => msg.sender_role === 'user')
+          .slice(0, 5);
+
+        if (unansweredIds.length > 0) {
+          const { data: profiles } = await supabase
+            .from('profiles')
+            .select('id, first_name, last_name')
+            .in('id', unansweredIds.map(([id]) => id));
+
+          const profileMap = new Map((profiles || []).map(p => [p.id, p]));
+          const pending: PendingMessage[] = unansweredIds.map(([userId, msg]) => {
+            const p = profileMap.get(userId);
+            return {
+              user_id: userId,
+              content: msg.content,
+              created_at: msg.created_at,
+              first_name: p?.first_name || "",
+              last_name: p?.last_name || "",
+            };
+          });
+          setPendingMessages(pending);
+        }
+      }
     } catch (error) {
       console.error("Dashboard data fetch error:", error);
     } finally {
@@ -132,45 +168,102 @@ export default function AdminDashboard() {
         </Card>
       </div>
 
-      <Card className="shadow-sm border-muted">
-        <CardHeader>
-          <CardTitle>Son Siparişler</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {recentOrders.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4 text-center">Henüz sipariş bulunmuyor.</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Müşteri</TableHead>
-                  <TableHead>Tarih</TableHead>
-                  <TableHead>Tutar</TableHead>
-                  <TableHead className="text-right">Durum</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {recentOrders.map((order) => (
-                  <TableRow key={order.id}>
-                    <TableCell className="font-medium">
-                      {order.profiles?.first_name} {order.profiles?.last_name}
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {new Date(order.created_at).toLocaleDateString('tr-TR')}
-                    </TableCell>
-                    <TableCell>₺{order.total_amount.toFixed(2)}</TableCell>
-                    <TableCell className="text-right">
-                       <span className="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10 capitalized">
-                         {order.status}
-                       </span>
-                    </TableCell>
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Son Siparişler */}
+        <Card className="shadow-sm border-muted">
+          <CardHeader>
+            <CardTitle>Son Siparişler</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {recentOrders.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">Henüz sipariş bulunmuyor.</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Müşteri</TableHead>
+                    <TableHead>Tarih</TableHead>
+                    <TableHead>Tutar</TableHead>
+                    <TableHead className="text-right">Durum</TableHead>
                   </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {recentOrders.map((order) => (
+                    <TableRow key={order.id}>
+                      <TableCell className="font-medium">
+                        {order.profiles?.first_name} {order.profiles?.last_name}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {new Date(order.created_at).toLocaleDateString('tr-TR')}
+                      </TableCell>
+                      <TableCell>₺{order.total_amount.toFixed(2)}</TableCell>
+                      <TableCell className="text-right">
+                        <span className="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10">
+                          {order.status}
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Yeni Mesajlar */}
+        <Card className="shadow-sm border-l-4 border-l-rose-500">
+          <CardHeader className="flex flex-row items-center justify-between pb-3">
+            <CardTitle className="flex items-center gap-2">
+              <MessageCircle size={18} className="text-rose-500" />
+              Yeni Mesajlar
+              {pendingMessages.length > 0 && (
+                <span className="bg-rose-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                  {pendingMessages.length}
+                </span>
+              )}
+            </CardTitle>
+            <Link
+              href="/admin/messages"
+              className="text-xs text-muted-foreground hover:text-rose-600 flex items-center gap-1 transition-colors"
+            >
+              Tümü <ArrowRight size={12} />
+            </Link>
+          </CardHeader>
+          <CardContent className="pt-0">
+            {pendingMessages.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">
+                Bekleyen mesaj yok.
+              </p>
+            ) : (
+              <div className="space-y-1">
+                {pendingMessages.map((msg) => (
+                  <Link
+                    key={msg.user_id}
+                    href={`/admin/messages?user=${msg.user_id}`}
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-rose-50 transition-colors group"
+                  >
+                    <div className="w-8 h-8 rounded-full bg-rose-100 flex items-center justify-center shrink-0 text-xs font-black text-rose-600 uppercase">
+                      {msg.first_name[0] || "?"}{msg.last_name[0] || ""}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-slate-900 leading-none">
+                        {msg.first_name} {msg.last_name}
+                      </p>
+                      <p className="text-xs text-slate-400 truncate mt-0.5">{msg.content}</p>
+                    </div>
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      <span className="text-[10px] text-slate-400">
+                        {new Date(msg.created_at).toLocaleString("tr-TR", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "short" })}
+                      </span>
+                      <ArrowRight size={12} className="text-slate-300 group-hover:text-rose-500 transition-colors" />
+                    </div>
+                  </Link>
                 ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
