@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
-import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
+import { getAuthUserFromRequest } from "@/lib/auth-from-request";
+import { validateCartPricing } from "@/lib/order-pricing";
 
 type CartItem = {
   product_id: string;
   variant_id?: string;
+  variant_name?: string;
   title: string;
   price: number;
   quantity: number;
@@ -13,34 +14,32 @@ type CartItem = {
 };
 
 export async function POST(req: NextRequest) {
-  const cookieStore = await cookies();
-
-  const userClient = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll: () => cookieStore.getAll(),
-        setAll: () => {},
-      },
-    }
-  );
-
-  const { data: { user } } = await userClient.auth.getUser();
+  const user = await getAuthUserFromRequest(req);
   if (!user) {
     return NextResponse.json({ error: "Giriş gerekli" }, { status: 401 });
   }
 
   const body = await req.json();
-  const { items, shippingAddressId, affiliateCode, couponCode } = body as {
+  const { items, shippingAddressId, affiliateCode, couponCode, paymentMethod } = body as {
     items: CartItem[];
     shippingAddressId: string;
     affiliateCode?: string;
     couponCode?: string;
+    paymentMethod?: string;
   };
 
   if (!items?.length || !shippingAddressId) {
     return NextResponse.json({ error: "Eksik bilgi" }, { status: 400 });
+  }
+
+  // ── GÜVENLİK: Bu uç yalnızca havale/EFT içindir. Kartlı ödeme iyzico
+  // (/api/checkout/iyzico/initialize) üzerinden gerçek tahsilatla yapılır.
+  // Aksi halde ödeme yapılmadan sipariş "ödendi" işaretlenebilirdi.
+  if (paymentMethod !== "bank_transfer") {
+    return NextResponse.json(
+      { error: "Bu ödeme yöntemi desteklenmiyor. Kartlı ödeme için iyzico akışını kullanın." },
+      { status: 400 }
+    );
   }
 
   const supabase = createAdminClient();
@@ -56,6 +55,13 @@ export async function POST(req: NextRequest) {
   if (!address) {
     return NextResponse.json({ error: "Geçersiz adres" }, { status: 400 });
   }
+
+  // ── GÜVENLİK: Fiyatları sunucuda doğrula (tarayıcıdan gelen price yok sayılır) ──
+  const pricing = await validateCartPricing(supabase, items);
+  if (!pricing.ok) {
+    return NextResponse.json({ error: pricing.error }, { status: 400 });
+  }
+  const pricedItems = pricing.items;
 
   // Affiliate kodu varsa affiliate profili bul
   let affiliateId: string | null = null;
@@ -106,7 +112,7 @@ export async function POST(req: NextRequest) {
         couponId = coupon.id;
         validatedCoupon = coupon;
 
-        const productTotal0 = items.reduce((s, i) => s + i.price * i.quantity, 0);
+        const productTotal0 = pricing.productTotal;
         if (coupon.type === "percentage") {
           couponDiscount = (productTotal0 * coupon.amount) / 100;
           if (coupon.max_discount_amount !== null) couponDiscount = Math.min(couponDiscount, coupon.max_discount_amount);
@@ -120,11 +126,8 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Toplam tutarı hesapla
-  const productTotal = items.reduce(
-    (sum, item) => sum + item.price * item.quantity,
-    0
-  );
+  // Toplam tutarı hesapla (doğrulanmış fiyatlardan)
+  const productTotal = pricing.productTotal;
   const shippingCost = (productTotal > 500 || freeShipping) ? 0 : 29.90;
   const totalAmount = productTotal + shippingCost - couponDiscount;
 
@@ -137,41 +140,70 @@ export async function POST(req: NextRequest) {
     city: address.city,
   });
 
+  // Ödeme yöntemine göre başlangıç durumları
+  const isBankTransfer = paymentMethod === "bank_transfer";
+  // Eski tek kolon (geriye dönük uyumluluk)
+  const initialStatus = isBankTransfer ? "awaiting_payment" : "pending";
+  // Yeni 3 boyutlu durum
+  const initialPaymentStatus  = isBankTransfer ? "pending" : "paid";
+  const initialShipmentStatus = isBankTransfer ? "waiting" : "preparing";
+  const initialInvoiceStatus  = "pending";
+
   // Siparişi oluştur
-  const { data: order, error: orderError } = await supabase
+  const { data: order, error: orderError } = await (supabase
     .from("orders")
     .insert({
       user_id: user.id,
-      status: "pending",
+      status: initialStatus,
       total_amount: Math.max(0, totalAmount),
       shipping_address: shippingAddressJson,
       affiliate_id: affiliateId,
       coupon_id: couponId,
       coupon_discount: couponDiscount,
-    })
+      payment_method: paymentMethod ?? "credit_card",
+      payment_status:  initialPaymentStatus,
+      shipment_status: initialShipmentStatus,
+      invoice_status:  initialInvoiceStatus,
+    } as any)
     .select()
-    .single();
+    .single() as any) as { data: any; error: any };
 
   if (orderError || !order) {
-    return NextResponse.json({ error: "Sipariş oluşturulamadı" }, { status: 500 });
+    console.error("[orders/create] orderError:", JSON.stringify(orderError));
+    return NextResponse.json({ error: "Sipariş oluşturulamadı", detail: orderError?.message ?? "unknown" }, { status: 500 });
+  }
+
+  // Varyasyon SKU'larını toplu çek (sku lookup için)
+  const variantIds = pricedItems.map(i => i.variant_id).filter(Boolean) as string[];
+  let skuMap: Record<string, string> = {};
+  if (variantIds.length > 0) {
+    const { data: variantRows } = await supabase
+      .from("product_variants")
+      .select("id, sku")
+      .in("id", variantIds);
+    (variantRows ?? []).forEach((v: any) => { if (v.sku) skuMap[v.id] = v.sku; });
   }
 
   // Sipariş kalemlerini oluştur
-  const orderItems = items.map((item) => ({
+  const orderItems = pricedItems.map((item) => ({
     order_id: order.id,
     product_id: item.product_id,
     quantity: item.quantity,
     unit_price: item.price,
+    ...(item.variant_id ? { variant_id: item.variant_id } : {}),
+    sku: (item.variant_id ? skuMap[item.variant_id] : undefined) ?? "",
+    variant_name: item.variant_name ?? "",
   }));
 
-  const { error: itemsError } = await supabase
+  const { error: itemsError } = await (supabase
     .from("order_items")
-    .insert(orderItems);
+    .insert(orderItems as any) as any);
 
   if (itemsError) {
+    console.error("[orders/create] itemsError:", JSON.stringify(itemsError));
     // Rollback: siparişi sil
     await supabase.from("orders").delete().eq("id", order.id);
-    return NextResponse.json({ error: "Sipariş kalemleri oluşturulamadı" }, { status: 500 });
+    return NextResponse.json({ error: "Sipariş kalemleri oluşturulamadı", detail: itemsError?.message ?? "unknown" }, { status: 500 });
   }
 
   // Affiliate komisyonu kaydet
@@ -227,7 +259,7 @@ export async function POST(req: NextRequest) {
   // Örnek: 36 numara Dodura Ayakkabı → "Kategori: Ayakkabı", "Marka: Dodura", "Beden: 36"
 
   const productIds = [...new Set(items.map((i) => i.product_id).filter(Boolean))];
-  const variantIds = [...new Set(items.map((i) => i.variant_id).filter(Boolean) as string[])];
+  const tagVariantIds = [...new Set(items.map((i) => i.variant_id).filter(Boolean) as string[])];
 
   // Ürün detaylarını çek (marka + kategori)
   const { data: orderedProducts } = productIds.length > 0
@@ -238,11 +270,11 @@ export async function POST(req: NextRequest) {
     : { data: [] as any[] };
 
   // Varyasyon detaylarını çek (seçenek değeri + grup adı)
-  const { data: orderedVariants } = variantIds.length > 0
+  const { data: orderedVariants } = tagVariantIds.length > 0
     ? await supabase
         .from("product_variants")
         .select("id, variant_options(value, variant_groups(name))")
-        .in("id", variantIds)
+        .in("id", tagVariantIds)
     : { data: [] as any[] };
 
   // Tag listesi oluştur: { groupName, value }
@@ -312,6 +344,10 @@ export async function POST(req: NextRequest) {
       );
     }
   }
+
+  // Sipariş oluşturma bildirimi gönder (non-blocking, doğrudan lib çağrısı)
+  const { sendOrderNotification } = await import("@/lib/notifications");
+  sendOrderNotification("order_placed", { orderId: order.id, userId: user.id }).catch(() => {});
 
   return NextResponse.json({ orderId: order.id });
 }

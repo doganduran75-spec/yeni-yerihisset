@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/lib/supabase";
-import { Loader2, Save, Store, Globe, Mail, Server, BarChart3, Eye, EyeOff, ShoppingCart, Copy, Check, Layers, ShieldCheck, Tag, Bookmark, FolderSearch, Tags, Megaphone } from "lucide-react";
+import { Loader2, Save, Store, Globe, Mail, Server, BarChart3, Eye, EyeOff, ShoppingCart, Copy, Check, Layers, ShieldCheck, Tag, Bookmark, FolderSearch, Tags, Megaphone, Truck, CreditCard, Landmark } from "lucide-react";
 import VariantsTab from "@/components/admin/settings/VariantsTab";
 import RolesTab from "@/components/admin/settings/RolesTab";
 import BrandsTab from "@/components/admin/settings/BrandsTab";
@@ -34,6 +34,12 @@ type Settings = {
   smtp_password: string;
   smtp_from_name: string;
   smtp_from_email: string;
+  // Ödeme
+  bank_transfer_enabled: boolean;
+  bank_transfer_info: string;
+  // Kargonomi
+  kargonomi_api_token: string;
+  kargonomi_warehouse_id: string;
   // GA
   ga_measurement_id: string;
   // GMC
@@ -61,6 +67,10 @@ const DEFAULT_SETTINGS: Settings = {
   smtp_password: "",
   smtp_from_name: "",
   smtp_from_email: "",
+  bank_transfer_enabled: false,
+  bank_transfer_info: "",
+  kargonomi_api_token: "",
+  kargonomi_warehouse_id: "",
   ga_measurement_id: "",
   gmc_merchant_id: "",
   gmc_target_country: "TR",
@@ -87,6 +97,7 @@ function SettingsPageInner() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showSmtpPass, setShowSmtpPass] = useState(false);
+  const [showKargoToken, setShowKargoToken] = useState(false);
   const [copiedFeed, setCopiedFeed] = useState(false);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
 
@@ -117,8 +128,8 @@ function SettingsPageInner() {
       const payload = { ...settings, updated_at: new Date().toISOString() };
       // Mevcut kayıt varsa güncelle, yoksa oluştur
       const { error } = settings.id
-        ? await supabase.from("settings").update(payload).eq("id", settings.id)
-        : await supabase.from("settings").insert(payload);
+        ? await supabase.from("settings").update(payload as any).eq("id", settings.id)
+        : await supabase.from("settings").insert(payload as any);
       if (error) throw error;
       alert("Ayarlar başarıyla kaydedildi.");
       fetchSettings();
@@ -542,6 +553,161 @@ function SettingsPageInner() {
                 <li>Ürünlerin onaylanması 1-3 iş günü sürebilir</li>
               </ol>
             </div>
+          </CardContent>
+        </Card>
+
+        {/* ─── Ödeme Yöntemleri ─── */}
+        <Card className="shadow-sm border-muted">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <CreditCard size={20} className="text-blue-600" /> Ödeme Yöntemleri
+            </CardTitle>
+            <CardDescription>
+              Ödeme sayfasında müşterilere sunulacak ödeme seçeneklerini yapılandırın.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+
+            {/* Havale / EFT */}
+            <div className="border rounded-xl overflow-hidden">
+              <div className="flex items-center justify-between p-4 bg-slate-50 border-b">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 bg-white border rounded-lg flex items-center justify-center">
+                    <Landmark size={18} className="text-slate-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold">Havale / EFT</p>
+                    <p className="text-xs text-muted-foreground">Banka havalesi ile ödeme</p>
+                  </div>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="sr-only peer"
+                    checked={settings.bank_transfer_enabled}
+                    onChange={(e) => set({ bank_transfer_enabled: e.target.checked })}
+                  />
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  <span className="ml-2 text-xs font-semibold text-muted-foreground">
+                    {settings.bank_transfer_enabled ? "Aktif" : "Pasif"}
+                  </span>
+                </label>
+              </div>
+              {settings.bank_transfer_enabled && (
+                <div className="p-4 space-y-2">
+                  <label className="text-sm font-medium">
+                    Banka Bilgileri <span className="text-muted-foreground font-normal">(ödeme sayfasında ve sipariş e-postasında gösterilir)</span>
+                  </label>
+                  <textarea
+                    rows={6}
+                    className="flex w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 font-mono"
+                    value={settings.bank_transfer_info}
+                    onChange={(e) => set({ bank_transfer_info: e.target.value })}
+                    placeholder={`Banka Adı: Ziraat Bankası
+Hesap Adı: YeriHisset Tic. Ltd. Şti.
+IBAN: TR00 0000 0000 0000 0000 0000 00
+Açıklama: Sipariş numaranızı açıklamaya yazmayı unutmayın.`}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Havale/EFT ile sipariş veren müşteriler bu bilgileri ödeme sayfasında görecek ve sipariş onay e-postasında alacaklar.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Kredi Kartı */}
+            <div className="border rounded-xl overflow-hidden opacity-60">
+              <div className="flex items-center justify-between p-4 bg-slate-50">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 bg-white border rounded-lg flex items-center justify-center">
+                    <CreditCard size={18} className="text-slate-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-slate-500">Kredi / Banka Kartı</p>
+                    <p className="text-xs text-muted-foreground">Sanal POS entegrasyonu</p>
+                  </div>
+                </div>
+                <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-400 px-3 py-1 rounded-full">
+                  Yakında
+                </span>
+              </div>
+            </div>
+
+          </CardContent>
+        </Card>
+
+        {/* ─── Kargonomi Entegrasyonu ─── */}
+        <Card className="shadow-sm border-muted">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Truck size={20} className="text-blue-600" /> Kargonomi Entegrasyonu
+            </CardTitle>
+            <CardDescription>
+              "Kargoya Ver" butonu için Kargonomi API bağlantı bilgileri.
+              Token ve Depo ID bilgilerini Kargonomi panelinden alabilirsiniz.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">API Token (Bearer)</label>
+                <div className="relative">
+                  <Input
+                    type={showKargoToken ? "text" : "password"}
+                    value={settings.kargonomi_api_token}
+                    onChange={(e) => set({ kargonomi_api_token: e.target.value })}
+                    placeholder="••••••••••••••••••••"
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowKargoToken(!showKargoToken)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-slate-700"
+                  >
+                    {showKargoToken ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Kargonomi Panel → Entegrasyonlar → API Anahtarları
+                </p>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Depo ID (Warehouse ID)</label>
+                <Input
+                  value={settings.kargonomi_warehouse_id}
+                  onChange={(e) => set({ kargonomi_warehouse_id: e.target.value })}
+                  placeholder="Örn: 123"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Kargonomi Panel → Depolar bölümündeki depo numarası
+                </p>
+              </div>
+            </div>
+
+            <div className="p-4 rounded-xl bg-orange-50 border border-orange-100 text-sm text-orange-800 space-y-2">
+              <p className="font-semibold flex items-center gap-2">
+                <Truck size={15} /> Kargonomi Bağlantı Adımları
+              </p>
+              <ol className="list-decimal list-inside space-y-1 text-xs text-orange-700">
+                <li>
+                  <a href="https://app.kargonomi.com.tr" target="_blank" rel="noopener noreferrer" className="underline font-medium">
+                    app.kargonomi.com.tr
+                  </a>{" "}
+                  adresine giriş yapın.
+                </li>
+                <li>Sağ üst menüden <strong>Entegrasyonlar → API Anahtarları</strong> bölümüne gidin.</li>
+                <li>Yeni bir API anahtarı oluşturun ve yukarıdaki <strong>API Token</strong> alanına yapıştırın.</li>
+                <li><strong>Depolar</strong> bölümünden sevkiyatın yapılacağı deponun ID numarasını alın.</li>
+                <li>Bu sayfayı kaydedin. Siparişler ekranındaki <strong>Kargoya Ver</strong> butonu artık çalışır.</li>
+              </ol>
+            </div>
+
+            {settings.kargonomi_api_token && settings.kargonomi_warehouse_id && (
+              <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-4 py-3 text-sm text-green-700 font-medium">
+                <Check size={16} className="shrink-0 text-green-600" />
+                Kargonomi entegrasyonu yapılandırılmış. Siparişler ekranından kargo oluşturabilirsiniz.
+              </div>
+            )}
           </CardContent>
         </Card>
 

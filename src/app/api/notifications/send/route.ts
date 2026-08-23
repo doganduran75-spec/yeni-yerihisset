@@ -1,8 +1,7 @@
 import { NextRequest } from "next/server";
 import { sendOrderNotification, NotificationTrigger } from "@/lib/notifications";
 import { createAdminClient } from "@/lib/supabase-admin";
-import { cookies } from "next/headers";
-import { createServerClient } from "@supabase/ssr";
+import { getAuthUserFromRequest } from "@/lib/auth-from-request";
 
 const VALID_TRIGGERS: NotificationTrigger[] = [
   "order_placed",
@@ -13,36 +12,22 @@ const VALID_TRIGGERS: NotificationTrigger[] = [
 ];
 
 export async function POST(request: NextRequest) {
-  // Çağıranın admin olup olmadığını doğrula
-  try {
-    const cookieStore = await cookies();
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+  // Bearer token ile kullanıcıyı doğrula
+  const user = await getAuthUserFromRequest(request);
+  if (!user) {
+    return Response.json({ error: "Yetkisiz" }, { status: 401 });
+  }
 
-    const userClient = createServerClient(supabaseUrl, supabaseAnonKey, {
-      cookies: {
-        getAll: () => cookieStore.getAll(),
-        setAll: () => {},
-      },
-    });
+  // Admin rolü kontrolü
+  const admin = createAdminClient();
+  const { data: profile } = await admin
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
 
-    const { data: { user } } = await userClient.auth.getUser();
-    if (!user) {
-      return Response.json({ error: "Yetkisiz" }, { status: 401 });
-    }
-
-    const admin = createAdminClient();
-    const { data: profile } = await admin
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
-
-    if (profile?.role !== "admin") {
-      return Response.json({ error: "Yalnızca adminler bildirim gönderebilir" }, { status: 403 });
-    }
-  } catch {
-    return Response.json({ error: "Auth kontrolü başarısız" }, { status: 500 });
+  if (profile?.role !== "admin") {
+    return Response.json({ error: "Yalnızca adminler bildirim gönderebilir" }, { status: 403 });
   }
 
   // Body'yi parse et

@@ -7,7 +7,7 @@ export const metadata: Metadata = {
 import { SidebarProvider, Sidebar, SidebarHeader, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarInset, SidebarGroupLabel } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
-import { LayoutDashboard, ShoppingBag, CreditCard, Settings, Users, ExternalLink, BookOpen, Handshake, MessagesSquare, Link2, Ticket, BellRing, FileEdit, Send, Gift, Sparkles } from "lucide-react";
+import { LayoutDashboard, ShoppingBag, CreditCard, Settings, Users, ExternalLink, BookOpen, Handshake, MessagesSquare, Link2, Ticket, BellRing, FileEdit, Send, Gift, Sparkles, Star } from "lucide-react";
 import AdminGuard from "@/components/admin/AdminGuard";
 
 export default function AdminLayout({
@@ -58,8 +58,13 @@ export default function AdminLayout({
                   />
                 </SidebarMenuItem>
                 <SidebarMenuItem>
-                  <SidebarMenuButton 
-                    render={<Link href="/admin/members"><Users size={18} className="mr-2" /> Üyeler</Link>} 
+                  <SidebarMenuButton
+                    render={<Link href="/admin/members"><Users size={18} className="mr-2" /> Üyeler</Link>}
+                  />
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    render={<Link href="/admin/reviews"><Star size={18} className="mr-2" /> Yorumlar</Link>}
                   />
                 </SidebarMenuItem>
               </SidebarMenu>
@@ -100,7 +105,7 @@ export default function AdminLayout({
                 </SidebarMenuItem>
                 <SidebarMenuItem>
                   <SidebarMenuButton
-                    render={<Link href="/admin/affiliates"><Link2 size={18} className="mr-2" /> Affiliate</Link>}
+                    render={<Link href="/admin/affiliates"><Link2 size={18} className="mr-2" /> Satış Ortaklığı</Link>}
                   />
                 </SidebarMenuItem>
                 <SidebarMenuItem>

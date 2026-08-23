@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer";
 import { createAdminClient } from "./supabase-admin";
+import { buildSmtpConfig } from "./smtp-config";
 
 export type NotificationTrigger =
   | "order_placed"
@@ -117,10 +118,10 @@ export async function sendOrderNotification(
   const supabase = createAdminClient();
 
   // 1. Sipariş + kullanıcı bilgilerini getir
-  const { data: order, error: orderError } = await supabase
+  const { data: order, error: orderError } = await (supabase
     .from("orders")
     .select(`
-      id, total_amount, status, created_at, shipping_address,
+      id, total_amount, status, created_at, shipping_address, payment_method,
       profiles!orders_user_id_fkey (
         first_name, last_name, email
       ),
@@ -130,7 +131,7 @@ export async function sendOrderNotification(
       )
     `)
     .eq("id", context.orderId)
-    .single();
+    .single() as any) as { data: any; error: any };
 
   if (orderError || !order) {
     return { channel: "skipped", status: "failed", error: "Sipariş bulunamadı" };
@@ -146,8 +147,8 @@ export async function sendOrderNotification(
       unit_price: i.unit_price,
     }));
 
-  // 2. Mağaza ayarlarını getir (SMTP + GA + mağaza adı)
-  const { data: settings } = await supabase.from("settings").select("*").single();
+  // 2. Mağaza ayarlarını getir (SMTP + GA + mağaza adı + ödeme bilgileri)
+  const { data: settings } = await (supabase.from("settings").select("*").single() as any) as { data: any };
   const storeName = settings?.store_name || "YeriHisset";
   const storeEmail = settings?.contact_email || "";
   const storeUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com";
@@ -180,6 +181,18 @@ export async function sendOrderNotification(
        </div>`
     : "";
 
+  // Havale/EFT siparişlerinde banka bilgisi bloğu
+  const isBankTransfer = (order as any).payment_method === "bank_transfer";
+  const bankInfo: string = settings?.bank_transfer_info ?? "";
+  const bankInfoHtml =
+    isBankTransfer && bankInfo
+      ? `<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:16px;margin:0 0 24px 0;">
+           <p style="margin:0 0 8px 0;color:#92400e;font-size:13px;font-weight:700;">🏦 Havale / EFT Banka Bilgileri</p>
+           <pre style="margin:0;color:#78350f;font-size:13px;font-family:monospace;white-space:pre-wrap;">${bankInfo}</pre>
+           <p style="margin:12px 0 0 0;color:#92400e;font-size:12px;">Açıklama kısmına sipariş numaranızı (<strong>#${order.id.slice(0, 8).toUpperCase()}</strong>) yazmayı unutmayın.</p>
+         </div>`
+      : "";
+
   const vars: Record<string, string> = {
     customer_name: customerName,
     order_id: order.id.slice(0, 8).toUpperCase(),
@@ -188,6 +201,7 @@ export async function sendOrderNotification(
     order_items_html: buildOrderItemsHtml(orderItems),
     shipping_address: order.shipping_address || "",
     tracking_html: trackingHtml,
+    bank_info_html: bankInfoHtml,
     store_name: storeName,
     store_email: storeEmail,
     store_url: storeUrl,
@@ -227,15 +241,13 @@ export async function sendOrderNotification(
     return { channel: "skipped", status: "skipped" };
   }
 
-  const smtpConfig = {
-    host: settings?.smtp_host || "",
-    port: settings?.smtp_port || 587,
-    secure: settings?.smtp_secure || false,
-    auth: {
-      user: settings?.smtp_user || "",
-      pass: settings?.smtp_password || "",
-    },
-  };
+  const smtpConfig = buildSmtpConfig({
+    smtp_host: settings?.smtp_host || "",
+    smtp_port: settings?.smtp_port,
+    smtp_secure: settings?.smtp_secure,
+    smtp_user: settings?.smtp_user,
+    smtp_password: settings?.smtp_password,
+  });
 
   if (!smtpConfig.host || !smtpConfig.auth.user) {
     await logNotification(supabase, { ...context, trigger, channel: "email", status: "failed", recipient: customerEmail, error: "SMTP ayarları eksik" });
@@ -330,15 +342,13 @@ export async function sendAdminReplyNotification(
   `;
 
   // 3. SMTP konfigürasyonu
-  const smtpConfig = {
-    host: settings?.smtp_host || "",
-    port: settings?.smtp_port || 587,
-    secure: settings?.smtp_secure || false,
-    auth: {
-      user: settings?.smtp_user || "",
-      pass: settings?.smtp_password || "",
-    },
-  };
+  const smtpConfig = buildSmtpConfig({
+    smtp_host: settings?.smtp_host || "",
+    smtp_port: settings?.smtp_port,
+    smtp_secure: settings?.smtp_secure,
+    smtp_user: settings?.smtp_user,
+    smtp_password: settings?.smtp_password,
+  });
 
   if (!smtpConfig.host || !smtpConfig.auth.user) {
     return { status: "failed", error: "SMTP ayarları yapılandırılmamış" };

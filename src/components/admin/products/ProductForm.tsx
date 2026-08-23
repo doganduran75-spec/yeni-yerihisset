@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/lib/supabase";
-import { Loader2, Upload, X, ChevronLeft, Save, Copy, ImagePlus } from "lucide-react";
+import { Loader2, Upload, X, ChevronLeft, Save, Copy, ImagePlus, GripVertical } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 
@@ -42,6 +42,7 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
   const [uploadingVariantIdx, setUploadingVariantIdx] = useState<number | null>(null);
 
   const [tagInput, setTagInput] = useState("");
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
 
   useEffect(() => {
     fetchMetadata();
@@ -84,6 +85,16 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
   const removeTag = (tagToRemove: string) => {
     setFormData({ ...formData, tags: formData.tags.filter((t) => t !== tagToRemove) });
   };
+
+  function handleImageDragOver(e: React.DragEvent, toIdx: number) {
+    e.preventDefault();
+    if (dragIndex === null || dragIndex === toIdx) return;
+    const imgs = [...formData.images];
+    const [moved] = imgs.splice(dragIndex, 1);
+    imgs.splice(toIdx, 0, moved);
+    setFormData((p) => ({ ...p, images: imgs }));
+    setDragIndex(toIdx);
+  }
 
   async function fetchMetadata() {
     const [cats, brnds, vgrps] = await Promise.all([
@@ -620,24 +631,58 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
           </section>
 
           {/* Görseller */}
-          <section className="bg-white p-6 rounded-3xl border shadow-sm space-y-6">
+          <section className="bg-white p-6 rounded-3xl border shadow-sm space-y-4">
             <h3 className="text-lg font-bold flex items-center gap-2">
               <span className="w-1.5 h-6 bg-blue-600 rounded-full" />
               Görseller
             </h3>
-            <div className="grid grid-cols-2 gap-4">
+            <p className="text-[11px] text-slate-400">Sürükle-bırak ile sıralayın. İlk görsel kapak fotoğrafı olur.</p>
+            <div className="grid grid-cols-2 gap-3">
+              {/* Yükleme butonu */}
               <div className="relative aspect-square border-2 border-dashed rounded-2xl flex flex-col items-center justify-center gap-2 hover:bg-slate-50 transition-colors cursor-pointer group">
                 {uploading ? <Loader2 size={24} className="animate-spin text-blue-600" /> : <Upload size={24} className="text-slate-400 group-hover:text-blue-600 transition-colors" />}
                 <span className="text-[10px] font-bold text-slate-500 text-center px-2">Görsel Yükle</span>
                 <input type="file" multiple accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleFileUpload} disabled={uploading} />
               </div>
+
+              {/* Görseller — sürükle/bırak sırala */}
               {formData.images.map((url, idx) => (
-                <div key={idx} className="relative aspect-square rounded-2xl overflow-hidden border group shadow-sm transition-transform hover:scale-[1.02]">
-                  <img src={url} alt="" className="w-full h-full object-cover" />
+                <div
+                  key={url}
+                  draggable
+                  onDragStart={() => setDragIndex(idx)}
+                  onDragOver={(e) => handleImageDragOver(e, idx)}
+                  onDragEnd={() => setDragIndex(null)}
+                  className={cn(
+                    "relative aspect-square rounded-2xl overflow-hidden border group shadow-sm cursor-grab active:cursor-grabbing transition-all",
+                    dragIndex === idx ? "opacity-40 scale-95 border-blue-400 border-2" : "hover:scale-[1.02]"
+                  )}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={url} alt="" className="w-full h-full object-cover pointer-events-none" />
+
+                  {/* Kapak rozeti */}
+                  {idx === 0 && (
+                    <span className="absolute bottom-1.5 left-1.5 text-[9px] font-black bg-blue-600 text-white px-1.5 py-0.5 rounded-full shadow">
+                      KAPAK
+                    </span>
+                  )}
+
+                  {/* Sıra numarası */}
+                  <span className="absolute top-1.5 left-1.5 text-[9px] font-black bg-black/40 text-white w-4 h-4 rounded-full flex items-center justify-center">
+                    {idx + 1}
+                  </span>
+
+                  {/* Drag handle */}
+                  <div className="absolute top-1.5 right-7 p-0.5 bg-black/30 text-white rounded opacity-0 group-hover:opacity-100 transition-all">
+                    <GripVertical size={11} />
+                  </div>
+
+                  {/* Sil butonu */}
                   <button
                     type="button"
-                    onClick={() => setFormData((p) => ({ ...p, images: p.images.filter((i) => i !== url) }))}
-                    className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-all shadow-lg"
+                    onClick={() => setFormData((p) => ({ ...p, images: p.images.filter((_, i) => i !== idx) }))}
+                    className="absolute top-1.5 right-1.5 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-all shadow-lg"
                   >
                     <X size={10} />
                   </button>

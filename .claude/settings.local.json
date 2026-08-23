@@ -20,7 +20,24 @@
       "Bash(grep -E \"\\\\.\\(ts|tsx|sql\\)$\")",
       "Bash(grep -r \"CREATE TABLE.*roles\\\\|CREATE TABLE IF NOT EXISTS.*roles\" /c/Users/dogan/Documents/antigravity/yeni-yerihisset/ ! -path \"*/node_modules/*\")",
       "Bash(find /c/Users/dogan/Documents/antigravity/yeni-yerihisset -type f \\\\\\( -name \"*.sql\" -o -name \"*.json\" \\\\\\) -exec grep -l \"messages\" {} \\\\;)",
-      "Bash(find /c/Users/dogan/Documents/antigravity/yeni-yerihisset/src -name \"*.ts\" -type f -exec grep -l \"CREATE TABLE.*messages\\\\|ALTER TABLE.*profiles.*ADD\" {} \\\\;)"
+      "Bash(find /c/Users/dogan/Documents/antigravity/yeni-yerihisset/src -name \"*.ts\" -type f -exec grep -l \"CREATE TABLE.*messages\\\\|ALTER TABLE.*profiles.*ADD\" {} \\\\;)",
+      "Bash(cat next.config.ts)",
+      "Bash(cat next.config.js)",
+      "WebFetch(domain:www.kargonomi.com.tr)",
+      "mcp__supabase__query",
+      "Bash(find \"C:\\\\Users\\\\dogan\\\\Documents\\\\antigravity\\\\yeni-yerihisset\\\\supabase\\\\migrations\" -name \"*.sql\" -exec grep -l \"product_variant\" {} \\\\;)",
+      "WebFetch(domain:dev.iyzipay.com)",
+      "WebSearch",
+      "WebFetch(domain:docs.iyzico.com)",
+      "Bash(node -e \"require\\('iyzipay'\\); console.log\\('iyzipay ok'\\)\")",
+      "Bash(node -e \"require\\('iyzipay'\\); console.log\\('ok'\\)\")",
+      "Bash(npx tsc *)",
+      "Bash(grep -E \"order-pricing|orders/create|iyzico/initialize|orders\\\\\\\\\\\\\\\\create|iyzico\\\\\\\\\\\\\\\\initialize\")",
+      "Bash(grep -E \"order-pricing|api[\\\\\\\\\\\\\\\\/]orders[\\\\\\\\\\\\\\\\/]create|api[\\\\\\\\\\\\\\\\/]checkout[\\\\\\\\\\\\\\\\/]iyzico\")",
+      "Bash(npx eslint *)",
+      "Bash(nslookup ewnuurgmxhksbjixbian.supabase.co 8.8.8.8)",
+      "Bash(nslookup ewnuurgmxhksbjixbian.supabase.co 1.1.1.1)",
+      "mcp__6fc8825e-801d-48c5-8cdd-5e67151dac79__list_projects"
     ]
   }
 }

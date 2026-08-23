@@ -109,6 +109,14 @@
   }
 }
 
+/* Placeholder rengi — muted-foreground (#46483c) asıl metne çok yakın olduğundan
+   ayrı bir açık ton tanımladık. */
+input::placeholder,
+textarea::placeholder {
+  color: #b2b5a8;
+  opacity: 1;
+}
+
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 10px;

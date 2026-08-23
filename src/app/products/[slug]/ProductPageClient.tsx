@@ -58,8 +58,8 @@ type Product = {
   image_url: string | null;
   has_variants: boolean | null;
   category_id: string | null;
-  brands: { name: string } | null;
-  categories: { name: string } | null;
+  brands: { name: string; slug: string } | null;
+  categories: { name: string; slug: string } | null;
   product_variants: Variant[] | null;
 };
 
@@ -235,9 +235,13 @@ export default function ProductPageClient({ product }: { product: Product }) {
         >
           <Link href="/" className="hover:text-olive-600">Anasayfa</Link>
           <ChevronRight size={14} />
-          <Link href="#" className="hover:text-olive-600">
-            {product.categories?.name || "Kategori"}
-          </Link>
+          {product.categories ? (
+            <Link href={`/kategori/${product.categories.slug}`} className="hover:text-olive-600">
+              {product.categories.name}
+            </Link>
+          ) : (
+            <span>Kategori</span>
+          )}
           <ChevronRight size={14} />
           <span className="text-slate-900 font-medium truncate">{product.title}</span>
         </nav>

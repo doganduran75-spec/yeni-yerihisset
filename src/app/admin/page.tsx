@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/lib/supabase";
-import { ShoppingBag, Users, CreditCard, TrendingUp, Loader2, MessageCircle, ArrowRight } from "lucide-react";
+import { ShoppingBag, Users, CreditCard, TrendingUp, Loader2, MessageCircle, ArrowRight, Star } from "lucide-react";
 
 type Stats = {
   totalSales: number;
@@ -16,10 +16,22 @@ type Stats = {
 
 type RecentOrder = {
   id: string;
+  order_number: number | null;
   total_amount: number;
   status: string;
   created_at: string;
   profiles: { first_name: string; last_name: string } | null;
+};
+
+const orderStatusMap: Record<string, { label: string; color: string }> = {
+  pending:          { label: "Beklemede",         color: "bg-amber-50 text-amber-700 ring-amber-500/20" },
+  awaiting_payment: { label: "Ödeme Bekleniyor",  color: "bg-orange-50 text-orange-700 ring-orange-500/20" },
+  processing:       { label: "Hazırlanıyor",       color: "bg-blue-50 text-blue-700 ring-blue-500/20" },
+  shipped:          { label: "Kargoya Verildi",    color: "bg-purple-50 text-purple-700 ring-purple-500/20" },
+  delivered:        { label: "Teslim Edildi",      color: "bg-green-50 text-green-700 ring-green-500/20" },
+  cancelled:        { label: "İptal Edildi",       color: "bg-red-50 text-red-700 ring-red-500/20" },
+  refunded:         { label: "İade Edildi",        color: "bg-slate-100 text-slate-600 ring-slate-400/20" },
+  paid:             { label: "Ödendi",             color: "bg-green-50 text-green-700 ring-green-500/20" },
 };
 
 type PendingMessage = {
@@ -30,10 +42,23 @@ type PendingMessage = {
   last_name: string;
 };
 
+type PendingReview = {
+  id: string;
+  order_id: string;
+  comment: string | null;
+  rating_shipping: number;
+  rating_quality: number;
+  rating_communication: number;
+  created_at: string;
+  profiles: { first_name: string | null; last_name: string | null } | null;
+  orders: { order_number: number | null } | null;
+};
+
 export default function AdminDashboard() {
   const [stats, setStats] = useState<Stats>({ totalSales: 0, activeOrders: 0, totalProducts: 0, totalMembers: 0 });
   const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
   const [pendingMessages, setPendingMessages] = useState<PendingMessage[]>([]);
+  const [pendingReviews, setPendingReviews] = useState<PendingReview[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -60,7 +85,7 @@ export default function AdminDashboard() {
 
       const { data: orders } = await supabase
         .from('orders')
-        .select('id, total_amount, status, created_at, profiles (first_name, last_name)')
+        .select('id, order_number, total_amount, status, created_at, profiles (first_name, last_name)')
         .order('created_at', { ascending: false })
         .limit(5);
       setRecentOrders((orders as any) || []);
@@ -101,6 +126,22 @@ export default function AdminDashboard() {
           setPendingMessages(pending);
         }
       }
+
+      // Onay bekleyen yorumlar
+      const { data: reviewsData } = await (supabase as any)
+        .from("order_reviews")
+        .select(`
+          id, order_id, comment,
+          rating_shipping, rating_quality, rating_communication,
+          created_at,
+          profiles (first_name, last_name),
+          orders (order_number)
+        `)
+        .eq("is_approved", false)
+        .is("admin_note", null)
+        .order("created_at", { ascending: false })
+        .limit(5);
+      setPendingReviews((reviewsData as PendingReview[]) || []);
     } catch (error) {
       console.error("Dashboard data fetch error:", error);
     } finally {
@@ -168,9 +209,9 @@ export default function AdminDashboard() {
         </Card>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-6 lg:grid-cols-3">
         {/* Son Siparişler */}
-        <Card className="shadow-sm border-muted">
+        <Card className="shadow-sm border-muted lg:col-span-2">
           <CardHeader>
             <CardTitle>Son Siparişler</CardTitle>
           </CardHeader>
@@ -181,6 +222,7 @@ export default function AdminDashboard() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-28">Sipariş No</TableHead>
                     <TableHead>Müşteri</TableHead>
                     <TableHead>Tarih</TableHead>
                     <TableHead>Tutar</TableHead>
@@ -188,22 +230,33 @@ export default function AdminDashboard() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {recentOrders.map((order) => (
-                    <TableRow key={order.id}>
-                      <TableCell className="font-medium">
-                        {order.profiles?.first_name} {order.profiles?.last_name}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {new Date(order.created_at).toLocaleDateString('tr-TR')}
-                      </TableCell>
-                      <TableCell>₺{order.total_amount.toFixed(2)}</TableCell>
-                      <TableCell className="text-right">
-                        <span className="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10">
-                          {order.status}
-                        </span>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {recentOrders.map((order) => {
+                    const st = orderStatusMap[order.status] ?? { label: order.status, color: "bg-slate-50 text-slate-600 ring-slate-400/20" };
+                    return (
+                      <TableRow key={order.id}>
+                        <TableCell>
+                          <Link
+                            href={`/admin/orders?id=${order.id}`}
+                            className="font-mono text-xs font-bold text-blue-600 hover:text-blue-800 hover:underline"
+                          >
+                            YH{order.order_number ?? "—"}
+                          </Link>
+                        </TableCell>
+                        <TableCell className="font-medium text-sm">
+                          {order.profiles?.first_name} {order.profiles?.last_name}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {new Date(order.created_at).toLocaleDateString('tr-TR')}
+                        </TableCell>
+                        <TableCell className="text-sm">₺{order.total_amount.toFixed(2)}</TableCell>
+                        <TableCell className="text-right">
+                          <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ${st.color}`}>
+                            {st.label}
+                          </span>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             )}
@@ -263,6 +316,73 @@ export default function AdminDashboard() {
             )}
           </CardContent>
         </Card>
+
+        {/* Onay Bekleyen Yorumlar */}
+        <Card className="shadow-sm border-l-4 border-l-amber-400">
+          <CardHeader className="flex flex-row items-center justify-between pb-3">
+            <CardTitle className="flex items-center gap-2">
+              <Star size={18} className="text-amber-500" />
+              Yorumlar
+              {pendingReviews.length > 0 && (
+                <span className="bg-amber-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                  {pendingReviews.length}
+                </span>
+              )}
+            </CardTitle>
+            <Link
+              href="/admin/reviews"
+              className="text-xs text-muted-foreground hover:text-amber-600 flex items-center gap-1 transition-colors"
+            >
+              Tümü <ArrowRight size={12} />
+            </Link>
+          </CardHeader>
+          <CardContent className="pt-0">
+            {pendingReviews.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">
+                Onay bekleyen yorum yok.
+              </p>
+            ) : (
+              <div className="space-y-1">
+                {pendingReviews.map((review) => {
+                  const avg = ((review.rating_shipping + review.rating_quality + review.rating_communication) / 3).toFixed(1);
+                  const name = [review.profiles?.first_name, review.profiles?.last_name].filter(Boolean).join(" ") || "Müşteri";
+                  return (
+                    <Link
+                      key={review.id}
+                      href="/admin/reviews"
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-amber-50 transition-colors group"
+                    >
+                      <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
+                        <Star size={14} className="text-amber-500 fill-amber-400" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-sm font-bold text-slate-900 leading-none truncate">{name}</p>
+                          {review.orders?.order_number && (
+                            <span className="text-[10px] font-mono bg-slate-100 text-slate-400 px-1 rounded">
+                              YH{review.orders.order_number}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-400 truncate mt-0.5">
+                          {review.comment || "Yorumsuz değerlendirme"}
+                        </p>
+                      </div>
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        <span className="flex items-center gap-0.5 text-xs font-bold text-amber-600">
+                          <Star size={10} className="fill-amber-400 text-amber-400" />
+                          {avg}
+                        </span>
+                        <ArrowRight size={12} className="text-slate-300 group-hover:text-amber-500 transition-colors" />
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
       </div>
     </div>
   );

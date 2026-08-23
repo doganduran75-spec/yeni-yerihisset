@@ -36,6 +36,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { GeoSelect } from "@/components/ui/geo-select";
+import { CITIES, DISTRICTS } from "@/lib/turkey-geo";
 import { cn } from "@/lib/utils";
 
 type TabType = "orders" | "addresses" | "profile" | "security" | "affiliate" | "coupons" | "messages";
@@ -46,6 +48,16 @@ export default function AccountPage() {
       <AccountPageInner />
     </Suspense>
   );
+}
+
+/** 10 haneli telefon numarasını "5XX XXX XX XX" formatında gösterir */
+function formatPhone(digits: string): string {
+  const d = digits.replace(/\D/g, "");
+  if (d.length === 0) return "";
+  if (d.length <= 3) return d;
+  if (d.length <= 6) return `${d.slice(0, 3)} ${d.slice(3)}`;
+  if (d.length <= 8) return `${d.slice(0, 3)} ${d.slice(3, 6)} ${d.slice(6)}`;
+  return `${d.slice(0, 3)} ${d.slice(3, 6)} ${d.slice(6, 8)} ${d.slice(8, 10)}`;
 }
 
 function AccountPageInner() {
@@ -108,6 +120,15 @@ function AccountPageInner() {
   const [newMessage, setNewMessage] = useState("");
   const [sendingMessage, setSendingMessage] = useState(false);
 
+  // Review State
+  const [reviewDialog, setReviewDialog] = useState<{ open: boolean; orderId: string; step: "form" | "thanks" } | null>(null);
+  const [reviewRatings, setReviewRatings] = useState({ shipping: 0, quality: 0, communication: 0 });
+  const [reviewHover, setReviewHover] = useState<{ cat: string; star: number } | null>(null);
+  const [reviewComment, setReviewComment] = useState("");
+  const [reviewImages, setReviewImages] = useState<File[]>([]);
+  const [reviewPreviews, setReviewPreviews] = useState<string[]>([]);
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+
   useEffect(() => {
     fetchUserData();
   }, []);
@@ -154,6 +175,71 @@ function AccountPageInner() {
       setNewMessage("");
     }
     setSendingMessage(false);
+  }
+
+  function openReviewDialog(orderId: string) {
+    setReviewDialog({ open: true, orderId, step: "form" });
+    setReviewRatings({ shipping: 0, quality: 0, communication: 0 });
+    setReviewHover(null);
+    setReviewComment("");
+    setReviewImages([]);
+    setReviewPreviews([]);
+  }
+
+  function handleReviewImageAdd(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    const remaining = 3 - reviewImages.length;
+    const added = files.slice(0, remaining);
+    setReviewImages(prev => [...prev, ...added]);
+    added.forEach(f => {
+      const reader = new FileReader();
+      reader.onload = ev => setReviewPreviews(prev => [...prev, ev.target?.result as string]);
+      reader.readAsDataURL(f);
+    });
+    e.target.value = "";
+  }
+
+  function removeReviewImage(idx: number) {
+    setReviewImages(prev => prev.filter((_, i) => i !== idx));
+    setReviewPreviews(prev => prev.filter((_, i) => i !== idx));
+  }
+
+  async function submitReview() {
+    if (!reviewDialog || !user) return;
+    if (!reviewRatings.shipping || !reviewRatings.quality || !reviewRatings.communication) {
+      alert("Lütfen tüm konular için puan verin.");
+      return;
+    }
+    setReviewSubmitting(true);
+    try {
+      // Görselleri yükle
+      const imageUrls: string[] = [];
+      for (const file of reviewImages) {
+        const ext = file.name.split(".").pop();
+        const path = `reviews/${user.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+        const { data: upload } = await supabase.storage
+          .from("product-images")
+          .upload(path, file, { upsert: true });
+        if (upload) {
+          const { data: { publicUrl } } = supabase.storage.from("product-images").getPublicUrl(path);
+          imageUrls.push(publicUrl);
+        }
+      }
+      await (supabase.from("order_reviews" as any).insert({
+        order_id: reviewDialog.orderId,
+        user_id: user.id,
+        rating_shipping: reviewRatings.shipping,
+        rating_quality: reviewRatings.quality,
+        rating_communication: reviewRatings.communication,
+        comment: reviewComment,
+        images: imageUrls,
+      }) as any);
+      setReviewDialog(prev => prev ? { ...prev, step: "thanks" } : null);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setReviewSubmitting(false);
+    }
   }
 
   async function fetchUserCoupons() {
@@ -246,7 +332,7 @@ function AccountPageInner() {
 
     const [prof, ords, addrs] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', user.id).single(),
-      supabase.from('orders').select('*, order_items(*, products(title, image_url, images))').eq('user_id', user.id).order('created_at', { ascending: false }),
+      supabase.from('orders').select('*, order_number, order_items(*, variant_name, products(title, image_url, images))').eq('user_id', user.id).order('created_at', { ascending: false }),
       supabase.from('user_addresses').select('*').eq('user_id', user.id).order('created_at', { ascending: false })
     ]);
 
@@ -278,8 +364,9 @@ function AccountPageInner() {
     e.preventDefault();
     if (!user) return;
 
-    // If setting as default, we might want to unset others first or let DB handle it?
-    // Let's keep it simple for now as the user requested basic functionality.
+    if (!addressForm.city) { alert("Lütfen il seçiniz."); return; }
+    if (!addressForm.district) { alert("Lütfen ilçe seçiniz."); return; }
+    if (addressForm.phone.length !== 10) { alert("Telefon numarası 10 haneli olmalıdır."); return; }
 
     const { error } = await supabase.from('user_addresses').insert({
       ...addressForm,
@@ -384,7 +471,7 @@ function AccountPageInner() {
                     { id: "addresses", icon: MapPin, label: "Adres Bilgilerim" },
                     { id: "profile", icon: User, label: "Profil Bilgilerim" },
                     { id: "security", icon: ShieldCheck, label: "Güvenlik Ayarları" },
-                    { id: "affiliate", icon: Link2, label: "Affiliate" },
+                    { id: "affiliate", icon: Link2, label: "Satış Ortaklığı" },
                   ].map((tab) => (
                     <button 
                       key={tab.id}
@@ -649,7 +736,17 @@ function AccountPageInner() {
                               </div>
                               <div className="hidden md:block">
                                 <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">SİPARİŞ NO</p>
-                                <p className="text-sm font-medium text-slate-500">#{order.id.slice(0,8)}</p>
+                                <div className="flex items-center gap-2">
+                                  <p className="text-sm font-bold text-blue-600">
+                                    {order.order_number ? `YH${order.order_number}` : `#${order.id.slice(0,8)}`}
+                                  </p>
+                                  <button
+                                    onClick={() => openReviewDialog(order.id)}
+                                    className="text-[10px] font-bold text-olive-600 hover:text-olive-800 border border-olive-200 hover:border-olive-400 bg-olive-50 hover:bg-olive-100 rounded-full px-2 py-0.5 transition-colors"
+                                  >
+                                    ⭐ Yorum Ekle
+                                  </button>
+                                </div>
                               </div>
                            </div>
                            <div className="flex items-center gap-2">
@@ -678,6 +775,11 @@ function AccountPageInner() {
                                    </div>
                                    <div className="flex-1">
                                       <h4 className="text-sm font-bold text-slate-900">{item.products?.title}</h4>
+                                      {item.variant_name && (
+                                        <span className="inline-block text-[11px] text-slate-500 bg-slate-100 rounded px-1.5 py-0.5 mt-0.5">
+                                          {item.variant_name}
+                                        </span>
+                                      )}
                                       <p className="text-xs text-slate-400 mt-1">{item.quantity} Adet x ₺{item.unit_price.toLocaleString('tr-TR')}</p>
                                    </div>
                                 </div>
@@ -721,8 +823,20 @@ function AccountPageInner() {
                             <Input required value={addressForm.address_name} onChange={e => setAddressForm({...addressForm, address_name: e.target.value})} placeholder="Evim" className="h-12" />
                           </div>
                           <div className="space-y-2">
-                             <label className="text-xs font-bold uppercase text-slate-500 px-1">Telefon</label>
-                             <Input required value={addressForm.phone} onChange={e => setAddressForm({...addressForm, phone: e.target.value})} placeholder="05XX XXX XX XX" className="h-12" />
+                            <label className="text-xs font-bold uppercase text-slate-500 px-1">Telefon</label>
+                            <Input
+                              required
+                              type="tel"
+                              inputMode="numeric"
+                              value={formatPhone(addressForm.phone)}
+                              onChange={e => {
+                                const digits = e.target.value.replace(/\D/g, "").slice(0, 10);
+                                if (digits.length > 0 && digits[0] !== "5") return;
+                                setAddressForm({...addressForm, phone: digits});
+                              }}
+                              placeholder="5XX XXX XX XX"
+                              className="h-12 tracking-wide"
+                            />
                           </div>
                           <div className="space-y-2">
                             <label className="text-xs font-bold uppercase text-slate-500 px-1">Alıcı Adı</label>
@@ -734,11 +848,22 @@ function AccountPageInner() {
                           </div>
                           <div className="space-y-2">
                             <label className="text-xs font-bold uppercase text-slate-500 px-1">Şehir (İl)</label>
-                            <Input required value={addressForm.city} onChange={e => setAddressForm({...addressForm, city: e.target.value})} placeholder="İstanbul" className="h-12" />
+                            <GeoSelect
+                              options={CITIES}
+                              value={addressForm.city}
+                              onChange={city => setAddressForm({...addressForm, city, district: ""})}
+                              placeholder="İl seçiniz..."
+                            />
                           </div>
                           <div className="space-y-2">
                             <label className="text-xs font-bold uppercase text-slate-500 px-1">İlçe</label>
-                            <Input required value={addressForm.district} onChange={e => setAddressForm({...addressForm, district: e.target.value})} placeholder="Kadıköy" className="h-12" />
+                            <GeoSelect
+                              options={addressForm.city ? (DISTRICTS[addressForm.city] ?? []) : []}
+                              value={addressForm.district}
+                              onChange={district => setAddressForm({...addressForm, district})}
+                              placeholder={addressForm.city ? "İlçe seçiniz..." : "Önce il seçin"}
+                              disabled={!addressForm.city}
+                            />
                           </div>
                         </div>
                         <div className="space-y-2">
@@ -847,8 +972,19 @@ function AccountPageInner() {
                                <p className="text-[10px] text-slate-400 mt-1 pl-1">E-posta adresi güvenliğiniz nedeniyle değiştirilemez.</p>
                             </div>
                             <div className="space-y-2">
-                               <label className="text-xs font-bold uppercase text-slate-500 px-1">Telefon Numarası</label>
-                               <Input value={profile?.phone || ""} onChange={e => setProfile({...profile, phone: e.target.value})} placeholder="05XX XXX XX XX" className="h-12 font-bold" />
+                               <label className="text-xs font-bold uppercase text-slate-500 px-1">Telefon</label>
+                               <Input
+                                 type="tel"
+                                 inputMode="numeric"
+                                 value={formatPhone(profile?.phone || "")}
+                                 onChange={e => {
+                                   const digits = e.target.value.replace(/\D/g, "").slice(0, 10);
+                                   if (digits.length > 0 && digits[0] !== "5") return;
+                                   setProfile({...profile, phone: digits});
+                                 }}
+                                 placeholder="5XX XXX XX XX"
+                                 className="h-12 tracking-wide"
+                               />
                             </div>
                             <div className="space-y-2">
                                <label className="text-xs font-bold uppercase text-slate-500 px-1">Ad</label>
@@ -871,7 +1007,7 @@ function AccountPageInner() {
             {activeTab === "affiliate" && (
               <section className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-2xl font-black text-slate-900">Affiliate Programı</h2>
+                  <h2 className="text-2xl font-black text-slate-900">Satış Ortaklığı Programı</h2>
                   <Link href="/affiliate" className={cn(buttonVariants({ variant: "ghost" }), "text-olive-600 font-bold text-sm gap-1")}>
                     Program Hakkında <ChevronRight size={14} />
                   </Link>
@@ -885,7 +1021,7 @@ function AccountPageInner() {
                   /* Başvuru Formu */
                   <Card className="border-none shadow-sm overflow-hidden">
                     <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-8 text-white">
-                      <h3 className="text-2xl font-black mb-2">Affiliate Ol, Kazan</h3>
+                      <h3 className="text-2xl font-black mb-2">Satış Ortağı Ol, Kazan</h3>
                       <p className="text-olive-100 font-medium">
                         Her satıştan %10 komisyon kazan. Aşağıdaki soruları yanıtla ve hemen başla.
                       </p>
@@ -942,14 +1078,14 @@ function AccountPageInner() {
                           </div>
                         </div>
                         <div className="bg-olive-50 rounded-2xl p-4 border border-blue-100 text-sm text-olive-700 font-medium">
-                          Başvurunuz anında onaylanır ve affiliate linkinizi hemen kullanabilirsiniz.
+                          Başvurunuz anında onaylanır ve satış ortaklığı linkinizi hemen kullanabilirsiniz.
                         </div>
                         <Button
                           type="submit"
                           disabled={affiliateApplying}
                           className="w-full h-14 rounded-2xl bg-olive-600 font-black text-lg shadow-lg shadow-olive-100"
                         >
-                          {affiliateApplying ? "Başvuruluyor..." : "Affiliate Olmak İstiyorum"}
+                          {affiliateApplying ? "Başvuruluyor..." : "Satış Ortağı Olmak İstiyorum"}
                         </Button>
                       </form>
                     </CardContent>
@@ -960,7 +1096,7 @@ function AccountPageInner() {
                     {/* Kod Kutusu */}
                     <Card className="border-none shadow-sm overflow-hidden">
                       <div className="bg-gradient-to-r from-slate-900 to-slate-800 p-6 text-white">
-                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Affiliate Kodunuz</p>
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Satış Ortaklığı Kodunuz</p>
                         <div className="flex items-center gap-4">
                           <span className="text-3xl font-black tracking-tight font-mono">{affiliate.code}</span>
                           <button
@@ -968,7 +1104,7 @@ function AccountPageInner() {
                             className="flex items-center gap-2 bg-white/20 hover:bg-white/30 px-4 py-2 rounded-xl text-sm font-bold transition-colors"
                           >
                             <Copy size={14} />
-                            {affiliateCopied ? "Kopyalandı!" : "Ana Sayfa Linkini Kopyala"}
+                            {affiliateCopied ? "Kopyalandı!" : "Ortaklık Linkini Kopyala"}
                           </button>
                         </div>
                         <p className="text-slate-400 text-sm mt-3 font-medium">
@@ -1110,6 +1246,113 @@ function AccountPageInner() {
           </div>
         </div>
       </main>
+
+      {/* ─── Yorum Dialog ───────────────────────────────────────────────────── */}
+      {reviewDialog?.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            {reviewDialog.step === "thanks" ? (
+              /* Teşekkür ekranı */
+              <div className="flex flex-col items-center justify-center p-10 text-center gap-4">
+                <div className="w-20 h-20 bg-olive-100 rounded-full flex items-center justify-center text-4xl">🌿</div>
+                <h3 className="text-2xl font-black text-slate-900">Yorumunuz için teşekkürler!</h3>
+                <p className="text-slate-500 text-sm">Geri bildiriminiz diğer müşterilerimize yön göstermektedir. En kısa sürede incelenip yayınlanacaktır.</p>
+                <Button
+                  onClick={() => setReviewDialog(null)}
+                  className="mt-2 bg-olive-600 hover:bg-olive-700 font-bold px-8"
+                >
+                  Siparişlerime Dön
+                </Button>
+              </div>
+            ) : (
+              /* Yorum formu */
+              <div className="p-6 space-y-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-xl font-black text-slate-900">Yorum Ekle</h3>
+                    <p className="text-xs text-olive-600 font-medium mt-0.5">Yorumlarımız diğer müşterilerimize yön göstermektedir.</p>
+                  </div>
+                  <button onClick={() => setReviewDialog(null)} className="text-slate-400 hover:text-slate-600 text-2xl leading-none">×</button>
+                </div>
+
+                {/* Yıldız puanlamaları */}
+                {([
+                  { key: "shipping", label: "🚚 Kargo" },
+                  { key: "quality",  label: "🎁 Ürün Kalitesi" },
+                  { key: "communication", label: "💬 İletişim" },
+                ] as { key: keyof typeof reviewRatings; label: string }[]).map(({ key, label }) => (
+                  <div key={key} className="space-y-1.5">
+                    <p className="text-sm font-bold text-slate-700">{label}</p>
+                    <div className="flex gap-1">
+                      {[1, 2, 3, 4, 5].map(star => {
+                        const active = (reviewHover?.cat === key ? reviewHover.star : reviewRatings[key]) >= star;
+                        return (
+                          <button
+                            key={star}
+                            className={`text-2xl transition-transform hover:scale-110 ${active ? "text-yellow-400" : "text-slate-200"}`}
+                            onMouseEnter={() => setReviewHover({ cat: key, star })}
+                            onMouseLeave={() => setReviewHover(null)}
+                            onClick={() => setReviewRatings(prev => ({ ...prev, [key]: star }))}
+                          >
+                            ★
+                          </button>
+                        );
+                      })}
+                      {reviewRatings[key] > 0 && (
+                        <span className="text-xs text-slate-400 self-center ml-1">{reviewRatings[key]}/5</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+
+                {/* Yorum metni */}
+                <div className="space-y-1.5">
+                  <p className="text-sm font-bold text-slate-700">Yorumunuz</p>
+                  <textarea
+                    rows={4}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-olive-400"
+                    placeholder="Deneyiminizi diğer müşterilerle paylaşın…"
+                    value={reviewComment}
+                    onChange={e => setReviewComment(e.target.value)}
+                  />
+                </div>
+
+                {/* Görsel ekleme */}
+                <div className="space-y-2">
+                  <p className="text-sm font-bold text-slate-700">Görsel Ekle <span className="text-slate-400 font-normal">(en fazla 3)</span></p>
+                  <div className="flex gap-2 flex-wrap">
+                    {reviewPreviews.map((src, i) => (
+                      <div key={i} className="relative w-20 h-20 rounded-xl overflow-hidden border border-slate-100">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={src} alt="" className="w-full h-full object-cover" />
+                        <button
+                          onClick={() => removeReviewImage(i)}
+                          className="absolute top-0.5 right-0.5 bg-black/60 text-white rounded-full w-5 h-5 text-xs flex items-center justify-center"
+                        >×</button>
+                      </div>
+                    ))}
+                    {reviewImages.length < 3 && (
+                      <label className="w-20 h-20 rounded-xl border-2 border-dashed border-slate-200 hover:border-olive-400 flex items-center justify-center cursor-pointer text-slate-400 hover:text-olive-500 transition-colors text-2xl">
+                        +
+                        <input type="file" accept="image/*" multiple className="hidden" onChange={handleReviewImageAdd} />
+                      </label>
+                    )}
+                  </div>
+                </div>
+
+                {/* Kaydet */}
+                <Button
+                  onClick={submitReview}
+                  disabled={reviewSubmitting || !reviewRatings.shipping || !reviewRatings.quality || !reviewRatings.communication}
+                  className="w-full bg-olive-600 hover:bg-olive-700 font-bold h-12 rounded-xl"
+                >
+                  {reviewSubmitting ? <Loader2 size={16} className="animate-spin" /> : "Yorumu Kaydet"}
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

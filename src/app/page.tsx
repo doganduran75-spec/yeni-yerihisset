@@ -17,6 +17,9 @@ export default function HomePage() {
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [content, setContent] = useState<Record<string, string>>({});
+  const [bentoImages, setBentoImages] = useState<{ babet: string; bot: string; sneaker: string }>({
+    babet: "", bot: "", sneaker: "",
+  });
   const { addItem, checkGiftRules } = useCartStore();
   const [mounted, setMounted] = useState(false);
   const [addedId, setAddedId] = useState<string | null>(null); // Sepete ekleme animasyonu
@@ -52,6 +55,7 @@ export default function HomePage() {
     setMounted(true);
     fetchFeaturedProducts();
     fetchContent();
+    fetchBentoImages();
   }, []);
 
   async function fetchContent() {
@@ -67,6 +71,38 @@ export default function HomePage() {
     } catch {
       // tablo henüz hazır değilse sayfa yine de çalışır
     }
+  }
+
+  async function fetchBentoImages() {
+    // Ürün başlığına göre kategori kartları için ilk fotoğrafı çek
+    const keywords = ["babet", "bot", "sneaker"];
+    const results: Record<string, string> = { babet: "", bot: "", sneaker: "" };
+    for (const kw of keywords) {
+      const { data } = await supabase
+        .from("products")
+        .select("images, image_url")
+        .ilike("title", `%${kw}%`)
+        .eq("is_active", true)
+        .limit(1)
+        .maybeSingle();
+      if (data) {
+        results[kw] = (data.images && data.images.length > 0) ? data.images[0] : (data.image_url || "");
+      }
+    }
+    // Boş kalanlar için herhangi bir ürün görseli kullan
+    const { data: fallback } = await supabase
+      .from("products")
+      .select("images, image_url")
+      .eq("is_active", true)
+      .not("images", "eq", "{}")
+      .limit(3);
+    const fbList = (fallback || []).map((p: any) =>
+      (p.images && p.images.length > 0) ? p.images[0] : (p.image_url || "")
+    ).filter(Boolean);
+    if (!results.babet && fbList[0]) results.babet = fbList[0];
+    if (!results.bot   && fbList[1]) results.bot   = fbList[1];
+    if (!results.sneaker && fbList[2]) results.sneaker = fbList[2];
+    setBentoImages(results);
   }
 
   async function fetchFeaturedProducts() {
@@ -112,12 +148,12 @@ export default function HomePage() {
                 {c("badge", "Yeni Sezon Yayında")}
               </div>
               <h1 className="text-6xl md:text-8xl font-black leading-[0.9] text-slate-900 tracking-tighter">
-                <span>{c("title_line1", "Evinizin")}</span><br />
-                <span className="text-olive-600 italic">{c("title_line2", "Ruhunu")}</span><br />
-                <span>{c("title_line3", "Keşfedin.")}</span>
+                <span>{c("title_line1", "Ayağını")}</span><br />
+                <span className="text-olive-600 italic">{c("title_line2", "Özgürleştir.")}</span><br />
+                <span>{c("title_line3", "Barefoot.")}</span>
               </h1>
               <p className="text-xl text-slate-500 max-w-lg leading-relaxed font-medium">
-                {c("subtitle", "Modern tasarımlar ve kaliteli materyallerle yaşam alanınızı yeniden hayal edin.")}
+                {c("subtitle", "Geniş burun bölgesi, sıfır topuk yüksekliği. Ayaklarını doğal yapısına kavuştur.")}
               </p>
               <div className="flex flex-wrap items-center gap-4">
                 <Button size="lg" className="bg-olive-600 hover:bg-blue-700 h-16 px-10 text-lg font-black shadow-2xl shadow-olive-100 rounded-2xl btn-juice">
@@ -130,13 +166,13 @@ export default function HomePage() {
 
               <div className="pt-8 flex items-center gap-8 border-t border-slate-100 max-w-md">
                 <div>
-                  <p className="text-2xl font-black text-slate-900 italic">{c("stat1_value", "10k+")}</p>
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{c("stat1_label", "Mutlu Müşteri")}</p>
+                  <p className="text-2xl font-black text-slate-900 italic">{c("stat1_value", "5k+")}</p>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{c("stat1_label", "Mutlu Ayak")}</p>
                 </div>
                 <Separator orientation="vertical" className="h-10" />
                 <div>
-                  <p className="text-2xl font-black text-slate-900 italic">{c("stat2_value", "500+")}</p>
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{c("stat2_label", "Özel Tasarım")}</p>
+                  <p className="text-2xl font-black text-slate-900 italic">{c("stat2_value", "30+")}</p>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{c("stat2_label", "Barefoot Model")}</p>
                 </div>
               </div>
             </div>
@@ -153,7 +189,7 @@ export default function HomePage() {
                    <div className="flex items-center gap-4">
                       <div className="w-12 h-12 rounded-2xl bg-olive-600 flex items-center justify-center text-white font-bold text-xl uppercase italic shadow-lg shadow-olive-100">Y</div>
                       <div>
-                        <p className="text-sm font-black text-slate-900 leading-none">{c("card_title", "Modern Berjer")}</p>
+                        <p className="text-sm font-black text-slate-900 leading-none">{c("card_title", "Barefoot Babet")}</p>
                         <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">{c("card_badge", "Sınırlı Stok")}</p>
                       </div>
                    </div>
@@ -169,58 +205,89 @@ export default function HomePage() {
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-16">
               <div className="space-y-4">
                 <h2 className="text-4xl md:text-5xl font-black text-slate-900 tracking-tighter italic uppercase underline decoration-olive-600 decoration-4 underline-offset-8">Kategorileri Keşfedin</h2>
-                <p className="text-slate-500 font-medium max-w-md">Evinizin her köşesi için özenle seçilmiş ürün gruplarımızla tanışın.</p>
+                <p className="text-slate-500 font-medium max-w-md">Ayaklarınıza özgürlük veren barefoot koleksiyonlarımızı keşfedin.</p>
               </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-              {/* Featured Category Card - Large */}
+              {/* Büyük kart — Barefoot Babet */}
               <div className="md:col-span-2 md:row-span-2 bento-card bg-slate-900 group">
                 <div className="absolute bottom-0 right-0 w-full h-full opacity-50 transition-opacity group-hover:opacity-70 bg-gradient-to-t from-slate-950 to-transparent z-10" />
-                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img 
-                  src="https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?q=80&w=800" 
-                  alt="Living Room"
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={bentoImages.babet || "https://images.unsplash.com/photo-1542291026-7eec264c27ff?q=80&w=800"}
+                  alt="Barefoot Babet"
                   className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000"
                 />
                 <div className="relative z-20 h-full flex flex-col justify-end gap-4">
-                   <Badge className="w-fit bg-olive-600 text-white border-none font-black text-[10px] uppercase tracking-widest px-3 py-1">En Popüler</Badge>
-                   <h3 className="text-4xl font-black text-white italic tracking-tighter uppercase leading-none">Oturma <br /> Odası</h3>
-                   <Link href="#" className="flex items-center gap-2 text-white font-bold text-sm bg-white/10 hover:bg-white/20 backdrop-blur-md w-fit px-6 h-12 rounded-2xl transition-all border border-white/20">
-                     İncele <ArrowRight size={18} />
-                   </Link>
+                  <Badge className="w-fit bg-olive-600 text-white border-none font-black text-[10px] uppercase tracking-widest px-3 py-1">En Popüler</Badge>
+                  <h3 className="text-4xl font-black text-white italic tracking-tighter uppercase leading-none">Barefoot <br /> Babet</h3>
+                  <Link href="/products" className="flex items-center gap-2 text-white font-bold text-sm bg-white/10 hover:bg-white/20 backdrop-blur-md w-fit px-6 h-12 rounded-2xl transition-all border border-white/20">
+                    İncele <ArrowRight size={18} />
+                  </Link>
                 </div>
               </div>
 
-              {/* Smaller Category Cards */}
-              <div className="bento-card group">
-                <div className="space-y-4">
-                   <div className="w-14 h-14 bg-olive-50 rounded-2xl flex items-center justify-center text-olive-600 group-hover:bg-olive-600 group-hover:text-white transition-colors duration-500">
-                      <ShoppingBag size={28} />
-                   </div>
-                   <h4 className="text-2xl font-black text-slate-900 uppercase italic">Aydınlatma</h4>
-                   <p className="text-xs font-medium text-slate-500 leading-relaxed uppercase tracking-widest">320+ Ürün • %15 İndirim</p>
+              {/* Küçük kart — Bot */}
+              <div className="bento-card group overflow-hidden">
+                {bentoImages.bot ? (
+                  <>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={bentoImages.bot}
+                      alt="Barefoot Bot"
+                      className="absolute inset-0 w-full h-full object-cover opacity-20 group-hover:opacity-30 group-hover:scale-110 transition-all duration-700"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-white/80 to-transparent" />
+                  </>
+                ) : null}
+                <div className="relative space-y-4">
+                  <div className="w-14 h-14 bg-olive-50 rounded-2xl flex items-center justify-center text-olive-600 group-hover:bg-olive-600 group-hover:text-white transition-colors duration-500">
+                    <ShoppingBag size={28} />
+                  </div>
+                  <h4 className="text-2xl font-black text-slate-900 uppercase italic">Barefoot Bot</h4>
+                  <p className="text-xs font-medium text-slate-500 leading-relaxed uppercase tracking-widest">Kış • Doğal Yürüyüş</p>
                 </div>
               </div>
 
-              <div className="bento-card group">
-                <div className="space-y-4">
-                   <div className="w-14 h-14 bg-olive-50 rounded-2xl flex items-center justify-center text-olive-600 group-hover:bg-olive-600 group-hover:text-white transition-colors duration-500">
-                      <Star size={28} />
-                   </div>
-                   <h4 className="text-2xl font-black text-slate-900 uppercase italic">Mutfak</h4>
-                   <p className="text-xs font-medium text-slate-500 leading-relaxed uppercase tracking-widest">150+ Ürün • Ücretsiz Kargo</p>
+              {/* Küçük kart — Sneaker / Günlük */}
+              <div className="bento-card group overflow-hidden">
+                {bentoImages.sneaker ? (
+                  <>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={bentoImages.sneaker}
+                      alt="Barefoot Sneaker"
+                      className="absolute inset-0 w-full h-full object-cover opacity-20 group-hover:opacity-30 group-hover:scale-110 transition-all duration-700"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-white/80 to-transparent" />
+                  </>
+                ) : null}
+                <div className="relative space-y-4">
+                  <div className="w-14 h-14 bg-olive-50 rounded-2xl flex items-center justify-center text-olive-600 group-hover:bg-olive-600 group-hover:text-white transition-colors duration-500">
+                    <Star size={28} />
+                  </div>
+                  <h4 className="text-2xl font-black text-slate-900 uppercase italic">Günlük Sneaker</h4>
+                  <p className="text-xs font-medium text-slate-500 leading-relaxed uppercase tracking-widest">Her Zemin • Esnek Taban</p>
                 </div>
               </div>
 
+              {/* Geniş kart — Tüm Koleksiyon */}
               <div className="md:col-span-2 bento-card bg-white flex items-center justify-between gap-8 group">
                 <div className="space-y-4 flex-1">
-                   <h4 className="text-3xl font-black text-slate-900 uppercase italic leading-none">Yatak Odası <br /> Takımları</h4>
-                   <Button variant="outline" className="rounded-2xl h-12 font-black uppercase text-[10px] tracking-widest border-2">Tümünü İncele</Button>
+                  <h4 className="text-3xl font-black text-slate-900 uppercase italic leading-none">Barefoot <br /> Ayakkabı</h4>
+                  <p className="text-xs text-slate-400 font-medium uppercase tracking-widest">Geniş Burun • Sıfır Topuk • Hafif Taban</p>
+                  <Link href="/products">
+                    <Button variant="outline" className="rounded-2xl h-12 font-black uppercase text-[10px] tracking-widest border-2">Tümünü İncele</Button>
+                  </Link>
                 </div>
                 <div className="w-1/3 aspect-square bg-slate-50 rounded-[2rem] overflow-hidden">
-                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                   <img src="https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?q=80&w=400" alt="Bedroom" className="w-full h-full object-cover group-hover:scale-125 transition-transform duration-700" />
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={bentoImages.babet || bentoImages.bot || "https://images.unsplash.com/photo-1542291026-7eec264c27ff?q=80&w=400"}
+                    alt="Barefoot Koleksiyon"
+                    className="w-full h-full object-cover group-hover:scale-125 transition-transform duration-700"
+                  />
                 </div>
               </div>
             </div>
@@ -322,21 +389,21 @@ export default function HomePage() {
                  <ShoppingBag size={36} />
               </div>
               <h4 className="text-2xl font-black text-slate-900 uppercase italic">Hızlı Teslimat</h4>
-              <p className="text-slate-500 font-medium leading-relaxed">Özenle paketlenmiş ürünleriniz 24 saat içerisinde kargoda.</p>
+              <p className="text-slate-500 font-medium leading-relaxed">Siparişiniz özenle paketlenerek 24 saat içinde kargoya verilir.</p>
             </div>
             <div className="space-y-6 group">
               <div className="w-24 h-24 bg-olive-50 rounded-[2.5rem] flex items-center justify-center mx-auto text-olive-600 group-hover:bg-olive-600 group-hover:text-white transition-all duration-700 transform group-hover:-rotate-6">
                  <Shield size={36} />
               </div>
-              <h4 className="text-2xl font-black text-slate-900 uppercase italic">Güvenli Alışveriş</h4>
-              <p className="text-slate-500 font-medium leading-relaxed">256-bit SSL güvenlik sertifikası ile tüm bilgileriniz koruma altında.</p>
+              <h4 className="text-2xl font-black text-slate-900 uppercase italic">Doğal Kalıp</h4>
+              <p className="text-slate-500 font-medium leading-relaxed">Geniş burun bölgesi ve sıfır topuk yüksekliği ile ayağınızın doğal şekline uyar.</p>
             </div>
             <div className="space-y-6 group">
               <div className="w-24 h-24 bg-olive-50 rounded-[2.5rem] flex items-center justify-center mx-auto text-olive-600 group-hover:bg-olive-600 group-hover:text-white transition-all duration-700 transform group-hover:rotate-12">
                  <ArrowRight className="rotate-180" size={36} />
               </div>
               <h4 className="text-2xl font-black text-slate-900 uppercase italic">Kolay İade</h4>
-              <p className="text-slate-500 font-medium leading-relaxed">Koşulsuz şartsız 14 gün içerisinde iade ve değişim garantisi.</p>
+              <p className="text-slate-500 font-medium leading-relaxed">Beden uymazsa koşulsuz 14 gün içinde ücretsiz iade ve değişim.</p>
             </div>
           </div>
         </section>

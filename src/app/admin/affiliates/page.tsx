@@ -95,16 +95,16 @@ export default function AdminAffiliatesPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Affiliate Yönetimi</h1>
+        <h1 className="text-2xl font-bold">Satış Ortaklığı Yönetimi</h1>
         <p className="text-muted-foreground text-sm mt-1">
-          Affiliate üyeleri ve komisyon ödemelerini yönetin.
+          Satış ortakları ve komisyon ödemelerini yönetin.
         </p>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: "Toplam Affiliate", value: affiliates.length, icon: Users, color: "blue" },
+          { label: "Toplam Ortak", value: affiliates.length, icon: Users, color: "blue" },
           { label: "Aktif", value: affiliates.filter((a) => a.status === "active").length, icon: CheckCircle2, color: "green" },
           { label: "Bekleyen Komisyon", value: `₺${totalPendingCommissions.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`, icon: Clock, color: "amber" },
           { label: "Toplam Dönüşüm", value: conversions.filter((c) => c.status !== "cancelled").length, icon: TrendingUp, color: "purple" },
@@ -142,7 +142,7 @@ export default function AdminAffiliatesPage() {
                 : "border-transparent text-muted-foreground hover:text-foreground"
             )}
           >
-            {view === "affiliates" ? "Affiliate Üyeleri" : "Komisyonlar"}
+            {view === "affiliates" ? "Satış Ortakları" : "Komisyonlar"}
           </button>
         ))}
       </div>

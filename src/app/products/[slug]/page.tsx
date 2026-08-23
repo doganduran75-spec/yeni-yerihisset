@@ -29,8 +29,8 @@ async function getProduct(slug: string) {
     .select(`
       id, title, description, slug, price, stock, images, image_url, has_variants,
       category_id,
-      brands (name),
-      categories (name),
+      brands (name, slug),
+      categories (name, slug),
       product_variants (
         id, sku, price, compare_at_price, stock, is_active, variant_option_id, image_url,
         variant_options (

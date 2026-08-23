@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useCartStore } from "@/store/useCartStore";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -8,7 +8,6 @@ import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
-  ArrowLeft,
   ArrowRight,
   MapPin,
   Plus,
@@ -16,11 +15,12 @@ import {
   CreditCard,
   ShieldCheck,
   Truck,
-  ChevronRight,
-  Info,
   Ticket,
   X,
   Loader2,
+  Landmark,
+  Clock,
+  IdCard,
 } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -56,10 +56,34 @@ export default function CheckoutPage() {
     lastName: "",
     email: "",
   });
+  const [identityNumber, setIdentityNumber] = useState("");
+  // Ödeme yöntemi
+  const [paymentMethod, setPaymentMethod] = useState<"credit_card" | "bank_transfer">("credit_card");
+  const [bankTransferEnabled, setBankTransferEnabled] = useState(false);
+  const [bankTransferInfo, setBankTransferInfo] = useState("");
+  // iyzico form içeriği (ödeme widgetı)
+  const [iyzicoFormHtml, setIyzicoFormHtml] = useState<string | null>(null);
+  const iyzicoContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetchAddresses();
   }, []);
+
+  // iyzico form HTML'i gelince script'leri çalıştır
+  useEffect(() => {
+    if (!iyzicoFormHtml || !iyzicoContainerRef.current) return;
+    const container = iyzicoContainerRef.current;
+    container.innerHTML = iyzicoFormHtml;
+    // <script> tag'leri innerHTML ile eklenmez — manuel çalıştır
+    container.querySelectorAll("script").forEach((oldScript) => {
+      const newScript = document.createElement("script");
+      Array.from(oldScript.attributes).forEach((attr) =>
+        newScript.setAttribute(attr.name, attr.value)
+      );
+      newScript.textContent = oldScript.textContent;
+      oldScript.parentNode?.replaceChild(newScript, oldScript);
+    });
+  }, [iyzicoFormHtml]);
 
   // GA4: begin_checkout — sayfa yüklenince (sepette ürün varsa)
   useEffect(() => {
@@ -93,6 +117,7 @@ export default function CheckoutPage() {
         lastName: profile.last_name || "",
         email: profile.email || user.email || "",
       });
+      if (profile.identity_number) setIdentityNumber(profile.identity_number);
     }
 
     const { data } = await supabase.from('user_addresses').select('*').eq('user_id', user.id);
@@ -102,6 +127,16 @@ export default function CheckoutPage() {
       const defaultBilling = data.find((a: any) => a.is_default_billing) || data[0];
       if (defaultShipping) setSelectedShippingId(defaultShipping.id);
       if (defaultBilling) setSelectedBillingId(defaultBilling.id);
+    }
+
+    // Ödeme ayarlarını yükle
+    const { data: paySettings } = await (supabase
+      .from("settings")
+      .select("bank_transfer_enabled, bank_transfer_info")
+      .single() as any) as { data: { bank_transfer_enabled?: boolean; bank_transfer_info?: string } | null };
+    if (paySettings) {
+      setBankTransferEnabled(paySettings.bank_transfer_enabled ?? false);
+      setBankTransferInfo(paySettings.bank_transfer_info ?? "");
     }
 
     // Kullanıcının kuponlarını yükle
@@ -132,14 +167,21 @@ export default function CheckoutPage() {
       alert("Lütfen bir teslimat adresi seçin.");
       return;
     }
+    // Kredi kartı seçiliyse TC kimlik zorunlu
+    if (paymentMethod === "credit_card") {
+      if (!identityNumber || identityNumber.replace(/\D/g, "").length !== 11) {
+        alert("Lütfen 11 haneli TC Kimlik Numaranızı girin.\niyzico, yasal zorunluluk kapsamında bu bilgiyi talep etmektedir.");
+        return;
+      }
+    }
+
     setPlacing(true);
 
-    // Update profile if names changed
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
       await supabase.from('profiles').update({
         first_name: personalInfo.firstName,
-        last_name: personalInfo.lastName
+        last_name: personalInfo.lastName,
       }).eq('id', user.id);
     }
 
@@ -149,15 +191,60 @@ export default function CheckoutPage() {
     const shippingCost = (totalPrice > 500 || couponData?.free_shipping) ? 0 : 29.90;
     const finalTotal = Math.max(0, totalPrice + shippingCost - couponDiscount);
 
+    const { data: { session } } = await supabase.auth.getSession();
+    const authToken = session?.access_token;
+
+    // ── Kredi kartı → iyzico akışı ──────────────────────────────────────────
+    if (paymentMethod === "credit_card") {
+      const res = await fetch("/api/checkout/iyzico/initialize", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+        },
+        body: JSON.stringify({
+          items: items.map((item) => ({
+            product_id: item.product_id,
+            variant_id: item.variant_id,
+            variant_name: item.variant_name,
+            title: item.title,
+            price: item.is_gift ? 0 : item.price,
+            quantity: item.quantity,
+            is_gift: item.is_gift ?? false,
+          })),
+          shippingAddressId: selectedShippingId,
+          affiliateCode,
+          couponCode: couponCode || undefined,
+          identityNumber: identityNumber.replace(/\D/g, ""),
+        }),
+      });
+
+      const data = await res.json();
+      setPlacing(false);
+
+      if (!data.ok) {
+        alert(data.error || "Ödeme başlatılamadı. Lütfen tekrar deneyin.");
+        return;
+      }
+
+      // iyzico ödeme formunu sayfaya enjekte et — widget otomatik açılır
+      setIyzicoFormHtml(data.checkoutFormContent);
+      return;
+    }
+
+    // ── Havale / EFT akışı (mevcut) ─────────────────────────────────────────
     const res = await fetch("/api/orders/create", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+      },
       body: JSON.stringify({
         items: items.map((item) => ({
           product_id: item.product_id,
           variant_id: item.variant_id,
+          variant_name: item.variant_name,
           title: item.title,
-          // Hediye ürünlerin fiyatı her zaman 0
           price: item.is_gift ? 0 : item.price,
           quantity: item.quantity,
           is_gift: item.is_gift ?? false,
@@ -165,6 +252,7 @@ export default function CheckoutPage() {
         shippingAddressId: selectedShippingId,
         affiliateCode,
         couponCode: couponCode || undefined,
+        paymentMethod,
       }),
     });
 
@@ -172,7 +260,6 @@ export default function CheckoutPage() {
     setPlacing(false);
 
     if (data.orderId) {
-      // GA4: purchase
       trackPurchase({
         orderId: data.orderId,
         items: items.map((i) => ({
@@ -221,22 +308,49 @@ export default function CheckoutPage() {
     setCouponError("");
   }
 
+  // URL'den hata parametresini oku (iyzico başarısız callback)
+  const paymentFailed = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("hatali") === "1";
+
   if (loading) return <div className="min-h-screen flex items-center justify-center animate-pulse text-blue-600 font-bold">Ödeme Sayfası Hazırlanıyor...</div>;
 
   if (orderSuccess) {
+    const isBankTransfer = paymentMethod === "bank_transfer";
     return (
       <div className="min-h-screen bg-[#F9FAFB] flex items-center justify-center p-4">
         <div className="bg-white rounded-3xl shadow-2xl p-12 max-w-md w-full text-center space-y-6">
-          <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto">
-            <CheckCircle2 size={40} className="text-green-600" />
+          <div className={cn(
+            "w-20 h-20 rounded-full flex items-center justify-center mx-auto",
+            isBankTransfer ? "bg-amber-100" : "bg-green-100"
+          )}>
+            {isBankTransfer
+              ? <Clock size={40} className="text-amber-600" />
+              : <CheckCircle2 size={40} className="text-green-600" />}
           </div>
           <div>
-            <h2 className="text-3xl font-black text-slate-900 mb-2">Siparişiniz Alındı!</h2>
+            <h2 className="text-3xl font-black text-slate-900 mb-2">
+              {isBankTransfer ? "Siparişiniz Oluşturuldu!" : "Siparişiniz Alındı!"}
+            </h2>
             <p className="text-slate-500 font-medium">Sipariş numaranız: <span className="font-bold text-slate-900">#{orderSuccess.slice(0, 8)}</span></p>
           </div>
-          <p className="text-sm text-slate-500 font-medium leading-relaxed">
-            Siparişinizi hazırlamaya başladık. E-posta adresinize bildirim gönderilecektir.
-          </p>
+          {isBankTransfer ? (
+            <div className="space-y-4 text-left">
+              <p className="text-sm text-slate-600 font-medium leading-relaxed text-center">
+                Havaleyi gerçekleştirdiğinizde siparişinizi işleme alacağız.
+              </p>
+              {bankTransferInfo && (
+                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
+                  <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-2 flex items-center gap-1">
+                    <Landmark size={12} /> Banka Bilgileri
+                  </p>
+                  <pre className="text-xs text-slate-700 font-medium whitespace-pre-wrap leading-relaxed">{bankTransferInfo}</pre>
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-slate-500 font-medium leading-relaxed">
+              Siparişinizi hazırlamaya başladık. E-posta adresinize bildirim gönderilecektir.
+            </p>
+          )}
           <div className="flex flex-col gap-3">
             <Link href="/account?tab=orders" className={cn(buttonVariants({ variant: "default" }), "h-12 rounded-2xl bg-blue-600 font-bold")}>
               Siparişlerimi Gör
@@ -262,6 +376,32 @@ export default function CheckoutPage() {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC]">
+      {/* iyzico ödeme formu overlay */}
+      {iyzicoFormHtml && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg relative overflow-hidden">
+            <div className="bg-slate-900 px-6 py-4 flex items-center justify-between">
+              <span className="text-white font-black text-sm uppercase tracking-widest">Güvenli Ödeme — iyzico</span>
+              <button
+                onClick={() => setIyzicoFormHtml(null)}
+                className="text-slate-400 hover:text-white transition-colors"
+                title="Kapat"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div ref={iyzicoContainerRef} className="p-4" />
+          </div>
+        </div>
+      )}
+
+      {/* Ödeme hatası banner */}
+      {paymentFailed && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-red-600 text-white px-6 py-3 rounded-2xl shadow-xl font-bold text-sm flex items-center gap-2 animate-in slide-in-from-top-4">
+          <X size={16} /> Ödeme işlemi tamamlanamadı. Lütfen tekrar deneyin.
+        </div>
+      )}
+
       <Navbar variant="minimal" />
 
       <main className="container mx-auto px-4 py-8 md:py-16">
@@ -291,7 +431,7 @@ export default function CheckoutPage() {
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <label className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em] px-1">ADINIZ</label>
-                        <Input 
+                        <Input
                           value={personalInfo.firstName}
                           onChange={e => setPersonalInfo({...personalInfo, firstName: e.target.value})}
                           placeholder="Ad"
@@ -300,13 +440,30 @@ export default function CheckoutPage() {
                       </div>
                       <div className="space-y-2">
                         <label className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em] px-1">SOYADINIZ</label>
-                        <Input 
+                        <Input
                           value={personalInfo.lastName}
                           onChange={e => setPersonalInfo({...personalInfo, lastName: e.target.value})}
                           placeholder="Soyad"
                           className="h-14 rounded-2xl bg-white border-slate-200 font-bold focus:ring-blue-600"
                         />
                       </div>
+                    </div>
+
+                    {/* TC Kimlik — iyzico + yasal zorunluluk */}
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em] px-1 flex items-center gap-1.5">
+                        <IdCard size={12} /> TC KİMLİK NUMARASI
+                      </label>
+                      <Input
+                        value={identityNumber}
+                        onChange={e => setIdentityNumber(e.target.value.replace(/\D/g, "").slice(0, 11))}
+                        placeholder="Örn: 12345678901"
+                        maxLength={11}
+                        className="h-14 rounded-2xl bg-white border-slate-200 font-bold font-mono tracking-widest focus:ring-blue-600"
+                      />
+                      <p className="text-[10px] text-slate-400 font-medium px-1 leading-relaxed">
+                        <span className="text-blue-500 font-bold">Yasal zorunluluk:</span> iyzico, 6493 sayılı Ödeme Hizmetleri Kanunu gereğince kimlik doğrulaması yapmaktadır. Bilgileriniz yalnızca fatura ve ödeme işlemleri için kullanılır.
+                      </p>
                     </div>
                   </div>
                </div>
@@ -425,26 +582,77 @@ export default function CheckoutPage() {
                   <div className="w-10 h-10 bg-blue-600 text-white rounded-2xl flex items-center justify-center font-black shadow-lg shadow-blue-100 italic">04</div>
                   <h3 className="text-2xl font-black text-slate-900 uppercase italic tracking-tighter">Ödeme Yöntemi</h3>
                </div>
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="bento-card !bg-slate-900 border-none flex flex-col items-center justify-center gap-6 py-12 group">
-                     <div className="w-20 h-20 bg-white/10 rounded-[2rem] flex items-center justify-center text-blue-400 group-hover:scale-110 transition-transform">
+               <div className={cn("grid gap-6", bankTransferEnabled ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1")}>
+                  {/* Kredi Kartı */}
+                  <div
+                    onClick={() => setPaymentMethod("credit_card")}
+                    className={cn(
+                      "bento-card flex flex-col items-center justify-center gap-6 py-12 cursor-pointer transition-all duration-300 group relative",
+                      paymentMethod === "credit_card"
+                        ? "!bg-slate-900 border-none ring-0"
+                        : "bg-white hover:border-slate-300"
+                    )}
+                  >
+                     <div className={cn(
+                       "w-20 h-20 rounded-[2rem] flex items-center justify-center transition-transform group-hover:scale-110",
+                       paymentMethod === "credit_card" ? "bg-white/10 text-blue-400" : "bg-slate-100 text-slate-500"
+                     )}>
                         <CreditCard size={40} />
                      </div>
                      <div className="text-center space-y-2">
-                        <p className="font-black text-white text-xl uppercase italic tracking-tight">Kredi / Banka Kartı</p>
-                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">iyzico Güvencesiyle Ödeyin</p>
+                        <p className={cn("font-black text-xl uppercase italic tracking-tight", paymentMethod === "credit_card" ? "text-white" : "text-slate-800")}>Kredi / Banka Kartı</p>
+                        <p className={cn("text-[10px] font-bold uppercase tracking-widest", paymentMethod === "credit_card" ? "text-slate-400" : "text-slate-400")}>iyzico Güvencesiyle Ödeyin</p>
                      </div>
+                     {paymentMethod === "credit_card" && (
+                       <div className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center shadow-lg animate-in zoom-in absolute top-4 right-4">
+                         <CheckCircle2 size={14} />
+                       </div>
+                     )}
                   </div>
-                  <div className="bento-card bg-slate-50 border-none flex flex-col items-center justify-center gap-6 py-12 opacity-40 grayscale cursor-not-allowed">
-                     <div className="w-20 h-20 bg-slate-200 rounded-[2rem] flex items-center justify-center text-slate-400">
-                        <Info size={40} />
-                     </div>
-                     <div className="text-center space-y-2">
-                        <p className="font-black text-slate-400 text-xl uppercase italic tracking-tight">Havale / EFT</p>
-                        <p className="text-[10px] text-slate-300 font-bold uppercase tracking-widest">Yakında Aktif Olacak</p>
-                     </div>
-                  </div>
+
+                  {/* Havale / EFT — sadece admin aktif ettiyse göster */}
+                  {bankTransferEnabled && (
+                    <div
+                      onClick={() => setPaymentMethod("bank_transfer")}
+                      className={cn(
+                        "bento-card flex flex-col items-center justify-center gap-6 py-12 cursor-pointer transition-all duration-300 group relative",
+                        paymentMethod === "bank_transfer"
+                          ? "!bg-amber-50 border-amber-300 ring-4 ring-amber-50"
+                          : "bg-white hover:border-amber-200"
+                      )}
+                    >
+                       <div className={cn(
+                         "w-20 h-20 rounded-[2rem] flex items-center justify-center transition-transform group-hover:scale-110",
+                         paymentMethod === "bank_transfer" ? "bg-amber-100 text-amber-600" : "bg-slate-100 text-slate-500"
+                       )}>
+                          <Landmark size={40} />
+                       </div>
+                       <div className="text-center space-y-2">
+                          <p className={cn("font-black text-xl uppercase italic tracking-tight", paymentMethod === "bank_transfer" ? "text-amber-900" : "text-slate-800")}>Havale / EFT</p>
+                          <p className={cn("text-[10px] font-bold uppercase tracking-widest", paymentMethod === "bank_transfer" ? "text-amber-600" : "text-slate-400")}>Banka Havalesiyle Ödeyin</p>
+                       </div>
+                       {paymentMethod === "bank_transfer" && (
+                         <div className="w-6 h-6 bg-amber-500 text-white rounded-full flex items-center justify-center shadow-lg animate-in zoom-in absolute top-4 right-4">
+                           <CheckCircle2 size={14} />
+                         </div>
+                       )}
+                    </div>
+                  )}
                </div>
+
+               {/* Banka bilgileri — Havale seçilince göster */}
+               {paymentMethod === "bank_transfer" && bankTransferInfo && (
+                 <div className="bento-card bg-amber-50 border-amber-200 !p-6 space-y-3 animate-in fade-in slide-in-from-top-4">
+                   <p className="text-[10px] font-black text-amber-700 uppercase tracking-widest flex items-center gap-2">
+                     <Landmark size={12} /> Havale / EFT Banka Bilgileri
+                   </p>
+                   <pre className="text-sm text-slate-700 font-medium whitespace-pre-wrap leading-relaxed">{bankTransferInfo}</pre>
+                   <div className="flex items-start gap-2 mt-2 text-xs text-amber-700 font-medium bg-amber-100 rounded-xl p-3">
+                     <Clock size={14} className="shrink-0 mt-0.5" />
+                     <span>Havaleyi gerçekleştirdiğinizde siparişinizi işleme alacağız. Açıklama kısmına sipariş numaranızı yazmayı unutmayın.</span>
+                   </div>
+                 </div>
+               )}
             </section>
           </div>
 
@@ -481,7 +689,7 @@ export default function CheckoutPage() {
                       <div className="flex justify-between text-slate-500 text-sm">
                         <span>Kargo Ücreti</span>
                         <span className={cn(shippingCost === 0 ? "text-green-600" : "text-slate-900", "text-lg")}>
-                          {shippingCost === 0 ? "ÜCRETİSİZ" : `₺${shippingCost.toLocaleString('tr-TR')}`}
+                          {shippingCost === 0 ? "ÜCRETSİZ" : `₺${shippingCost.toLocaleString('tr-TR')}`}
                         </span>
                       </div>
                       {couponDiscount > 0 && (

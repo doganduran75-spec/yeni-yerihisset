@@ -77,7 +77,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="tr" className={`${outfit.variable} ${inter.variable} antialiased scroll-smooth`}>
+    <html lang="tr" className={`${outfit.variable} ${inter.variable} antialiased`} data-scroll-behavior="smooth">
       <head>
         <GlobalStructuredData />
         <GoogleAnalytics />
