@@ -1,6 +1,11 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // ─── Sunucu-harici paketler ──────────────────────────────────────────────
+  // iyzipay dinamik require() kullanıyor; Turbopack derleyemiyor.
+  // Bunu bundle'a dahil etmeyip çalışma anında Node ile yükletiyoruz.
+  serverExternalPackages: ["iyzipay"],
+
   // ─── Build: mevcut tip/lint borçları derlemeyi durdurmasın ───────────────
   // Not: Bunlar geçici. Staging'i ayağa kaldırmak için; ileride tip hataları
   // ve ESLint uyarıları temizlenince kaldırılmalı.
