@@ -12,8 +12,10 @@ export default function AdminGuard({ children }: { children: React.ReactNode }) 
   const check = useCallback(async () => {
     setStatus("loading");
     try {
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError) throw userError;
+      // getUser, oturum yoksa "AuthSessionMissingError" döndürür — bu bir bağlantı
+      // hatası DEĞİL, sadece giriş yapılmamış demektir. Bu durumda login'e yönlendir.
+      // Gerçek ağ/DB hataları aşağıdaki profil sorgusunda (veya throw ile) yakalanır.
+      const { data: { user } } = await supabase.auth.getUser();
 
       if (!user) {
         router.replace("/login?redirect=/admin");
