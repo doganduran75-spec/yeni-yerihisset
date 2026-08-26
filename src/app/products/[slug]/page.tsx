@@ -27,7 +27,7 @@ async function getProduct(slug: string) {
   const { data } = await supabase
     .from("products")
     .select(`
-      id, title, description, slug, price, stock, images, image_url, has_variants,
+      id, title, description, short_description, slug, price, stock, images, image_url, has_variants,
       category_id,
       brands (name, slug),
       categories (name, slug),

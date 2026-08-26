@@ -30,6 +30,7 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
     stock: "",
     category_id: "",
     brand_id: "",
+    short_description: "",
     description: "",
     images: [] as string[],
     tags: [] as string[],
@@ -53,6 +54,7 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
         stock: initialData.stock?.toString() || "",
         category_id: initialData.category_id || "",
         brand_id: initialData.brand_id || "",
+        short_description: initialData.short_description || "",
         tags: initialData.tags || [],
         variants: initialData.product_variants?.map((v: any) => ({
           ...v,
@@ -210,6 +212,7 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
         stock: parseInt(formData.stock) || 0,
         category_id: formData.category_id || null,
         brand_id: formData.brand_id || null,
+        short_description: formData.short_description,
         description: formData.description,
         images: formData.images,
         tags: formData.tags,
@@ -264,6 +267,7 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
         stock: parseInt(formData.stock) || 0,
         category_id: formData.category_id || null,
         brand_id: formData.brand_id || null,
+        short_description: formData.short_description,
         description: formData.description,
         images: formData.images,
         tags: formData.tags,
@@ -366,13 +370,24 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">Açıklama</label>
+                <label className="text-sm font-medium">Kısa Açıklama</label>
+                <textarea
+                  className="flex min-h-[110px] w-full rounded-2xl border-2 border-slate-100 bg-slate-50/30 px-4 py-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 transition-all font-medium"
+                  placeholder="Ürünün üst kısmında görünecek kısa tanıtım..."
+                  value={formData.short_description}
+                  onChange={(e) => setFormData({ ...formData, short_description: e.target.value })}
+                />
+                <p className="text-xs text-slate-400">Ürün sayfasında başlığın altında, varyasyon/sepet bölümünden önce görünür.</p>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Detaylı Açıklama</label>
                 <textarea
                   className="flex min-h-[400px] w-full rounded-2xl border-2 border-slate-100 bg-slate-50/30 px-4 py-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 transition-all font-medium"
-                  placeholder="Ürün açıklamasını detaylıca buraya yazın..."
+                  placeholder="Ürünün detaylı açıklaması (sayfanın en altında görünür)..."
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 />
+                <p className="text-xs text-slate-400">Müşteri yorumlarının altında, sayfanın en altında görünür.</p>
               </div>
             </div>
           </section>

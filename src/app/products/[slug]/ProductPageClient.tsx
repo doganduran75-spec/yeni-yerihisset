@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   ShoppingBag,
-  ChevronRight,
   Star,
   Shield,
   Truck,
@@ -51,6 +50,7 @@ type Product = {
   id: string;
   title: string;
   description: string | null;
+  short_description: string | null;
   slug: string;
   price: number;
   stock: number;
@@ -228,27 +228,9 @@ export default function ProductPageClient({ product }: { product: Product }) {
       <Navbar />
 
       <main className="container mx-auto px-4 py-8 md:py-12">
-        {/* Breadcrumbs */}
-        <nav
-          aria-label="breadcrumb"
-          className="flex items-center gap-2 text-sm text-slate-500 mb-8 overflow-x-auto whitespace-nowrap pb-2"
-        >
-          <Link href="/" className="hover:text-olive-600">Anasayfa</Link>
-          <ChevronRight size={14} />
-          {product.categories ? (
-            <Link href={`/kategori/${product.categories.slug}`} className="hover:text-olive-600">
-              {product.categories.name}
-            </Link>
-          ) : (
-            <span>Kategori</span>
-          )}
-          <ChevronRight size={14} />
-          <span className="text-slate-900 font-medium truncate">{product.title}</span>
-        </nav>
-
-        <div className="grid md:grid-cols-2 gap-12 lg:gap-20">
-          {/* Gallery */}
-          <div className="space-y-4">
+        <div className="grid md:grid-cols-2 gap-12 lg:gap-20 items-start">
+          {/* Gallery — sayfa aşağı kaydırılınca sabit kalır */}
+          <div className="space-y-4 md:sticky md:top-6 md:self-start">
             <div className="aspect-[4/5] rounded-3xl overflow-hidden bg-slate-50 border relative group">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
@@ -317,13 +299,12 @@ export default function ProductPageClient({ product }: { product: Product }) {
 
             <Separator className="bg-slate-100" />
 
-            <div className="space-y-3">
-              <h3 className="font-bold text-slate-900">Ürün Açıklaması</h3>
+            {/* Kısa açıklama — başlığın altında, varyasyon/sepetten önce */}
+            {product.short_description && (
               <div className="text-slate-600 leading-relaxed whitespace-pre-wrap">
-                {product.description ||
-                  "Bu ürün hakkında henüz detaylı bir açıklama girilmemiş. Modern tasarımı ve kaliteli yapısıyla yaşam alanınıza şıklık katacak."}
+                {product.short_description}
               </div>
-            </div>
+            )}
 
             {/* Variants */}
             {product.has_variants && activeVariants.length > 0 && (
@@ -476,6 +457,16 @@ export default function ProductPageClient({ product }: { product: Product }) {
         </div>
 
         <ProductReviews productId={product.id} />
+
+        {/* Detaylı açıklama — müşteri yorumlarının altında, tam genişlik */}
+        {product.description && (
+          <section className="mt-16 border-t border-slate-100 pt-10">
+            <h2 className="text-2xl font-black text-slate-900 mb-4">Ürün Açıklaması</h2>
+            <div className="text-slate-600 leading-relaxed whitespace-pre-wrap max-w-4xl">
+              {product.description}
+            </div>
+          </section>
+        )}
       </main>
 
       <Footer />
