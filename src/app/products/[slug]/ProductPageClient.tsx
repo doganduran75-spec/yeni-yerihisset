@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   ShoppingBag,
+  ChevronLeft,
+  ChevronRight,
   Star,
   Shield,
   Truck,
@@ -72,7 +74,16 @@ export default function ProductPageClient({ product }: { product: Product }) {
   const activeVariants = product.product_variants?.filter((v) => v.is_active) ?? [];
 
   const [selectedImage, setSelectedImage] = useState<string>(images[0]);
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
   const [quantity, setQuantity] = useState(1);
+
+  // Ok/kaydırma ile görsel değiştir
+  const goToImage = (dir: number) => {
+    if (images.length < 2) return;
+    const idx = images.indexOf(selectedImage);
+    const cur = idx < 0 ? 0 : idx;
+    setSelectedImage(images[(cur + dir + images.length) % images.length]);
+  };
   const [selectedVariant, setSelectedVariant] = useState<Variant | null>(
     activeVariants.length > 0 ? activeVariants[0] : null
   );
@@ -231,7 +242,16 @@ export default function ProductPageClient({ product }: { product: Product }) {
         <div className="grid md:grid-cols-2 gap-12 lg:gap-20 items-start">
           {/* Gallery — sayfa aşağı kaydırılınca sabit kalır */}
           <div className="space-y-4 md:sticky md:top-6 md:self-start">
-            <div className="aspect-[4/5] rounded-3xl overflow-hidden bg-slate-50 border relative group">
+            <div
+              className="aspect-[4/5] rounded-3xl overflow-hidden bg-slate-50 border relative group select-none"
+              onTouchStart={(e) => setTouchStartX(e.touches[0].clientX)}
+              onTouchEnd={(e) => {
+                if (touchStartX === null) return;
+                const dx = e.changedTouches[0].clientX - touchStartX;
+                if (Math.abs(dx) > 40) goToImage(dx > 0 ? -1 : 1);
+                setTouchStartX(null);
+              }}
+            >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={selectedImage}
@@ -241,6 +261,28 @@ export default function ProductPageClient({ product }: { product: Product }) {
               <Badge className="absolute top-6 left-6 bg-white/90 text-slate-900 border-none px-3 py-1 font-bold shadow-sm">
                 {product.brands?.name || "Premium"}
               </Badge>
+
+              {/* Sağ/sol oklar — birden fazla görsel varsa */}
+              {images.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => goToImage(-1)}
+                    aria-label="Önceki görsel"
+                    className="absolute left-3 top-1/2 -translate-y-1/2 z-10 w-11 h-11 rounded-full bg-white/85 backdrop-blur hover:bg-white shadow-lg flex items-center justify-center text-slate-800 opacity-80 hover:opacity-100 transition-all active:scale-90"
+                  >
+                    <ChevronLeft size={22} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => goToImage(1)}
+                    aria-label="Sonraki görsel"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 z-10 w-11 h-11 rounded-full bg-white/85 backdrop-blur hover:bg-white shadow-lg flex items-center justify-center text-slate-800 opacity-80 hover:opacity-100 transition-all active:scale-90"
+                  >
+                    <ChevronRight size={22} />
+                  </button>
+                </>
+              )}
             </div>
             {images.length > 1 && (
               <div className="grid grid-cols-4 gap-4">
@@ -453,20 +495,21 @@ export default function ProductPageClient({ product }: { product: Product }) {
                 </Card>
               ))}
             </div>
+
+            {/* Müşteri yorumları — sağ sütunda (sol foto sabit kalsın diye) */}
+            <ProductReviews productId={product.id} />
+
+            {/* Detaylı açıklama — yorumların altında */}
+            {product.description && (
+              <section className="border-t border-slate-100 pt-8">
+                <h2 className="text-2xl font-black text-slate-900 mb-4">Ürün Açıklaması</h2>
+                <div className="text-slate-600 leading-relaxed whitespace-pre-wrap">
+                  {product.description}
+                </div>
+              </section>
+            )}
           </div>
         </div>
-
-        <ProductReviews productId={product.id} />
-
-        {/* Detaylı açıklama — müşteri yorumlarının altında, tam genişlik */}
-        {product.description && (
-          <section className="mt-16 border-t border-slate-100 pt-10">
-            <h2 className="text-2xl font-black text-slate-900 mb-4">Ürün Açıklaması</h2>
-            <div className="text-slate-600 leading-relaxed whitespace-pre-wrap max-w-4xl">
-              {product.description}
-            </div>
-          </section>
-        )}
       </main>
 
       <Footer />
