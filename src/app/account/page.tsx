@@ -69,6 +69,7 @@ function AccountPageInner() {
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
   const [orders, setOrders] = useState<any[]>([]);
+  const [reviewedOrderIds, setReviewedOrderIds] = useState<Set<string>>(new Set());
   const [addresses, setAddresses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -235,11 +236,16 @@ function AccountPageInner() {
         images: imageUrls,
       }) as any);
       if (reviewError) throw reviewError;
+      setReviewedOrderIds((prev) => new Set(prev).add(reviewDialog.orderId));
       setReviewDialog(prev => prev ? { ...prev, step: "thanks" } : null);
     } catch (e: unknown) {
       console.error(e);
-      const msg = e instanceof Error ? e.message : "Bilinmeyen hata";
-      alert("Yorum gönderilemedi: " + msg);
+      const code = (e as { code?: string })?.code;
+      const msg =
+        code === "23505"
+          ? "Bu sipariş için zaten bir yorum yaptınız."
+          : "Yorum gönderilemedi: " + (e instanceof Error ? e.message : "bilinmeyen hata");
+      alert(msg);
     } finally {
       setReviewSubmitting(false);
     }
@@ -333,15 +339,17 @@ function AccountPageInner() {
     }
     setUser(user);
 
-    const [prof, ords, addrs] = await Promise.all([
+    const [prof, ords, addrs, revs] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', user.id).single(),
       supabase.from('orders').select('*, order_number, order_items(*, variant_name, products(title, image_url, images))').eq('user_id', user.id).order('created_at', { ascending: false }),
-      supabase.from('user_addresses').select('*').eq('user_id', user.id).order('created_at', { ascending: false })
+      supabase.from('user_addresses').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
+      (supabase as any).from('order_reviews').select('order_id').eq('user_id', user.id),
     ]);
 
     setProfile(prof.data);
     setOrders(ords.data || []);
     setAddresses(addrs.data || []);
+    setReviewedOrderIds(new Set(((revs.data as any[]) || []).map((r) => r.order_id)));
     setLoading(false);
   }
 
@@ -717,12 +725,18 @@ function AccountPageInner() {
                                   <p className="text-sm font-bold text-blue-600">
                                     {order.order_number ? `YH${order.order_number}` : `#${order.id.slice(0,8)}`}
                                   </p>
-                                  <button
-                                    onClick={() => openReviewDialog(order.id)}
-                                    className="text-[10px] font-bold text-olive-600 hover:text-olive-800 border border-olive-200 hover:border-olive-400 bg-olive-50 hover:bg-olive-100 rounded-full px-2 py-0.5 transition-colors"
-                                  >
-                                    ⭐ Yorum Ekle
-                                  </button>
+                                  {reviewedOrderIds.has(order.id) ? (
+                                    <span className="text-[10px] font-bold text-green-600 border border-green-200 bg-green-50 rounded-full px-2 py-0.5">
+                                      ✓ Yorumlandı
+                                    </span>
+                                  ) : (
+                                    <button
+                                      onClick={() => openReviewDialog(order.id)}
+                                      className="text-[10px] font-bold text-olive-600 hover:text-olive-800 border border-olive-200 hover:border-olive-400 bg-olive-50 hover:bg-olive-100 rounded-full px-2 py-0.5 transition-colors"
+                                    >
+                                      ⭐ Yorum Ekle
+                                    </button>
+                                  )}
                                 </div>
                               </div>
                            </div>
