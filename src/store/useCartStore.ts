@@ -45,11 +45,13 @@ interface CartStore {
   items: CartItem[];
   pendingGifts: PendingGift[];  // Varyant seçimi beklenen hediyeler (persist edilmez)
   dismissedRules: string[];     // Bu oturumda reddedilen kural ID'leri (persist edilmez)
+  couponCode: string;           // Sepette seçilen/uygulanan kupon kodu (checkout'a taşınır)
 
   addItem: (item: CartItem) => void;
   removeItem: (id: string) => void;
   updateQuantity: (id: string, quantity: number) => void;
   clearCart: () => void;
+  setCouponCode: (code: string) => void;
   getTotalItems: () => number;
   getTotalPrice: () => number;
 
@@ -65,6 +67,9 @@ export const useCartStore = create<CartStore>()(
       items: [],
       pendingGifts: [],
       dismissedRules: [],
+      couponCode: '',
+
+      setCouponCode: (code) => set({ couponCode: code }),
 
       // ── Sepete ürün ekle ──
       addItem: (newItem) => {
@@ -146,7 +151,7 @@ export const useCartStore = create<CartStore>()(
         });
       },
 
-      clearCart: () => set({ items: [], pendingGifts: [], dismissedRules: [] }),
+      clearCart: () => set({ items: [], pendingGifts: [], dismissedRules: [], couponCode: '' }),
 
       getTotalItems: () =>
         get().items.reduce((total, item) => total + item.quantity, 0),
@@ -313,12 +318,13 @@ export const useCartStore = create<CartStore>()(
     {
       name: 'shopping-cart',
       // Yalnızca items persist edilir; pendingGifts ve dismissedRules oturum bazlıdır
-      partialize: (state) => ({ items: state.items }),
+      partialize: (state) => ({ items: state.items, couponCode: state.couponCode }),
       // Merge: localStorage'dan sadece items alınır, geri kalanlar her zaman
       // başlangıç değeriyle başlar. Eski kayıtlarda eksik alan olsa da güvenli.
       merge: (persisted, current) => ({
         ...current,
         items: (persisted as any)?.items ?? [],
+        couponCode: (persisted as any)?.couponCode ?? '',
         pendingGifts: [],
         dismissedRules: [],
       }),

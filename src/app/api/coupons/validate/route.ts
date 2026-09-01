@@ -1,16 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
-import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
+import { getAuthUserFromRequest } from "@/lib/auth-from-request";
 
 export async function POST(req: NextRequest) {
-  const cookieStore = await cookies();
-  const userClient = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { cookies: { getAll: () => cookieStore.getAll(), setAll: () => {} } }
-  );
-  const { data: { user } } = await userClient.auth.getUser();
+  // Oturum localStorage'da tutulduğundan Bearer token ile doğrulanır
+  // (uygulamanın diğer uçlarıyla tutarlı).
+  const user = await getAuthUserFromRequest(req);
   if (!user) return NextResponse.json({ error: "Giriş gerekli" }, { status: 401 });
 
   const { code, cartTotal } = await req.json();

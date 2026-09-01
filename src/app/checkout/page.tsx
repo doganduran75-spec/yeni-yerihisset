@@ -37,7 +37,7 @@ function getCookie(name: string): string | null {
 
 export default function CheckoutPage() {
   const router = useRouter();
-  const { items, getTotalPrice, clearCart } = useCartStore();
+  const { items, getTotalPrice, clearCart, couponCode: storeCouponCode } = useCartStore();
   const [addresses, setAddresses] = useState<any[]>([]);
   const [selectedShippingId, setSelectedShippingId] = useState<string>("");
   const [selectedBillingId, setSelectedBillingId] = useState<string>("");
@@ -281,14 +281,18 @@ export default function CheckoutPage() {
     }
   }
 
-  async function handleApplyCoupon() {
-    const code = couponInput.trim().toUpperCase();
+  async function handleApplyCoupon(codeArg?: string) {
+    const code = (codeArg ?? couponInput).trim().toUpperCase();
     if (!code) return;
     setCouponError("");
     setCouponLoading(true);
+    const { data: { session } } = await supabase.auth.getSession();
     const res = await fetch("/api/coupons/validate", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+      },
       body: JSON.stringify({ code, cartTotal: getTotalPrice() }),
     });
     const data = await res.json();
@@ -300,6 +304,15 @@ export default function CheckoutPage() {
       setCouponError(data.error || "Geçersiz kupon kodu");
     }
   }
+
+  // Sepette seçilen kupon varsa checkout'ta otomatik uygula
+  useEffect(() => {
+    if (storeCouponCode && !couponData) {
+      setCouponInput(storeCouponCode);
+      handleApplyCoupon(storeCouponCode);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storeCouponCode]);
 
   function removeCoupon() {
     setCouponCode("");

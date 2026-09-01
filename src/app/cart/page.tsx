@@ -4,14 +4,15 @@ import { useCartStore, CartItem, GiftVariant } from "@/store/useCartStore";
 import Link from "next/link";
 import {
   ShoppingBag, Trash2, Plus, Minus, ArrowLeft, ChevronRight,
-  ShieldCheck, CreditCard, Truck, User, Gift, X, Check,
+  ShieldCheck, CreditCard, Truck, User, Gift, X, Check, Ticket, Loader2,
 } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { supabase } from "@/lib/supabase";
 
 // ── Varyant Seçici Modal ─────────────────────────────────────────────────────
 function GiftVariantModal({
@@ -221,6 +222,159 @@ function CartCard({
   );
 }
 
+// ── İndirim Kuponu Kutusu ────────────────────────────────────────────────────
+function CouponBox({
+  cartTotal,
+  onApplied,
+}: {
+  cartTotal: number;
+  onApplied: (discount: number, freeShipping: boolean) => void;
+}) {
+  const { couponCode, setCouponCode } = useCartStore();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [userCoupons, setUserCoupons] = useState<any[]>([]);
+  const [input, setInput] = useState("");
+  const [applied, setApplied] = useState<{ name: string; discount: number; free_shipping: boolean } | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [loggedIn, setLoggedIn] = useState<boolean | null>(null);
+
+  const onAppliedRef = useRef(onApplied);
+  onAppliedRef.current = onApplied;
+
+  // Kullanıcı + hesabına tanımlı kuponları yükle
+  useEffect(() => {
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setLoggedIn(!!user);
+      if (!user) return;
+      const { data: uc } = await supabase
+        .from("user_coupons")
+        .select("*, coupons(*)")
+        .eq("user_id", user.id);
+      const now = new Date();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      setUserCoupons(((uc as any[]) || []).filter((x) => {
+        const c = x.coupons;
+        if (!c || !c.is_active) return false;
+        if (c.expires_at && new Date(c.expires_at) < now) return false;
+        if (x.use_count >= c.per_user_limit) return false;
+        return true;
+      }));
+    })();
+  }, []);
+
+  // couponCode veya sepet toplamı değişince doğrula (indirim tutara bağlı)
+  useEffect(() => {
+    if (!couponCode) {
+      setApplied(null);
+      onAppliedRef.current(0, false);
+      return;
+    }
+    let active = true;
+    (async () => {
+      setLoading(true);
+      setError("");
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch("/api/coupons/validate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify({ code: couponCode, cartTotal }),
+      });
+      const d = await res.json();
+      if (!active) return;
+      setLoading(false);
+      if (d.valid) {
+        setApplied({ name: d.name, discount: d.discount_amount, free_shipping: d.free_shipping });
+        onAppliedRef.current(d.discount_amount, d.free_shipping);
+      } else {
+        setApplied(null);
+        onAppliedRef.current(0, false);
+        setError(d.error || "Kupon uygulanamadı");
+        setCouponCode("");
+      }
+    })();
+    return () => { active = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [couponCode, cartTotal]);
+
+  function apply() {
+    const c = input.trim().toUpperCase();
+    if (c) setCouponCode(c);
+  }
+  function remove() {
+    setCouponCode("");
+    setInput("");
+    setError("");
+  }
+
+  return (
+    <Card className="border-none shadow-sm bg-slate-50 p-6 rounded-3xl">
+      <h4 className="text-sm font-bold mb-4 uppercase tracking-wider flex items-center gap-2">
+        <Ticket size={16} className="text-olive-600" /> İndirim Kuponu
+      </h4>
+
+      {applied ? (
+        <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-2xl px-4 py-3">
+          <div>
+            <p className="text-xs font-black text-green-800">{applied.name}</p>
+            <p className="text-[10px] text-green-600 font-mono font-bold">
+              {couponCode}
+              {applied.free_shipping
+                ? " · Ücretsiz kargo"
+                : applied.discount > 0
+                ? ` · -₺${applied.discount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`
+                : ""}
+            </p>
+          </div>
+          <button onClick={remove} className="text-green-500 hover:text-red-500 transition-colors p-1">
+            <X size={16} />
+          </button>
+        </div>
+      ) : loggedIn === false ? (
+        <p className="text-xs text-slate-500">
+          Kupon kullanmak için{" "}
+          <Link href="/login?redirect=/cart" className="font-bold text-olive-600 underline">giriş yapın</Link>.
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {userCoupons.length > 0 && (
+            <select
+              className="flex h-12 w-full rounded-xl border-2 border-slate-200 bg-white px-3 text-sm font-bold"
+              value=""
+              onChange={(e) => { if (e.target.value) setInput(e.target.value); }}
+            >
+              <option value="">— Hesabınızdaki kuponlar —</option>
+              {userCoupons.map((uc) => (
+                <option key={uc.id} value={uc.coupons?.code}>
+                  {uc.coupons?.code} — {uc.coupons?.name}
+                </option>
+              ))}
+            </select>
+          )}
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value.toUpperCase())}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); apply(); } }}
+              placeholder="Kupon Kodu"
+              className="w-full h-12 px-4 rounded-xl border-2 border-slate-200 focus:outline-none focus:border-olive-500 bg-white transition-all font-medium uppercase placeholder:lowercase"
+            />
+            <Button onClick={apply} disabled={loading || !input.trim()} className="h-12 px-6 rounded-xl font-bold bg-slate-900">
+              {loading ? <Loader2 size={16} className="animate-spin" /> : "UYGULA"}
+            </Button>
+          </div>
+          {error && <p className="text-xs text-red-500 font-medium">{error}</p>}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 // ── Ana Sayfa ────────────────────────────────────────────────────────────────
 export default function CartPage() {
   const {
@@ -229,6 +383,8 @@ export default function CartPage() {
   } = useCartStore();
   const [mounted, setMounted] = useState(false);
   const [activePending, setActivePending] = useState<string | null>(null);
+  const [couponDiscount, setCouponDiscount] = useState(0);
+  const [couponFreeShip, setCouponFreeShip] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -257,7 +413,8 @@ export default function CartPage() {
   }
 
   const totalPrice = getTotalPrice();
-  const shippingCost = totalPrice > 500 ? 0 : 29.90;
+  const shippingCost = (totalPrice > 500 || couponFreeShip) ? 0 : 29.90;
+  const finalTotal = Math.max(0, totalPrice + shippingCost - couponDiscount);
 
   // ── Sıralama: normal item → per_item hediyeleri → (sona) per_order hediyeleri
   const regularItems = items.filter((i) => !i.is_gift);
@@ -409,6 +566,12 @@ export default function CartPage() {
 
           {/* Ödeme Özeti */}
           <div className="space-y-6">
+            {/* İndirim kuponu — ödeme özetinin üstünde */}
+            <CouponBox
+              cartTotal={totalPrice}
+              onApplied={(d, fs) => { setCouponDiscount(d); setCouponFreeShip(fs); }}
+            />
+
             <Card className="border-none shadow-lg shadow-olive-900/5 bg-white rounded-3xl overflow-hidden">
               <div className="bg-olive-600 p-6 text-white">
                 <h2 className="text-xl font-black">Ödeme Özeti</h2>
@@ -434,6 +597,12 @@ export default function CartPage() {
                       {shippingCost === 0 ? "ÜCRETSİZ" : `₺${shippingCost.toLocaleString("tr-TR")}`}
                     </span>
                   </div>
+                  {couponDiscount > 0 && (
+                    <div className="flex justify-between text-green-600">
+                      <span className="flex items-center gap-1"><Ticket size={12} /> İndirim</span>
+                      <span>-₺{couponDiscount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span>
+                    </div>
+                  )}
                 </div>
 
                 <Separator className="bg-slate-100" />
@@ -441,7 +610,7 @@ export default function CartPage() {
                 <div className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl border border-slate-100/50">
                   <span className="font-bold text-slate-900 uppercase tracking-tighter">Genel Toplam</span>
                   <span className="text-2xl font-black text-olive-600">
-                    ₺{(totalPrice + shippingCost).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                    ₺{finalTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
                   </span>
                 </div>
 
@@ -468,18 +637,6 @@ export default function CartPage() {
               </CardContent>
             </Card>
 
-            {/* Kupon */}
-            <Card className="border-none shadow-sm bg-slate-50 p-6 rounded-3xl">
-              <h4 className="text-sm font-bold mb-4 uppercase tracking-wider">İndirim Kuponu</h4>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  placeholder="Kupon Kodu"
-                  className="w-full h-12 px-4 rounded-xl border-2 border-slate-200 focus:outline-none focus:border-olive-500 bg-white transition-all font-medium uppercase placeholder:lowercase"
-                />
-                <Button variant="default" className="h-12 px-6 rounded-xl font-bold bg-slate-900">UYGULA</Button>
-              </div>
-            </Card>
           </div>
         </div>
       </main>
