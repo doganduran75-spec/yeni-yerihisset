@@ -65,22 +65,22 @@ export async function validateCartPricing(
   // (supabase as any): üretilen tipler eski olabildiği için kod tabanı deseni
   const { data: products } = await (supabase as any)
     .from("products")
-    .select("id, price, is_active, category_id")
+    .select("id, price, is_active, category_id, stock")
     .in("id", productIds) as { data: any[] | null };
 
-  type ProductRow = { id: string; price: number | string; is_active?: boolean | null; category_id?: string | null };
-  const productMap = new Map<string, { price: number; is_active: boolean; category_id: string | null }>(
+  type ProductRow = { id: string; price: number | string; is_active?: boolean | null; category_id?: string | null; stock?: number | null };
+  const productMap = new Map<string, { price: number; is_active: boolean; category_id: string | null; stock: number }>(
     ((products ?? []) as ProductRow[]).map((p) => [
       p.id,
-      { price: Number(p.price), is_active: p.is_active !== false, category_id: p.category_id ?? null },
+      { price: Number(p.price), is_active: p.is_active !== false, category_id: p.category_id ?? null, stock: Number(p.stock ?? 0) },
     ])
   );
 
-  const variantMap = new Map<string, { price: number; is_active: boolean; product_id: string }>();
+  const variantMap = new Map<string, { price: number; is_active: boolean; product_id: string; stock: number }>();
   if (variantIds.length > 0) {
     const { data: variants } = await (supabase as any)
       .from("product_variants")
-      .select("id, price, is_active, product_id")
+      .select("id, price, is_active, product_id, stock")
       .in("id", variantIds) as { data: any[] | null };
 
     (variants ?? []).forEach((v: any) => {
@@ -88,6 +88,7 @@ export async function validateCartPricing(
         price: Number(v.price),
         is_active: v.is_active !== false,
         product_id: v.product_id,
+        stock: Number(v.stock ?? 0),
       });
     });
   }
@@ -154,11 +155,18 @@ export async function validateCartPricing(
       if (v.product_id !== it.product_id) {
         return { ok: false, error: "Ürün/varyant uyuşmazlığı." };
       }
+      // Stok ön-kontrolü (asıl guard atomik reduce_order_stock'ta)
+      if (v.stock < it.quantity) {
+        return { ok: false, error: `"${it.title}" için yeterli stok yok (kalan: ${Math.max(0, v.stock)}).` };
+      }
       realPrice = v.price;
     } else {
       const p = productMap.get(it.product_id);
       if (!p || !p.is_active) {
         return { ok: false, error: `"${it.title}" artık mevcut değil.` };
+      }
+      if (p.stock < it.quantity) {
+        return { ok: false, error: `"${it.title}" için yeterli stok yok (kalan: ${Math.max(0, p.stock)}).` };
       }
       realPrice = p.price;
     }

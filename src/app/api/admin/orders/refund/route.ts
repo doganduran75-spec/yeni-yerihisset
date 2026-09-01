@@ -104,6 +104,11 @@ export async function POST(req: NextRequest) {
     })
     .eq("id", orderId);
 
+  // Tam iade → ürünler iade edildiği için stoğu geri yükle
+  if (isFullRefund) {
+    await (supabase as any).rpc("restore_order_stock", { p_order_id: orderId });
+  }
+
   return NextResponse.json({
     ok: true,
     refundedAmount: refundAmount,

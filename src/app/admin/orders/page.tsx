@@ -197,6 +197,24 @@ export default function OrdersPage() {
       setOrders(prev => prev.map(o => o.id === orderId ? { ...o, ...fields } : o));
       if (selectedOrder?.id === orderId) setSelectedOrder(prev => prev ? { ...prev, ...fields } : null);
 
+      // İptal / başarısız ödeme → düşülen stoğu geri yükle (idempotent, no-op güvenli)
+      const isCancel =
+        fields.status === "cancelled" ||
+        fields.shipment_status === "cancelled" ||
+        fields.payment_status === "failed";
+      if (isCancel) {
+        supabase.auth.getSession().then(({ data: { session } }) => {
+          fetch("/api/admin/orders/restore-stock", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+            },
+            body: JSON.stringify({ orderId }),
+          }).catch(() => {});
+        });
+      }
+
       // Bildirim tetikleyicileri
       const triggerMap: Record<string, string> = {
         paid:      "order_paid",

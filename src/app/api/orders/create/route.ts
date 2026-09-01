@@ -206,6 +206,30 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Sipariş kalemleri oluşturulamadı", detail: itemsError?.message ?? "unknown" }, { status: 500 });
   }
 
+  // ── STOK DÜŞÜMÜ (oversell guard) ──────────────────────────────────────────
+  // Havale siparişinde para henüz alınmadığı için stok yetmezse siparişi
+  // reddediyoruz (strict). Böylece aynı son ürünü iki kişi birden satın alamaz.
+  const { data: reduceRes, error: reduceErr } = await (supabase as any).rpc(
+    "reduce_order_stock",
+    { p_order_id: order.id, p_strict: true }
+  );
+  if (reduceErr || !reduceRes?.ok) {
+    // Rollback: kalemleri ve siparişi sil (kupon/etiket henüz işlenmedi)
+    await supabase.from("order_items").delete().eq("order_id", order.id);
+    await supabase.from("orders").delete().eq("id", order.id);
+    const msg = String(reduceErr?.message ?? "");
+    const soldOut = msg.includes("INSUFFICIENT_STOCK");
+    console.error("[orders/create] stok düşümü başarısız:", msg);
+    return NextResponse.json(
+      {
+        error: soldOut
+          ? "Üzgünüz, sepetinizdeki bir ürün az önce tükendi. Lütfen sepetinizi güncelleyip tekrar deneyin."
+          : "Sipariş oluşturulurken bir stok hatası oluştu.",
+      },
+      { status: 409 }
+    );
+  }
+
   // Affiliate komisyonu kaydet
   if (affiliateId && commissionRate > 0) {
     const commissionAmount = (totalAmount * commissionRate) / 100;

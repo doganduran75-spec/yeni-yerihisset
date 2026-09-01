@@ -66,6 +66,26 @@ export async function POST(req: NextRequest) {
           })
           .eq("id", order.id);
 
+        // ── STOK DÜŞÜMÜ (soft) ────────────────────────────────────────────────
+        // Para çekildiği için siparişi ASLA reddetmiyoruz. Stok yetmezse (nadir
+        // oversell yarışı) stok 0'a sabitlenir ve admin'e not düşülür.
+        try {
+          const { data: reduceRes } = await (supabase as any).rpc(
+            "reduce_order_stock",
+            { p_order_id: order.id, p_strict: false }
+          );
+          const shortages = reduceRes?.shortages;
+          if (Array.isArray(shortages) && shortages.length > 0) {
+            console.error("[iyzico/callback] STOK EKSİĞİ order", order.id, shortages);
+            const note = "⚠ STOK EKSİĞİ (ödeme alındı): " + shortages
+              .map((s: any) => `${s.title || s.product_id} — gereken ${s.needed}, mevcut ${s.available}`)
+              .join("; ");
+            await (supabase as any).from("orders").update({ admin_note: note }).eq("id", order.id);
+          }
+        } catch (e) {
+          console.error("[iyzico/callback] stok düşümü hatası:", e);
+        }
+
         // Müşteri rolü ata + etiketler + bildirim (non-blocking)
         Promise.allSettled([
           import("@/lib/user-roles").then(({ assignRole }) => assignRole(order.user_id, "musteri")),
