@@ -1,10 +1,6 @@
--- Ürün yorumları: herkes (giriş yapmamış ziyaretçi dahil) yorum ekleyebilsin.
--- Eski politika "auth.uid() = user_id" istiyordu; form ise anonim (isim elle
--- giriliyor, user_id gönderilmiyor) olduğundan hiçbir yorum kaydedilemiyordu.
+-- product_reviews artık salt-okunur (legacy). Ürün sayfasındaki anonim yorum
+-- formu kaldırıldı; yorumlar order_reviews üzerinden (yalnızca satın alanlar
+-- tarafından) ekleniyor ve admin onayından geçiyor.
+-- Bu tabloya artık ekleme yapılmadığı için INSERT politikalarını kaldırıyoruz.
+DROP POLICY IF EXISTS "Herkes yorum ekleyebilir" ON public.product_reviews;
 DROP POLICY IF EXISTS "Authenticated users can create reviews" ON public.product_reviews;
-
-CREATE POLICY "Herkes yorum ekleyebilir"
-  ON public.product_reviews
-  FOR INSERT
-  TO anon, authenticated
-  WITH CHECK (true);
