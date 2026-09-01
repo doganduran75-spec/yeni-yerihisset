@@ -7,7 +7,7 @@ export const metadata: Metadata = {
 import { SidebarProvider, Sidebar, SidebarHeader, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarInset, SidebarGroupLabel } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
-import { LayoutDashboard, ShoppingBag, CreditCard, Settings, Users, ExternalLink, BookOpen, Handshake, MessagesSquare, Link2, Ticket, BellRing, FileEdit, Send, Gift, Sparkles, Star } from "lucide-react";
+import { LayoutDashboard, ShoppingBag, CreditCard, Settings, Users, ExternalLink, BookOpen, Handshake, MessagesSquare, Link2, Ticket, BellRing, FileEdit, Send, Gift, Star } from "lucide-react";
 import AdminGuard from "@/components/admin/AdminGuard";
 
 export default function AdminLayout({
@@ -49,12 +49,7 @@ export default function AdminLayout({
                 </SidebarMenuItem>
                 <SidebarMenuItem>
                   <SidebarMenuButton
-                    render={<Link href="/admin/products/free-gifts"><Sparkles size={18} className="mr-2" /> Bedelsiz Ürünler</Link>}
-                  />
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton 
-                    render={<Link href="/admin/orders"><CreditCard size={18} className="mr-2" /> Siparişler</Link>} 
+                    render={<Link href="/admin/orders"><CreditCard size={18} className="mr-2" /> Siparişler</Link>}
                   />
                 </SidebarMenuItem>
                 <SidebarMenuItem>
@@ -115,7 +110,7 @@ export default function AdminLayout({
                 </SidebarMenuItem>
                 <SidebarMenuItem>
                   <SidebarMenuButton
-                    render={<Link href="/admin/coupons"><Ticket size={18} className="mr-2" /> Kuponlar</Link>}
+                    render={<Link href="/admin/coupons"><Ticket size={18} className="mr-2" /> Kuponlar &amp; Ödüller</Link>}
                   />
                 </SidebarMenuItem>
                 <SidebarMenuItem>
