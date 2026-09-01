@@ -101,11 +101,13 @@ export default function ProductReviews({ productId }: { productId: string }) {
             <h4 className="font-bold text-slate-900">Yorum Yaz</h4>
             <div className="space-y-2">
               <label className="text-xs font-bold text-slate-500 uppercase">Adınız</label>
-              <Input 
+              <Input
                 placeholder="Adınız Soyadınız"
                 value={newReview.user_name}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewReview({...newReview, user_name: e.target.value})}
                 required
+                onInvalid={(e) => (e.currentTarget as HTMLInputElement).setCustomValidity("Lütfen adınızı yazın.")}
+                onInput={(e) => (e.currentTarget as HTMLInputElement).setCustomValidity("")}
               />
             </div>
             <div className="space-y-2">
@@ -125,11 +127,13 @@ export default function ProductReviews({ productId }: { productId: string }) {
             </div>
             <div className="space-y-2">
               <label className="text-xs font-bold text-slate-500 uppercase">Yorumunuz</label>
-              <Textarea 
+              <Textarea
                 placeholder="Ürün hakkındaki düşünceleriniz..."
                 value={newReview.comment}
                 onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNewReview({...newReview, comment: e.target.value})}
                 required
+                onInvalid={(e) => (e.currentTarget as HTMLTextAreaElement).setCustomValidity("Lütfen yorumunuzu yazın.")}
+                onInput={(e) => (e.currentTarget as HTMLTextAreaElement).setCustomValidity("")}
                 className="min-h-[100px]"
               />
             </div>
