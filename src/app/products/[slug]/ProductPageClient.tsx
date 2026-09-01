@@ -223,7 +223,7 @@ export default function ProductPageClient({ product }: { product: Product }) {
           )}
         </div>
         <Link
-          href="/cart"
+          href="/sepet"
           className="flex-shrink-0 text-[11px] font-bold text-olive-600 hover:text-olive-800 whitespace-nowrap border border-olive-200 rounded-full px-2.5 py-1 hover:bg-olive-50 transition-colors"
         >
           Sepete Git →

@@ -92,7 +92,7 @@ export default function Navbar({ variant = "default" }: NavbarProps) {
             </Link>
             
             <Link 
-              href="/cart"
+              href="/sepet"
               className="p-3 hover:bg-slate-50 rounded-2xl transition-all text-slate-700 hover:text-olive-600 relative group"
               title="Sepetim"
             >

@@ -197,14 +197,27 @@ function CartCard({
               )}
             </div>
             <div className="flex items-end justify-between">
-              <div className="flex items-center gap-1 border-2 border-slate-100 rounded-xl p-0.5 bg-slate-50">
-                <button onClick={() => onUpdateQty(item.quantity - 1)} className="p-2 hover:bg-white rounded-lg transition-colors">
-                  <Minus size={14} />
-                </button>
-                <span className="w-8 text-center font-bold text-sm">{item.quantity}</span>
-                <button onClick={() => onUpdateQty(item.quantity + 1)} className="p-2 hover:bg-white rounded-lg transition-colors">
-                  <Plus size={14} />
-                </button>
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-1 border-2 border-slate-100 rounded-xl p-0.5 bg-slate-50 w-fit">
+                  <button
+                    onClick={() => onUpdateQty(item.quantity - 1)}
+                    disabled={item.quantity <= 1}
+                    className="p-2 hover:bg-white rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                  >
+                    <Minus size={14} />
+                  </button>
+                  <span className="w-8 text-center font-bold text-sm">{item.quantity}</span>
+                  <button
+                    onClick={() => onUpdateQty(item.quantity + 1)}
+                    disabled={item.stock > 0 && item.quantity >= item.stock}
+                    className="p-2 hover:bg-white rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                  >
+                    <Plus size={14} />
+                  </button>
+                </div>
+                {item.stock > 0 && item.quantity >= item.stock && (
+                  <span className="text-[10px] font-bold text-amber-600">Stoktaki son {item.stock} ürün</span>
+                )}
               </div>
               <div className="text-right">
                 <p className="text-lg font-black text-slate-900">
@@ -347,7 +360,7 @@ function CouponBox({
       ) : loggedIn === false ? (
         <p className="text-xs text-slate-500">
           Kupon kullanmak için{" "}
-          <Link href="/login?redirect=/cart" className="font-bold text-olive-600 underline">giriş yapın</Link>.
+          <Link href="/login?redirect=/sepet" className="font-bold text-olive-600 underline">giriş yapın</Link>.
         </p>
       ) : (
         <div className="space-y-2">

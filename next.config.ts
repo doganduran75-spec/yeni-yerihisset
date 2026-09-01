@@ -41,6 +41,14 @@ const nextConfig: NextConfig = {
     minimumCacheTTL: 86400,
   },
 
+  // ─── Yönlendirmeler ──────────────────────────────────────────────────────
+  // Eski /cart adresi kalıcı olarak /sepet'e taşındı (eski link/bookmark bozulmasın)
+  async redirects() {
+    return [
+      { source: "/cart", destination: "/sepet", permanent: true },
+    ];
+  },
+
   // ─── HTTP Güvenlik Başlıkları ────────────────────────────────────────────
   async headers() {
     return [

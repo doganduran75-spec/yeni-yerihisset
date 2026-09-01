@@ -385,7 +385,7 @@ export default function CheckoutPage() {
   }
 
   if (items.length === 0) {
-    router.push("/cart");
+    router.push("/sepet");
     return null;
   }
 

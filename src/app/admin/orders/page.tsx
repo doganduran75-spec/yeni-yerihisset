@@ -1102,23 +1102,28 @@ export default function OrdersPage() {
                         </TableRow>
                       ) : selectedOrder.order_items?.map((item) => {
                         const edit = skuEdits[item.id];
+                        const invoiced = selectedOrder.invoice_status === "invoiced";
                         return (
                           <TableRow key={item.id}>
-                            {/* Ürün Kodu (SKU) — inline edit */}
+                            {/* Ürün Kodu (SKU) — inline edit (fatura kesildiyse kilitli) */}
                             <TableCell className="py-2">
                               <div className="space-y-0.5">
                                 <div className="relative">
                                   <input
-                                    className={`w-full text-xs font-mono px-2 py-1 rounded border bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 transition ${edit?.error ? "border-red-400" : "border-slate-200"}`}
+                                    readOnly={invoiced}
+                                    title={invoiced ? "Fatura kesildiği için ürün kodu değiştirilemez" : undefined}
+                                    className={`w-full text-xs font-mono px-2 py-1 rounded border focus:outline-none focus:ring-1 focus:ring-blue-500 transition ${edit?.error ? "border-red-400" : "border-slate-200"} ${invoiced ? "bg-slate-100 text-slate-500 cursor-not-allowed" : "bg-white"}`}
                                     value={edit?.sku ?? item.sku ?? ""}
                                     placeholder="SKU girin…"
-                                    onChange={(e) =>
+                                    onChange={(e) => {
+                                      if (invoiced) return;
                                       setSkuEdits(prev => ({
                                         ...prev,
                                         [item.id]: { ...prev[item.id], sku: e.target.value, error: "" },
-                                      }))
-                                    }
+                                      }));
+                                    }}
                                     onBlur={(e) => {
+                                      if (invoiced) return;
                                       const val = e.target.value.trim();
                                       const orig = item.sku ?? "";
                                       if (val !== orig) handleSkuLookup(item.id, val);
@@ -1163,7 +1168,9 @@ export default function OrdersPage() {
                   </div>
                 </div>
                 <p className="text-[11px] text-muted-foreground">
-                  Ürün kodunu düzenleyip Enter'a basın veya alandan çıkın — kod değiştiğinde ürün adı otomatik güncellenir.
+                  {selectedOrder.invoice_status === "invoiced"
+                    ? "🔒 Fatura kesildiği için ürün kodları kilitlidir, değiştirilemez."
+                    : "Ürün kodunu düzenleyip Enter'a basın veya alandan çıkın — kod değiştiğinde ürün adı otomatik güncellenir."}
                 </p>
               </div>
 
