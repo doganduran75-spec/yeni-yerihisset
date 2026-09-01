@@ -567,34 +567,8 @@ function AccountPageInner() {
               <section className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
                 <div className="flex items-center justify-between">
                   <h2 className="text-2xl font-black text-slate-900">Kuponlarım</h2>
-                  <Button
-                    onClick={() => setShowClaimInput((p) => !p)}
-                    variant="outline"
-                    className="gap-2 font-bold"
-                  >
-                    <Plus size={16} /> Kod Ekle
-                  </Button>
                 </div>
-
-                {/* Kod ekleme formu */}
-                {showClaimInput && (
-                  <div className="bg-olive-50 border border-blue-200 rounded-2xl p-5 animate-in fade-in slide-in-from-top-2">
-                    <p className="text-sm font-bold text-olive-800 mb-3">Kupon kodunuzu girin</p>
-                    <form onSubmit={handleClaimCoupon} className="flex gap-2">
-                      <Input
-                        value={claimCode}
-                        onChange={(e) => setClaimCode(e.target.value.toUpperCase())}
-                        placeholder="ÖRNEK: INDIRIM10"
-                        className="font-mono font-bold tracking-widest max-w-xs"
-                        autoFocus
-                      />
-                      <Button type="submit" disabled={claimLoading || !claimCode.trim()} className="bg-olive-600 gap-2">
-                        {claimLoading ? <Loader2 size={14} className="animate-spin" /> : null}
-                        Ekle
-                      </Button>
-                    </form>
-                  </div>
-                )}
+                <p className="text-sm text-slate-500 -mt-2">Size tanımlı indirim kuponları burada görünür ve ödeme sırasında kullanılabilir.</p>
 
                 {/* Yakında sona erecek uyarıları */}
                 {(() => {
