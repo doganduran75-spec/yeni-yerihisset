@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/lib/supabase";
-import { Loader2, Save, Store, Globe, Mail, Server, BarChart3, Eye, EyeOff, ShoppingCart, Copy, Check, Layers, ShieldCheck, Tag, Bookmark, FolderSearch, Tags, Megaphone, Truck, CreditCard, Landmark } from "lucide-react";
+import { Loader2, Save, Store, Globe, Mail, Server, BarChart3, Eye, EyeOff, ShoppingCart, Copy, Check, Layers, ShieldCheck, Tag, Bookmark, FolderSearch, Tags, Megaphone, Truck, CreditCard, Landmark, MessageSquare } from "lucide-react";
 import VariantsTab from "@/components/admin/settings/VariantsTab";
 import RolesTab from "@/components/admin/settings/RolesTab";
 import BrandsTab from "@/components/admin/settings/BrandsTab";
@@ -50,6 +50,8 @@ type Settings = {
   gmc_product_condition: string;
   gmc_default_category: string;
   gmc_brand_default: string;
+  // Yorumlar
+  product_reviews_show_all: boolean;
 };
 
 const DEFAULT_SETTINGS: Settings = {
@@ -79,6 +81,7 @@ const DEFAULT_SETTINGS: Settings = {
   gmc_product_condition: "new",
   gmc_default_category: "",
   gmc_brand_default: "",
+  product_reviews_show_all: true,
 };
 
 export default function SettingsPage() {
@@ -239,6 +242,39 @@ function SettingsPageInner() {
                   <Globe size={18} />
                 </Button>
               </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Yorumlar */}
+        <Card className="shadow-sm border-muted">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <MessageSquare size={20} className="text-blue-600" /> Yorumlar
+            </CardTitle>
+            <CardDescription>Ürün sayfasında müşteri yorumlarının nasıl gösterileceği.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between p-4 rounded-xl border border-muted">
+              <div className="pr-4">
+                <p className="font-medium text-sm">Tüm yorumları her üründe göster</p>
+                <p className="text-xs text-muted-foreground">
+                  Açık: onaylı tüm yorumlar her ürün sayfasında görünür (yorum azken önerilir).
+                  Kapalı: her ürün yalnızca kendi yorumlarını gösterir.
+                </p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                <input
+                  type="checkbox"
+                  className="sr-only peer"
+                  checked={settings.product_reviews_show_all}
+                  onChange={(e) => set({ product_reviews_show_all: e.target.checked })}
+                />
+                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                <span className="ml-2 text-xs font-semibold text-muted-foreground">
+                  {settings.product_reviews_show_all ? "Tümü" : "Ürüne özel"}
+                </span>
+              </label>
             </div>
           </CardContent>
         </Card>

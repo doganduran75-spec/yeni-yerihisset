@@ -10,6 +10,7 @@ interface Review {
   rating: number;
   comment: string;
   created_at: string;
+  images: string[];
 }
 
 export default function ProductReviews({ productId }: { productId: string }) {
@@ -18,26 +19,50 @@ export default function ProductReviews({ productId }: { productId: string }) {
 
   useEffect(() => {
     fetchReviews();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [productId]);
 
   async function fetchReviews() {
-    const { data } = await supabase
-      .from("product_reviews")
-      .select("*")
-      .eq("product_id", productId)
+    setLoading(true);
+
+    // Ayar: tüm yorumlar mı, ürüne özel mi?
+    const { data: settingRow } = await (supabase as any)
+      .from("settings")
+      .select("product_reviews_show_all")
+      .limit(1)
+      .maybeSingle();
+    const showAll = settingRow?.product_reviews_show_all ?? true;
+
+    let query = (supabase as any)
+      .from("order_reviews")
+      .select(
+        "id, comment, rating_shipping, rating_quality, rating_communication, images, created_at, profiles(first_name, last_name)"
+      )
       .eq("is_approved", true)
       .order("created_at", { ascending: false });
 
-    if (data) {
-      const formattedReviews: Review[] = data.map((r) => ({
+    if (!showAll) query = query.eq("product_id", productId);
+
+    const { data } = await query;
+
+    const formatted: Review[] = ((data as any[]) ?? []).map((r) => {
+      const nums = [r.rating_shipping, r.rating_quality, r.rating_communication].filter(
+        (x) => typeof x === "number"
+      ) as number[];
+      const avg = nums.length ? Math.round(nums.reduce((a, b) => a + b, 0) / nums.length) : 5;
+      const p = r.profiles as { first_name?: string; last_name?: string } | null;
+      const name = [p?.first_name, p?.last_name].filter(Boolean).join(" ") || "Müşteri";
+      return {
         id: r.id,
-        user_name: r.user_name || "Anonim",
-        rating: r.rating || 5,
+        user_name: name,
+        rating: avg,
         comment: r.comment || "",
         created_at: r.created_at || new Date().toISOString(),
-      }));
-      setReviews(formattedReviews);
-    }
+        images: Array.isArray(r.images) ? r.images : [],
+      };
+    });
+
+    setReviews(formatted);
     setLoading(false);
   }
 
@@ -107,7 +132,24 @@ export default function ProductReviews({ productId }: { productId: string }) {
                     ))}
                   </div>
                 </div>
-                <p className="text-slate-600 leading-relaxed italic">&quot;{review.comment}&quot;</p>
+
+                {review.comment && (
+                  <p className="text-slate-600 leading-relaxed italic">&quot;{review.comment}&quot;</p>
+                )}
+
+                {review.images.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {review.images.map((img, i) => (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        key={i}
+                        src={img}
+                        alt={`Yorum görseli ${i + 1}`}
+                        className="w-20 h-20 object-cover rounded-xl border border-slate-100"
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>
