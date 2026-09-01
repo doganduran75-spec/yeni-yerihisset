@@ -17,6 +17,7 @@ export interface CartItem {
   // ── Hediye alanları (yalnızca is_gift=true olduğunda dolu) ──
   is_gift?: boolean;
   gift_rule_id?: string;
+  selection_group?: string | null; // Karşılıklı dışlama grubu (aynı gruptan 1 hediye)
   original_price?: number;     // Üstü çizili gösterilecek orijinal fiyat
   trigger_item_id?: string;    // per_item: hangi sepet öğesi tetikledi
   trigger_category_id?: string;// per_order cascade silme için
@@ -39,6 +40,7 @@ export interface PendingGift {
   original_price: number;
   variants: GiftVariant[];         // Stokta olan varyantlar
   has_variants: boolean;
+  selection_group?: string | null; // Aynı gruptaki hediyelerden yalnızca biri seçilebilir
 }
 
 interface CartStore {
@@ -172,7 +174,7 @@ export const useCartStore = create<CartStore>()(
         const { data: rules } = await (supabase as any)
           .from('free_gift_rules')
           .select(`
-            id, quantity_mode,
+            id, quantity_mode, selection_group,
             gift_product:products!gift_product_id (
               id, title, image_url, price, has_variants, stock,
               product_variants ( id, stock, variant_options ( value ) )
@@ -256,6 +258,7 @@ export const useCartStore = create<CartStore>()(
             original_price: giftProduct.price,
             variants,
             has_variants: hasVariants,
+            selection_group: rule.selection_group ?? null,
           });
         }
 
@@ -266,7 +269,7 @@ export const useCartStore = create<CartStore>()(
 
       // ── Hediyeyi onayla (varyant seçildikten sonra) ──
       confirmGift: (ruleId, variant) => {
-        const { pendingGifts, items } = get();
+        const { pendingGifts } = get();
         const pending = pendingGifts.find((p) => p.rule_id === ruleId);
         if (!pending) return;
 
@@ -288,23 +291,26 @@ export const useCartStore = create<CartStore>()(
           category_id: undefined,
           is_gift: true,
           gift_rule_id: ruleId,
+          selection_group: pending.selection_group ?? null,
           original_price: pending.original_price,
           trigger_item_id: pending.trigger_item_id,
           trigger_category_id: pending.trigger_category_id,
         };
 
-        // Aynı hediye zaten sepette var mı? (kullanıcı aynı rengi seçmiş olabilir)
-        if (items.some((i) => i.id === giftItem.id)) {
-          set((state) => ({
-            pendingGifts: state.pendingGifts.filter((p) => p.rule_id !== ruleId),
-          }));
-          return;
-        }
+        set((state) => {
+          // Karşılıklı dışlama: aynı seçim grubundaki diğer hediyeleri sepetten çıkar
+          const grp = pending.selection_group;
+          const base = grp
+            ? state.items.filter((i) => !(i.is_gift && i.selection_group === grp))
+            : state.items;
 
-        set((state) => ({
-          items: [...state.items, giftItem],
-          pendingGifts: state.pendingGifts.filter((p) => p.rule_id !== ruleId),
-        }));
+          // Aynı hediye zaten sepette varsa tekrar ekleme
+          const already = base.some((i) => i.id === giftItem.id);
+          return {
+            items: already ? base : [...base, giftItem],
+            pendingGifts: state.pendingGifts.filter((p) => p.rule_id !== ruleId),
+          };
+        });
       },
 
       // ── Hediyeyi reddet ──

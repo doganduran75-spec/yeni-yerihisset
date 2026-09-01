@@ -413,13 +413,11 @@ export default function CartPage() {
     setMounted(true);
   }, []);
 
-  // Yeni pending gift geldiğinde otomatik modal aç (ilki)
+  // Modalı OTOMATİK açmıyoruz — kullanıcı hediye panelinden kendi seçer.
+  // Yalnızca uygun hediye kalmadıysa açık modalı kapat.
   useEffect(() => {
     const gifts = pendingGifts ?? [];
-    if (gifts.length > 0 && !activePending) {
-      setActivePending(gifts[0].rule_id);
-    }
-    if (gifts.length === 0) {
+    if (gifts.length === 0 && activePending) {
       setActivePending(null);
     }
   }, [pendingGifts, activePending]);
@@ -497,15 +495,9 @@ export default function CartPage() {
           hasVariants={activePendingGift.has_variants}
           onConfirm={(variant) => {
             confirmGift(activePendingGift.rule_id, variant);
-            // Sıradaki pending varsa ona geç
-            const remaining = safePending.filter((p) => p.rule_id !== activePendingGift.rule_id);
-            setActivePending(remaining[0]?.rule_id ?? null);
+            setActivePending(null);
           }}
-          onDismiss={() => {
-            dismissGift(activePendingGift.rule_id);
-            const remaining = safePending.filter((p) => p.rule_id !== activePendingGift.rule_id);
-            setActivePending(remaining[0]?.rule_id ?? null);
-          }}
+          onDismiss={() => setActivePending(null)}
         />
       )}
 

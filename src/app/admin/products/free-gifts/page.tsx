@@ -24,6 +24,7 @@ type Rule = {
   quantity_mode: "per_item" | "per_order" | "first_order";
   is_active: boolean;
   valid_until: string | null;
+  selection_group: string | null;
   // joined
   categories: { name: string } | null;
   products:   { title: string; price: number; image_url: string | null } | null;
@@ -42,6 +43,7 @@ const EMPTY = {
   quantity_mode: "per_order" as Rule["quantity_mode"],
   is_active: true,
   valid_until: "",
+  selection_group: "",
 };
 
 export default function FreeGiftsPage() {
@@ -87,6 +89,7 @@ export default function FreeGiftsPage() {
       quantity_mode: rule.quantity_mode,
       is_active: rule.is_active,
       valid_until: rule.valid_until || "",
+      selection_group: rule.selection_group || "",
     });
     setOpen(true);
   }
@@ -100,6 +103,7 @@ export default function FreeGiftsPage() {
     const payload = {
       ...form,
       valid_until: form.valid_until || null,
+      selection_group: form.selection_group?.trim() || null,
       updated_at: new Date().toISOString(),
     };
     if (editingId) {
@@ -337,6 +341,20 @@ export default function FreeGiftsPage() {
                   </label>
                 ))}
               </div>
+            </div>
+
+            {/* Seçim grubu (karşılıklı dışlama) */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Seçim Grubu (opsiyonel)</label>
+              <Input
+                value={form.selection_group}
+                onChange={(e) => setForm({ ...form, selection_group: e.target.value })}
+                placeholder="ör. hediye-secimi"
+              />
+              <p className="text-xs text-muted-foreground">
+                Aynı gruba yazılan ücretsiz ürünlerden müşteri yalnızca <strong>birini</strong> seçebilir
+                (çanta ya da krem gibi). Boş bırakılırsa bu ödül bağımsızdır, diğerleriyle birlikte seçilebilir.
+              </p>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
