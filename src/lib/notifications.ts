@@ -295,6 +295,72 @@ async function logNotification(
   });
 }
 
+/** Bir üyeye kupon atandığında "Yeni Kupon Tanımlandı" e-postası gönderir */
+export async function sendCouponAssignedNotification(
+  userId: string,
+  couponId: string
+): Promise<{ status: "sent" | "failed" | "skipped"; error?: string }> {
+  const supabase = createAdminClient();
+
+  const [{ data: profile }, { data: coupon }, { data: settings }, { data: template }] = await Promise.all([
+    (supabase as any).from("profiles").select("first_name, last_name, email").eq("id", userId).maybeSingle(),
+    (supabase as any).from("coupons").select("*").eq("id", couponId).maybeSingle(),
+    (supabase as any).from("settings").select("*").limit(1).maybeSingle(),
+    (supabase as any).from("email_templates").select("subject, body_html, is_active").eq("trigger", "coupon_assigned").maybeSingle(),
+  ]);
+
+  if (!profile?.email) return { status: "skipped", error: "Üye e-postası yok" };
+  if (!coupon) return { status: "failed", error: "Kupon bulunamadı" };
+  if (!template?.is_active) return { status: "skipped", error: "coupon_assigned şablonu pasif/yok" };
+
+  const storeName = settings?.store_name || "YeriHisset";
+  const storeUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com";
+  const customerName = [profile.first_name, profile.last_name].filter(Boolean).join(" ") || "Değerli Müşterimiz";
+
+  const couponValue =
+    coupon.type === "percentage" ? `%${coupon.amount} indirim`
+      : coupon.type === "fixed" ? `₺${Number(coupon.amount).toFixed(2)} indirim`
+      : coupon.type === "free_shipping" ? "Ücretsiz kargo"
+      : "";
+
+  const vars: Record<string, string> = {
+    customer_name: customerName,
+    coupon_code: coupon.code || "",
+    coupon_name: coupon.name || "",
+    coupon_description: coupon.description || "",
+    coupon_value: couponValue,
+    coupon_expires: coupon.expires_at ? new Date(coupon.expires_at).toLocaleDateString("tr-TR") : "",
+    store_name: storeName,
+    store_url: storeUrl,
+  };
+
+  const subject = replaceVariables(template.subject, vars);
+  let bodyHtml = replaceVariables(template.body_html, vars);
+  bodyHtml = addUtmTracking(bodyHtml, "coupon_assigned");
+
+  const smtpConfig = buildSmtpConfig({
+    smtp_host: settings?.smtp_host || "",
+    smtp_port: settings?.smtp_port,
+    smtp_secure: settings?.smtp_secure,
+    smtp_user: settings?.smtp_user,
+    smtp_password: settings?.smtp_password,
+  });
+  if (!smtpConfig.host || !smtpConfig.auth.user) return { status: "failed", error: "SMTP ayarları eksik" };
+
+  try {
+    const transporter = nodemailer.createTransport(smtpConfig);
+    await transporter.sendMail({
+      from: `"${settings?.smtp_from_name || storeName}" <${settings?.smtp_from_email || smtpConfig.auth.user}>`,
+      to: profile.email,
+      subject,
+      html: buildEmailDocument(bodyHtml, storeName),
+    });
+    return { status: "sent" };
+  } catch (err: unknown) {
+    return { status: "failed", error: err instanceof Error ? err.message : "Email gönderim hatası" };
+  }
+}
+
 /** Admin cevabını müşteriye e-posta ile bildirir */
 export async function sendAdminReplyNotification(
   userId: string,

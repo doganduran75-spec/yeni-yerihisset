@@ -21,6 +21,7 @@ const TRIGGERS = [
   { key: "order_shipped", label: "Kargoya Verildi", desc: "Sipariş kargoya teslim edildiğinde gönderilir.", color: "bg-purple-50 text-purple-700" },
   { key: "order_delivered", label: "Teslim Edildi", desc: "Sipariş müşteriye ulaştığında gönderilir.", color: "bg-green-50 text-green-700" },
   { key: "order_cancelled", label: "İptal Edildi", desc: "Sipariş iptal edildiğinde gönderilir.", color: "bg-red-50 text-red-700" },
+  { key: "coupon_assigned", label: "Yeni Kupon Tanımlandı", desc: "Bir üyeye indirim kuponu atandığında gönderilir.", color: "bg-amber-50 text-amber-700" },
 ];
 
 export default function EmailTemplatesPage() {

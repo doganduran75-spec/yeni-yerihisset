@@ -170,7 +170,29 @@ export default function CouponsPage() {
         if (error.code === "23505") throw new Error("Bu kupon zaten bu üyeye atanmış");
         throw error;
       }
-      alert("Kupon başarıyla üyeye atandı.");
+
+      // Bilgilendirme e-postası gönder ("Yeni Kupon Tanımlandı" şablonu)
+      let emailNote = "";
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch("/api/coupons/notify", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+          },
+          body: JSON.stringify({ userId: profile.id, couponId: assignCouponId }),
+        });
+        const d = await res.json();
+        emailNote =
+          d.status === "sent" ? "\nBilgilendirme e-postası gönderildi."
+            : d.status === "skipped" ? "\n(E-posta gönderilmedi: şablon pasif ya da üyenin e-postası yok.)"
+            : `\n(E-posta gönderilemedi: ${d.error || "hata"})`;
+      } catch {
+        emailNote = "\n(E-posta gönderilemedi.)";
+      }
+
+      alert("Kupon başarıyla üyeye atandı." + emailNote);
       setAssignOpen(false);
       setAssignEmail("");
     } catch (err: any) {
