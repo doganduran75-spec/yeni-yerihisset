@@ -1,6 +1,6 @@
 "use client";
 
-import { useCartStore, CartItem, GiftVariant } from "@/store/useCartStore";
+import { useCartStore, CartItem, GiftVariant, PendingGift } from "@/store/useCartStore";
 import Link from "next/link";
 import {
   ShoppingBag, Trash2, Plus, Minus, ArrowLeft, ChevronRight,
@@ -16,7 +16,6 @@ import { supabase } from "@/lib/supabase";
 
 // ── Varyant Seçici Modal ─────────────────────────────────────────────────────
 function GiftVariantModal({
-  ruleId,
   title,
   image,
   originalPrice,
@@ -25,7 +24,6 @@ function GiftVariantModal({
   onConfirm,
   onDismiss,
 }: {
-  ruleId: string;
   title: string;
   image: string;
   originalPrice: number;
@@ -34,9 +32,7 @@ function GiftVariantModal({
   onConfirm: (variant: GiftVariant | null) => void;
   onDismiss: () => void;
 }) {
-  const [selected, setSelected] = useState<GiftVariant | null>(
-    !hasVariants ? null : null
-  );
+  const [selected, setSelected] = useState<GiftVariant | null>(null);
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in">
@@ -103,7 +99,7 @@ function GiftVariantModal({
             className="flex-1 rounded-xl text-sm"
             onClick={onDismiss}
           >
-            Reddet
+            Vazgeç
           </Button>
           <Button
             className="flex-1 rounded-xl bg-olive-600 hover:bg-olive-700 text-sm gap-1.5"
@@ -115,55 +111,6 @@ function GiftVariantModal({
         </div>
       </div>
     </div>
-  );
-}
-
-// ── Hediye Sepet Kartı ───────────────────────────────────────────────────────
-function GiftCard({ item, onRemove }: { item: CartItem; onRemove: () => void }) {
-  return (
-    <Card className="border-l-4 border-l-olive-300 bg-olive-50/60 shadow-sm overflow-hidden">
-      <CardContent className="p-4 md:p-5">
-        <div className="flex gap-3 md:gap-4">
-          <div className="w-16 h-20 md:w-20 md:h-24 bg-white rounded-xl overflow-hidden shrink-0 border border-olive-100">
-            {item.image ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={item.image} alt={item.title} className="w-full h-full object-cover" />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center">
-                <Gift size={20} className="text-olive-300" />
-              </div>
-            )}
-          </div>
-          <div className="flex-1 flex flex-col justify-between py-0.5">
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <div className="flex items-center gap-1.5 mb-0.5">
-                  <Gift size={12} className="text-olive-600" />
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-olive-600">Hediye</span>
-                </div>
-                <p className="font-bold text-slate-900 text-sm leading-tight">{item.title}</p>
-                {item.variant_name && (
-                  <p className="text-xs font-semibold text-olive-600 mt-0.5">{item.variant_name}</p>
-                )}
-              </div>
-              <button
-                onClick={onRemove}
-                className="p-1.5 text-slate-300 hover:text-red-400 transition-colors flex-shrink-0"
-                title="Hediyeyi Kaldır"
-              >
-                <X size={14} />
-              </button>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-400 line-through">
-                ₺{(item.original_price ?? 0).toLocaleString("tr-TR")}
-              </span>
-              <Badge className="bg-olive-600 text-white text-[10px] px-1.5 py-0">Ücretsiz</Badge>
-            </div>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
   );
 }
 
@@ -235,8 +182,8 @@ function CartCard({
   );
 }
 
-// ── İndirim Kuponu Kutusu ────────────────────────────────────────────────────
-function CouponBox({
+// ── Kupon bölümü (panel içi, dış Card yok) ───────────────────────────────────
+function CouponSection({
   cartTotal,
   onApplied,
 }: {
@@ -335,9 +282,9 @@ function CouponBox({
   }
 
   return (
-    <Card className="border-none shadow-sm bg-slate-50 p-6 rounded-3xl">
-      <h4 className="text-sm font-bold mb-4 uppercase tracking-wider flex items-center gap-2">
-        <Ticket size={16} className="text-olive-600" /> İndirim Kuponu
+    <div>
+      <h4 className="text-xs font-bold mb-3 uppercase tracking-wider flex items-center gap-2 text-slate-500">
+        <Ticket size={14} className="text-olive-600" /> İndirim Kuponu
       </h4>
 
       {applied ? (
@@ -394,6 +341,179 @@ function CouponBox({
           {error && <p className="text-xs text-red-500 font-medium">{error}</p>}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Ödül (ücretsiz ürün) satırları ───────────────────────────────────────────
+type RewardGroup = { key: string; group: string | null; confirmed: CartItem[]; pending: PendingGift[] };
+
+function RewardRows({ onPickVariant }: { onPickVariant: (p: PendingGift) => void }) {
+  const { items, pendingGifts, confirmGift, dismissGift, removeItem } = useCartStore();
+
+  const confirmedGifts = items.filter((i) => i.is_gift);
+  const pending = pendingGifts ?? [];
+  if (confirmedGifts.length === 0 && pending.length === 0) return null;
+
+  // Grupla: aynı selection_group → tek grup; grup yoksa (null) her ödül kendi grubu
+  const map = new Map<string, RewardGroup>();
+  const keyOf = (grp: string | null, id: string) => (grp ? `g:${grp}` : `s:${id}`);
+  for (const it of confirmedGifts) {
+    const k = keyOf(it.selection_group ?? null, it.id);
+    if (!map.has(k)) map.set(k, { key: k, group: it.selection_group ?? null, confirmed: [], pending: [] });
+    map.get(k)!.confirmed.push(it);
+  }
+  for (const p of pending) {
+    const k = keyOf(p.selection_group ?? null, p.rule_id);
+    if (!map.has(k)) map.set(k, { key: k, group: p.selection_group ?? null, confirmed: [], pending: [] });
+    map.get(k)!.pending.push(p);
+  }
+  const groups = [...map.values()];
+
+  function pick(p: PendingGift) {
+    if (p.has_variants) onPickVariant(p);
+    else confirmGift(p.rule_id, null);
+  }
+
+  return (
+    <div className="space-y-3">
+      <h4 className="text-xs font-bold uppercase tracking-wider flex items-center gap-2 text-slate-500">
+        <Gift size={14} className="text-olive-600" /> Ücretsiz Ürünler
+      </h4>
+
+      {groups.map((g) => {
+        const chosen = g.confirmed[0];
+
+        // ── Seçim yapılmış grup: seçileni öne çıkar, diğerlerini pasif göster ──
+        if (chosen) {
+          return (
+            <div key={g.key} className="rounded-2xl border border-olive-200 bg-olive-50/60 p-3 space-y-2">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-white rounded-xl overflow-hidden shrink-0 border border-olive-100 flex items-center justify-center">
+                  {chosen.image ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={chosen.image} alt={chosen.title} className="w-full h-full object-cover" />
+                  ) : (
+                    <Gift size={18} className="text-olive-300" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-slate-900 text-sm leading-tight truncate">{chosen.title}</p>
+                  {chosen.variant_name && (
+                    <p className="text-xs font-semibold text-olive-600">{chosen.variant_name}</p>
+                  )}
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <Check size={12} className="text-green-600" />
+                    <span className="text-[10px] font-bold text-green-700 uppercase tracking-wide">Sepete eklendi</span>
+                    <Badge className="bg-olive-600 text-white text-[10px] px-1.5 py-0">Ücretsiz</Badge>
+                  </div>
+                </div>
+                <button
+                  onClick={() => removeItem(chosen.id)}
+                  className="p-1.5 text-slate-300 hover:text-red-400 transition-colors shrink-0"
+                  title="Kaldır"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* Aynı gruptaki diğer seçenekler — pasif */}
+              {g.pending.length > 0 && (
+                <div className="pt-2 border-t border-olive-100 space-y-1.5">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Diğer seçenekler</p>
+                  {g.pending.map((p) => (
+                    <div key={p.rule_id} className="flex items-center justify-between gap-2">
+                      <span className="text-xs text-slate-500 truncate">{p.title}</span>
+                      <button
+                        onClick={() => pick(p)}
+                        className="text-[11px] font-bold text-olive-600 hover:text-olive-800 whitespace-nowrap border border-olive-200 rounded-full px-2.5 py-0.5 hover:bg-olive-100 transition-colors"
+                      >
+                        {p.has_variants ? "Renk seç" : "Bunu seç"}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        }
+
+        // ── Henüz seçilmemiş grup: teklif kartları ──
+        return (
+          <div key={g.key} className="space-y-2">
+            {g.group && g.pending.length > 1 && (
+              <p className="text-[10px] font-bold text-olive-600 uppercase tracking-wide">Birini seçin</p>
+            )}
+            {g.pending.map((p) => (
+              <div key={p.rule_id} className="flex items-center gap-3 rounded-2xl border border-olive-200 bg-white p-3">
+                <div className="w-12 h-12 bg-olive-50 rounded-xl overflow-hidden shrink-0 border border-olive-100 flex items-center justify-center">
+                  {p.image ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={p.image} alt={p.title} className="w-full h-full object-cover" />
+                  ) : (
+                    <Gift size={18} className="text-olive-300" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-slate-900 text-sm leading-tight truncate">🎁 {p.title}</p>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    {p.original_price > 0 && (
+                      <span className="text-[10px] text-slate-400 line-through">
+                        ₺{p.original_price.toLocaleString("tr-TR")}
+                      </span>
+                    )}
+                    <Badge className="bg-olive-600 text-white text-[10px] px-1.5 py-0">Ücretsiz</Badge>
+                  </div>
+                </div>
+                <div className="flex flex-col items-end gap-1 shrink-0">
+                  <button
+                    onClick={() => pick(p)}
+                    className="text-xs font-bold text-white bg-olive-600 hover:bg-olive-700 rounded-full px-3.5 py-1.5 transition-colors"
+                  >
+                    {p.has_variants ? "Renk Seç" : "Ekle"}
+                  </button>
+                  <button
+                    onClick={() => dismissGift(p.rule_id)}
+                    className="text-[10px] text-slate-400 hover:text-slate-600"
+                  >
+                    Vazgeç
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Birleşik panel: Ücretsiz Ürünler + İndirim Kuponu ────────────────────────
+function RewardsAndCouponPanel({
+  cartTotal,
+  onApplied,
+  onPickVariant,
+  hasRewards,
+}: {
+  cartTotal: number;
+  onApplied: (discount: number, freeShipping: boolean) => void;
+  onPickVariant: (p: PendingGift) => void;
+  hasRewards: boolean;
+}) {
+  return (
+    <Card className="border-none shadow-sm bg-white p-6 rounded-3xl space-y-5">
+      <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
+        <Gift size={16} className="text-olive-600" /> İndirim &amp; Ücretsiz Ürünler
+      </h3>
+
+      {hasRewards && (
+        <>
+          <RewardRows onPickVariant={onPickVariant} />
+          <Separator className="bg-slate-100" />
+        </>
+      )}
+
+      <CouponSection cartTotal={cartTotal} onApplied={onApplied} />
     </Card>
   );
 }
@@ -402,7 +522,7 @@ function CouponBox({
 export default function CartPage() {
   const {
     items, removeItem, updateQuantity, getTotalPrice, clearCart,
-    pendingGifts, confirmGift, dismissGift,
+    pendingGifts, confirmGift,
   } = useCartStore();
   const [mounted, setMounted] = useState(false);
   const [activePending, setActivePending] = useState<string | null>(null);
@@ -413,11 +533,10 @@ export default function CartPage() {
     setMounted(true);
   }, []);
 
-  // Modalı OTOMATİK açmıyoruz — kullanıcı hediye panelinden kendi seçer.
-  // Yalnızca uygun hediye kalmadıysa açık modalı kapat.
+  // Uygun hediye kalmadıysa açık modalı kapat
   useEffect(() => {
     const gifts = pendingGifts ?? [];
-    if (gifts.length === 0 && activePending) {
+    if (activePending && !gifts.some((p) => p.rule_id === activePending)) {
       setActivePending(null);
     }
   }, [pendingGifts, activePending]);
@@ -437,20 +556,11 @@ export default function CartPage() {
   const shippingCost = (totalPrice > 500 || couponFreeShip) ? 0 : 29.90;
   const finalTotal = Math.max(0, totalPrice + shippingCost - couponDiscount);
 
-  // ── Sıralama: normal item → per_item hediyeleri → (sona) per_order hediyeleri
   const regularItems = items.filter((i) => !i.is_gift);
-  const perItemGifts = items.filter((i) => i.is_gift && !!i.trigger_item_id);
-  const perOrderGifts = items.filter((i) => i.is_gift && !i.trigger_item_id);
-
-  const displayItems: CartItem[] = [];
-  for (const item of regularItems) {
-    displayItems.push(item);
-    perItemGifts.filter((g) => g.trigger_item_id === item.id).forEach((g) => displayItems.push(g));
-  }
-  displayItems.push(...perOrderGifts);
-
   const safePending = pendingGifts ?? [];
-  const totalGifts = items.filter((i) => i.is_gift).length + safePending.length;
+  const confirmedGiftCount = items.filter((i) => i.is_gift).length;
+  const totalGifts = confirmedGiftCount + safePending.length;
+  const hasRewards = confirmedGiftCount > 0 || safePending.length > 0;
 
   if (items.length === 0 && safePending.length === 0) {
     return (
@@ -487,7 +597,6 @@ export default function CartPage() {
       {/* Varyant seçici modal */}
       {activePendingGift && (
         <GiftVariantModal
-          ruleId={activePendingGift.rule_id}
           title={activePendingGift.title}
           image={activePendingGift.image}
           originalPrice={activePendingGift.original_price}
@@ -537,41 +646,16 @@ export default function CartPage() {
               </Button>
             </div>
 
-            {/* Bekleyen hediye banner'ları (seçim yapılmamış, modal kapalıyken) */}
-            {safePending.filter((p) => p.rule_id !== activePending).map((p) => (
-              <div
-                key={p.rule_id}
-                className="flex items-center justify-between gap-3 px-4 py-3 bg-olive-50 border border-olive-200 rounded-2xl"
-              >
-                <div className="flex items-center gap-2 text-sm">
-                  <Gift size={16} className="text-olive-600 flex-shrink-0" />
-                  <span className="font-semibold text-olive-900">
-                    🎁 <span className="font-bold">{p.title}</span> hediye kazandınız!
-                  </span>
-                </div>
-                <button
-                  onClick={() => setActivePending(p.rule_id)}
-                  className="text-xs font-bold text-olive-600 hover:text-olive-800 whitespace-nowrap border border-olive-300 rounded-full px-3 py-1 hover:bg-olive-100 transition-colors"
-                >
-                  {p.has_variants ? "Renk Seç →" : "Ekle →"}
-                </button>
-              </div>
-            ))}
-
-            {/* Sıralı liste: normal + per_item hediyeleri + per_order hediyeleri */}
+            {/* Yalnızca satın alınan ürünler; hediyeler sağdaki panelde yönetilir */}
             <div className="space-y-3">
-              {displayItems.map((item) =>
-                item.is_gift ? (
-                  <GiftCard key={item.id} item={item} onRemove={() => removeItem(item.id)} />
-                ) : (
-                  <CartCard
-                    key={item.id}
-                    item={item}
-                    onRemove={() => removeItem(item.id)}
-                    onUpdateQty={(qty) => updateQuantity(item.id, qty)}
-                  />
-                )
-              )}
+              {regularItems.map((item) => (
+                <CartCard
+                  key={item.id}
+                  item={item}
+                  onRemove={() => removeItem(item.id)}
+                  onUpdateQty={(qty) => updateQuantity(item.id, qty)}
+                />
+              ))}
             </div>
 
             <Link href="/" className="inline-flex items-center gap-2 text-sm font-bold text-olive-600 hover:gap-3 transition-all pt-4">
@@ -581,9 +665,11 @@ export default function CartPage() {
 
           {/* Ödeme Özeti */}
           <div className="space-y-6">
-            {/* İndirim kuponu — ödeme özetinin üstünde */}
-            <CouponBox
+            {/* Birleşik panel: ücretsiz ürünler + indirim kuponu */}
+            <RewardsAndCouponPanel
               cartTotal={totalPrice}
+              hasRewards={hasRewards}
+              onPickVariant={(p) => setActivePending(p.rule_id)}
               onApplied={(d, fs) => { setCouponDiscount(d); setCouponFreeShip(fs); }}
             />
 
