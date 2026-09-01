@@ -12,11 +12,14 @@ export default function AdminGuard({ children }: { children: React.ReactNode }) 
   const check = useCallback(async () => {
     setStatus("loading");
     try {
-      // getUser, oturum yoksa "AuthSessionMissingError" döndürür — bu bir bağlantı
-      // hatası DEĞİL, sadece giriş yapılmamış demektir. Bu durumda login'e yönlendir.
-      // Gerçek ağ/DB hataları aşağıdaki profil sorgusunda (veya throw ile) yakalanır.
-      const { data: { user } } = await supabase.auth.getUser();
+      // getSession, oturumu localStorage'dan okur ve gerekirse access token'ı
+      // refresh token ile YENİLER — sunucuya doğrulama isteği atmaz. Sayfa
+      // yenilendiğinde (refresh) getUser() gibi ağ hatası/401 yüzünden yanlışlıkla
+      // login'e atmaz. Gerçek "oturum yok" durumu session === null ile ayrılır.
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
 
+      const user = session?.user ?? null;
       if (!user) {
         router.replace("/login?redirect=/admin");
         return;
@@ -40,6 +43,15 @@ export default function AdminGuard({ children }: { children: React.ReactNode }) 
 
   useEffect(() => {
     check();
+
+    // Hidrasyon race'i: bazen ilk mount'ta oturum henüz storage'dan okunmamış olur.
+    // INITIAL_SESSION / SIGNED_IN / TOKEN_REFRESHED olaylarında yeniden kontrol et.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "INITIAL_SESSION" || event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+        check();
+      }
+    });
+    return () => subscription.unsubscribe();
   }, [check]);
 
   if (status === "loading") {
