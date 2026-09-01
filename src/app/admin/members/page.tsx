@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -43,6 +44,7 @@ function roleColor(slug: string) {
 /* ── Bileşen ─────────────────────────────────────────── */
 
 export default function MembersPage() {
+  const router = useRouter();
   const [members, setMembers]     = useState<Member[]>([]);
   const [allRoles, setAllRoles]   = useState<Role[]>([]);
   const [tagGroups, setTagGroups] = useState<TagGroup[]>([]);
@@ -220,7 +222,11 @@ export default function MembersPage() {
                   const memberTags  = member.tagOptionIds.map(id => allOptionsById.get(id)).filter(Boolean);
 
                   return (
-                    <TableRow key={member.id} className="group">
+                    <TableRow
+                      key={member.id}
+                      className="group cursor-pointer hover:bg-slate-50/60"
+                      onClick={() => router.push(`/admin/members/${member.id}`)}
+                    >
                       <TableCell>
                         <div className="font-medium text-sm leading-tight">
                           {member.first_name} {member.last_name}
@@ -266,7 +272,7 @@ export default function MembersPage() {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
-                          onClick={() => openEdit(member)}
+                          onClick={(e) => { e.stopPropagation(); openEdit(member); }}
                           title="Rol ve Etiket Düzenle"
                         >
                           <UserCog size={15} />
