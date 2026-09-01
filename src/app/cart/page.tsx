@@ -275,26 +275,36 @@ function CouponBox({
     (async () => {
       setLoading(true);
       setError("");
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch("/api/coupons/validate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-        },
-        body: JSON.stringify({ code: couponCode, cartTotal }),
-      });
-      const d = await res.json();
-      if (!active) return;
-      setLoading(false);
-      if (d.valid) {
-        setApplied({ name: d.name, discount: d.discount_amount, free_shipping: d.free_shipping });
-        onAppliedRef.current(d.discount_amount, d.free_shipping);
-      } else {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch("/api/coupons/validate", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+          },
+          body: JSON.stringify({ code: couponCode, cartTotal }),
+        });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let d: any = {};
+        try { d = await res.json(); } catch { /* JSON değil */ }
+        if (!active) return;
+        if (res.ok && d.valid) {
+          setApplied({ name: d.name || "İndirim", discount: d.discount_amount || 0, free_shipping: !!d.free_shipping });
+          onAppliedRef.current(d.discount_amount || 0, !!d.free_shipping);
+        } else {
+          setApplied(null);
+          onAppliedRef.current(0, false);
+          setError(d.error || (res.status === 401 ? "Kupon için giriş yapın." : `Kupon uygulanamadı (${res.status})`));
+          setCouponCode("");
+        }
+      } catch {
+        if (!active) return;
         setApplied(null);
         onAppliedRef.current(0, false);
-        setError(d.error || "Kupon uygulanamadı");
-        setCouponCode("");
+        setError("Bağlantı hatası, tekrar deneyin.");
+      } finally {
+        if (active) setLoading(false);
       }
     })();
     return () => { active = false; };

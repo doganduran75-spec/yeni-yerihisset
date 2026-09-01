@@ -286,22 +286,29 @@ export default function CheckoutPage() {
     if (!code) return;
     setCouponError("");
     setCouponLoading(true);
-    const { data: { session } } = await supabase.auth.getSession();
-    const res = await fetch("/api/coupons/validate", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-      },
-      body: JSON.stringify({ code, cartTotal: getTotalPrice() }),
-    });
-    const data = await res.json();
-    setCouponLoading(false);
-    if (data.valid) {
-      setCouponCode(code);
-      setCouponData(data);
-    } else {
-      setCouponError(data.error || "Geçersiz kupon kodu");
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch("/api/coupons/validate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify({ code, cartTotal: getTotalPrice() }),
+      });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let data: any = {};
+      try { data = await res.json(); } catch { /* JSON değil */ }
+      if (res.ok && data.valid) {
+        setCouponCode(code);
+        setCouponData(data);
+      } else {
+        setCouponError(data.error || (res.status === 401 ? "Kupon için giriş yapın." : "Geçersiz kupon kodu"));
+      }
+    } catch {
+      setCouponError("Bağlantı hatası, tekrar deneyin.");
+    } finally {
+      setCouponLoading(false);
     }
   }
 
