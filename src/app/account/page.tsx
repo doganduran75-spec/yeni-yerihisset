@@ -225,7 +225,7 @@ function AccountPageInner() {
           imageUrls.push(publicUrl);
         }
       }
-      await (supabase.from("order_reviews" as any).insert({
+      const { error: reviewError } = await (supabase.from("order_reviews" as any).insert({
         order_id: reviewDialog.orderId,
         user_id: user.id,
         rating_shipping: reviewRatings.shipping,
@@ -234,9 +234,12 @@ function AccountPageInner() {
         comment: reviewComment,
         images: imageUrls,
       }) as any);
+      if (reviewError) throw reviewError;
       setReviewDialog(prev => prev ? { ...prev, step: "thanks" } : null);
-    } catch (e) {
+    } catch (e: unknown) {
       console.error(e);
+      const msg = e instanceof Error ? e.message : "Bilinmeyen hata";
+      alert("Yorum gönderilemedi: " + msg);
     } finally {
       setReviewSubmitting(false);
     }
