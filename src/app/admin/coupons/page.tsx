@@ -26,6 +26,7 @@ type Coupon = {
   min_order_amount: number;
   max_discount_amount: number | null;
   is_personal: boolean;
+  auto_assign_on_signup: boolean;
   max_uses: number | null;
   per_user_limit: number;
   used_count: number;
@@ -43,6 +44,7 @@ const EMPTY: Omit<Coupon, "id" | "used_count"> = {
   min_order_amount: 0,
   max_discount_amount: null,
   is_personal: false,
+  auto_assign_on_signup: false,
   max_uses: null,
   per_user_limit: 1,
   starts_at: new Date().toISOString().split("T")[0],
@@ -81,14 +83,31 @@ export default function CouponsPage() {
   const [saving, setSaving] = useState(false);
   const [assignCouponId, setAssignCouponId] = useState("");
   const [assignEmail, setAssignEmail] = useState("");
+  const [assignTagOptionId, setAssignTagOptionId] = useState("");
+  const [assignNotify, setAssignNotify] = useState(true);
+  const [tagOptions, setTagOptions] = useState<{ id: string; label: string }[]>([]);
   const [assigning, setAssigning] = useState(false);
 
-  useEffect(() => { fetchCoupons(); }, []);
+  useEffect(() => { fetchCoupons(); fetchTagOptions(); }, []);
 
   async function fetchCoupons() {
     const { data } = await supabase.from("coupons").select("*").order("created_at", { ascending: false });
     setCoupons(data || []);
     setLoading(false);
+  }
+
+  async function fetchTagOptions() {
+    const { data } = await (supabase as any)
+      .from("member_tag_groups")
+      .select("name, member_tag_options(id, value)")
+      .order("name");
+    const opts: { id: string; label: string }[] = [];
+    for (const g of (data as any[]) || []) {
+      for (const o of g.member_tag_options || []) {
+        opts.push({ id: o.id, label: `${g.name}: ${o.value}` });
+      }
+    }
+    setTagOptions(opts);
   }
 
   function openNew() {
@@ -195,6 +214,41 @@ export default function CouponsPage() {
       alert("Kupon başarıyla üyeye atandı." + emailNote);
       setAssignOpen(false);
       setAssignEmail("");
+    } catch (err: any) {
+      alert("Hata: " + err.message);
+    } finally {
+      setAssigning(false);
+    }
+  }
+
+  async function handleBulkAssign() {
+    const emails = assignEmail.split(/[\s,;]+/).map((e) => e.trim()).filter(Boolean);
+    if (!assignCouponId || (emails.length === 0 && !assignTagOptionId)) {
+      alert("En az bir e-posta girin ya da bir etiket seçin.");
+      return;
+    }
+    setAssigning(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch("/api/coupons/bulk-assign", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify({
+          couponId: assignCouponId,
+          emails,
+          tagOptionId: assignTagOptionId || undefined,
+          notify: assignNotify,
+        }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || "Atama başarısız");
+      alert(`Atandı: ${d.atanan}/${d.hedef} üye.` + (assignNotify ? ` E-posta: ${d.epostaGonderilen}.` : ""));
+      setAssignOpen(false);
+      setAssignEmail("");
+      setAssignTagOptionId("");
     } catch (err: any) {
       alert("Hata: " + err.message);
     } finally {
@@ -432,6 +486,11 @@ export default function CouponsPage() {
                 <span className="font-medium">Kişiye Özel</span>
                 <span className="text-xs text-muted-foreground">(admin atar)</span>
               </label>
+              <label className="flex items-center gap-2 cursor-pointer text-sm">
+                <input type="checkbox" checked={editingCoupon.auto_assign_on_signup ?? false} onChange={(e) => setEditingCoupon((p) => ({ ...p, auto_assign_on_signup: e.target.checked }))} className="h-4 w-4" />
+                <span className="font-medium">Üye olunca otomatik ata</span>
+                <span className="text-xs text-muted-foreground">(kayıt olan herkese + e-posta)</span>
+              </label>
             </div>
 
             <div className="flex justify-end gap-3 pt-2 border-t">
@@ -445,26 +504,49 @@ export default function CouponsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Kullanıcıya Ata Dialog */}
+      {/* Kullanıcıya Ata Dialog — toplu */}
       <Dialog open={assignOpen} onOpenChange={setAssignOpen}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><UserPlus size={18} /> Üyeye Ata</DialogTitle>
+            <DialogTitle className="flex items-center gap-2"><UserPlus size={18} /> Kupon Ata (Toplu)</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 pt-2">
-            <p className="text-sm text-muted-foreground">Kuponu atamak istediğiniz üyenin email adresini girin.</p>
+            <p className="text-sm text-muted-foreground">
+              Belirli üyeleri (e-posta) girin <strong>ve/veya</strong> bir etiket grubu seçin. Her üyeye kupon atanır.
+            </p>
+
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold">Üye Email</label>
-              <Input
-                type="email"
+              <label className="text-xs font-semibold">Üye e-postaları (virgül / satır ile ayır)</label>
+              <textarea
                 value={assignEmail}
                 onChange={(e) => setAssignEmail(e.target.value)}
-                placeholder="uye@example.com"
+                placeholder="uye1@example.com, uye2@example.com"
+                className="w-full min-h-[80px] rounded-xl border-2 border-slate-100 px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
               />
             </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold">Ya da bir etikete sahip tüm üyeler</label>
+              <select
+                value={assignTagOptionId}
+                onChange={(e) => setAssignTagOptionId(e.target.value)}
+                className="flex h-10 w-full rounded-xl border-2 border-slate-100 bg-white px-3 text-sm"
+              >
+                <option value="">— Etiket seçilmedi —</option>
+                {tagOptions.map((t) => (
+                  <option key={t.id} value={t.id}>{t.label}</option>
+                ))}
+              </select>
+            </div>
+
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={assignNotify} onChange={(e) => setAssignNotify(e.target.checked)} className="h-4 w-4" />
+              Bilgilendirme e-postası gönder
+            </label>
+
             <div className="flex justify-end gap-3 pt-2 border-t">
               <Button variant="outline" onClick={() => setAssignOpen(false)}>İptal</Button>
-              <Button onClick={handleAssign} disabled={assigning || !assignEmail} className="gap-2">
+              <Button onClick={handleBulkAssign} disabled={assigning || (!assignEmail.trim() && !assignTagOptionId)} className="gap-2">
                 {assigning && <Loader2 size={14} className="animate-spin" />}
                 Ata
               </Button>

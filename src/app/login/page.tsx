@@ -93,6 +93,12 @@ function LoginForm() {
         // If profile exists, update it. Usually a trigger handles this in Supabase, 
         // but let's be safe if they don't have the trigger.
         if (data.user) {
+          // Karşılama kuponlarını (auto_assign_on_signup) hesabına ekle + e-posta (fire-and-forget)
+          fetch("/api/coupons/welcome", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId: data.user.id }),
+          }).catch(() => {});
           setSuccess("Kayıt başarılı! Lütfen e-postanızı kontrol edin veya giriş yapın.");
           setIsLogin(true);
         }
