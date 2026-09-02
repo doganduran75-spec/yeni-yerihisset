@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/lib/supabase";
-import { ShoppingBag, Users, CreditCard, TrendingUp, Loader2, MessageCircle, ArrowRight, Star, Clock, PackageOpen } from "lucide-react";
+import { ShoppingBag, Users, CreditCard, TrendingUp, Loader2, MessageCircle, ArrowRight, Star, Clock, PackageOpen, BellRing } from "lucide-react";
 
 type Stats = {
   totalSales: number;
@@ -85,6 +85,7 @@ export default function AdminDashboard() {
   const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
   const [openOrders, setOpenOrders] = useState<OpenOrder[]>([]);
   const [openEventMap, setOpenEventMap] = useState<Record<string, string>>({});
+  const [manualAlerts, setManualAlerts] = useState<{ id: string; product: string; who: string; channel: string }[]>([]);
   const [pendingMessages, setPendingMessages] = useState<PendingMessage[]>([]);
   const [pendingReviews, setPendingReviews] = useState<PendingReview[]>([]);
   const [loading, setLoading] = useState(true);
@@ -142,6 +143,33 @@ export default function AdminDashboard() {
         }
         setOpenEventMap(map);
       }
+
+      // Manuel stok uyarısı: e-postası olmayan (Instagram/telefon) bekleyen
+      // stok bildirimleri → stok gelince ELDEN bilgilendirilmeli (auto e-posta yok)
+      const { data: snData } = await (supabase as any)
+        .from("stock_notifications")
+        .select("id, email, phone, instagram, status, products(title), contacts(full_name, instagram_handle, phone, email)")
+        .eq("status", "pending")
+        .order("created_at", { ascending: false })
+        .limit(40);
+      const alerts = ((snData as any[]) || [])
+        .filter((n) => {
+          const email = n.email || n.contacts?.email;
+          const ig = n.instagram || n.contacts?.instagram_handle;
+          const ph = n.phone || n.contacts?.phone;
+          return !email && (ig || ph);
+        })
+        .map((n) => {
+          const ig = n.instagram || n.contacts?.instagram_handle;
+          const ph = n.phone || n.contacts?.phone;
+          return {
+            id: n.id,
+            product: n.products?.title || "—",
+            who: n.contacts?.full_name || "",
+            channel: ig ? `@${ig}` : (ph || ""),
+          };
+        });
+      setManualAlerts(alerts);
 
       // Cevaplanmayan mesajlar: son mesajı 'user' olan yazışmalar
       const { data: allMessages } = await (supabase as any)
@@ -494,6 +522,47 @@ export default function AdminDashboard() {
                   );
                 })}
               </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Manuel Stok Uyarısı — e-postasız kişiler elden bilgilendirilmeli */}
+        <Card className="shadow-sm border-l-4 border-l-teal-500">
+          <CardHeader className="flex flex-row items-center justify-between pb-3">
+            <CardTitle className="flex items-center gap-2">
+              <BellRing size={18} className="text-teal-500" />
+              Manuel Bilgilendirme
+              {manualAlerts.length > 0 && (
+                <span className="bg-teal-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                  {manualAlerts.length}
+                </span>
+              )}
+            </CardTitle>
+            <Link href="/admin/crm/stock-notifications" className="text-xs text-muted-foreground hover:text-teal-600 flex items-center gap-1 transition-colors">
+              Tümü <ArrowRight size={12} />
+            </Link>
+          </CardHeader>
+          <CardContent className="pt-0">
+            {manualAlerts.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">Elden bilgilendirme bekleyen yok.</p>
+            ) : (
+              <>
+                <p className="text-[11px] text-slate-400 mb-2">
+                  E-postası olmayan (Instagram/telefon) stok bildirimleri — stok gelince <b>elden</b> haber verilmeli.
+                </p>
+                <div className="space-y-1">
+                  {manualAlerts.slice(0, 6).map((a) => (
+                    <Link key={a.id} href="/admin/crm/stock-notifications"
+                      className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-teal-50 transition-colors group">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-slate-900 truncate">{a.product}</p>
+                        <p className="text-xs text-slate-400 truncate">{a.who ? `${a.who} · ` : ""}{a.channel}</p>
+                      </div>
+                      <ArrowRight size={12} className="text-slate-300 group-hover:text-teal-500 transition-colors shrink-0" />
+                    </Link>
+                  ))}
+                </div>
+              </>
             )}
           </CardContent>
         </Card>

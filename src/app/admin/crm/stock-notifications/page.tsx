@@ -47,7 +47,15 @@ type ProductOpt = {
   id: string;
   title: string;
   variants: { id: string; label: string }[];
+  search: string; // başlık + varyant değerleri (çok-kelimeli arama)
 };
+
+// Türkçe-duyarsız normalize
+function normTr(s: string): string {
+  return (s || "").toLocaleLowerCase("tr-TR")
+    .replaceAll("ı", "i").replaceAll("İ", "i").replaceAll("ş", "s")
+    .replaceAll("ğ", "g").replaceAll("ü", "u").replaceAll("ö", "o").replaceAll("ç", "c");
+}
 
 export default function StockNotificationsPage() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -74,15 +82,22 @@ export default function StockNotificationsPage() {
       .select("id, title, product_variants(id, variant_options(value, variant_groups(name)))")
       .eq("is_active", true)
       .order("title");
-    const opts: ProductOpt[] = ((data as any[]) || []).map((p) => ({
-      id: p.id,
-      title: p.title,
-      variants: (p.product_variants || []).map((v: any) => {
+    const opts: ProductOpt[] = ((data as any[]) || []).map((p) => {
+      const variantTexts: string[] = [];
+      const variants = (p.product_variants || []).map((v: any) => {
         const val = v.variant_options?.value ?? "";
         const gn = v.variant_options?.variant_groups?.name ?? "";
+        if (val) variantTexts.push(val);
+        if (gn) variantTexts.push(gn);
         return { id: v.id, label: val ? (gn ? `${gn}: ${val}` : val) : "Varyant" };
-      }),
-    }));
+      });
+      return {
+        id: p.id,
+        title: p.title,
+        variants,
+        search: normTr([p.title, ...variantTexts].join(" ")),
+      };
+    });
     setProducts(opts);
   }
 
@@ -161,9 +176,11 @@ export default function StockNotificationsPage() {
     return "—";
   }
 
-  const filteredProducts = pSearch.trim()
-    ? products.filter((p) => p.title.toLocaleLowerCase("tr-TR").includes(pSearch.trim().toLocaleLowerCase("tr-TR"))).slice(0, 30)
-    : products.slice(0, 30);
+  const filteredProducts = (() => {
+    const tokens = normTr(pSearch).split(/\s+/).filter(Boolean);
+    if (tokens.length === 0) return products.slice(0, 30);
+    return products.filter((p) => tokens.every((t) => p.search.includes(t))).slice(0, 30);
+  })();
   const selectedProduct = products.find((p) => p.id === form.productId);
 
   async function saveManual() {
@@ -386,7 +403,7 @@ export default function StockNotificationsPage() {
 
       {/* Manuel ekleme modalı */}
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="w-[95vw] sm:max-w-[720px] max-h-[90vh] overflow-y-auto top-[5vh] translate-y-0">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><Bell size={18} /> Manuel Stok Bildirimi</DialogTitle>
           </DialogHeader>
