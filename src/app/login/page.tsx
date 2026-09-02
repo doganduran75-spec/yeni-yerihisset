@@ -34,6 +34,7 @@ function LoginForm() {
   const redirect = searchParams.get("redirect") || "/";
   
   const [isLogin, setIsLogin] = useState(true);
+  const [forgot, setForgot] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -70,6 +71,16 @@ function LoginForm() {
     setSuccess(null);
 
     try {
+      if (forgot) {
+        // Şifre sıfırlama bağlantısı gönder
+        const { error } = await supabase.auth.resetPasswordForEmail(formData.email, {
+          redirectTo: `${window.location.origin}/sifre-belirle`,
+        });
+        if (error) throw error;
+        setSuccess("Şifre sıfırlama bağlantısı e-postanıza gönderildi. Lütfen kontrol edin.");
+        return;
+      }
+
       if (isLogin) {
         const { error } = await supabase.auth.signInWithPassword({
           email: formData.email,
@@ -121,20 +132,20 @@ function LoginForm() {
 
       <Card className="w-full max-w-md border-none shadow-2xl shadow-slate-200/50 rounded-[2rem] overflow-hidden">
         <div className="flex border-b">
-          <button 
-            onClick={() => { setIsLogin(true); setError(null); }}
+          <button
+            onClick={() => { setIsLogin(true); setForgot(false); setError(null); }}
             className={cn(
               "flex-1 py-5 text-sm font-black transition-all",
-              isLogin ? "text-blue-600 border-b-2 border-blue-600 bg-blue-50/30" : "text-slate-400 hover:text-slate-600"
+              isLogin && !forgot ? "text-blue-600 border-b-2 border-blue-600 bg-blue-50/30" : "text-slate-400 hover:text-slate-600"
             )}
           >
             GİRİŞ YAP
           </button>
-          <button 
-            onClick={() => { setIsLogin(false); setError(null); }}
+          <button
+            onClick={() => { setIsLogin(false); setForgot(false); setError(null); }}
             className={cn(
               "flex-1 py-5 text-sm font-black transition-all",
-              !isLogin ? "text-blue-600 border-b-2 border-blue-600 bg-blue-50/30" : "text-slate-400 hover:text-slate-600"
+              !isLogin && !forgot ? "text-blue-600 border-b-2 border-blue-600 bg-blue-50/30" : "text-slate-400 hover:text-slate-600"
             )}
           >
             KAYIT OL
@@ -183,22 +194,31 @@ function LoginForm() {
               </div>
             </div>
 
+            {!forgot && (
             <div className="space-y-2">
               <div className="flex justify-between items-center px-1">
                 <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">ŞİFRE</label>
-                {isLogin && <button type="button" className="text-[10px] font-bold text-blue-600 hover:underline">Şifremi Unuttum</button>}
+                {isLogin && (
+                  <button
+                    type="button"
+                    onClick={() => { setForgot(true); setError(null); setSuccess(null); }}
+                    className="text-[10px] font-bold text-blue-600 hover:underline"
+                  >
+                    Şifremi Unuttum
+                  </button>
+                )}
               </div>
               <div className="relative">
                 <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                <Input 
-                  type={showPassword ? "text" : "password"} 
-                  required 
-                  placeholder="••••••••" 
+                <Input
+                  type={showPassword ? "text" : "password"}
+                  required
+                  placeholder="••••••••"
                   value={formData.password}
                   onChange={e => setFormData({...formData, password: e.target.value})}
                   className="h-12 pl-12 pr-12 rounded-xl bg-slate-50 border-slate-100 font-bold"
                 />
-                <button 
+                <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
@@ -207,6 +227,20 @@ function LoginForm() {
                 </button>
               </div>
             </div>
+            )}
+
+            {forgot && (
+              <p className="text-xs text-slate-500 -mt-2">
+                Kayıtlı e-postanı gir; şifre belirleme bağlantısı gönderelim.{" "}
+                <button
+                  type="button"
+                  onClick={() => { setForgot(false); setError(null); setSuccess(null); }}
+                  className="font-bold text-blue-600 hover:underline"
+                >
+                  ← Girişe dön
+                </button>
+              </p>
+            )}
 
             {error && (
               <div className="bg-red-50 border-l-4 border-red-500 p-4 flex gap-3 animate-in shake">
@@ -227,10 +261,11 @@ function LoginForm() {
               disabled={loading}
               className="w-full h-14 rounded-2xl bg-blue-600 hover:bg-blue-700 text-sm font-black tracking-widest uppercase shadow-xl shadow-blue-100 group transition-all"
             >
-              {loading ? "İŞLEM YAPILIYOR..." : (isLogin ? "GİRİŞ YAP" : "HESAP OLUŞTUR")}
+              {loading ? "İŞLEM YAPILIYOR..." : forgot ? "SIFIRLAMA BAĞLANTISI GÖNDER" : (isLogin ? "GİRİŞ YAP" : "HESAP OLUŞTUR")}
               <ArrowRight size={18} className="ml-2 group-hover:translate-x-1 transition-transform" />
             </Button>
 
+            {!forgot && (
             <div className="relative py-4">
               <div className="absolute inset-0 flex items-center">
                 <span className="w-full border-t border-slate-100"></span>
@@ -239,8 +274,9 @@ function LoginForm() {
                 <span className="bg-white px-4 text-slate-400">VEYA</span>
               </div>
             </div>
+            )}
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className={cn("grid grid-cols-2 gap-4", forgot && "hidden")}>
               <Button 
                 type="button"
                 variant="outline"
