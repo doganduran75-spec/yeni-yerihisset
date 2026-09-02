@@ -4,8 +4,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import { ChevronRight, Search, Star } from "lucide-react";
-import { formatPriceDisplay, getMinPrice } from "@/lib/product-price";
+import SizeFilterGrid from "@/components/SizeFilterGrid";
+import { ChevronRight } from "lucide-react";
 
 export const revalidate = 60;
 
@@ -51,7 +51,7 @@ export default async function KategoriPage({
     .select(`
       id, title, slug, price, images, image_url, has_variants,
       brands(name, slug),
-      product_variants(price, is_active)
+      product_variants(price, is_active, stock, variant_options(value, variant_groups(name)))
     `)
     .eq("category_id", category.id)
     .eq("is_active", true)
@@ -79,81 +79,8 @@ export default async function KategoriPage({
             <p className="text-slate-400 mt-1 text-sm">{list.length} ürün</p>
           </div>
 
-          {/* Ürün grid */}
-          {list.length === 0 ? (
-            <div className="text-center py-20 text-slate-400">
-              Bu kategoride henüz ürün bulunmuyor.
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-16">
-              {list.map((product) => {
-                const img =
-                  product.images?.[0] ?? product.image_url ??
-                  "https://images.unsplash.com/photo-1494438639946-1ebd1d20bf85?q=80&w=400";
-                const minPrice = getMinPrice(product);
-                const priceText = formatPriceDisplay(product);
-                const brand = product.brands as any;
-
-                return (
-                  <div key={product.id} className="group cursor-pointer">
-                    <div className="relative aspect-[3/4] overflow-hidden rounded-[2.5rem] bg-olive-50 mb-6 border border-slate-100 shadow-sm transition-all duration-700 hover:shadow-2xl hover:shadow-slate-200">
-                      <Link href={`/products/${product.slug}`} className="block w-full h-full">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={img}
-                          alt={product.title}
-                          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000"
-                        />
-                      </Link>
-
-                      {/* İncele butonu */}
-                      <Link
-                        href={`/products/${product.slug}`}
-                        className="absolute bottom-6 left-1/2 -translate-x-1/2 w-[85%] h-14 glass rounded-2xl text-slate-900 font-black text-xs uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-all transform translate-y-4 group-hover:translate-y-0 flex items-center justify-center gap-2 hover:bg-olive-600 hover:text-white hover:border-olive-600 active:scale-95 shadow-xl"
-                      >
-                        <Search size={18} /> İNCELE
-                      </Link>
-
-                      {/* Marka + ücretsiz kargo badge */}
-                      <div className="absolute top-6 left-6 flex flex-col gap-2">
-                        {brand?.name && (
-                          <span className="px-3 py-1 bg-white/90 backdrop-blur-md text-[9px] font-black uppercase tracking-widest rounded-full border border-slate-100 text-slate-900">
-                            {brand.name}
-                          </span>
-                        )}
-                        {minPrice > 1000 && (
-                          <span className="px-3 py-1 bg-olive-600 text-white text-[9px] font-black uppercase tracking-widest rounded-full shadow-lg shadow-olive-100">
-                            Ücretsiz Kargo
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Kart altı */}
-                    <div className="space-y-1 px-2">
-                      <div className="flex items-center justify-between">
-                        <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.1em]">
-                          {category.name}
-                        </p>
-                        <div className="flex items-center gap-1 text-yellow-400">
-                          <Star size={10} fill="currentColor" />
-                          <span className="text-[10px] text-slate-500 font-bold italic">4.9 (124+)</span>
-                        </div>
-                      </div>
-                      <Link href={`/products/${product.slug}`}>
-                        <h3 className="text-lg font-black text-slate-900 group-hover:text-olive-600 transition-colors tracking-tight uppercase italic">
-                          {product.title}
-                        </h3>
-                      </Link>
-                      <p className="font-black text-2xl text-olive-600 italic tracking-tighter">
-                        {priceText}
-                      </p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          {/* Ürün grid + numara filtresi */}
+          <SizeFilterGrid products={list} categoryName={category.name} />
         </div>
       </main>
       <Footer />
