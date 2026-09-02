@@ -892,7 +892,7 @@ export default function OrdersPage() {
 
       {/* ─── Detay Dialog ─────────────────────────────────────────────────── */}
       <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
-        <DialogContent className="w-[95vw] sm:max-w-[680px] max-h-[92vh] overflow-y-auto">
+        <DialogContent className="w-[95vw] sm:max-w-[860px] max-h-[90vh] overflow-y-auto top-[5vh] translate-y-0">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               Sipariş Detayı
@@ -1233,7 +1233,7 @@ export default function OrdersPage() {
 
       {/* ─── Yeni Sipariş Dialog ──────────────────────────────────────────────── */}
       <Dialog open={createOpen} onOpenChange={(o) => { if (!o) { setCreateOpen(false); setCreateError(""); } }}>
-        <DialogContent className="w-[95vw] sm:max-w-[900px] max-h-[92vh] overflow-y-auto">
+        <DialogContent className="w-[95vw] sm:max-w-[900px] max-h-[90vh] overflow-y-auto top-[5vh] translate-y-0">
           <DialogHeader>
             <DialogTitle>Yeni Sipariş Oluştur</DialogTitle>
             <DialogDescription>Müşteri ve ürün bilgilerini girerek manuel sipariş oluşturun.</DialogDescription>

@@ -293,19 +293,22 @@ export default function AdminDashboard() {
                   <Link key={o.id} href={`/admin/orders?id=${o.id}`}
                     className="flex items-center gap-3 py-2.5 px-2 hover:bg-amber-50/50 rounded-lg transition-colors group">
                     <span className="font-mono text-xs font-bold text-blue-600 w-16 shrink-0">YH{o.order_number ?? "—"}</span>
-                    <span className="text-sm font-medium flex-1 min-w-0 truncate">
+                    <span className="text-sm font-medium shrink-0 truncate max-w-[150px]">
                       {o.profiles?.first_name} {o.profiles?.last_name}
                     </span>
-                    <span className={`hidden sm:inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset ${st.color}`}>{st.label}</span>
-                    {(() => {
-                      const ev = EVENT_LABELS[openEventMap[o.id]];
-                      return (
-                        <span className={`hidden md:inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-bold ${ev ? ev.color : "bg-slate-50 text-slate-400"}`} title="Süreç durumu">
-                          <Clock size={10} /> {ev ? ev.label : "Başlamadı"}
-                        </span>
-                      );
-                    })()}
-                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${invoiced ? "bg-green-50 text-green-700" : "bg-slate-100 text-slate-500"}`}>
+                    {/* Süreç durumu — ortadaki boş alanda */}
+                    <div className="flex-1 flex justify-center min-w-0">
+                      {(() => {
+                        const ev = EVENT_LABELS[openEventMap[o.id]];
+                        return (
+                          <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold ${ev ? ev.color : "bg-slate-50 text-slate-400"}`} title="Süreç durumu">
+                            <Clock size={10} /> {ev ? ev.label : "Süreç başlamadı"}
+                          </span>
+                        );
+                      })()}
+                    </div>
+                    <span className={`hidden sm:inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset shrink-0 ${st.color}`}>{st.label}</span>
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${invoiced ? "bg-green-50 text-green-700" : "bg-slate-100 text-slate-500"}`}>
                       {invoiced ? "Faturalı" : "Fatura yok"}
                     </span>
                     <span className="text-sm text-slate-500 w-20 text-right shrink-0">₺{o.total_amount.toFixed(0)}</span>
