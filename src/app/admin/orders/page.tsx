@@ -25,7 +25,7 @@ import { supabase } from "@/lib/supabase";
 import {
   Eye, MoreVertical, Loader2, Package, Truck, CheckCircle, XCircle,
   Clock, MapPin, Phone, Mail, Users, ShoppingBag, Copy, ExternalLink,
-  Landmark, FileText, ChevronDown, AlertCircle, Send,
+  Landmark, FileText, ChevronDown, AlertCircle, Send, Search,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -142,13 +142,16 @@ export default function OrdersPage() {
   const [customerAddresses, setCustomerAddresses] = useState<any[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState("");
   const [newItems, setNewItems] = useState([
-    { sku: "", productId: "", variantId: "", variantName: "", title: "", quantity: 1, unitPrice: 0, skuError: "", skuLoading: false },
+    { sku: "", productId: "", variantId: "", variantName: "", title: "", quantity: 1, unitPrice: 0, stock: 0, query: "", skuError: "", skuLoading: false },
   ]);
   const [newPaymentMethod, setNewPaymentMethod] = useState("credit_card");
   const [newAdminNote, setNewAdminNote] = useState("");
   const [creatingOrder, setCreatingOrder] = useState(false);
   const [createError, setCreateError] = useState("");
   const [skuDropdown, setSkuDropdown] = useState<{ idx: number; results: any[] } | null>(null);
+  // Ürün (satılabilir birim) listesi — çok-kelimeli arama için Yeni Sipariş'te yüklenir
+  const [orderUnits, setOrderUnits] = useState<any[]>([]);
+  const EMPTY_ITEM = { sku: "", productId: "", variantId: "", variantName: "", title: "", quantity: 1, unitPrice: 0, stock: 0, query: "", skuError: "", skuLoading: false };
 
   // ─── iyzico İade state ────────────────────────────────────────────────────
   const [refundAmount, setRefundAmount] = useState("");
@@ -156,6 +159,12 @@ export default function OrdersPage() {
   const [refundResult, setRefundResult] = useState<{ ok: boolean; msg: string } | null>(null);
 
   useEffect(() => { fetchOrders(); }, []);
+
+  // Yeni Sipariş diyaloğu açılınca satılabilir birimleri (stok dahil) yükle
+  useEffect(() => {
+    if (createOpen && orderUnits.length === 0) loadOrderUnits();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [createOpen]);
 
   // URL'den ?id=xxx gelirse ilgili siparişi otomatik aç
   useEffect(() => {
@@ -337,74 +346,67 @@ export default function OrdersPage() {
     setSelectedAddressId(addrs?.[0]?.id ?? "");
   }
 
-  async function handleNewItemSkuLookup(idx: number, sku: string) {
-    const trimmed = sku.trim();
-    setNewItems(prev => prev.map((item, i) => i === idx ? { ...item, sku: trimmed, skuLoading: true, skuError: "" } : item));
-    if (!trimmed) {
-      setNewItems(prev => prev.map((item, i) => i === idx ? { ...item, skuLoading: false } : item));
-      return;
-    }
-    const { data: variant } = await (supabase
-      .from("product_variants")
-      .select("id, sku, price, product_id, products(title), variant_options(value, variant_groups(name))")
-      .eq("sku", trimmed)
-      .maybeSingle() as any) as { data: any };
-
-    if (!variant) {
-      setNewItems(prev => prev.map((item, i) => i === idx
-        ? { ...item, skuLoading: false, skuError: `"${trimmed}" SKU bulunamadı` }
-        : item));
-      return;
-    }
-    const opt = variant.variant_options;
-    const variantName = opt?.value && opt?.variant_groups?.name ? `${opt.variant_groups.name}: ${opt.value}` : (opt?.value ?? "");
-    setNewItems(prev => prev.map((item, i) => i === idx ? {
-      ...item,
-      sku: trimmed,
-      productId: variant.product_id,
-      variantId: variant.id,
-      variantName,
-      title: variant.products?.title ?? "",
-      unitPrice: variant.price ?? item.unitPrice,
-      skuLoading: false,
-      skuError: "",
-    } : item));
+  // Türkçe-duyarsız normalize (Yeni Sipariş ürün araması)
+  function normTr(s: string): string {
+    return (s || "").toLocaleLowerCase("tr-TR")
+      .replaceAll("ı", "i").replaceAll("İ", "i").replaceAll("ş", "s")
+      .replaceAll("ğ", "g").replaceAll("ü", "u").replaceAll("ö", "o").replaceAll("ç", "c");
   }
 
-  async function searchSkuDropdown(idx: number, query: string) {
-    const q = query.trim();
-    if (q.length < 1) { setSkuDropdown(null); return; }
-    const { data } = await (supabase
-      .from("product_variants")
-      .select("id, sku, price, product_id, products(title), variant_options(value, variant_groups(name))")
-      .ilike("sku", `${q}%`)
-      .limit(8) as any);
-    setSkuDropdown({ idx, results: data ?? [] });
+  // Satılabilir birimleri yükle (varyantlar + varyantsız ürünler), stok dahil
+  async function loadOrderUnits() {
+    const { data } = await (supabase as any)
+      .from("products")
+      .select("id, title, price, stock, has_variants, product_variants(id, sku, price, stock, variant_options(value, variant_groups(name)))")
+      .eq("is_active", true)
+      .order("title");
+    const list: any[] = [];
+    for (const p of (data as any[]) || []) {
+      const vs = p.product_variants || [];
+      if (vs.length > 0) {
+        for (const v of vs) {
+          const val = v.variant_options?.value ?? "";
+          const gn = v.variant_options?.variant_groups?.name ?? "";
+          const label = val ? (gn ? `${gn}: ${val}` : val) : "";
+          list.push({
+            productId: p.id, variantId: v.id, title: p.title, variantName: label,
+            sku: v.sku ?? "", price: Number(v.price ?? 0), stock: Number(v.stock ?? 0),
+            search: normTr([p.title, gn, val, v.sku].filter(Boolean).join(" ")),
+          });
+        }
+      } else {
+        list.push({
+          productId: p.id, variantId: "", title: p.title, variantName: "",
+          sku: "", price: Number(p.price ?? 0), stock: Number(p.stock ?? 0),
+          search: normTr(p.title),
+        });
+      }
+    }
+    setOrderUnits(list);
   }
 
-  function selectSkuFromDropdown(idx: number, variant: any) {
-    const opt = variant.variant_options;
-    const variantName = opt?.value && opt?.variant_groups?.name
-      ? `${opt.variant_groups.name}: ${opt.value}`
-      : (opt?.value ?? "");
+  function filterUnits(query: string): any[] {
+    const tokens = normTr(query).split(/\s+/).filter(Boolean);
+    if (tokens.length === 0) return [];
+    return orderUnits.filter(u => tokens.every(t => u.search.includes(t))).slice(0, 12);
+  }
+
+  function selectUnit(idx: number, u: any) {
     setNewItems(prev => prev.map((item, i) => i === idx ? {
       ...item,
-      sku: variant.sku,
-      productId: variant.product_id,
-      variantId: variant.id,
-      variantName,
-      title: variant.products?.title ?? "",
-      unitPrice: variant.price ?? item.unitPrice,
-      skuError: "",
-      skuLoading: false,
+      productId: u.productId, variantId: u.variantId, variantName: u.variantName,
+      title: u.title, sku: u.sku, unitPrice: u.price, stock: u.stock,
+      quantity: Math.min(item.quantity || 1, u.stock > 0 ? u.stock : 1),
+      query: "", skuError: "",
     } : item));
-    setSkuDropdown(null);
   }
 
   async function submitNewOrder() {
     if (!selectedCustomer) { setCreateError("Müşteri seçin"); return; }
     if (!selectedAddressId) { setCreateError("Adres seçin"); return; }
-    if (newItems.some(i => !i.productId)) { setCreateError("Tüm ürün kodlarını doğrulayın"); return; }
+    if (newItems.some(i => !i.productId)) { setCreateError("Tüm ürünleri listeden seçin"); return; }
+    if (newItems.some(i => i.stock <= 0)) { setCreateError("Stokta olmayan ürünle sipariş girilemez. O satırı çıkarın."); return; }
+    if (newItems.some(i => i.quantity > i.stock)) { setCreateError("Adet, stoktan fazla olamaz."); return; }
     setCreatingOrder(true);
     setCreateError("");
     try {
@@ -435,7 +437,7 @@ export default function OrdersPage() {
       if (!res.ok) { setCreateError(json.error ?? "Hata oluştu"); return; }
       setCreateOpen(false);
       setCustomerQuery(""); setSelectedCustomer(null); setCustomerAddresses([]); setSelectedAddressId("");
-      setNewItems([{ sku: "", productId: "", variantId: "", variantName: "", title: "", quantity: 1, unitPrice: 0, skuError: "", skuLoading: false }]);
+      setNewItems([{ ...EMPTY_ITEM }]);
       setNewAdminNote(""); setNewPaymentMethod("credit_card");
       await fetchOrders();
     } catch {
@@ -890,7 +892,7 @@ export default function OrdersPage() {
 
       {/* ─── Detay Dialog ─────────────────────────────────────────────────── */}
       <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
-        <DialogContent className="sm:max-w-[640px] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[95vw] sm:max-w-[680px] max-h-[92vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               Sipariş Detayı
@@ -1231,7 +1233,7 @@ export default function OrdersPage() {
 
       {/* ─── Yeni Sipariş Dialog ──────────────────────────────────────────────── */}
       <Dialog open={createOpen} onOpenChange={(o) => { if (!o) { setCreateOpen(false); setCreateError(""); } }}>
-        <DialogContent className="sm:max-w-[620px] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[95vw] sm:max-w-[640px] max-h-[92vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Yeni Sipariş Oluştur</DialogTitle>
             <DialogDescription>Müşteri ve ürün bilgilerini girerek manuel sipariş oluşturun.</DialogDescription>
@@ -1301,80 +1303,96 @@ export default function OrdersPage() {
             <div className="space-y-2">
               <label className="text-sm font-semibold">Ürünler</label>
               <div className="space-y-2">
-                {newItems.map((item, idx) => (
+                {newItems.map((item, idx) => {
+                  const results = item.productId ? [] : filterUnits(item.query);
+                  const overStock = item.stock > 0 && item.quantity > item.stock;
+                  return (
                   <div key={idx} className="border rounded-lg p-3 space-y-2 bg-slate-50/50">
-                    <div className="grid grid-cols-[1fr_auto_auto_auto] gap-2 items-start">
-                      {/* SKU */}
-                      <div className="space-y-1">
-                        <div className="relative">
-                          <Input
-                            className="font-mono text-xs h-8"
-                            placeholder="Ürün kodu (SKU)…"
-                            value={item.sku}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setNewItems(prev => prev.map((it, i) => i === idx ? { ...it, sku: val, skuError: "", productId: "", variantId: "", title: "", variantName: "" } : it));
-                              searchSkuDropdown(idx, val);
-                            }}
-                            onBlur={() => setTimeout(() => setSkuDropdown(null), 200)}
-                            onKeyDown={(e) => { if (e.key === "Escape") setSkuDropdown(null); }}
-                          />
-                          {item.skuLoading && <Loader2 size={11} className="animate-spin absolute right-2 top-1/2 -translate-y-1/2 text-blue-400" />}
-                          {/* Dropdown */}
-                          {skuDropdown?.idx === idx && skuDropdown.results.length > 0 && (
-                            <div className="absolute z-50 mt-1 w-full min-w-[260px] bg-white border rounded-lg shadow-lg overflow-hidden">
-                              {skuDropdown.results.map((v: any) => {
-                                const opt = v.variant_options;
-                                const vName = opt?.value && opt?.variant_groups?.name ? `${opt.variant_groups.name}: ${opt.value}` : (opt?.value ?? "");
-                                return (
-                                  <button
-                                    key={v.id}
-                                    className="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 border-b last:border-0 flex flex-col"
-                                    onMouseDown={() => selectSkuFromDropdown(idx, v)}
-                                  >
-                                    <span className="font-mono font-bold text-blue-700">{v.sku}</span>
-                                    <span className="text-slate-500 truncate">{v.products?.title}{vName ? ` · ${vName}` : ""} — ₺{v.price}</span>
-                                  </button>
-                                );
-                              })}
-                            </div>
+                    {!item.productId ? (
+                      /* Ürün arama (çok-kelimeli) */
+                      <div className="relative">
+                        <div className="flex items-center gap-2">
+                          <div className="relative flex-1">
+                            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                            <Input
+                              className="h-9 pl-8 text-sm"
+                              placeholder='Ürün ara: "bot kahve 38"…'
+                              value={item.query}
+                              onChange={(e) => setNewItems(prev => prev.map((it, i) => i === idx ? { ...it, query: e.target.value } : it))}
+                            />
+                          </div>
+                          {newItems.length > 1 && (
+                            <button onClick={() => setNewItems(prev => prev.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600">
+                              <XCircle size={16} />
+                            </button>
                           )}
                         </div>
-                        {item.skuError && <p className="text-[10px] text-red-500">{item.skuError}</p>}
-                        {item.title && <p className="text-[11px] text-slate-600 font-medium truncate">{item.title}{item.variantName ? ` · ${item.variantName}` : ""}</p>}
+                        {results.length > 0 && (
+                          <div className="absolute z-50 mt-1 w-full bg-white border rounded-lg shadow-lg overflow-hidden max-h-64 overflow-y-auto">
+                            {results.map((u: any) => {
+                              const out = u.stock <= 0;
+                              return (
+                                <button
+                                  key={`${u.productId}_${u.variantId}`}
+                                  disabled={out}
+                                  className={`w-full text-left px-3 py-2 text-xs border-b last:border-0 flex items-center justify-between gap-2 ${out ? "opacity-50 cursor-not-allowed bg-slate-50" : "hover:bg-blue-50"}`}
+                                  onClick={() => !out && selectUnit(idx, u)}
+                                >
+                                  <span className="min-w-0">
+                                    <span className="font-medium text-slate-800 block truncate">{u.title}{u.variantName ? ` · ${u.variantName}` : ""}</span>
+                                    <span className="text-slate-400">{u.sku ? `${u.sku} · ` : ""}₺{u.price}</span>
+                                  </span>
+                                  <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded ${out ? "bg-red-100 text-red-600" : u.stock <= 3 ? "bg-amber-100 text-amber-700" : "bg-green-100 text-green-700"}`}>
+                                    {out ? "Tükendi" : `Stok ${u.stock}`}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
-                      {/* Adet */}
-                      <div className="w-16">
-                        <Input
-                          type="number" min={1} className="h-8 text-xs text-center"
-                          value={item.quantity}
-                          onChange={(e) => setNewItems(prev => prev.map((it, i) => i === idx ? { ...it, quantity: Math.max(1, Number(e.target.value)) } : it))}
-                        />
+                    ) : (
+                      /* Seçilen ürün + adet + fiyat */
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-sm font-bold text-slate-800 truncate">{item.title}{item.variantName ? ` · ${item.variantName}` : ""}</p>
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${item.stock <= 3 ? "bg-amber-100 text-amber-700" : "bg-green-100 text-green-700"}`}>Stok {item.stock}</span>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button onClick={() => setNewItems(prev => prev.map((it, i) => i === idx ? { ...EMPTY_ITEM, quantity: it.quantity } : it))}
+                              className="text-[11px] font-bold text-blue-600 hover:text-blue-800">Değiştir</button>
+                            {newItems.length > 1 && (
+                              <button onClick={() => setNewItems(prev => prev.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600 ml-1"><XCircle size={16} /></button>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-end gap-3">
+                          <div className="w-20">
+                            <label className="text-[10px] font-semibold text-slate-500 block mb-0.5">Adet</label>
+                            <Input type="number" min={1} max={item.stock || undefined} className="h-9 text-sm text-center"
+                              value={item.quantity}
+                              onChange={(e) => setNewItems(prev => prev.map((it, i) => i === idx ? { ...it, quantity: Math.max(1, Number(e.target.value)) } : it))} />
+                          </div>
+                          <div className="w-28">
+                            <label className="text-[10px] font-semibold text-slate-500 block mb-0.5">Birim Fiyat (₺)</label>
+                            <Input type="number" min={0} step={0.01} className="h-9 text-sm"
+                              value={item.unitPrice || ""}
+                              onChange={(e) => setNewItems(prev => prev.map((it, i) => i === idx ? { ...it, unitPrice: Number(e.target.value) } : it))} />
+                          </div>
+                          <div className="flex-1 text-right text-sm font-bold text-slate-700 pb-1.5">
+                            ₺{(item.quantity * item.unitPrice).toFixed(2)}
+                          </div>
+                        </div>
+                        {overStock && <p className="text-[10px] text-red-500 font-medium">Adet stoktan fazla (max {item.stock}).</p>}
                       </div>
-                      {/* Fiyat */}
-                      <div className="w-24">
-                        <Input
-                          type="number" min={0} step={0.01} className="h-8 text-xs"
-                          placeholder="₺ Fiyat"
-                          value={item.unitPrice || ""}
-                          onChange={(e) => setNewItems(prev => prev.map((it, i) => i === idx ? { ...it, unitPrice: Number(e.target.value) } : it))}
-                        />
-                      </div>
-                      {/* Sil */}
-                      {newItems.length > 1 && (
-                        <button
-                          onClick={() => setNewItems(prev => prev.filter((_, i) => i !== idx))}
-                          className="text-red-400 hover:text-red-600 mt-1"
-                        >
-                          <XCircle size={16} />
-                        </button>
-                      )}
-                    </div>
+                    )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
               <button
-                onClick={() => setNewItems(prev => [...prev, { sku: "", productId: "", variantId: "", variantName: "", title: "", quantity: 1, unitPrice: 0, skuError: "", skuLoading: false }])}
+                onClick={() => setNewItems(prev => [...prev, { ...EMPTY_ITEM }])}
                 className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
               >
                 + Ürün ekle
