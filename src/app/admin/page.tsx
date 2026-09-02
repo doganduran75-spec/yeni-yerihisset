@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/lib/supabase";
-import { ShoppingBag, Users, CreditCard, TrendingUp, Loader2, MessageCircle, ArrowRight, Star } from "lucide-react";
+import { ShoppingBag, Users, CreditCard, TrendingUp, Loader2, MessageCircle, ArrowRight, Star, Clock, PackageOpen } from "lucide-react";
 
 type Stats = {
   totalSales: number;
@@ -54,9 +54,21 @@ type PendingReview = {
   orders: { order_number: number | null } | null;
 };
 
+type OpenOrder = {
+  id: string;
+  order_number: number | null;
+  total_amount: number;
+  status: string;
+  shipment_status: string | null;
+  invoice_status: string | null;
+  created_at: string;
+  profiles: { first_name: string | null; last_name: string | null } | null;
+};
+
 export default function AdminDashboard() {
   const [stats, setStats] = useState<Stats>({ totalSales: 0, activeOrders: 0, totalProducts: 0, totalMembers: 0 });
   const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
+  const [openOrders, setOpenOrders] = useState<OpenOrder[]>([]);
   const [pendingMessages, setPendingMessages] = useState<PendingMessage[]>([]);
   const [pendingReviews, setPendingReviews] = useState<PendingReview[]>([]);
   const [loading, setLoading] = useState(true);
@@ -89,6 +101,16 @@ export default function AdminDashboard() {
         .order('created_at', { ascending: false })
         .limit(5);
       setRecentOrders((orders as any) || []);
+
+      // Tamamlanmamış (kapanmamış) siparişler — süreç takibi
+      const { data: openData } = await (supabase as any)
+        .from('orders')
+        .select('id, order_number, total_amount, status, shipment_status, invoice_status, created_at, profiles (first_name, last_name)')
+        .eq('is_closed', false)
+        .not('status', 'in', '(cancelled,refunded)')
+        .order('created_at', { ascending: false })
+        .limit(20);
+      setOpenOrders((openData as OpenOrder[]) || []);
 
       // Cevaplanmayan mesajlar: son mesajı 'user' olan yazışmalar
       const { data: allMessages } = await (supabase as any)
@@ -208,6 +230,57 @@ export default function AdminDashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Tamamlanmamış Siparişler (süreç kapanmamış) */}
+      <Card className="shadow-sm border-l-4 border-l-amber-500">
+        <CardHeader className="flex flex-row items-center justify-between pb-3">
+          <CardTitle className="flex items-center gap-2">
+            <Clock size={18} className="text-amber-500" />
+            Tamamlanmamış Siparişler
+            {openOrders.length > 0 && (
+              <span className="bg-amber-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                {openOrders.length}
+              </span>
+            )}
+          </CardTitle>
+          <Link href="/admin/orders" className="text-xs text-muted-foreground hover:text-amber-600 flex items-center gap-1 transition-colors">
+            Tümü <ArrowRight size={12} />
+          </Link>
+        </CardHeader>
+        <CardContent className="pt-0">
+          {openOrders.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-6 text-center flex flex-col items-center gap-2">
+              <PackageOpen size={28} className="text-slate-300" />
+              Tüm siparişler tamamlandı. 🎉
+            </p>
+          ) : (
+            <div className="divide-y">
+              {openOrders.map((o) => {
+                const st = orderStatusMap[o.status] ?? { label: o.status, color: "bg-slate-50 text-slate-600 ring-slate-400/20" };
+                const invoiced = o.invoice_status === "invoiced";
+                return (
+                  <Link key={o.id} href={`/admin/orders?id=${o.id}`}
+                    className="flex items-center gap-3 py-2.5 px-2 hover:bg-amber-50/50 rounded-lg transition-colors group">
+                    <span className="font-mono text-xs font-bold text-blue-600 w-16 shrink-0">YH{o.order_number ?? "—"}</span>
+                    <span className="text-sm font-medium flex-1 min-w-0 truncate">
+                      {o.profiles?.first_name} {o.profiles?.last_name}
+                    </span>
+                    <span className={`hidden sm:inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset ${st.color}`}>{st.label}</span>
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${invoiced ? "bg-green-50 text-green-700" : "bg-slate-100 text-slate-500"}`}>
+                      {invoiced ? "Faturalı" : "Fatura yok"}
+                    </span>
+                    <span className="text-sm text-slate-500 w-20 text-right shrink-0">₺{o.total_amount.toFixed(0)}</span>
+                    <span className="text-[10px] text-slate-400 w-16 text-right shrink-0 hidden md:block">
+                      {new Date(o.created_at).toLocaleDateString("tr-TR")}
+                    </span>
+                    <ArrowRight size={12} className="text-slate-300 group-hover:text-amber-500 transition-colors shrink-0" />
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Son Siparişler */}

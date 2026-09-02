@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
+import OrderTimeline from "@/components/admin/OrderTimeline";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -1210,6 +1211,17 @@ export default function OrdersPage() {
                     <Loader2 size={12} className="animate-spin absolute right-2 top-2 text-blue-400" />
                   )}
                 </div>
+              </div>
+
+              {/* Süreç Takibi (yaşam döngüsü) */}
+              <div className="pt-2 border-t">
+                <OrderTimeline
+                  orderId={selectedOrder.id}
+                  onOrderChanged={(patch) => {
+                    setOrders(prev => prev.map(o => o.id === selectedOrder.id ? { ...o, ...patch } : o));
+                    setSelectedOrder(prev => prev ? { ...prev, ...patch } : prev);
+                  }}
+                />
               </div>
 
             </div>
