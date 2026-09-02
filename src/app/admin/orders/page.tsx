@@ -1233,7 +1233,7 @@ export default function OrdersPage() {
 
       {/* ─── Yeni Sipariş Dialog ──────────────────────────────────────────────── */}
       <Dialog open={createOpen} onOpenChange={(o) => { if (!o) { setCreateOpen(false); setCreateError(""); } }}>
-        <DialogContent className="w-[95vw] sm:max-w-[640px] max-h-[92vh] overflow-y-auto">
+        <DialogContent className="w-[95vw] sm:max-w-[900px] max-h-[92vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Yeni Sipariş Oluştur</DialogTitle>
             <DialogDescription>Müşteri ve ürün bilgilerini girerek manuel sipariş oluşturun.</DialogDescription>
