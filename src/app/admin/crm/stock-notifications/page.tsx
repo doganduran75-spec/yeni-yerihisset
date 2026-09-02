@@ -18,8 +18,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Bell, Check, Loader2, RefreshCw } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Bell, Check, Loader2, RefreshCw, Plus, Search, AtSign } from "lucide-react";
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 type Notification = {
   id: string;
@@ -28,11 +32,21 @@ type Notification = {
   user_id: string | null;
   email: string | null;
   phone: string | null;
+  contact_id: string | null;
+  instagram: string | null;
   status: "pending" | "notified";
   created_at: string;
   notified_at: string | null;
   product_title?: string;
   variant_value?: string;
+  contact_name?: string | null;
+  contact_instagram?: string | null;
+};
+
+type ProductOpt = {
+  id: string;
+  title: string;
+  variants: { id: string; label: string }[];
 };
 
 export default function StockNotificationsPage() {
@@ -41,9 +55,36 @@ export default function StockNotificationsPage() {
   const [filter, setFilter] = useState<"pending" | "all">("pending");
   const [marking, setMarking] = useState<string | null>(null);
 
+  // Manuel ekleme
+  const [products, setProducts] = useState<ProductOpt[]>([]);
+  const [addOpen, setAddOpen] = useState(false);
+  const [pSearch, setPSearch] = useState("");
+  const [form, setForm] = useState({ productId: "", variantId: "", name: "", email: "", instagram: "", phone: "" });
+  const [addSaving, setAddSaving] = useState(false);
+
   useEffect(() => {
     fetchNotifications();
   }, [filter]);
+
+  useEffect(() => { fetchProducts(); }, []);
+
+  async function fetchProducts() {
+    const { data } = await (supabase as any)
+      .from("products")
+      .select("id, title, product_variants(id, variant_options(value, variant_groups(name)))")
+      .eq("is_active", true)
+      .order("title");
+    const opts: ProductOpt[] = ((data as any[]) || []).map((p) => ({
+      id: p.id,
+      title: p.title,
+      variants: (p.product_variants || []).map((v: any) => {
+        const val = v.variant_options?.value ?? "";
+        const gn = v.variant_options?.variant_groups?.name ?? "";
+        return { id: v.id, label: val ? (gn ? `${gn}: ${val}` : val) : "Varyant" };
+      }),
+    }));
+    setProducts(opts);
+  }
 
   async function fetchNotifications() {
     setLoading(true);
@@ -51,10 +92,11 @@ export default function StockNotificationsPage() {
       let query = supabase
         .from("stock_notifications")
         .select(`
-          id, product_id, variant_id, user_id, email, phone,
+          id, product_id, variant_id, user_id, email, phone, contact_id, instagram,
           status, created_at, notified_at,
           products(title),
-          product_variants(variant_options(value))
+          product_variants(variant_options(value)),
+          contacts(full_name, instagram_handle)
         `)
         .order("created_at", { ascending: false });
 
@@ -67,6 +109,8 @@ export default function StockNotificationsPage() {
         ...n,
         product_title: n.products?.title ?? "—",
         variant_value: n.product_variants?.variant_options?.value ?? null,
+        contact_name: n.contacts?.full_name ?? null,
+        contact_instagram: n.contacts?.instagram_handle ?? null,
       }));
 
       setNotifications(formatted);
@@ -109,10 +153,66 @@ export default function StockNotificationsPage() {
   const pendingCount = notifications.filter((n) => n.status === "pending").length;
 
   function contactDisplay(n: Notification) {
+    if (n.contact_name) return n.contact_name;
     if (n.email) return n.email;
+    if (n.contact_instagram || n.instagram) return "@" + (n.contact_instagram || n.instagram);
     if (n.phone) return n.phone;
     if (n.user_id) return <span className="text-slate-400 text-xs italic">Kayıtlı üye</span>;
     return "—";
+  }
+
+  const filteredProducts = pSearch.trim()
+    ? products.filter((p) => p.title.toLocaleLowerCase("tr-TR").includes(pSearch.trim().toLocaleLowerCase("tr-TR"))).slice(0, 30)
+    : products.slice(0, 30);
+  const selectedProduct = products.find((p) => p.id === form.productId);
+
+  async function saveManual() {
+    if (!form.productId) { alert("Bir ürün seçin."); return; }
+    const hasIdentity = form.name.trim() || form.email.trim() || form.instagram.trim() || form.phone.trim();
+    if (!hasIdentity) { alert("Kişi için en az bir bilgi girin (isim, e-posta, Instagram veya telefon)."); return; }
+    setAddSaving(true);
+    try {
+      const email = form.email.trim().toLowerCase() || null;
+      const instagram = form.instagram.trim().replace(/^@/, "") || null;
+      const phone = form.phone.trim() || null;
+
+      // Kişiyi bul (email) ya da oluştur
+      let contactId: string | null = null;
+      if (email) {
+        const { data: existing } = await (supabase as any).from("contacts").select("id").eq("email", email).maybeSingle();
+        if (existing) contactId = existing.id;
+      }
+      if (!contactId) {
+        const { data: { user } } = await supabase.auth.getUser();
+        const { data: created, error: cErr } = await (supabase as any).from("contacts").insert({
+          full_name: form.name.trim() || null,
+          email, phone, instagram_handle: instagram,
+          source_channel: "stock_notify",
+          note: `Stok bildirimi: ${selectedProduct?.title ?? ""}`,
+          created_by: user?.id ?? null,
+        }).select("id").single();
+        if (cErr) throw cErr;
+        contactId = created.id;
+      }
+
+      const { error: nErr } = await (supabase as any).from("stock_notifications").insert({
+        product_id: form.productId,
+        variant_id: form.variantId || null,
+        contact_id: contactId,
+        email, phone, instagram,
+        status: "pending",
+      });
+      if (nErr) throw nErr;
+
+      setAddOpen(false);
+      setForm({ productId: "", variantId: "", name: "", email: "", instagram: "", phone: "" });
+      setPSearch("");
+      fetchNotifications();
+    } catch (e: any) {
+      alert("Eklenemedi: " + (e?.message ?? "hata"));
+    } finally {
+      setAddSaving(false);
+    }
   }
 
   return (
@@ -128,6 +228,9 @@ export default function StockNotificationsPage() {
           </p>
         </div>
         <div className="flex gap-2">
+          <Button size="sm" className="gap-2" onClick={() => setAddOpen(true)}>
+            <Plus size={14} /> Manuel Ekle
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -280,6 +383,78 @@ export default function StockNotificationsPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Manuel ekleme modalı */}
+      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Bell size={18} /> Manuel Stok Bildirimi</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 pt-2">
+            <p className="text-xs text-muted-foreground">
+              Bir ürün seç ve isteyen kişinin bilgisini gir. Kişi otomatik olarak &quot;Kişiler&quot;e (Üyeler ekranı) eklenir.
+            </p>
+
+            {/* Ürün seçimi */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold">Ürün *</label>
+              {form.productId ? (
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm">
+                  <span className="font-medium truncate">{selectedProduct?.title}</span>
+                  <button className="text-xs text-blue-600 font-bold" onClick={() => setForm(f => ({ ...f, productId: "", variantId: "" }))}>Değiştir</button>
+                </div>
+              ) : (
+                <>
+                  <div className="relative">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <Input value={pSearch} onChange={e => setPSearch(e.target.value)} placeholder="Ürün ara..." className="pl-9 h-10" />
+                  </div>
+                  <div className="max-h-40 overflow-y-auto rounded-lg border border-slate-100 divide-y">
+                    {filteredProducts.map(p => (
+                      <button key={p.id} onClick={() => setForm(f => ({ ...f, productId: p.id, variantId: "" }))}
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 truncate">
+                        {p.title}
+                      </button>
+                    ))}
+                    {filteredProducts.length === 0 && <div className="px-3 py-2 text-xs text-muted-foreground">Ürün yok.</div>}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Varyant */}
+            {selectedProduct && selectedProduct.variants.length > 0 && (
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold">Varyant / Numara</label>
+                <select value={form.variantId} onChange={e => setForm(f => ({ ...f, variantId: e.target.value }))}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
+                  <option value="">Farketmez / genel</option>
+                  {selectedProduct.variants.map(v => <option key={v.id} value={v.id}>{v.label}</option>)}
+                </select>
+              </div>
+            )}
+
+            <div className="border-t pt-3 space-y-3">
+              <p className="text-xs font-semibold text-slate-600">Kişi bilgileri (en az biri)</p>
+              <div className="grid grid-cols-2 gap-3">
+                <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Ad Soyad" />
+                <Input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="E-posta" />
+                <div className="relative">
+                  <AtSign size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <Input value={form.instagram} onChange={e => setForm(f => ({ ...f, instagram: e.target.value }))} placeholder="Instagram" className="pl-7" />
+                </div>
+                <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="Telefon" />
+              </div>
+            </div>
+          </div>
+          <div className="flex justify-end gap-3 pt-3 border-t mt-3">
+            <Button variant="outline" onClick={() => setAddOpen(false)}>İptal</Button>
+            <Button onClick={saveManual} disabled={addSaving} className="gap-2">
+              {addSaving && <Loader2 size={14} className="animate-spin" />} Ekle
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
