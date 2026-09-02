@@ -435,3 +435,74 @@ export async function sendAdminReplyNotification(
     return { status: "failed", error: err?.message || "Email gönderim hatası" };
   }
 }
+
+/**
+ * Lead-magnet (Fırsat) e-postası: kupon + şifre belirleme bağlantısı.
+ * mode 'created' → yeni şifresiz üye (set-password linki gönderilir)
+ * mode 'existing' → zaten üye (giriş linki + kupon hesabında bilgisi)
+ */
+export async function sendLeadMagnetWelcome(params: {
+  to: string;
+  name?: string | null;
+  couponCode?: string | null;
+  couponValue?: string | null;
+  actionUrl?: string | null; // set-password veya giriş linki
+  mode: "created" | "existing";
+}): Promise<{ status: "sent" | "failed" | "skipped"; error?: string }> {
+  const supabase = createAdminClient();
+  const { data: settings } = await (supabase as any).from("settings").select("*").limit(1).maybeSingle();
+  const storeName = settings?.store_name || "YeriHisset";
+  const storeUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com";
+  const name = (params.name || "").trim() || "Merhaba";
+
+  const couponBlock = params.couponCode
+    ? `<div style="margin:24px 0;padding:20px;border:2px dashed #6b7f3a;border-radius:16px;text-align:center;background:#f7f9f0">
+         <p style="margin:0 0 6px;font-size:13px;color:#6b7280;text-transform:uppercase;letter-spacing:1px">Kupon Kodunuz</p>
+         <p style="margin:0;font-size:26px;font-weight:800;letter-spacing:4px;color:#4d5e2a">${params.couponCode}</p>
+         ${params.couponValue ? `<p style="margin:8px 0 0;font-size:14px;color:#6b7f3a;font-weight:700">${params.couponValue}</p>` : ""}
+       </div>`
+    : "";
+
+  const cta = params.actionUrl
+    ? `<div style="text-align:center;margin:28px 0">
+         <a href="${params.actionUrl}" style="display:inline-block;background:#6b7f3a;color:#fff;text-decoration:none;padding:14px 32px;border-radius:14px;font-weight:800;font-size:15px">
+           ${params.mode === "created" ? "Şifremi Belirle ve Giriş Yap" : "Giriş Yap"}
+         </a>
+       </div>`
+    : "";
+
+  const intro = params.mode === "created"
+    ? `Tebrikler ${name}! Ücretsiz kargo fırsatın hesabına tanımlandı. Kullanmak için tek yapman gereken şifreni belirleyip giriş yapmak.`
+    : `Merhaba ${name}, bu e-posta zaten kayıtlı. Ücretsiz kargo kuponun hesabına tanımlandı — giriş yapıp alışverişte kullanabilirsin.`;
+
+  const bodyHtml = `
+    <h1 style="font-size:22px;font-weight:800;color:#111827;margin:0 0 12px">🎉 Ücretsiz Kargo Senin Oldu!</h1>
+    <p style="font-size:15px;color:#374151;line-height:1.6;margin:0 0 8px">${intro}</p>
+    ${couponBlock}
+    ${cta}
+    <p style="font-size:13px;color:#9ca3af;line-height:1.6;margin:16px 0 0">
+      Bu e-postayı ${storeName} kampanyasına e-posta adresini bıraktığın için aldın.
+    </p>`;
+
+  const smtpConfig = buildSmtpConfig({
+    smtp_host: settings?.smtp_host || "",
+    smtp_port: settings?.smtp_port,
+    smtp_secure: settings?.smtp_secure,
+    smtp_user: settings?.smtp_user,
+    smtp_password: settings?.smtp_password,
+  });
+  if (!smtpConfig.host || !smtpConfig.auth.user) return { status: "failed", error: "SMTP ayarları eksik" };
+
+  try {
+    const transporter = nodemailer.createTransport(smtpConfig);
+    await transporter.sendMail({
+      from: `"${settings?.smtp_from_name || storeName}" <${settings?.smtp_from_email || smtpConfig.auth.user}>`,
+      to: params.to,
+      subject: "Ücretsiz kargo kuponunuz hazır 🎁",
+      html: buildEmailDocument(bodyHtml, storeName),
+    });
+    return { status: "sent" };
+  } catch (err: any) {
+    return { status: "failed", error: err?.message || "Email gönderim hatası" };
+  }
+}
