@@ -11,6 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { useCartStore } from "@/store/useCartStore";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import WelcomeFunnel from "@/components/WelcomeFunnel";
 import { formatPriceDisplay, getMinPrice } from "@/lib/product-price";
 
 export default function HomePage() {
@@ -124,6 +125,7 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-cream">
+      <WelcomeFunnel />
       {/* Top Bar for Admin Link (Geliştirme Süreci İçin) */}
       <div className="bg-slate-900 text-white py-2 px-4 text-xs font-black uppercase tracking-widest flex justify-between items-center z-[60] relative">
         <span>Geliştirme Modu Aktif</span>
