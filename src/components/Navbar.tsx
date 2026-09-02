@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ShoppingBag, Search, User, Menu, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -13,7 +14,15 @@ interface NavbarProps {
 export default function Navbar({ variant = "default" }: NavbarProps) {
   const [mounted, setMounted] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [search, setSearch] = useState("");
+  const router = useRouter();
   const { items } = useCartStore();
+
+  function submitSearch(e: React.FormEvent) {
+    e.preventDefault();
+    const q = search.trim();
+    if (q) router.push(`/ara?q=${encodeURIComponent(q)}`);
+  }
 
   useEffect(() => {
     setMounted(true);
@@ -73,14 +82,18 @@ export default function Navbar({ variant = "default" }: NavbarProps) {
         </div>
 
         <div className="flex items-center gap-2 sm:gap-6">
-          <div className="hidden md:flex items-center bg-slate-50 rounded-2xl px-4 py-2 border border-slate-100 focus-within:ring-2 focus-within:ring-olive-100 focus-within:bg-white transition-all">
-            <Search size={18} className="text-slate-400" />
-            <input 
-              type="text" 
-              placeholder="Ürün Ara..." 
-              className="bg-transparent border-none focus:ring-0 text-sm font-bold text-slate-800 placeholder:text-slate-400 w-48"
+          <form onSubmit={submitSearch} className="hidden md:flex items-center bg-slate-50 rounded-2xl px-4 py-2 border border-slate-100 focus-within:ring-2 focus-within:ring-olive-100 focus-within:bg-white transition-all">
+            <button type="submit" aria-label="Ara" className="text-slate-400 hover:text-olive-600 transition-colors">
+              <Search size={18} />
+            </button>
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Ürün Ara..."
+              className="bg-transparent border-none focus:ring-0 text-sm font-bold text-slate-800 placeholder:text-slate-400 w-48 ml-2 outline-none"
             />
-          </div>
+          </form>
 
           <div className="flex items-center gap-1">
             <Link 
