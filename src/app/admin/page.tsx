@@ -34,6 +34,21 @@ const orderStatusMap: Record<string, { label: string; color: string }> = {
   paid:             { label: "Ödendi",             color: "bg-green-50 text-green-700 ring-green-500/20" },
 };
 
+// Sipariş süreç (timeline) olay etiketleri
+const EVENT_LABELS: Record<string, { label: string; color: string }> = {
+  shipped:         { label: "Kargolandı",       color: "bg-blue-50 text-blue-700" },
+  tracking_wrong:  { label: "Kargo no hatalı",   color: "bg-amber-50 text-amber-700" },
+  exchange:        { label: "Değişim",           color: "bg-purple-50 text-purple-700" },
+  reshipped:       { label: "Yeni kargo",        color: "bg-blue-50 text-blue-700" },
+  return_expected: { label: "İade bekleniyor",   color: "bg-orange-50 text-orange-700" },
+  return_received: { label: "İade geldi",        color: "bg-teal-50 text-teal-700" },
+  corrected:       { label: "Düzeltildi",        color: "bg-slate-100 text-slate-600" },
+  refund:          { label: "İade yapıldı",      color: "bg-green-50 text-green-700" },
+  invoiced:        { label: "Fatura kesildi",    color: "bg-indigo-50 text-indigo-700" },
+  closed:          { label: "Kapatıldı",         color: "bg-green-50 text-green-700" },
+  note:            { label: "Not",               color: "bg-slate-50 text-slate-500" },
+};
+
 type PendingMessage = {
   user_id: string;
   content: string;
@@ -69,6 +84,7 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState<Stats>({ totalSales: 0, activeOrders: 0, totalProducts: 0, totalMembers: 0 });
   const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
   const [openOrders, setOpenOrders] = useState<OpenOrder[]>([]);
+  const [openEventMap, setOpenEventMap] = useState<Record<string, string>>({});
   const [pendingMessages, setPendingMessages] = useState<PendingMessage[]>([]);
   const [pendingReviews, setPendingReviews] = useState<PendingReview[]>([]);
   const [loading, setLoading] = useState(true);
@@ -111,6 +127,21 @@ export default function AdminDashboard() {
         .order('created_at', { ascending: false })
         .limit(20);
       setOpenOrders((openData as OpenOrder[]) || []);
+
+      // Her açık siparişin en son süreç olayı (timeline)
+      const openIds = ((openData as OpenOrder[]) || []).map((o) => o.id);
+      if (openIds.length > 0) {
+        const { data: evs } = await (supabase as any)
+          .from("order_events")
+          .select("order_id, type, created_at")
+          .in("order_id", openIds)
+          .order("created_at", { ascending: false });
+        const map: Record<string, string> = {};
+        for (const e of (evs as any[]) || []) {
+          if (!(e.order_id in map)) map[e.order_id] = e.type; // ilk = en yeni
+        }
+        setOpenEventMap(map);
+      }
 
       // Cevaplanmayan mesajlar: son mesajı 'user' olan yazışmalar
       const { data: allMessages } = await (supabase as any)
@@ -266,6 +297,14 @@ export default function AdminDashboard() {
                       {o.profiles?.first_name} {o.profiles?.last_name}
                     </span>
                     <span className={`hidden sm:inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset ${st.color}`}>{st.label}</span>
+                    {(() => {
+                      const ev = EVENT_LABELS[openEventMap[o.id]];
+                      return (
+                        <span className={`hidden md:inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-bold ${ev ? ev.color : "bg-slate-50 text-slate-400"}`} title="Süreç durumu">
+                          <Clock size={10} /> {ev ? ev.label : "Başlamadı"}
+                        </span>
+                      );
+                    })()}
                     <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${invoiced ? "bg-green-50 text-green-700" : "bg-slate-100 text-slate-500"}`}>
                       {invoiced ? "Faturalı" : "Fatura yok"}
                     </span>
