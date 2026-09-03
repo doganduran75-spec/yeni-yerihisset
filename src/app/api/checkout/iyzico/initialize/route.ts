@@ -195,6 +195,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Kalemler oluşturulamadı" }, { status: 500 });
   }
 
+  // ── STOK REZERVASYONU (F9) ────────────────────────────────────────────────
+  // Ödeme formunu göstermeden önce stoğu rezerve et (strict). Böylece aynı son
+  // ürüne iki kişi birden ödeme yapamaz. Ödeme gelmezse cron 30 dk sonra iade eder.
+  const { data: reserveRes, error: reserveErr } = await (supabase as any).rpc(
+    "reduce_order_stock", { p_order_id: order.id, p_strict: true }
+  );
+  if (reserveErr || !reserveRes?.ok) {
+    await supabase.from("order_items").delete().eq("order_id", order.id);
+    await supabase.from("orders").delete().eq("id", order.id);
+    const soldOut = String(reserveErr?.message ?? "").includes("INSUFFICIENT_STOCK");
+    return NextResponse.json(
+      { error: soldOut ? "Üzgünüz, sepetinizdeki bir ürün az önce tükendi. Lütfen sepetinizi güncelleyin." : "Stok rezervasyonu başarısız." },
+      { status: 409 }
+    );
+  }
+
   // ── iyzico CheckoutForm Initialize ────────────────────────────────────────
   const iyzipay = createIyzicoClient();
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://yerihisset.com";
@@ -291,7 +307,8 @@ export async function POST(req: NextRequest) {
   return new Promise<NextResponse>((resolve) => {
     iyzipay.checkoutFormInitialize.create(checkoutRequest, async (err: any, result: any) => {
       if (err || result?.status !== "success") {
-        // Başarısız olursa siparişi iptal et
+        // Başarısız olursa siparişi iptal et + rezerve edilen stoğu iade et
+        await (supabase as any).rpc("restore_order_stock", { p_order_id: order.id });
         await supabase.from("orders").update({ status: "cancelled" }).eq("id", order.id);
         console.error("[iyzico/initialize] iyzico error:", err ?? result);
         resolve(NextResponse.json(

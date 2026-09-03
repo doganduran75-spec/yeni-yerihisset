@@ -123,7 +123,8 @@ export async function POST(req: NextRequest) {
 
         resolve(NextResponse.redirect(`${SITE_URL}/siparis-tamam?id=${order.id}`, 303));
       } else {
-        // Ödeme başarısız / iptal
+        // Ödeme başarısız / iptal → siparişi iptal et + rezerve stoğu iade et (F9)
+        await (supabase as any).rpc("restore_order_stock", { p_order_id: order.id });
         await (supabase as any)
           .from("orders")
           .update({ status: "cancelled", payment_status: "failed" })
