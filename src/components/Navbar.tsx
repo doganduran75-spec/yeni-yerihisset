@@ -78,6 +78,20 @@ export default function Navbar({ variant = "default" }: NavbarProps) {
                 <span className="absolute bottom-0 left-0 w-0 h-1 bg-olive-600 transition-all group-hover:w-full rounded-full" />
               </Link>
             ))}
+            {/* Test: karşılama funnel'ını tekrar aç */}
+            <button
+              onClick={() => {
+                if (typeof window !== "undefined" && window.location.pathname === "/") {
+                  window.dispatchEvent(new Event("yh:open-funnel"));
+                } else {
+                  router.push("/?funnel=1");
+                }
+              }}
+              className="text-sm font-black uppercase tracking-widest text-olive-600 hover:text-olive-800 transition-colors py-2"
+              title="Karşılama ekranını tekrar aç"
+            >
+              Funnel
+            </button>
           </nav>
         </div>
 

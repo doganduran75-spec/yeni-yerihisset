@@ -17,11 +17,18 @@ export default function WelcomeFunnel() {
   useEffect(() => {
     let seen = false;
     try { seen = localStorage.getItem(SEEN_KEY) === "1"; } catch { /* yoksay */ }
-    if (!seen) setOpen(true);
+    // ?funnel=1 ile (menüdeki butondan) her zaman aç
+    const forced = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("funnel") === "1";
+    if (!seen || forced) { setStep("ask"); setOpen(true); }
     (async () => {
       const { data } = await (supabase as any).from("categories").select("name, slug").order("name");
       setCategories((data as any[])?.filter((c) => c.slug) ?? []);
     })();
+
+    // Aynı sayfadan tekrar açmak için (menü butonu olay yayınlar)
+    const handler = () => { setStep("ask"); setOpen(true); };
+    window.addEventListener("yh:open-funnel", handler);
+    return () => window.removeEventListener("yh:open-funnel", handler);
   }, []);
 
   function dismiss() {
