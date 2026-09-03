@@ -7,7 +7,7 @@ import { Loader2, WifiOff, RefreshCw } from "lucide-react";
 
 export default function AdminGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const [status, setStatus] = useState<"loading" | "ok" | "denied" | "error">("loading");
+  const [status, setStatus] = useState<"loading" | "ok" | "error">("loading");
 
   const check = useCallback(async () => {
     setStatus("loading");
@@ -33,7 +33,13 @@ export default function AdminGuard({ children }: { children: React.ReactNode }) 
 
       if (profileError) throw profileError;
 
-      setStatus(profile?.role === "admin" ? "ok" : "denied");
+      if (profile?.role === "admin") {
+        setStatus("ok");
+      } else {
+        // Admin değil → hiçbir detay göstermeden ana sayfaya yönlendir.
+        // (Panelin varlığını/altyapıyı ifşa eden bir "erişim reddedildi" ekranı YOK.)
+        router.replace("/");
+      }
     } catch (err) {
       // Ağ/veritabanı erişilemezliği → sonsuz spinner yerine tekrar-dene ekranı
       console.error("[AdminGuard] yetki kontrolü başarısız:", err);
@@ -76,28 +82,6 @@ export default function AdminGuard({ children }: { children: React.ReactNode }) 
           className="mt-2 inline-flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-xl font-bold text-sm"
         >
           <RefreshCw size={16} /> Tekrar Dene
-        </button>
-      </div>
-    );
-  }
-
-  if (status === "denied") {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-4">
-        <div className="text-5xl">🚫</div>
-        <h1 className="text-2xl font-black text-slate-800">Erişim Reddedildi</h1>
-        <p className="text-slate-500">Bu sayfayı görüntülemek için admin yetkisine ihtiyacınız var.</p>
-        <p className="text-xs text-slate-400 mt-2">
-          {"Supabase'de: "}
-          <code className="bg-slate-100 px-2 py-0.5 rounded">
-            {"UPDATE profiles SET role = 'admin' WHERE email = 'sizin@email.com';"}
-          </code>
-        </p>
-        <button
-          onClick={() => router.push("/")}
-          className="mt-4 px-6 py-2 bg-blue-600 text-white rounded-xl font-bold text-sm"
-        >
-          Ana Sayfaya Dön
         </button>
       </div>
     );
