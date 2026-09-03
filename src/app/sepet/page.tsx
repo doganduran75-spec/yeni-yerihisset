@@ -528,10 +528,35 @@ export default function CartPage() {
   const [activePending, setActivePending] = useState<string | null>(null);
   const [couponDiscount, setCouponDiscount] = useState(0);
   const [couponFreeShip, setCouponFreeShip] = useState(false);
+  // F10: canlı stok doğrulama (sepette bekleyen ürün başkası tarafından tükenmiş olabilir)
+  const [liveStock, setLiveStock] = useState<Record<string, number> | null>(null);
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Sepet açılınca / öğeler değişince gerçek stoğu çek
+  const cartIdsKey = items.filter((i) => !i.is_gift).map((i) => i.id).join(",");
+  useEffect(() => {
+    (async () => {
+      const regs = items.filter((i) => !i.is_gift);
+      if (regs.length === 0) { setLiveStock({}); return; }
+      const variantIds = regs.filter((i) => i.variant_id).map((i) => i.variant_id!) as string[];
+      const productIds = regs.filter((i) => !i.variant_id).map((i) => i.product_id);
+      const [vRes, pRes] = await Promise.all([
+        variantIds.length ? supabase.from("product_variants").select("id, stock").in("id", variantIds) : Promise.resolve({ data: [] as any[] }),
+        productIds.length ? supabase.from("products").select("id, stock").in("id", productIds) : Promise.resolve({ data: [] as any[] }),
+      ]);
+      const vMap = new Map(((vRes.data as any[]) || []).map((v) => [v.id, Number(v.stock ?? 0)]));
+      const pMap = new Map(((pRes.data as any[]) || []).map((p) => [p.id, Number(p.stock ?? 0)]));
+      const map: Record<string, number> = {};
+      for (const it of regs) {
+        map[it.id] = it.variant_id ? (vMap.get(it.variant_id) ?? 0) : (pMap.get(it.product_id) ?? 0);
+      }
+      setLiveStock(map);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cartIdsKey]);
 
   // Uygun hediye kalmadıysa açık modalı kapat
   useEffect(() => {
@@ -561,6 +586,14 @@ export default function CartPage() {
   const confirmedGiftCount = items.filter((i) => i.is_gift).length;
   const totalGifts = confirmedGiftCount + safePending.length;
   const hasRewards = confirmedGiftCount > 0 || safePending.length > 0;
+
+  // F10: canlı stoğa göre sorunlu öğeler (adet stoğu aşıyor / tükendi)
+  const stockIssues = liveStock
+    ? regularItems
+        .map((i) => ({ item: i, live: liveStock[i.id] ?? 0 }))
+        .filter(({ item, live }) => live < item.quantity)
+    : [];
+  const checkoutBlocked = stockIssues.length > 0;
 
   if (items.length === 0 && safePending.length === 0) {
     return (
@@ -646,6 +679,28 @@ export default function CartPage() {
               </Button>
             </div>
 
+            {/* F10: canlı stok uyarısı — adedi aşan/tükenen öğeler */}
+            {stockIssues.length > 0 && (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 space-y-2">
+                <p className="text-sm font-bold text-amber-800 flex items-center gap-2">
+                  <ShieldCheck size={16} /> Sepetinde stok değişikliği var
+                </p>
+                {stockIssues.map(({ item, live }) => (
+                  <div key={item.id} className="flex items-center justify-between gap-3 text-sm">
+                    <span className="text-amber-900 min-w-0 truncate">
+                      <b>{item.title}</b>{item.variant_name ? ` · ${item.variant_name}` : ""} —{" "}
+                      {live <= 0 ? "tükendi" : `sadece ${live} adet kaldı (sepette ${item.quantity})`}
+                    </span>
+                    {live <= 0 ? (
+                      <button onClick={() => removeItem(item.id)} className="shrink-0 text-xs font-bold text-white bg-red-500 hover:bg-red-600 rounded-lg px-3 py-1.5">Kaldır</button>
+                    ) : (
+                      <button onClick={() => updateQuantity(item.id, live)} className="shrink-0 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-lg px-3 py-1.5">{live} adete düşür</button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
             {/* Yalnızca satın alınan ürünler; hediyeler sağdaki panelde yönetilir */}
             <div className="space-y-3">
               {regularItems.map((item) => (
@@ -715,11 +770,22 @@ export default function CartPage() {
                   </span>
                 </div>
 
-                <Link href="/checkout" className="block w-full">
-                  <Button className="w-full h-16 rounded-2xl bg-olive-600 hover:bg-olive-700 text-lg font-bold shadow-xl shadow-olive-100 uppercase tracking-wide group">
-                    Ödemeye Geç <ChevronRight size={20} className="ml-2 group-hover:translate-x-1 transition-transform" />
-                  </Button>
-                </Link>
+                {checkoutBlocked ? (
+                  <div className="space-y-2">
+                    <Button disabled className="w-full h-16 rounded-2xl bg-slate-300 text-lg font-bold uppercase tracking-wide cursor-not-allowed">
+                      Ödemeye Geç
+                    </Button>
+                    <p className="text-xs text-center text-amber-600 font-medium">
+                      Devam etmek için yukarıdaki stok uyarısını çözün.
+                    </p>
+                  </div>
+                ) : (
+                  <Link href="/checkout" className="block w-full">
+                    <Button className="w-full h-16 rounded-2xl bg-olive-600 hover:bg-olive-700 text-lg font-bold shadow-xl shadow-olive-100 uppercase tracking-wide group">
+                      Ödemeye Geç <ChevronRight size={20} className="ml-2 group-hover:translate-x-1 transition-transform" />
+                    </Button>
+                  </Link>
+                )}
 
                 <div className="space-y-4 pt-4">
                   <div className="flex items-center gap-3 text-[11px] font-bold text-slate-500">
