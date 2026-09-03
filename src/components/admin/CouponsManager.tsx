@@ -325,7 +325,7 @@ export default function CouponsManager() {
 
       {/* Kupon Oluştur/Düzenle Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[95vw] sm:max-w-[640px] max-h-[90vh] overflow-y-auto top-[5vh] translate-y-0">
           <DialogHeader>
             <DialogTitle>{editingCoupon.id ? "Kuponu Düzenle" : "Yeni Kupon Oluştur"}</DialogTitle>
           </DialogHeader>
@@ -421,18 +421,18 @@ export default function CouponsManager() {
               </div>
             </div>
 
-            <div className="flex gap-6 pt-1">
+            <div className="flex flex-col gap-2.5 pt-1 rounded-xl border border-slate-100 p-3 bg-slate-50/50">
               <label className="flex items-center gap-2 cursor-pointer text-sm">
-                <input type="checkbox" checked={editingCoupon.is_active ?? true} onChange={(e) => setEditingCoupon((p) => ({ ...p, is_active: e.target.checked }))} className="h-4 w-4" />
+                <input type="checkbox" checked={editingCoupon.is_active ?? true} onChange={(e) => setEditingCoupon((p) => ({ ...p, is_active: e.target.checked }))} className="h-4 w-4 shrink-0" />
                 <span className="font-medium">Aktif</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer text-sm">
-                <input type="checkbox" checked={editingCoupon.is_personal ?? false} onChange={(e) => setEditingCoupon((p) => ({ ...p, is_personal: e.target.checked }))} className="h-4 w-4" />
+                <input type="checkbox" checked={editingCoupon.is_personal ?? false} onChange={(e) => setEditingCoupon((p) => ({ ...p, is_personal: e.target.checked }))} className="h-4 w-4 shrink-0" />
                 <span className="font-medium">Kişiye Özel</span>
                 <span className="text-xs text-muted-foreground">(admin atar)</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer text-sm">
-                <input type="checkbox" checked={editingCoupon.auto_assign_on_signup ?? false} onChange={(e) => setEditingCoupon((p) => ({ ...p, auto_assign_on_signup: e.target.checked }))} className="h-4 w-4" />
+                <input type="checkbox" checked={editingCoupon.auto_assign_on_signup ?? false} onChange={(e) => setEditingCoupon((p) => ({ ...p, auto_assign_on_signup: e.target.checked }))} className="h-4 w-4 shrink-0" />
                 <span className="font-medium">Üye olunca otomatik ata</span>
                 <span className="text-xs text-muted-foreground">(kayıt olan herkese + e-posta)</span>
               </label>
@@ -451,7 +451,7 @@ export default function CouponsManager() {
 
       {/* Kullanıcıya Ata Dialog — toplu */}
       <Dialog open={assignOpen} onOpenChange={setAssignOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="w-[95vw] sm:max-w-[440px] max-h-[90vh] overflow-y-auto top-[5vh] translate-y-0">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><UserPlus size={18} /> Kupon Ata (Toplu)</DialogTitle>
           </DialogHeader>

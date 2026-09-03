@@ -27,7 +27,7 @@ export default async function ProductsPage() {
     .from("products")
     .select(`
       id, title, slug, price, images, image_url, has_variants,
-      categories(name),
+      categories(id, name),
       brands(name, slug),
       product_variants(price, is_active, stock, variant_options(value, variant_groups(name)))
     `)

@@ -62,36 +62,76 @@ function ProductCard({ product, categoryName }: { product: any; categoryName?: s
 
 export default function SizeFilterGrid({ products, categoryName }: { products: any[]; categoryName?: string }) {
   const [size, setSize] = useState<string | null>(null);
+  const [cat, setCat] = useState<string | null>(null); // seçili kategori id'si
 
-  // Mevcut numaralar
+  // Mevcut kategoriler (yalnızca kategorisi olan ürünlerden). ≥2 ise filtre gösterilir.
+  const cats = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const p of products) {
+      const c = p.categories;
+      if (c?.id && c?.name) m.set(c.id, c.name);
+    }
+    return [...m.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name, "tr"));
+  }, [products]);
+  const showCatFilter = cats.length >= 2;
+
+  // Kategori süzgeci (numaradan bağımsız). Kategori seçiliyse önce ona indir.
+  const base = useMemo(
+    () => (cat ? products.filter((p) => p.categories?.id === cat) : products),
+    [products, cat]
+  );
+
+  // Mevcut numaralar (kategori süzgecinden sonra)
   const sizes = useMemo(() => {
     const set = new Set<string>();
-    for (const p of products) {
+    for (const p of base) {
       for (const v of p.product_variants ?? []) {
         if (isSizeVariant(v)) { const s = sizeValue(v); if (s) set.add(s); }
       }
     }
     return [...set].sort((a, b) => parseFloat(a.replace(",", ".")) - parseFloat(b.replace(",", ".")));
-  }, [products]);
+  }, [base]);
 
-  // Seçilen numaraya göre ayrım
+  // Seçilen numaraya göre ayrım (kategori süzgecinden sonra)
   const { inStock, outStock } = useMemo(() => {
-    if (!size) return { inStock: products, outStock: [] as any[] };
+    if (!size) return { inStock: base, outStock: [] as any[] };
     const inS: any[] = [];
     const outS: any[] = [];
-    for (const p of products) {
+    for (const p of base) {
       const sizeVars = (p.product_variants ?? []).filter((v: any) => isSizeVariant(v) && sizeValue(v) === size);
       if (sizeVars.length === 0) continue; // bu numara yok → gizle
       const hasStock = sizeVars.some((v: any) => Number(v.stock ?? 0) > 0);
       (hasStock ? inS : outS).push(p);
     }
     return { inStock: inS, outStock: outS };
-  }, [products, size]);
+  }, [base, size]);
 
   const gridCls = "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-16";
 
   return (
     <div className="space-y-8">
+      {/* Kategori filtresi (numaranın üstünde) */}
+      {showCatFilter && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-black uppercase tracking-widest text-slate-400 mr-1">Kategori:</span>
+          <button
+            onClick={() => setCat(null)}
+            className={`px-4 h-9 rounded-xl text-sm font-bold border-2 transition-all ${cat === null ? "border-olive-600 bg-olive-600 text-white" : "border-slate-200 text-slate-600 hover:border-olive-300"}`}
+          >
+            Hepsi
+          </button>
+          {cats.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => setCat((prev) => (prev === c.id ? null : c.id))}
+              className={`px-4 h-9 rounded-xl text-sm font-bold border-2 transition-all ${cat === c.id ? "border-olive-600 bg-olive-600 text-white" : "border-slate-200 text-slate-700 hover:border-olive-300"}`}
+            >
+              {c.name}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Numara filtresi */}
       {sizes.length > 0 && (
         <div className="flex flex-wrap items-center gap-2">

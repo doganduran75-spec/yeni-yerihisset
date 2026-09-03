@@ -264,7 +264,7 @@ export default function FreeGiftsManager() {
 
       {/* Form Modal */}
       <Dialog open={open} onOpenChange={setOpen} disablePointerDismissal>
-        <DialogContent className="sm:max-w-[520px]">
+        <DialogContent className="w-[95vw] sm:max-w-[560px] max-h-[90vh] overflow-y-auto top-[5vh] translate-y-0">
           <DialogHeader>
             <DialogTitle>{editingId ? "Kuralı Düzenle" : "Yeni Ücretsiz Ürün Kuralı"}</DialogTitle>
           </DialogHeader>
