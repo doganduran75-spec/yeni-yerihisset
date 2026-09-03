@@ -92,6 +92,8 @@ export default function ProductPageClient({ product }: { product: Product }) {
   const [notifyModalOpen, setNotifyModalOpen] = useState(false);
   // notifiedVariants: başarıyla bildirim kaydedilen variant ID'leri
   const [notifiedVariants, setNotifiedVariants] = useState<Set<string>>(new Set());
+  // F9: stok 0 ise geçici havale rezervasyonu mu (yakında dönebilir)?
+  const [holdInfo, setHoldInfo] = useState<{ held: boolean; free_at: string | null } | null>(null);
   const { addItem, items, checkGiftRules } = useCartStore();
 
   // GA4: view_item — ürün sayfası yüklenince
@@ -151,6 +153,21 @@ export default function ProductPageClient({ product }: { product: Product }) {
   const currentStock =
     product.has_variants && selectedVariant ? (selectedVariant.stock ?? 0) : product.stock;
   const isOutOfStock = currentStock === 0;
+
+  // F9: stok yoksa, bunun sebebi ödenmemiş bir havale siparişi mi (yakında dönebilir)?
+  useEffect(() => {
+    if (!isOutOfStock) { setHoldInfo(null); return; }
+    let active = true;
+    (async () => {
+      const { data } = await (supabase as any).rpc("product_hold_info", {
+        p_product_id: product.id,
+        p_variant_id: selectedVariant?.id ?? null,
+      });
+      if (active) setHoldInfo((data as any) ?? null);
+    })();
+    return () => { active = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOutOfStock, selectedVariant?.id, product.id]);
 
   async function handleAddToCart() {
     const cartId =
@@ -426,17 +443,35 @@ export default function ProductPageClient({ product }: { product: Product }) {
 
               {/* Stokta yok → bilgilendirme bandı */}
               {isOutOfStock && (
-                <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-100 rounded-2xl">
-                  <BellRing size={18} className="text-amber-600 shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-sm font-bold text-amber-800">
-                      Bu seçenek şu an stokta yok.
-                    </p>
-                    <p className="text-xs text-amber-600 mt-0.5">
-                      Stok girişinde sizi haberdar edebiliriz.
-                    </p>
+                holdInfo?.held ? (
+                  /* Geçici havale rezervasyonu → yakında dönebilir */
+                  <div className="flex items-start gap-3 p-4 bg-teal-50 border border-teal-100 rounded-2xl">
+                    <BellRing size={18} className="text-teal-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-bold text-teal-800">
+                        Bu ürün şu an geçici olarak ayrılmış.
+                      </p>
+                      <p className="text-xs text-teal-700 mt-0.5">
+                        {holdInfo.free_at
+                          ? <>{new Date(holdInfo.free_at).toLocaleDateString("tr-TR", { day: "numeric", month: "long" })} gününe kadar tekrar stokta olma ihtimali var. </>
+                          : "Yakında tekrar stokta olma ihtimali var. "}
+                        E-postanı bırak, uygun olduğunda ilk sana haber verelim.
+                      </p>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-100 rounded-2xl">
+                    <BellRing size={18} className="text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-bold text-amber-800">
+                        Bu seçenek şu an stokta yok.
+                      </p>
+                      <p className="text-xs text-amber-600 mt-0.5">
+                        Stok girişinde sizi haberdar edebiliriz.
+                      </p>
+                    </div>
+                  </div>
+                )
               )}
 
               <div className="flex gap-4">
