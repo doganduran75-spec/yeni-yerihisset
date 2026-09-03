@@ -21,7 +21,20 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Bell, Check, Loader2, RefreshCw, Plus, Search, AtSign } from "lucide-react";
+import { Bell, Check, Loader2, RefreshCw, Plus, Search, AtSign, MessageCircle } from "lucide-react";
+
+// WhatsApp linki (TR numaralarını uluslararası formata çevir)
+function waLink(phone?: string | null): string | null {
+  let d = (phone || "").replace(/\D/g, "");
+  if (!d) return null;
+  if (d.startsWith("0")) d = "90" + d.slice(1);
+  else if (d.length === 10) d = "90" + d;
+  return `https://wa.me/${d}`;
+}
+function igLink(handle?: string | null): string | null {
+  const h = (handle || "").replace(/^@/, "").trim();
+  return h ? `https://instagram.com/${h}` : null;
+}
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -41,6 +54,7 @@ type Notification = {
   variant_value?: string;
   contact_name?: string | null;
   contact_instagram?: string | null;
+  contact_phone?: string | null;
 };
 
 type ProductOpt = {
@@ -111,7 +125,7 @@ export default function StockNotificationsPage() {
           status, created_at, notified_at,
           products(title),
           product_variants(variant_options(value)),
-          contacts(full_name, instagram_handle)
+          contacts(full_name, instagram_handle, phone)
         `)
         .order("created_at", { ascending: false });
 
@@ -126,6 +140,7 @@ export default function StockNotificationsPage() {
         variant_value: n.product_variants?.variant_options?.value ?? null,
         contact_name: n.contacts?.full_name ?? null,
         contact_instagram: n.contacts?.instagram_handle ?? null,
+        contact_phone: n.contacts?.phone ?? null,
       }));
 
       setNotifications(formatted);
@@ -357,7 +372,32 @@ export default function StockNotificationsPage() {
                         <span className="text-slate-400 text-xs">—</span>
                       )}
                     </TableCell>
-                    <TableCell className="text-sm">{contactDisplay(n)}</TableCell>
+                    <TableCell className="text-sm">
+                      <div>{contactDisplay(n)}</div>
+                      {(() => {
+                        const wa = waLink(n.phone || n.contact_phone);
+                        const ig = igLink(n.contact_instagram || n.instagram);
+                        const hasEmail = !!n.email;
+                        if (!wa && !ig) return null;
+                        return (
+                          <div className="flex items-center gap-1.5 mt-1">
+                            {!hasEmail && <span className="text-[9px] font-bold text-teal-600 uppercase">Elden:</span>}
+                            {wa && (
+                              <a href={wa} target="_blank" rel="noopener noreferrer" title="WhatsApp'tan yaz"
+                                className="inline-flex items-center gap-1 text-[11px] font-bold text-green-700 bg-green-50 hover:bg-green-100 rounded-md px-1.5 py-0.5">
+                                <MessageCircle size={11} /> WhatsApp
+                              </a>
+                            )}
+                            {ig && (
+                              <a href={ig} target="_blank" rel="noopener noreferrer" title="Instagram'dan yaz"
+                                className="inline-flex items-center gap-1 text-[11px] font-bold text-pink-700 bg-pink-50 hover:bg-pink-100 rounded-md px-1.5 py-0.5">
+                                <AtSign size={11} /> Instagram
+                              </a>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </TableCell>
                     <TableCell className="text-xs text-slate-500">
                       {new Date(n.created_at).toLocaleDateString("tr-TR", {
                         day: "2-digit", month: "short", year: "numeric",

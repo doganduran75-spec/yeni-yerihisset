@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Search, Check, Package, Save } from "lucide-react";
+import { Loader2, Search, Check, Package, Save, BellRing, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type StockRow = {
@@ -38,6 +38,8 @@ export default function StockPage() {
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [savedKey, setSavedKey] = useState<string | null>(null);
   const [bulkSaving, setBulkSaving] = useState(false);
+  // Stok gelince: bu ürünü bekleyenler uyarısı
+  const [restockAlert, setRestockAlert] = useState<{ product: string; total: number; manual: number } | null>(null);
 
   useEffect(() => { load(); }, []);
 
@@ -115,10 +117,31 @@ export default function StockPage() {
         p_source: "admin_manual",
       });
       if (error) throw error;
+      const wasOut = r.stock <= 0; // düşümden önceki stok
       setRows((prev) => prev.map((x) => x.key === r.key ? { ...x, stock: val } : x));
       setEdited((prev) => { const n = { ...prev }; delete n[r.key]; return n; });
       setSavedKey(r.key);
       setTimeout(() => setSavedKey((k) => (k === r.key ? null : k)), 2000);
+
+      // Stok 0→artı olduysa: bu ürünü/varyantı bekleyenleri uyar
+      if (wasOut && val > 0) {
+        let q = (supabase as any)
+          .from("stock_notifications")
+          .select("id, email, instagram, contacts(email)")
+          .eq("status", "pending")
+          .eq("product_id", r.productId);
+        if (r.variantId) q = q.eq("variant_id", r.variantId);
+        const { data: waiters } = await q;
+        const list = (waiters as any[]) || [];
+        if (list.length > 0) {
+          const manual = list.filter((n) => !(n.email || n.contacts?.email)).length;
+          setRestockAlert({
+            product: r.title + (r.variantLabel ? ` · ${r.variantLabel}` : ""),
+            total: list.length,
+            manual,
+          });
+        }
+      }
       return true;
     } catch (e: any) {
       alert("Stok güncellenemedi: " + (e?.message ?? "hata"));
@@ -154,6 +177,25 @@ export default function StockPage() {
           </Button>
         )}
       </div>
+
+      {/* Stok gelince: bekleyenler uyarısı */}
+      {restockAlert && (
+        <div className="flex items-center justify-between gap-3 rounded-2xl border border-teal-200 bg-teal-50 px-4 py-3">
+          <div className="flex items-center gap-2 text-sm">
+            <BellRing size={18} className="text-teal-600 shrink-0" />
+            <span className="text-teal-900">
+              🔔 <b>{restockAlert.product}</b> yeniden stokta! <b>{restockAlert.total} kişi</b> bekliyordu
+              {restockAlert.manual > 0 && <> · <b className="text-teal-700">{restockAlert.manual} tanesi elden bilgilendirilecek</b> (e-postasız)</>}.
+            </span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <a href="/admin/crm/stock-notifications" className="text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 rounded-lg px-3 py-1.5">
+              Bildirimlere git
+            </a>
+            <button onClick={() => setRestockAlert(null)} className="text-teal-500 hover:text-teal-700 p-1"><X size={16} /></button>
+          </div>
+        </div>
+      )}
 
       {/* Arama */}
       <div className="relative">
