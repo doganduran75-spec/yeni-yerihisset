@@ -8,7 +8,9 @@ import { Button } from "@/components/ui/button"
 import { XIcon } from "lucide-react"
 
 function Dialog({ ...props }: DialogPrimitive.Root.Props) {
-  return <DialogPrimitive.Root data-slot="dialog" {...props} />
+  // Varsayılan: dış alana tıklayınca kapanma. Diyaloglar yalnızca İptal/Kaydet
+  // (veya X) ile kapanır. Gerekirse tek tek `disablePointerDismissal={false}` ile geçilebilir.
+  return <DialogPrimitive.Root data-slot="dialog" disablePointerDismissal {...props} />
 }
 
 function DialogTrigger({ ...props }: DialogPrimitive.Trigger.Props) {
