@@ -6,10 +6,9 @@ const nextConfig: NextConfig = {
   // Bunu bundle'a dahil etmeyip çalışma anında Node ile yükletiyoruz.
   serverExternalPackages: ["iyzipay"],
 
-  // ─── Build: mevcut tip/lint borçları derlemeyi durdurmasın ───────────────
-  // Not: Bunlar geçici. Staging'i ayağa kaldırmak için; ileride tip hataları
-  // ve ESLint uyarıları temizlenince kaldırılmalı.
-  eslint: { ignoreDuringBuilds: true },
+  // ─── Build: mevcut tip borçları derlemeyi durdurmasın ────────────────────
+  // Not: Geçici. Stale database.types.ts yüzünden; tipler tazelenince kaldırılmalı.
+  // (Next 16 artık build'de ESLint çalıştırmıyor; eski `eslint` anahtarı kaldırıldı.)
   typescript: { ignoreBuildErrors: true },
 
   // ─── Görsel Optimizasyonu ────────────────────────────────────────────────
