@@ -78,6 +78,7 @@ function normTr(s: string): string {
 export default function StockNotificationsPage() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [filter, setFilter] = useState<"pending" | "all">("pending");
   const [marking, setMarking] = useState<string | null>(null);
 
@@ -127,38 +128,52 @@ export default function StockNotificationsPage() {
   async function fetchNotifications() {
     setLoading(true);
     try {
-      // NOT: contacts embed'ine güvenmiyoruz (schema cache stale olursa tüm
-      // sorgu düşer). Kişileri ayrı çekip birleştiriyoruz.
-      let query = supabase
+      // EMBED YOK — ana sorgu yalın; ilişkiler ayrı çekilir (embed hataları
+      // tüm listeyi boş bırakmasın). Hata olursa ekranda gösterilir.
+      let query = (supabase as any)
         .from("stock_notifications")
-        .select(`
-          id, product_id, variant_id, user_id, email, phone, contact_id, instagram,
-          status, created_at, notified_at,
-          products(title),
-          product_variants(variant_options(value))
-        `)
+        .select("id, product_id, variant_id, user_id, email, phone, contact_id, instagram, status, created_at, notified_at")
         .order("created_at", { ascending: false });
-
       if (filter === "pending") query = query.eq("status", "pending");
 
       const { data, error } = await query;
       if (error) throw error;
+      const rows = (data as any[]) || [];
 
-      // Kişi bilgilerini ayrı çek
-      const cids = [...new Set(((data as any[]) || []).map((n) => n.contact_id).filter(Boolean))] as string[];
+      // Ürün başlıkları
+      const pids = [...new Set(rows.map((r) => r.product_id).filter(Boolean))] as string[];
+      const pmap = new Map<string, string>();
+      if (pids.length) {
+        const { data: ps } = await (supabase as any).from("products").select("id, title").in("id", pids);
+        (ps as any[] || []).forEach((p) => pmap.set(p.id, p.title));
+      }
+
+      // Varyant değerleri (embed'i yalıtılmış — hata olursa yut)
+      const vids = [...new Set(rows.map((r) => r.variant_id).filter(Boolean))] as string[];
+      const vmap = new Map<string, string | null>();
+      if (vids.length) {
+        try {
+          const { data: vs } = await (supabase as any)
+            .from("product_variants").select("id, variant_options(value)").in("id", vids);
+          (vs as any[] || []).forEach((v) => vmap.set(v.id, v.variant_options?.value ?? null));
+        } catch { /* varyant etiketi kritik değil */ }
+      }
+
+      // Kişiler
+      const cids = [...new Set(rows.map((r) => r.contact_id).filter(Boolean))] as string[];
       const cmap = new Map<string, any>();
-      if (cids.length > 0) {
+      if (cids.length) {
         const { data: cs } = await (supabase as any)
           .from("contacts").select("id, full_name, instagram_handle, phone").in("id", cids);
         (cs as any[] || []).forEach((c) => cmap.set(c.id, c));
       }
 
-      const formatted = (data || []).map((n: any) => {
+      const formatted = rows.map((n: any) => {
         const c = n.contact_id ? cmap.get(n.contact_id) : null;
         return {
           ...n,
-          product_title: n.products?.title ?? "—",
-          variant_value: n.product_variants?.variant_options?.value ?? null,
+          product_title: pmap.get(n.product_id) ?? "—",
+          variant_value: n.variant_id ? (vmap.get(n.variant_id) ?? null) : null,
           contact_name: c?.full_name ?? null,
           contact_instagram: c?.instagram_handle ?? null,
           contact_phone: c?.phone ?? null,
@@ -166,8 +181,10 @@ export default function StockNotificationsPage() {
       });
 
       setNotifications(formatted);
-    } catch (err) {
+      setLoadError(null);
+    } catch (err: any) {
       console.error(err);
+      setLoadError(err?.message || "Liste yüklenemedi.");
     } finally {
       setLoading(false);
     }
@@ -358,6 +375,11 @@ export default function StockNotificationsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {loadError && (
+            <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+              Liste yüklenemedi: {loadError}
+            </div>
+          )}
           {loading ? (
             <div className="py-8 flex justify-center">
               <Loader2 size={24} className="animate-spin text-slate-400" />
