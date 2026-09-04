@@ -156,11 +156,11 @@ export default function SizeFilterGrid({ products, categoryName }: { products: a
 
       {/* Sonuç */}
       {!size ? (
-        products.length === 0 ? (
+        base.length === 0 ? (
           <div className="text-center py-20 text-slate-400">Bu kategoride henüz ürün bulunmuyor.</div>
         ) : (
           <div className={gridCls}>
-            {products.map((p) => <ProductCard key={p.id} product={p} categoryName={categoryName} />)}
+            {base.map((p) => <ProductCard key={p.id} product={p} categoryName={categoryName} />)}
           </div>
         )
       ) : (
