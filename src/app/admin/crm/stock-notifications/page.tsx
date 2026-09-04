@@ -127,14 +127,15 @@ export default function StockNotificationsPage() {
   async function fetchNotifications() {
     setLoading(true);
     try {
+      // NOT: contacts embed'ine güvenmiyoruz (schema cache stale olursa tüm
+      // sorgu düşer). Kişileri ayrı çekip birleştiriyoruz.
       let query = supabase
         .from("stock_notifications")
         .select(`
           id, product_id, variant_id, user_id, email, phone, contact_id, instagram,
           status, created_at, notified_at,
           products(title),
-          product_variants(variant_options(value)),
-          contacts(full_name, instagram_handle, phone)
+          product_variants(variant_options(value))
         `)
         .order("created_at", { ascending: false });
 
@@ -143,14 +144,26 @@ export default function StockNotificationsPage() {
       const { data, error } = await query;
       if (error) throw error;
 
-      const formatted = (data || []).map((n: any) => ({
-        ...n,
-        product_title: n.products?.title ?? "—",
-        variant_value: n.product_variants?.variant_options?.value ?? null,
-        contact_name: n.contacts?.full_name ?? null,
-        contact_instagram: n.contacts?.instagram_handle ?? null,
-        contact_phone: n.contacts?.phone ?? null,
-      }));
+      // Kişi bilgilerini ayrı çek
+      const cids = [...new Set(((data as any[]) || []).map((n) => n.contact_id).filter(Boolean))] as string[];
+      const cmap = new Map<string, any>();
+      if (cids.length > 0) {
+        const { data: cs } = await (supabase as any)
+          .from("contacts").select("id, full_name, instagram_handle, phone").in("id", cids);
+        (cs as any[] || []).forEach((c) => cmap.set(c.id, c));
+      }
+
+      const formatted = (data || []).map((n: any) => {
+        const c = n.contact_id ? cmap.get(n.contact_id) : null;
+        return {
+          ...n,
+          product_title: n.products?.title ?? "—",
+          variant_value: n.product_variants?.variant_options?.value ?? null,
+          contact_name: c?.full_name ?? null,
+          contact_instagram: c?.instagram_handle ?? null,
+          contact_phone: c?.phone ?? null,
+        };
+      });
 
       setNotifications(formatted);
     } catch (err) {
