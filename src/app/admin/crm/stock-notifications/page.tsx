@@ -180,6 +180,12 @@ export default function StockNotificationsPage() {
         };
       });
 
+      // Ürün adına (sonra varyanta) göre sırala
+      formatted.sort((a: any, b: any) =>
+        (a.product_title || "").localeCompare(b.product_title || "", "tr")
+        || (a.variant_value || "").localeCompare(b.variant_value || "", "tr")
+      );
+
       setNotifications(formatted);
       setLoadError(null);
     } catch (err: any) {
@@ -295,7 +301,8 @@ export default function StockNotificationsPage() {
             Stok Bildirimleri
           </h2>
           <p className="text-muted-foreground">
-            Stok girişinde haberdar edilmek isteyen kişiler.
+            Stok gelince haber bekleyen kişiler. Haber verdikçe &quot;Haber Verdim&quot; ile kapatın.
+            <span className="block text-xs mt-0.5">Durum <b>Bekliyor</b> = henüz haber verilmedi · <b>Bildirildi</b> = haber verildi (tamamlandı).</span>
           </p>
         </div>
         <div className="flex gap-2">
@@ -393,8 +400,7 @@ export default function StockNotificationsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Ürün</TableHead>
-                  <TableHead>Varyasyon</TableHead>
+                  <TableHead>Ürün / Numara</TableHead>
                   <TableHead>İletişim</TableHead>
                   <TableHead>Tarih</TableHead>
                   <TableHead>Durum</TableHead>
@@ -404,16 +410,12 @@ export default function StockNotificationsPage() {
               <TableBody>
                 {notifications.map((n) => (
                   <TableRow key={n.id}>
-                    <TableCell className="font-medium max-w-[200px] truncate">
-                      {n.product_title}
-                    </TableCell>
-                    <TableCell>
-                      {n.variant_value ? (
-                        <Badge variant="outline" className="text-blue-600 border-blue-100 bg-blue-50">
+                    <TableCell className="max-w-[240px]">
+                      <div className="font-medium text-sm truncate" title={n.product_title}>{n.product_title}</div>
+                      {n.variant_value && (
+                        <span className="inline-block mt-0.5 text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-100 rounded px-1.5 py-0.5">
                           {n.variant_value}
-                        </Badge>
-                      ) : (
-                        <span className="text-slate-400 text-xs">—</span>
+                        </span>
                       )}
                     </TableCell>
                     <TableCell className="text-sm">
@@ -467,13 +469,14 @@ export default function StockNotificationsPage() {
                           className="h-8 px-3 text-green-600 border-green-100 hover:bg-green-50"
                           disabled={marking === n.id}
                           onClick={() => markAsNotified(n.id)}
+                          title="Bu kişiye stok geldiğini bildirdim → tamamlandı olarak işaretle"
                         >
                           {marking === n.id ? (
                             <Loader2 size={12} className="animate-spin" />
                           ) : (
                             <Check size={12} className="mr-1" />
                           )}
-                          Bildirildi
+                          Haber Verdim
                         </Button>
                       )}
                     </TableCell>
