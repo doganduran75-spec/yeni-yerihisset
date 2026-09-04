@@ -39,7 +39,12 @@ export async function POST(req: NextRequest) {
       options: { redirectTo: `${storeUrl}/sifre-belirle` },
     } as any);
 
-    const actionUrl = (linkData as any)?.properties?.action_link;
+    // Supabase'in action_link'i yerine token_hash'i alıp linki KENDİ domainimizde
+    // kuruyoruz → e-postada altyapı (supabase/auth/verify) görünmez.
+    const hashedToken = (linkData as any)?.properties?.hashed_token;
+    const actionUrl = hashedToken
+      ? `${storeUrl}/sifre-belirle?token_hash=${hashedToken}&type=recovery`
+      : null;
     if (linkErr || !actionUrl) {
       emailStatus = "failed";
       emailError = linkErr?.message || "Recovery linki üretilemedi";

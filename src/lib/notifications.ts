@@ -523,21 +523,17 @@ export async function sendPasswordRecoveryEmail(params: {
   const name = (params.name || "").trim() || "Merhaba";
 
   const bodyHtml = `
-    <h1 style="font-size:22px;font-weight:800;color:#111827;margin:0 0 12px">🔐 Şifre Sıfırlama</h1>
+    <h1 style="font-size:22px;font-weight:800;color:#111827;margin:0 0 12px">Şifre Sıfırlama</h1>
     <p style="font-size:15px;color:#374151;line-height:1.6;margin:0 0 8px">
-      ${name}, ${storeName} hesabın için şifre sıfırlama talebi aldık. Yeni şifreni belirlemek için aşağıdaki butona tıkla.
+      Merhaba ${name}, hesabın için şifre sıfırlama talebi aldık. Yeni şifreni oluşturmak için aşağıdaki butona tıklaman yeterli.
     </p>
     <div style="text-align:center;margin:28px 0">
-      <a href="${params.actionUrl}" style="display:inline-block;background:#1d4ed8;color:#fff;text-decoration:none;padding:14px 32px;border-radius:14px;font-weight:800;font-size:15px">
-        Şifremi Belirle
+      <a href="${params.actionUrl}" style="display:inline-block;background:#1d4ed8;color:#fff;text-decoration:none;padding:14px 36px;border-radius:14px;font-weight:800;font-size:15px">
+        Yeni Şifre Oluştur
       </a>
     </div>
-    <p style="font-size:13px;color:#6b7280;line-height:1.6;margin:0 0 8px">
-      Buton çalışmazsa bu bağlantıyı tarayıcına yapıştır:<br>
-      <span style="color:#1d4ed8;word-break:break-all">${params.actionUrl}</span>
-    </p>
     <p style="font-size:13px;color:#9ca3af;line-height:1.6;margin:16px 0 0">
-      Bu talebi sen yapmadıysan bu e-postayı yok sayabilirsin — şifren değişmez. Bağlantı kısa süre sonra geçersiz olur.
+      Bu talebi sen yapmadıysan bu e-postayı yok sayabilirsin; şifren değişmez. Güvenliğin için bu bağlantı kısa süre sonra geçerliliğini yitirir.
     </p>`;
 
   const smtpConfig = buildSmtpConfig({

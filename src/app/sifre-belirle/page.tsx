@@ -32,7 +32,7 @@ export default function SetPasswordPage() {
   useEffect(() => {
     let settled = false;
 
-    // URL'deki token işlendiğinde bu olay gelir
+    // URL'deki token işlendiğinde bu olay gelir (eski hash-tabanlı akış / lead-magnet)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === "PASSWORD_RECOVERY" || (session && (event === "SIGNED_IN" || event === "INITIAL_SESSION"))) {
         settled = true;
@@ -40,13 +40,34 @@ export default function SetPasswordPage() {
       }
     });
 
-    // Doğrudan da bir oturum var mı diye kontrol et (bağlantı zaten işlenmişse)
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) { settled = true; setReady(true); }
-    });
+    // Kendi-domain akışı: ?token_hash=...&type=recovery → sayfa kendisi doğrular.
+    // Bu sayede e-postadaki bağlantı tamamen kendi domainimizdedir (altyapı gizli).
+    const params = new URLSearchParams(window.location.search);
+    const tokenHash = params.get("token_hash");
+    const type = params.get("type");
+    if (tokenHash && type) {
+      supabase.auth
+        .verifyOtp({ token_hash: tokenHash, type: type as any }) // eslint-disable-line @typescript-eslint/no-explicit-any
+        .then(({ data, error }) => {
+          if (!error && data?.session) {
+            settled = true;
+            setReady(true);
+            // Token'ı adres çubuğundan temizle
+            window.history.replaceState(null, "", "/sifre-belirle");
+          } else {
+            settled = true;
+            setReady(false);
+          }
+        });
+    } else {
+      // Doğrudan da bir oturum var mı diye kontrol et (bağlantı zaten işlenmişse)
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session) { settled = true; setReady(true); }
+      });
+    }
 
-    // 4 sn içinde oturum kurulmadıysa bağlantı geçersiz/expired demektir
-    const t = setTimeout(() => { if (!settled) setReady(false); }, 4000);
+    // 6 sn içinde oturum kurulmadıysa bağlantı geçersiz/expired demektir
+    const t = setTimeout(() => { if (!settled) setReady(false); }, 6000);
 
     return () => { subscription.unsubscribe(); clearTimeout(t); };
   }, []);

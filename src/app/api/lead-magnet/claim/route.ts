@@ -67,7 +67,8 @@ export async function POST(req: NextRequest) {
     const { data: linkData } = await supabase.auth.admin.generateLink({
       type: "recovery", email, options: { redirectTo: `${storeUrl}/sifre-belirle` },
     } as any);
-    const actionUrl = (linkData as any)?.properties?.action_link ?? `${storeUrl}/login`;
+    const hashedToken = (linkData as any)?.properties?.hashed_token;
+    const actionUrl = hashedToken ? `${storeUrl}/sifre-belirle?token_hash=${hashedToken}&type=recovery` : `${storeUrl}/login`;
     sendLeadMagnetWelcome({ to: email, name: null, couponCode: coupon?.code ?? null, couponValue, actionUrl, mode: "existing" }).catch(() => {});
     return NextResponse.json({ ok: true, status: "existing" });
   }
@@ -77,11 +78,12 @@ export async function POST(req: NextRequest) {
   await supabase.from("profiles").upsert({ id: userId, email } as any, { onConflict: "id", ignoreDuplicates: true });
   await grantCoupon(userId);
 
-  // Şifre belirleme bağlantısı üret
+  // Şifre belirleme bağlantısı üret — token_hash ile KENDİ domainimizde
   const { data: linkData } = await supabase.auth.admin.generateLink({
     type: "recovery", email, options: { redirectTo: `${storeUrl}/sifre-belirle` },
   } as any);
-  const actionUrl = (linkData as any)?.properties?.action_link ?? `${storeUrl}/sifre-belirle`;
+  const hashedToken = (linkData as any)?.properties?.hashed_token;
+  const actionUrl = hashedToken ? `${storeUrl}/sifre-belirle?token_hash=${hashedToken}&type=recovery` : `${storeUrl}/sifre-belirle`;
 
   const emailRes = await sendLeadMagnetWelcome({
     to: email, name: null, couponCode: coupon?.code ?? null, couponValue, actionUrl, mode: "created",
