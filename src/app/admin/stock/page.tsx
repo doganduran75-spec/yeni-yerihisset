@@ -39,7 +39,7 @@ export default function StockPage() {
   const [savedKey, setSavedKey] = useState<string | null>(null);
   const [bulkSaving, setBulkSaving] = useState(false);
   // Stok gelince: bu ürünü bekleyenler uyarısı
-  const [restockAlert, setRestockAlert] = useState<{ product: string; total: number; manual: number } | null>(null);
+  const [restockAlert, setRestockAlert] = useState<{ product: string; total: number; sent: number; manual: number } | null>(null);
 
   useEffect(() => { load(); }, []);
 
@@ -123,24 +123,28 @@ export default function StockPage() {
       setSavedKey(r.key);
       setTimeout(() => setSavedKey((k) => (k === r.key ? null : k)), 2000);
 
-      // Stok 0→artı olduysa: bu ürünü/varyantı bekleyenleri uyar
+      // Stok 0→artı olduysa: bekleyen e-postalılara OTOMATİK "stok geldi" maili
+      // gönder (+ notified işaretle); e-postasızlar elden bilgilendirilir.
       if (wasOut && val > 0) {
-        let q = (supabase as any)
-          .from("stock_notifications")
-          .select("id, email, instagram, contacts(email)")
-          .eq("status", "pending")
-          .eq("product_id", r.productId);
-        if (r.variantId) q = q.eq("variant_id", r.variantId);
-        const { data: waiters } = await q;
-        const list = (waiters as any[]) || [];
-        if (list.length > 0) {
-          const manual = list.filter((n) => !(n.email || n.contacts?.email)).length;
-          setRestockAlert({
-            product: r.title + (r.variantLabel ? ` · ${r.variantLabel}` : ""),
-            total: list.length,
-            manual,
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          const res = await fetch("/api/stock-notify/dispatch", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+            },
+            body: JSON.stringify({ productId: r.productId, variantId: r.variantId || null }),
           });
-        }
+          const d = await res.json();
+          const total = (d.sent ?? 0) + (d.manual ?? 0);
+          if (total > 0) {
+            setRestockAlert({
+              product: r.title + (r.variantLabel ? ` · ${r.variantLabel}` : ""),
+              total, sent: d.sent ?? 0, manual: d.manual ?? 0,
+            });
+          }
+        } catch (e) { console.error("[stok] bildirim gönderimi:", e); }
       }
       return true;
     } catch (e: any) {
@@ -184,8 +188,9 @@ export default function StockPage() {
           <div className="flex items-center gap-2 text-sm">
             <BellRing size={18} className="text-teal-600 shrink-0" />
             <span className="text-teal-900">
-              🔔 <b>{restockAlert.product}</b> yeniden stokta! <b>{restockAlert.total} kişi</b> bekliyordu
-              {restockAlert.manual > 0 && <> · <b className="text-teal-700">{restockAlert.manual} tanesi elden bilgilendirilecek</b> (e-postasız)</>}.
+              🔔 <b>{restockAlert.product}</b> yeniden stokta! <b>{restockAlert.total} kişi</b> bekliyordu.{" "}
+              {restockAlert.sent > 0 && <><b className="text-green-700">{restockAlert.sent} kişiye e-posta gönderildi</b>. </>}
+              {restockAlert.manual > 0 && <><b className="text-teal-700">{restockAlert.manual} kişi e-postasız</b> — elden bilgilendirin.</>}
             </span>
           </div>
           <div className="flex items-center gap-2 shrink-0">

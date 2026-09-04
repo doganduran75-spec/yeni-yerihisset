@@ -506,3 +506,54 @@ export async function sendLeadMagnetWelcome(params: {
     return { status: "failed", error: err?.message || "Email gönderim hatası" };
   }
 }
+
+/**
+ * "Stok geldi" bildirimi — beklediği ürün tekrar stoğa girince müşteriye gider.
+ */
+export async function sendBackInStockNotification(params: {
+  to: string;
+  name?: string | null;
+  productTitle: string;
+  productUrl: string;
+}): Promise<{ status: "sent" | "failed"; error?: string }> {
+  const supabase = createAdminClient();
+  const { data: settings } = await (supabase as any).from("settings").select("*").limit(1).maybeSingle();
+  const storeName = settings?.store_name || "YeriHisset";
+  const name = (params.name || "").trim() || "Merhaba";
+
+  const bodyHtml = `
+    <h1 style="font-size:22px;font-weight:800;color:#111827;margin:0 0 12px">🎉 İyi haber! Ürün tekrar stokta</h1>
+    <p style="font-size:15px;color:#374151;line-height:1.6;margin:0 0 8px">
+      ${name}, beklediğin <b>${params.productTitle}</b> yeniden stoklarımızda. Stoklar sınırlı olabilir — kaçırmadan göz at.
+    </p>
+    <div style="text-align:center;margin:28px 0">
+      <a href="${params.productUrl}" style="display:inline-block;background:#6b7f3a;color:#fff;text-decoration:none;padding:14px 32px;border-radius:14px;font-weight:800;font-size:15px">
+        Ürüne Git
+      </a>
+    </div>
+    <p style="font-size:13px;color:#9ca3af;line-height:1.6;margin:16px 0 0">
+      Bu e-postayı, ${storeName}'te bu ürün için "stok gelince haber ver" talebinde bulunduğun için aldın.
+    </p>`;
+
+  const smtpConfig = buildSmtpConfig({
+    smtp_host: settings?.smtp_host || "",
+    smtp_port: settings?.smtp_port,
+    smtp_secure: settings?.smtp_secure,
+    smtp_user: settings?.smtp_user,
+    smtp_password: settings?.smtp_password,
+  });
+  if (!smtpConfig.host || !smtpConfig.auth.user) return { status: "failed", error: "SMTP ayarları eksik" };
+
+  try {
+    const transporter = nodemailer.createTransport(smtpConfig);
+    await transporter.sendMail({
+      from: `"${settings?.smtp_from_name || storeName}" <${settings?.smtp_from_email || smtpConfig.auth.user}>`,
+      to: params.to,
+      subject: `Tekrar stokta: ${params.productTitle}`,
+      html: buildEmailDocument(bodyHtml, storeName),
+    });
+    return { status: "sent" };
+  } catch (err: any) {
+    return { status: "failed", error: err?.message || "Email gönderim hatası" };
+  }
+}
