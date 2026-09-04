@@ -180,12 +180,22 @@ export default function MembersPage() {
         note: cForm.note.trim() || null,
       };
 
-      // Yeni kayıtta basit mükerrer uyarısı
-      if (!contactId && payload.email) {
-        const { data: dupP } = await supabase.from("profiles").select("id").eq("email", payload.email).maybeSingle();
-        if (dupP) { if (!confirm("Bu e-posta zaten kayıtlı bir ÜYE'ye ait. Yine de kişi eklensin mi?")) { setCSaving(false); return; } }
-        const { data: dupC } = await (supabase as any).from("contacts").select("id").eq("email", payload.email).maybeSingle();
-        if (dupC) { if (!confirm("Bu e-posta ile zaten bir kişi var. Yine de yeni kişi eklensin mi?")) { setCSaving(false); return; } }
+      // Yeni kayıtta mükerrer uyarısı (e-posta / instagram / telefon)
+      if (!contactId) {
+        if (payload.email) {
+          const { data: dupP } = await supabase.from("profiles").select("id").eq("email", payload.email).maybeSingle();
+          if (dupP) { if (!confirm("Bu e-posta zaten kayıtlı bir ÜYE'ye ait. Yine de kişi eklensin mi?")) { setCSaving(false); return; } }
+          const { data: dupC } = await (supabase as any).from("contacts").select("id").eq("email", payload.email).maybeSingle();
+          if (dupC) { if (!confirm("Bu e-posta ile zaten bir kişi var. Yine de yeni kişi eklensin mi?")) { setCSaving(false); return; } }
+        }
+        if (payload.instagram_handle) {
+          const { data: dupI } = await (supabase as any).from("contacts").select("id").ilike("instagram_handle", payload.instagram_handle).maybeSingle();
+          if (dupI) { if (!confirm("Bu Instagram ile zaten bir kişi var. Yine de yeni kişi eklensin mi?")) { setCSaving(false); return; } }
+        }
+        if (payload.phone) {
+          const { data: dupPh } = await (supabase as any).from("contacts").select("id").eq("phone", payload.phone).maybeSingle();
+          if (dupPh) { if (!confirm("Bu telefon ile zaten bir kişi var. Yine de yeni kişi eklensin mi?")) { setCSaving(false); return; } }
+        }
       }
 
       if (contactId) {

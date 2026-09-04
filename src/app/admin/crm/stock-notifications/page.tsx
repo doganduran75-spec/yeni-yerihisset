@@ -51,7 +51,9 @@ type Notification = {
   created_at: string;
   notified_at: string | null;
   product_title?: string;
-  variant_value?: string;
+  variant_value?: string | null;
+  stock?: number;
+  has_email?: boolean;
   contact_name?: string | null;
   contact_instagram?: string | null;
   contact_phone?: string | null;
@@ -79,7 +81,7 @@ export default function StockNotificationsPage() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<"pending" | "all">("pending");
+  const [filter, setFilter] = useState<"pending" | "manual" | "notified" | "all">("pending");
   const [marking, setMarking] = useState<string | null>(null);
 
   // Manuel ekleme
@@ -90,8 +92,8 @@ export default function StockNotificationsPage() {
   const [addSaving, setAddSaving] = useState(false);
 
   useEffect(() => {
-    fetchNotifications();
-  }, [filter]);
+    fetchNotifications(); // tümünü çek; filtre istemci tarafında
+  }, []);
 
   useEffect(() => { fetchProducts(); }, []);
 
@@ -130,50 +132,54 @@ export default function StockNotificationsPage() {
     try {
       // EMBED YOK — ana sorgu yalın; ilişkiler ayrı çekilir (embed hataları
       // tüm listeyi boş bırakmasın). Hata olursa ekranda gösterilir.
-      let query = (supabase as any)
+      // TÜMÜNÜ çek — filtre istemci tarafında (dashboard rakamları sabit kalsın)
+      const { data, error } = await (supabase as any)
         .from("stock_notifications")
         .select("id, product_id, variant_id, user_id, email, phone, contact_id, instagram, status, created_at, notified_at")
         .order("created_at", { ascending: false });
-      if (filter === "pending") query = query.eq("status", "pending");
-
-      const { data, error } = await query;
       if (error) throw error;
       const rows = (data as any[]) || [];
 
-      // Ürün başlıkları
+      // Ürün başlık + stok
       const pids = [...new Set(rows.map((r) => r.product_id).filter(Boolean))] as string[];
-      const pmap = new Map<string, string>();
+      const pmap = new Map<string, { title: string; stock: number }>();
       if (pids.length) {
-        const { data: ps } = await (supabase as any).from("products").select("id, title").in("id", pids);
-        (ps as any[] || []).forEach((p) => pmap.set(p.id, p.title));
+        const { data: ps } = await (supabase as any).from("products").select("id, title, stock").in("id", pids);
+        (ps as any[] || []).forEach((p) => pmap.set(p.id, { title: p.title, stock: Number(p.stock ?? 0) }));
       }
 
-      // Varyant değerleri (embed'i yalıtılmış — hata olursa yut)
+      // Varyant değer + stok (embed yalıtılmış)
       const vids = [...new Set(rows.map((r) => r.variant_id).filter(Boolean))] as string[];
-      const vmap = new Map<string, string | null>();
+      const vmap = new Map<string, { value: string | null; stock: number }>();
       if (vids.length) {
         try {
           const { data: vs } = await (supabase as any)
-            .from("product_variants").select("id, variant_options(value)").in("id", vids);
-          (vs as any[] || []).forEach((v) => vmap.set(v.id, v.variant_options?.value ?? null));
-        } catch { /* varyant etiketi kritik değil */ }
+            .from("product_variants").select("id, stock, variant_options(value)").in("id", vids);
+          (vs as any[] || []).forEach((v) => vmap.set(v.id, { value: v.variant_options?.value ?? null, stock: Number(v.stock ?? 0) }));
+        } catch { /* kritik değil */ }
       }
 
-      // Kişiler
+      // Kişiler (email dahil — otomatik/manuel ayrımı için)
       const cids = [...new Set(rows.map((r) => r.contact_id).filter(Boolean))] as string[];
       const cmap = new Map<string, any>();
       if (cids.length) {
         const { data: cs } = await (supabase as any)
-          .from("contacts").select("id, full_name, instagram_handle, phone").in("id", cids);
+          .from("contacts").select("id, full_name, instagram_handle, phone, email").in("id", cids);
         (cs as any[] || []).forEach((c) => cmap.set(c.id, c));
       }
 
       const formatted = rows.map((n: any) => {
         const c = n.contact_id ? cmap.get(n.contact_id) : null;
+        const v = n.variant_id ? vmap.get(n.variant_id) : null;
+        const p = pmap.get(n.product_id);
+        // Kayıtlı üye (user_id) her zaman e-postalıdır → otomatik bildirilebilir
+        const hasEmail = !!(n.email || c?.email || n.user_id);
         return {
           ...n,
-          product_title: pmap.get(n.product_id) ?? "—",
-          variant_value: n.variant_id ? (vmap.get(n.variant_id) ?? null) : null,
+          product_title: p?.title ?? "—",
+          variant_value: v ? v.value : null,
+          stock: n.variant_id ? (v?.stock ?? 0) : (p?.stock ?? 0),
+          has_email: hasEmail,
           contact_name: c?.full_name ?? null,
           contact_instagram: c?.instagram_handle ?? null,
           contact_phone: c?.phone ?? null,
@@ -204,8 +210,9 @@ export default function StockNotificationsPage() {
         .update({ status: "notified", notified_at: new Date().toISOString() })
         .eq("id", id);
       if (error) throw error;
-      setNotifications((prev) => prev.filter((n) => (filter === "pending" ? n.id !== id : true)).map((n) =>
-        n.id === id ? { ...n, status: "notified", notified_at: new Date().toISOString() } : n
+      // Yerelde durumu güncelle → ilgili sekmeye (Bildirildi) otomatik geçer
+      setNotifications((prev) => prev.map((n) =>
+        n.id === id ? { ...n, status: "notified" as const, notified_at: new Date().toISOString() } : n
       ));
     } finally {
       setMarking(null);
@@ -225,7 +232,18 @@ export default function StockNotificationsPage() {
     if (!error) fetchNotifications();
   }
 
-  const pendingCount = notifications.filter((n) => n.status === "pending").length;
+  // Dashboard sayaçları — HER ZAMAN tüm veriden (filtreden bağımsız, sabit)
+  const pendingCount  = notifications.filter((n) => n.status === "pending").length;
+  const manualCount   = notifications.filter((n) => n.status === "pending" && !n.has_email).length;
+  const notifiedCount = notifications.filter((n) => n.status === "notified").length;
+
+  // Görünen liste — sekmeye göre istemci tarafı filtre
+  const shown = notifications.filter((n) => {
+    if (filter === "pending")  return n.status === "pending" && !!n.has_email;
+    if (filter === "manual")   return n.status === "pending" && !n.has_email;
+    if (filter === "notified") return n.status === "notified";
+    return true; // Hepsi
+  });
 
   function contactDisplay(n: Notification) {
     if (n.contact_name) return n.contact_name;
@@ -254,10 +272,19 @@ export default function StockNotificationsPage() {
       const phone = form.phone.trim() || null;
 
       // Kişiyi bul (email) ya da oluştur
+      // Mükerrer önleme: e-posta / instagram / telefon ile mevcut kişiyi bul
       let contactId: string | null = null;
       if (email) {
-        const { data: existing } = await (supabase as any).from("contacts").select("id").eq("email", email).maybeSingle();
-        if (existing) contactId = existing.id;
+        const { data } = await (supabase as any).from("contacts").select("id").eq("email", email).limit(1).maybeSingle();
+        if (data) contactId = data.id;
+      }
+      if (!contactId && instagram) {
+        const { data } = await (supabase as any).from("contacts").select("id").ilike("instagram_handle", instagram).limit(1).maybeSingle();
+        if (data) contactId = data.id;
+      }
+      if (!contactId && phone) {
+        const { data } = await (supabase as any).from("contacts").select("id").eq("phone", phone).limit(1).maybeSingle();
+        if (data) contactId = data.id;
       }
       if (!contactId) {
         const { data: { user } } = await supabase.auth.getUser();
@@ -344,32 +371,44 @@ export default function StockNotificationsPage() {
         </Card>
         <Card className="shadow-sm">
           <CardContent className="p-4 flex items-center gap-3">
+            <div className="w-10 h-10 bg-teal-100 rounded-xl flex items-center justify-center">
+              <MessageCircle size={18} className="text-teal-600" />
+            </div>
+            <div>
+              <p className="text-2xl font-black text-slate-900">{manualCount}</p>
+              <p className="text-xs text-slate-500 font-medium">Manuel (e-postasız)</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="shadow-sm">
+          <CardContent className="p-4 flex items-center gap-3">
             <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center">
               <Check size={18} className="text-green-600" />
             </div>
             <div>
-              <p className="text-2xl font-black text-slate-900">
-                {notifications.filter((n) => n.status === "notified").length}
-              </p>
+              <p className="text-2xl font-black text-slate-900">{notifiedCount}</p>
               <p className="text-xs text-slate-500 font-medium">Bildirildi</p>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Filtre */}
-      <div className="flex gap-2">
-        {(["pending", "all"] as const).map((f) => (
+      {/* Filtre sekmeleri — dashboard rakamlarını DEĞİŞTİRMEZ, sadece listeyi süzer */}
+      <div className="flex gap-2 flex-wrap">
+        {([
+          { key: "pending"  as const, label: "Bekleyenler", count: pendingCount - manualCount },
+          { key: "manual"   as const, label: "Manuel bildirim", count: manualCount },
+          { key: "notified" as const, label: "Bildirildi", count: notifiedCount },
+          { key: "all"      as const, label: "Hepsi", count: notifications.length },
+        ]).map((f) => (
           <button
-            key={f}
-            onClick={() => setFilter(f)}
+            key={f.key}
+            onClick={() => setFilter(f.key)}
             className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all ${
-              filter === f
-                ? "bg-blue-600 text-white"
-                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              filter === f.key ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
             }`}
           >
-            {f === "pending" ? "Bekleyenler" : "Tümü"}
+            {f.label} ({f.count})
           </button>
         ))}
       </div>
@@ -378,7 +417,10 @@ export default function StockNotificationsPage() {
         <CardHeader>
           <CardTitle>Bildirim Talepleri</CardTitle>
           <CardDescription>
-            {filter === "pending" ? "Henüz bildirilmemiş talepler" : "Tüm bildirim talepleri"}
+            {filter === "pending" ? "Otomatik e-posta gidecek bekleyenler"
+              : filter === "manual" ? "E-postasız — stok gelince ELDEN haber verilecekler (WhatsApp/Instagram)"
+              : filter === "notified" ? "Haber verilmiş (tamamlanmış) talepler"
+              : "Tüm bildirim talepleri"}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -391,10 +433,10 @@ export default function StockNotificationsPage() {
             <div className="py-8 flex justify-center">
               <Loader2 size={24} className="animate-spin text-slate-400" />
             </div>
-          ) : notifications.length === 0 ? (
+          ) : shown.length === 0 ? (
             <div className="py-12 text-center text-muted-foreground border border-dashed rounded-xl">
               <Bell size={32} className="mx-auto mb-3 text-slate-300" />
-              <p className="font-medium">Bekleyen bildirim talebi yok.</p>
+              <p className="font-medium">Bu sekmede kayıt yok.</p>
             </div>
           ) : (
             <Table>
@@ -408,15 +450,20 @@ export default function StockNotificationsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {notifications.map((n) => (
+                {shown.map((n) => (
                   <TableRow key={n.id}>
                     <TableCell className="max-w-[240px]">
                       <div className="font-medium text-sm truncate" title={n.product_title}>{n.product_title}</div>
-                      {n.variant_value && (
-                        <span className="inline-block mt-0.5 text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-100 rounded px-1.5 py-0.5">
-                          {n.variant_value}
+                      <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                        {n.variant_value && (
+                          <span className="text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-100 rounded px-1.5 py-0.5">
+                            {n.variant_value}
+                          </span>
+                        )}
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${(n.stock ?? 0) > 0 ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-500"}`}>
+                          {(n.stock ?? 0) > 0 ? `Stok ${n.stock}` : "Stok 0"}
                         </span>
-                      )}
+                      </div>
                     </TableCell>
                     <TableCell className="text-sm">
                       <div>{contactDisplay(n)}</div>
