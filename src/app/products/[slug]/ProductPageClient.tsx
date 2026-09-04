@@ -25,6 +25,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import { sortByVariantValue } from "@/lib/variant-sort";
 import ProductReviews from "@/components/products/ProductReviews";
 import StockNotifyModal from "@/components/products/StockNotifyModal";
 import { useCartStore } from "@/store/useCartStore";
@@ -71,7 +72,10 @@ export default function ProductPageClient({ product }: { product: Product }) {
       ? product.images
       : [product.image_url || "https://images.unsplash.com/photo-1494438639946-1ebd1d20bf85?q=80&w=800"];
 
-  const activeVariants = product.product_variants?.filter((v) => v.is_active) ?? [];
+  const activeVariants = sortByVariantValue(
+    product.product_variants?.filter((v) => v.is_active) ?? [],
+    (v) => v.variant_options?.value
+  );
 
   const [selectedImage, setSelectedImage] = useState<string>(images[0]);
   const [touchStartX, setTouchStartX] = useState<number | null>(null);

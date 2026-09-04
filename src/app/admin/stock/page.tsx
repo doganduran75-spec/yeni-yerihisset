@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Search, Check, Package, Save, BellRing, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { sortByVariantValue } from "@/lib/variant-sort";
 
 type StockRow = {
   key: string;
@@ -55,7 +56,7 @@ export default function StockPage() {
 
     const out: StockRow[] = [];
     for (const p of (data as any[]) || []) {
-      const variants = p.product_variants || [];
+      const variants = sortByVariantValue(p.product_variants || [], (v: any) => v.variant_options?.value);
       if (variants.length > 0) {
         for (const v of variants) {
           const value = v.variant_options?.value ?? "";

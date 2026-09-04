@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { supabase } from "@/lib/supabase";
 import { Plus, Edit, Trash2, Loader2, Layers } from "lucide-react";
+import { sortByVariantValue } from "@/lib/variant-sort";
 
 type VariantGroup = {
   id: string;
@@ -168,7 +169,7 @@ export default function VariantsTab() {
               <CardContent className="py-3 px-4">
                 <div className="flex flex-wrap gap-1.5">
                   {group.options?.length ? (
-                    group.options.map((opt) => (
+                    sortByVariantValue(group.options, (o) => o.value).map((opt) => (
                       <div
                         key={opt.id}
                         className="bg-white border rounded px-2 py-0.5 text-xs flex items-center gap-1.5 group/opt shadow-sm hover:border-blue-200"

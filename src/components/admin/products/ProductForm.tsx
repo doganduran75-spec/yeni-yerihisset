@@ -9,6 +9,7 @@ import { supabase } from "@/lib/supabase";
 import { Loader2, Upload, X, ChevronLeft, Save, Copy, ImagePlus, GripVertical } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { sortByVariantValue } from "@/lib/variant-sort";
 
 interface ProductFormProps {
   productId?: string;
@@ -56,17 +57,20 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
         brand_id: initialData.brand_id || "",
         short_description: initialData.short_description || "",
         tags: initialData.tags || [],
-        variants: initialData.product_variants?.map((v: any) => ({
-          ...v,
-          price: v.price?.toString() || "",
-          compare_at_price: v.compare_at_price?.toString() || "",
-          stock: v.stock?.toString() || "",
-          barcode: v.barcode || "",
-          trendyol_psf: v.trendyol_psf?.toString() || "",
-          trendyol_price: v.trendyol_price?.toString() || "",
-          value: v.variant_options?.value,
-          image_url: v.image_url || "",
-        })) || [],
+        variants: sortByVariantValue(
+          initialData.product_variants?.map((v: any) => ({
+            ...v,
+            price: v.price?.toString() || "",
+            compare_at_price: v.compare_at_price?.toString() || "",
+            stock: v.stock?.toString() || "",
+            barcode: v.barcode || "",
+            trendyol_psf: v.trendyol_psf?.toString() || "",
+            trendyol_price: v.trendyol_price?.toString() || "",
+            value: v.variant_options?.value,
+            image_url: v.image_url || "",
+          })) || [],
+          (v) => v.value
+        ),
         variants_have_images:
           initialData.product_variants?.some((v: any) => v.image_url) || false,
       });
@@ -180,7 +184,7 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
     const group = variantGroups.find((g) => g.id === groupId);
     if (!group) return;
 
-    const initialVariants = group.variant_options.map((opt: any) => ({
+    const initialVariants = sortByVariantValue(group.variant_options, (o: any) => o.value).map((opt: any) => ({
       variant_option_id: opt.id,
       value: opt.value,
       sku: "",

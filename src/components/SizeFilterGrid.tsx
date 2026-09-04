@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Search, Star, PackageX } from "lucide-react";
 import { formatPriceDisplay, getMinPrice } from "@/lib/product-price";
+import { compareVariantValues } from "@/lib/variant-sort";
 
 const FALLBACK_IMG = "https://images.unsplash.com/photo-1494438639946-1ebd1d20bf85?q=80&w=400";
 
@@ -89,7 +90,7 @@ export default function SizeFilterGrid({ products, categoryName }: { products: a
         if (isSizeVariant(v)) { const s = sizeValue(v); if (s) set.add(s); }
       }
     }
-    return [...set].sort((a, b) => parseFloat(a.replace(",", ".")) - parseFloat(b.replace(",", ".")));
+    return [...set].sort(compareVariantValues);
   }, [base]);
 
   // Seçilen numaraya göre ayrım (kategori süzgecinden sonra)
