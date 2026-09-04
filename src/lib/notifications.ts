@@ -508,6 +508,62 @@ export async function sendLeadMagnetWelcome(params: {
 }
 
 /**
+ * Şifre sıfırlama e-postası — uygulama SMTP'si (nodemailer) ile gönderilir.
+ * GoTrue'nun kendi SMTP'sine (auth/v1/recover) bağımlı DEĞİL; recovery linki
+ * admin.generateLink ile üretilir, markalı e-postayla bu fonksiyon gönderir.
+ */
+export async function sendPasswordRecoveryEmail(params: {
+  to: string;
+  name?: string | null;
+  actionUrl: string;
+}): Promise<{ status: "sent" | "failed"; error?: string }> {
+  const supabase = createAdminClient();
+  const { data: settings } = await (supabase as any).from("settings").select("*").limit(1).maybeSingle();
+  const storeName = settings?.store_name || "YeriHisset";
+  const name = (params.name || "").trim() || "Merhaba";
+
+  const bodyHtml = `
+    <h1 style="font-size:22px;font-weight:800;color:#111827;margin:0 0 12px">🔐 Şifre Sıfırlama</h1>
+    <p style="font-size:15px;color:#374151;line-height:1.6;margin:0 0 8px">
+      ${name}, ${storeName} hesabın için şifre sıfırlama talebi aldık. Yeni şifreni belirlemek için aşağıdaki butona tıkla.
+    </p>
+    <div style="text-align:center;margin:28px 0">
+      <a href="${params.actionUrl}" style="display:inline-block;background:#1d4ed8;color:#fff;text-decoration:none;padding:14px 32px;border-radius:14px;font-weight:800;font-size:15px">
+        Şifremi Belirle
+      </a>
+    </div>
+    <p style="font-size:13px;color:#6b7280;line-height:1.6;margin:0 0 8px">
+      Buton çalışmazsa bu bağlantıyı tarayıcına yapıştır:<br>
+      <span style="color:#1d4ed8;word-break:break-all">${params.actionUrl}</span>
+    </p>
+    <p style="font-size:13px;color:#9ca3af;line-height:1.6;margin:16px 0 0">
+      Bu talebi sen yapmadıysan bu e-postayı yok sayabilirsin — şifren değişmez. Bağlantı kısa süre sonra geçersiz olur.
+    </p>`;
+
+  const smtpConfig = buildSmtpConfig({
+    smtp_host: settings?.smtp_host || "",
+    smtp_port: settings?.smtp_port,
+    smtp_secure: settings?.smtp_secure,
+    smtp_user: settings?.smtp_user,
+    smtp_password: settings?.smtp_password,
+  });
+  if (!smtpConfig.host || !smtpConfig.auth.user) return { status: "failed", error: "SMTP ayarları eksik" };
+
+  try {
+    const transporter = nodemailer.createTransport(smtpConfig);
+    await transporter.sendMail({
+      from: `"${settings?.smtp_from_name || storeName}" <${settings?.smtp_from_email || smtpConfig.auth.user}>`,
+      to: params.to,
+      subject: `${storeName} — Şifre sıfırlama bağlantın`,
+      html: buildEmailDocument(bodyHtml, storeName),
+    });
+    return { status: "sent" };
+  } catch (err: any) {
+    return { status: "failed", error: err?.message || "Email gönderim hatası" };
+  }
+}
+
+/**
  * "Stok geldi" bildirimi — beklediği ürün tekrar stoğa girince müşteriye gider.
  */
 export async function sendBackInStockNotification(params: {

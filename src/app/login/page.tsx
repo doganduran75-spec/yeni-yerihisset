@@ -72,12 +72,17 @@ function LoginForm() {
 
     try {
       if (forgot) {
-        // Şifre sıfırlama bağlantısı gönder
-        const { error } = await supabase.auth.resetPasswordForEmail(formData.email, {
-          redirectTo: `${window.location.origin}/sifre-belirle`,
+        // Şifre sıfırlama bağlantısı gönder — uygulama SMTP'si üzerinden
+        // (GoTrue'nun kendi SMTP'sine bağımlı değil). Route daima generic
+        // başarı döner (e-posta varlık sızdırma yok).
+        const res = await fetch("/api/auth/forgot-password", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: formData.email }),
         });
-        if (error) throw error;
-        setSuccess("Şifre sıfırlama bağlantısı e-postanıza gönderildi. Lütfen kontrol edin.");
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data?.error || "İstek gönderilemedi.");
+        setSuccess("Bu e-posta kayıtlıysa şifre sıfırlama bağlantısı gönderildi. Lütfen gelen kutunuzu (ve spam) kontrol edin.");
         return;
       }
 

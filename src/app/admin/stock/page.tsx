@@ -39,7 +39,7 @@ export default function StockPage() {
   const [savedKey, setSavedKey] = useState<string | null>(null);
   const [bulkSaving, setBulkSaving] = useState(false);
   // Stok gelince: bu ürünü bekleyenler uyarısı
-  const [restockAlert, setRestockAlert] = useState<{ product: string; total: number; sent: number; manual: number } | null>(null);
+  const [restockAlert, setRestockAlert] = useState<{ product: string; total: number; sent: number; manual: number; failed: number; error?: string } | null>(null);
 
   useEffect(() => { load(); }, []);
 
@@ -137,11 +137,11 @@ export default function StockPage() {
             body: JSON.stringify({ productId: r.productId, variantId: r.variantId || null }),
           });
           const d = await res.json();
-          const total = (d.sent ?? 0) + (d.manual ?? 0);
+          const total = (d.sent ?? 0) + (d.manual ?? 0) + (d.failed ?? 0);
           if (total > 0) {
             setRestockAlert({
               product: r.title + (r.variantLabel ? ` · ${r.variantLabel}` : ""),
-              total, sent: d.sent ?? 0, manual: d.manual ?? 0,
+              total, sent: d.sent ?? 0, manual: d.manual ?? 0, failed: d.failed ?? 0, error: d.error,
             });
           }
         } catch (e) { console.error("[stok] bildirim gönderimi:", e); }
@@ -184,13 +184,21 @@ export default function StockPage() {
 
       {/* Stok gelince: bekleyenler uyarısı */}
       {restockAlert && (
-        <div className="flex items-center justify-between gap-3 rounded-2xl border border-teal-200 bg-teal-50 px-4 py-3">
+        <div className={cn(
+          "flex items-center justify-between gap-3 rounded-2xl border px-4 py-3",
+          restockAlert.failed > 0 ? "border-amber-300 bg-amber-50" : "border-teal-200 bg-teal-50"
+        )}>
           <div className="flex items-center gap-2 text-sm">
-            <BellRing size={18} className="text-teal-600 shrink-0" />
+            <BellRing size={18} className={cn("shrink-0", restockAlert.failed > 0 ? "text-amber-600" : "text-teal-600")} />
             <span className="text-teal-900">
               🔔 <b>{restockAlert.product}</b> yeniden stokta! <b>{restockAlert.total} kişi</b> bekliyordu.{" "}
               {restockAlert.sent > 0 && <><b className="text-green-700">{restockAlert.sent} kişiye e-posta gönderildi</b>. </>}
-              {restockAlert.manual > 0 && <><b className="text-teal-700">{restockAlert.manual} kişi e-postasız</b> — elden bilgilendirin.</>}
+              {restockAlert.manual > 0 && <><b className="text-teal-700">{restockAlert.manual} kişi e-postasız</b> — elden bilgilendirin. </>}
+              {restockAlert.failed > 0 && (
+                <><b className="text-red-700">{restockAlert.failed} e-posta GÖNDERİLEMEDİ</b>
+                {restockAlert.error && <span className="text-red-600"> — {restockAlert.error}</span>}
+                {" "}(pending kaldı, stoğu tekrar kaydedince yeniden denenir).</>
+              )}
             </span>
           </div>
           <div className="flex items-center gap-2 shrink-0">

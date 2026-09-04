@@ -55,6 +55,8 @@ export async function POST(req: NextRequest) {
 
   let sent = 0;
   let manual = 0;
+  let failed = 0;
+  let firstError: string | undefined;
   const notifiedIds: string[] = [];
 
   for (const r of list) {
@@ -66,15 +68,22 @@ export async function POST(req: NextRequest) {
     if (!email) { manual += 1; continue; }
 
     const res = await sendBackInStockNotification({ to: email, name, productTitle, productUrl });
-    if (res.status === "sent") { sent += 1; notifiedIds.push(r.id); }
+    if (res.status === "sent") {
+      sent += 1;
+      notifiedIds.push(r.id);
+    } else {
+      failed += 1;
+      if (!firstError) firstError = res.error;
+      console.error("[stock-notify/dispatch] e-posta gönderilemedi:", email, res.error);
+    }
   }
 
-  // Gönderilenleri 'notified' işaretle
+  // Gönderilenleri 'notified' işaretle (başarısızlar pending kalır → tekrar denenebilir)
   if (notifiedIds.length) {
     await (supabase as any).from("stock_notifications")
       .update({ status: "notified", notified_at: new Date().toISOString() })
       .in("id", notifiedIds);
   }
 
-  return NextResponse.json({ ok: true, sent, manual, product: productTitle });
+  return NextResponse.json({ ok: true, sent, manual, failed, error: firstError, product: productTitle });
 }
