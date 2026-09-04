@@ -57,11 +57,15 @@ type Notification = {
   contact_phone?: string | null;
 };
 
-type ProductOpt = {
-  id: string;
+// Satılabilir birim: ürün ya da varyant (stok dahil)
+type Unit = {
+  productId: string;
+  variantId: string;     // "" = varyantsız ürün
   title: string;
-  variants: { id: string; label: string }[];
-  search: string; // başlık + varyant değerleri (çok-kelimeli arama)
+  variantLabel: string;  // "" ya da "Beden: 42"
+  sku: string;
+  stock: number;
+  search: string;        // başlık + varyant + sku (çok-kelimeli)
 };
 
 // Türkçe-duyarsız normalize
@@ -78,7 +82,7 @@ export default function StockNotificationsPage() {
   const [marking, setMarking] = useState<string | null>(null);
 
   // Manuel ekleme
-  const [products, setProducts] = useState<ProductOpt[]>([]);
+  const [units, setUnits] = useState<Unit[]>([]);
   const [addOpen, setAddOpen] = useState(false);
   const [pSearch, setPSearch] = useState("");
   const [form, setForm] = useState({ productId: "", variantId: "", name: "", email: "", instagram: "", phone: "" });
@@ -93,26 +97,31 @@ export default function StockNotificationsPage() {
   async function fetchProducts() {
     const { data } = await (supabase as any)
       .from("products")
-      .select("id, title, product_variants(id, variant_options(value, variant_groups(name)))")
+      .select("id, title, stock, product_variants(id, sku, stock, variant_options(value, variant_groups(name)))")
       .eq("is_active", true)
       .order("title");
-    const opts: ProductOpt[] = ((data as any[]) || []).map((p) => {
-      const variantTexts: string[] = [];
-      const variants = (p.product_variants || []).map((v: any) => {
-        const val = v.variant_options?.value ?? "";
-        const gn = v.variant_options?.variant_groups?.name ?? "";
-        if (val) variantTexts.push(val);
-        if (gn) variantTexts.push(gn);
-        return { id: v.id, label: val ? (gn ? `${gn}: ${val}` : val) : "Varyant" };
-      });
-      return {
-        id: p.id,
-        title: p.title,
-        variants,
-        search: normTr([p.title, ...variantTexts].join(" ")),
-      };
-    });
-    setProducts(opts);
+    const us: Unit[] = [];
+    for (const p of (data as any[]) || []) {
+      const vs = p.product_variants || [];
+      if (vs.length > 0) {
+        for (const v of vs) {
+          const val = v.variant_options?.value ?? "";
+          const gn = v.variant_options?.variant_groups?.name ?? "";
+          const label = val ? (gn ? `${gn}: ${val}` : val) : "Varyant";
+          us.push({
+            productId: p.id, variantId: v.id, title: p.title, variantLabel: label,
+            sku: v.sku ?? "", stock: Number(v.stock ?? 0),
+            search: normTr([p.title, gn, val, v.sku].filter(Boolean).join(" ")),
+          });
+        }
+      } else {
+        us.push({
+          productId: p.id, variantId: "", title: p.title, variantLabel: "",
+          sku: "", stock: Number(p.stock ?? 0), search: normTr(p.title),
+        });
+      }
+    }
+    setUnits(us);
   }
 
   async function fetchNotifications() {
@@ -191,12 +200,12 @@ export default function StockNotificationsPage() {
     return "—";
   }
 
-  const filteredProducts = (() => {
+  const filteredUnits = (() => {
     const tokens = normTr(pSearch).split(/\s+/).filter(Boolean);
-    if (tokens.length === 0) return products.slice(0, 30);
-    return products.filter((p) => tokens.every((t) => p.search.includes(t))).slice(0, 30);
+    if (tokens.length === 0) return units.slice(0, 30);
+    return units.filter((u) => tokens.every((t) => u.search.includes(t))).slice(0, 30);
   })();
-  const selectedProduct = products.find((p) => p.id === form.productId);
+  const selectedUnit = units.find((u) => u.productId === form.productId && (u.variantId || "") === (form.variantId || ""));
 
   async function saveManual() {
     if (!form.productId) { alert("Bir ürün seçin."); return; }
@@ -220,7 +229,7 @@ export default function StockNotificationsPage() {
           full_name: form.name.trim() || null,
           email, phone, instagram_handle: instagram,
           source_channel: "stock_notify",
-          note: `Stok bildirimi: ${selectedProduct?.title ?? ""}`,
+          note: `Stok bildirimi: ${selectedUnit?.title ?? ""}${selectedUnit?.variantLabel ? " · " + selectedUnit.variantLabel : ""}`,
           created_by: user?.id ?? null,
         }).select("id").single();
         if (cErr) throw cErr;
@@ -452,44 +461,46 @@ export default function StockNotificationsPage() {
               Bir ürün seç ve isteyen kişinin bilgisini gir. Kişi otomatik olarak &quot;Kişiler&quot;e (Üyeler ekranı) eklenir.
             </p>
 
-            {/* Ürün seçimi */}
+            {/* Ürün/varyant seçimi — çok-kelimeli, stoklu (sipariş girişi gibi) */}
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold">Ürün *</label>
-              {form.productId ? (
+              <label className="text-xs font-semibold">Ürün / Varyant *</label>
+              {selectedUnit ? (
                 <div className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm">
-                  <span className="font-medium truncate">{selectedProduct?.title}</span>
-                  <button className="text-xs text-blue-600 font-bold" onClick={() => setForm(f => ({ ...f, productId: "", variantId: "" }))}>Değiştir</button>
+                  <span className="min-w-0">
+                    <span className="font-medium truncate block">{selectedUnit.title}{selectedUnit.variantLabel ? ` · ${selectedUnit.variantLabel}` : ""}</span>
+                    <span className={`text-[11px] font-bold ${selectedUnit.stock > 0 ? "text-green-600" : "text-red-500"}`}>
+                      {selectedUnit.stock > 0 ? `Stok ${selectedUnit.stock} — zaten var, bildirim gereksiz olabilir` : "Tükendi"}
+                    </span>
+                  </span>
+                  <button className="text-xs text-blue-600 font-bold shrink-0" onClick={() => setForm(f => ({ ...f, productId: "", variantId: "" }))}>Değiştir</button>
                 </div>
               ) : (
                 <>
                   <div className="relative">
                     <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                    <Input value={pSearch} onChange={e => setPSearch(e.target.value)} placeholder="Ürün ara..." className="pl-9 h-10" />
+                    <Input value={pSearch} onChange={e => setPSearch(e.target.value)} placeholder='Ara: "bot kahve 42"…' className="pl-9 h-10" />
                   </div>
-                  <div className="max-h-40 overflow-y-auto rounded-lg border border-slate-100 divide-y">
-                    {filteredProducts.map(p => (
-                      <button key={p.id} onClick={() => setForm(f => ({ ...f, productId: p.id, variantId: "" }))}
-                        className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 truncate">
-                        {p.title}
+                  <div className="max-h-56 overflow-y-auto rounded-lg border border-slate-100 divide-y">
+                    {filteredUnits.map(u => (
+                      <button
+                        key={`${u.productId}_${u.variantId}`}
+                        onClick={() => setForm(f => ({ ...f, productId: u.productId, variantId: u.variantId }))}
+                        className="w-full text-left px-3 py-2 text-xs hover:bg-blue-50 flex items-center justify-between gap-2"
+                      >
+                        <span className="min-w-0">
+                          <span className="font-medium text-slate-800 block truncate">{u.title}{u.variantLabel ? ` · ${u.variantLabel}` : ""}</span>
+                          {u.sku && <span className="text-slate-400">{u.sku}</span>}
+                        </span>
+                        <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded ${u.stock <= 0 ? "bg-red-100 text-red-600" : u.stock <= 3 ? "bg-amber-100 text-amber-700" : "bg-green-100 text-green-700"}`}>
+                          {u.stock <= 0 ? "Tükendi" : `Stok ${u.stock}`}
+                        </span>
                       </button>
                     ))}
-                    {filteredProducts.length === 0 && <div className="px-3 py-2 text-xs text-muted-foreground">Ürün yok.</div>}
+                    {filteredUnits.length === 0 && <div className="px-3 py-2 text-xs text-muted-foreground">Sonuç yok.</div>}
                   </div>
                 </>
               )}
             </div>
-
-            {/* Varyant */}
-            {selectedProduct && selectedProduct.variants.length > 0 && (
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold">Varyant / Numara</label>
-                <select value={form.variantId} onChange={e => setForm(f => ({ ...f, variantId: e.target.value }))}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
-                  <option value="">Farketmez / genel</option>
-                  {selectedProduct.variants.map(v => <option key={v.id} value={v.id}>{v.label}</option>)}
-                </select>
-              </div>
-            )}
 
             <div className="border-t pt-3 space-y-3">
               <p className="text-xs font-semibold text-slate-600">Kişi bilgileri (en az biri)</p>
