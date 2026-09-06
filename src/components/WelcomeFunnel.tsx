@@ -125,11 +125,11 @@ export default function WelcomeFunnel() {
             <div className="space-y-5">
               <button onClick={() => setStep("ask")} className="text-xs font-bold text-slate-400 hover:text-slate-600">← Geri</button>
               <h2 className="text-2xl font-black text-slate-900">Ne arıyorsun?</h2>
-              <p className="text-slate-500 text-sm -mt-3">Bir kategori seç, doğrudan oraya götürelim.</p>
+              <p className="text-slate-500 text-sm -mt-3">Bir kategori seç — seçtiğin önde gelir, dilersen diğerlerine de göz atarsın.</p>
 
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {categories.map((cat) => (
-                  <Link key={cat.slug} href={`/kategori/${cat.slug}`} onClick={dismiss}
+                  <Link key={cat.slug} href={`/products?kategori=${cat.slug}`} onClick={dismiss}
                     className="p-4 rounded-2xl border-2 border-slate-100 hover:border-olive-400 hover:bg-olive-50/40 transition-all text-center font-black text-slate-800 uppercase italic text-sm">
                     {cat.name}
                   </Link>

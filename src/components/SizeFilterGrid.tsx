@@ -1,7 +1,7 @@
 "use client";
 
 /* eslint-disable @typescript-eslint/no-explicit-any, @next/next/no-img-element */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Search, Star, PackageX } from "lucide-react";
 import { formatPriceDisplay, getMinPrice } from "@/lib/product-price";
@@ -64,6 +64,16 @@ function ProductCard({ product, categoryName }: { product: any; categoryName?: s
 export default function SizeFilterGrid({ products, categoryName }: { products: any[]; categoryName?: string }) {
   const [size, setSize] = useState<string | null>(null);
   const [cat, setCat] = useState<string | null>(null); // seçili kategori id'si
+
+  // URL'de ?kategori=<slug> varsa (ör. funnel'dan gelen) o kategori önseçili
+  // açılır — kullanıcı yine tüm kategoriler arasında gezebilir. Hydration
+  // uyuşmazlığı olmasın diye mount sonrası uygulanır.
+  useEffect(() => {
+    const slug = new URLSearchParams(window.location.search).get("kategori");
+    if (!slug) return;
+    const match = products.find((p: any) => p.categories?.slug === slug);
+    if (match?.categories?.id) setCat(match.categories.id);
+  }, [products]);
 
   // Mevcut kategoriler (yalnızca kategorisi olan ürünlerden). ≥2 ise filtre gösterilir.
   const cats = useMemo(() => {
