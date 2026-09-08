@@ -101,29 +101,40 @@ function LoginForm() {
         if (error) throw error;
         router.push(redirect);
       } else {
-        const { data, error } = await supabase.auth.signUp({
+        // Üyelik sunucu tarafında (admin.createUser, anında onaylı) — GoTrue
+        // confirmation e-postasına (bozuk self-host SMTP) bağımlı değil.
+        const res = await fetch("/api/auth/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: formData.email,
+            password: formData.password,
+            firstName: formData.firstName,
+            lastName: formData.lastName,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data?.error || "Kayıt oluşturulamadı.");
+
+        // Anında giriş yap
+        const { error: signInErr } = await supabase.auth.signInWithPassword({
           email: formData.email,
           password: formData.password,
-          options: {
-            data: {
-              first_name: formData.firstName,
-              last_name: formData.lastName,
-            }
-          }
         });
-        if (error) throw error;
-        
-        // If profile exists, update it. Usually a trigger handles this in Supabase, 
-        // but let's be safe if they don't have the trigger.
-        if (data.user) {
-          // Karşılama kuponlarını (auto_assign_on_signup) hesabına ekle + e-posta (fire-and-forget)
-          fetch("/api/coupons/welcome", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ userId: data.user.id }),
-          }).catch(() => {});
-          setSuccess("Kayıt başarılı! Lütfen e-postanızı kontrol edin veya giriş yapın.");
+        if (signInErr) {
+          // Kullanıcı oluştu ama giriş olmadıysa, giriş ekranına al
+          setSuccess("Kayıt başarılı! Giriş yapabilirsiniz.");
           setIsLogin(true);
+        } else {
+          // Karşılama kuponlarını hesabına ekle (fire-and-forget)
+          if (data.userId) {
+            fetch("/api/coupons/welcome", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ userId: data.userId }),
+            }).catch(() => {});
+          }
+          router.push(redirect);
         }
       }
     } catch (err: any) {
