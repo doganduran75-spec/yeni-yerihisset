@@ -59,7 +59,14 @@ export async function POST(req: NextRequest) {
   let firstError: string | undefined;
   const notifiedIds: string[] = [];
 
-  for (const r of list) {
+  // #4 — Anti-burst: gönderimler arası kısa bekleme (aynı anda 20-50 mail
+  // patlaması spam sinyali; araya boşluk koyunca daha güvenli). Alıcı sayısı
+  // ürün başına küçük olduğundan senkron döngü + throttle yeterli.
+  const THROTTLE_MS = 400;
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  for (let i = 0; i < list.length; i++) {
+    const r = list[i];
     let email: string | null = r.email ?? null;
     let name: string | null = null;
     if (!email && r.contact_id) { const c = cmap.get(r.contact_id); email = c?.email ?? null; name = c?.full_name ?? null; }
@@ -76,6 +83,7 @@ export async function POST(req: NextRequest) {
       if (!firstError) firstError = res.error;
       console.error("[stock-notify/dispatch] e-posta gönderilemedi:", email, res.error);
     }
+    if (i < list.length - 1) await sleep(THROTTLE_MS); // son gönderimden sonra bekleme
   }
 
   // Gönderilenleri 'notified' işaretle (başarısızlar pending kalır → tekrar denenebilir)
