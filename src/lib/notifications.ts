@@ -109,6 +109,37 @@ function buildEmailDocument(bodyHtml: string, storeName: string): string {
 </html>`;
 }
 
+/**
+ * HTML gövdeyi düz metne çevirir (multipart text/plain alternatifi için).
+ * HTML-only mailler spam filtresinde puan kaybeder; text alternatifi eklemek
+ * teslim edilebilirliği artırır.
+ */
+function htmlToText(html: string): string {
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<head[\s\S]*?<\/head>/gi, "")
+    .replace(/<a [^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi, "$2: $1")
+    .replace(/<\/(p|div|tr|h[1-6]|li)>/gi, "\n")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .split("\n").map((l) => l.trim()).filter((l, i, a) => !(l === "" && a[i - 1] === "")).join("\n")
+    .trim();
+}
+
+/**
+ * Toplu/pazarlama maillerine List-Unsubscribe başlığı (Gmail/Yahoo toplu-gönderim
+ * kuralları + itibar için). İşlemsel maillerde (sipariş/şifre) KULLANILMAZ.
+ * Not: tam tek-tık abonelikten çıkış (URL + suppression listesi) go-live işi.
+ */
+function listUnsubHeader(settings: any): Record<string, string> { // eslint-disable-line @typescript-eslint/no-explicit-any
+  const addr = settings?.smtp_from_email || settings?.contact_email;
+  return addr ? { "List-Unsubscribe": `<mailto:${addr}?subject=unsubscribe>` } : {};
+}
+
 // --- Ana fonksiyon ---
 
 export async function sendOrderNotification(
@@ -261,6 +292,7 @@ export async function sendOrderNotification(
       to: customerEmail,
       subject,
       html: buildEmailDocument(bodyHtml, storeName),
+      text: htmlToText(bodyHtml),
     });
 
     await logNotification(supabase, { ...context, trigger, channel: "email", status: "sent", recipient: customerEmail });
@@ -354,6 +386,8 @@ export async function sendCouponAssignedNotification(
       to: profile.email,
       subject,
       html: buildEmailDocument(bodyHtml, storeName),
+      text: htmlToText(bodyHtml),
+      headers: listUnsubHeader(settings),
     });
     return { status: "sent" };
   } catch (err: unknown) {
@@ -428,6 +462,7 @@ export async function sendAdminReplyNotification(
       to: profile.email,
       subject,
       html: buildEmailDocument(bodyHtml, storeName),
+      text: htmlToText(bodyHtml),
     });
 
     return { status: "sent" };
@@ -500,6 +535,8 @@ export async function sendLeadMagnetWelcome(params: {
       to: params.to,
       subject: "Ücretsiz kargo kuponunuz hazır 🎁",
       html: buildEmailDocument(bodyHtml, storeName),
+      text: htmlToText(bodyHtml),
+      headers: listUnsubHeader(settings),
     });
     return { status: "sent" };
   } catch (err: any) {
@@ -552,6 +589,7 @@ export async function sendPasswordRecoveryEmail(params: {
       to: params.to,
       subject: `${storeName} — Şifre sıfırlama bağlantın`,
       html: buildEmailDocument(bodyHtml, storeName),
+      text: htmlToText(bodyHtml),
     });
     return { status: "sent" };
   } catch (err: any) {
@@ -603,6 +641,8 @@ export async function sendBackInStockNotification(params: {
       to: params.to,
       subject: `Tekrar stokta: ${params.productTitle}`,
       html: buildEmailDocument(bodyHtml, storeName),
+      text: htmlToText(bodyHtml),
+      headers: listUnsubHeader(settings),
     });
     return { status: "sent" };
   } catch (err: any) {

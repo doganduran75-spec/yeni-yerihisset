@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ShoppingBag, Search, User, Menu, Shield } from "lucide-react";
+import { ShoppingBag, Search, User, Menu, X, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCartStore } from "@/store/useCartStore";
 
@@ -11,17 +11,26 @@ interface NavbarProps {
   variant?: "default" | "minimal";
 }
 
+// Menü linkleri (masaüstü + mobil paylaşır). "Mağaza" eskiden ayrı olan
+// "Yeni Gelenler" + "Kategoriler"i tek satırda birleştirir (ikisi de /products).
+const NAV_LINKS = [
+  { label: "Mağaza", href: "/products" },
+  { label: "Fırsatlar", href: "/firsatlar" },
+  { label: "Bilgi Bankası", href: "/bilgi-bankasi" },
+];
+
 export default function Navbar({ variant = "default" }: NavbarProps) {
   const [mounted, setMounted] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [search, setSearch] = useState("");
+  const [menuOpen, setMenuOpen] = useState(false);
   const router = useRouter();
   const { items } = useCartStore();
 
   function submitSearch(e: React.FormEvent) {
     e.preventDefault();
     const q = search.trim();
-    if (q) router.push(`/ara?q=${encodeURIComponent(q)}`);
+    if (q) { setMenuOpen(false); router.push(`/ara?q=${encodeURIComponent(q)}`); }
   }
 
   useEffect(() => {
@@ -63,12 +72,7 @@ export default function Navbar({ variant = "default" }: NavbarProps) {
           </Link>
           
           <nav className="hidden lg:flex items-center gap-8">
-            {[
-              { label: "Yeni Gelenler", href: "/products" },
-              { label: "Kategoriler",   href: "#" },
-              { label: "Fırsatlar",      href: "/firsatlar" },
-              { label: "Bilgi Bankası", href: "/bilgi-bankasi" },
-            ].map((item) => (
+            {NAV_LINKS.map((item) => (
               <Link
                 key={item.label}
                 href={item.href}
@@ -131,11 +135,64 @@ export default function Navbar({ variant = "default" }: NavbarProps) {
               )}
             </Link>
 
-            <button className="lg:hidden p-3 hover:bg-slate-50 rounded-2xl transition-all text-slate-700">
-              <Menu size={24} />
+            <button
+              onClick={() => setMenuOpen((v) => !v)}
+              aria-label={menuOpen ? "Menüyü kapat" : "Menüyü aç"}
+              aria-expanded={menuOpen}
+              className="lg:hidden p-3 hover:bg-slate-50 rounded-2xl transition-all text-slate-700"
+            >
+              {menuOpen ? <X size={24} /> : <Menu size={24} />}
             </button>
           </div>
         </div>
+
+        {/* Mobil menü paneli */}
+        {menuOpen && (
+          <div className="lg:hidden absolute left-0 right-0 top-full bg-white border-b shadow-xl animate-in slide-in-from-top-2 duration-200">
+            <div className="container mx-auto px-4 py-4 space-y-4">
+              {/* Arama (mobilde header'da yok, buraya koyduk) */}
+              <form onSubmit={submitSearch} className="flex items-center bg-slate-50 rounded-2xl px-4 py-3 border border-slate-100 focus-within:ring-2 focus-within:ring-olive-100 focus-within:bg-white transition-all">
+                <button type="submit" aria-label="Ara" className="text-slate-400 hover:text-olive-600 transition-colors">
+                  <Search size={18} />
+                </button>
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Ürün Ara..."
+                  className="bg-transparent border-none focus:ring-0 text-sm font-bold text-slate-800 placeholder:text-slate-400 flex-1 ml-2 outline-none"
+                />
+              </form>
+
+              <nav className="flex flex-col">
+                {NAV_LINKS.map((item) => (
+                  <Link
+                    key={item.label}
+                    href={item.href}
+                    onClick={() => setMenuOpen(false)}
+                    className="py-3 text-sm font-black uppercase tracking-widest text-slate-700 hover:text-olive-600 border-b border-slate-50 transition-colors"
+                  >
+                    {item.label}
+                  </Link>
+                ))}
+                {/* Test: karşılama funnel'ını tekrar aç */}
+                <button
+                  onClick={() => {
+                    setMenuOpen(false);
+                    if (typeof window !== "undefined" && window.location.pathname === "/") {
+                      window.dispatchEvent(new Event("yh:open-funnel"));
+                    } else {
+                      router.push("/?funnel=1");
+                    }
+                  }}
+                  className="py-3 text-left text-sm font-black uppercase tracking-widest text-olive-600 hover:text-olive-800 transition-colors"
+                >
+                  Funnel
+                </button>
+              </nav>
+            </div>
+          </div>
+        )}
       </div>
     </header>
   );
