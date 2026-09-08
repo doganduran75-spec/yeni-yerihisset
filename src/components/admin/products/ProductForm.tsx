@@ -297,30 +297,50 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
       }
 
       if (formData.has_variants && finalId) {
-        // Mevcut varyasyonları sil (cascade ile variant_tag_assignments da silinir)
-        if (productId) {
-          await supabase.from("product_variants").delete().eq("product_id", productId);
+        // YIKICI OLMAYAN kaydetme: mevcut varyantların ID'lerini KORU.
+        // (Eskiden hepsi silinip yeniden eklenirdi → variant_id'ye ON DELETE
+        // CASCADE bağlı stok_bildirimleri/sipariş kalemleri de silinirdi.)
+        const { data: existing } = await supabase
+          .from("product_variants")
+          .select("id, variant_option_id")
+          .eq("product_id", finalId);
+        const existingByOption = new Map(
+          ((existing as any[]) || []).map((e) => [e.variant_option_id, e.id])
+        );
+        const formOptionIds = new Set(formData.variants.map((v) => v.variant_option_id));
+
+        // Yalnızca formdan KALDIRILAN bedenleri sil (gerçekten yok edilenler)
+        const toDelete = ((existing as any[]) || [])
+          .filter((e) => !formOptionIds.has(e.variant_option_id))
+          .map((e) => e.id);
+        if (toDelete.length) {
+          await supabase.from("product_variants").delete().in("id", toDelete);
         }
 
-        const variantsPayload = formData.variants.map((v) => ({
-          product_id: finalId,
-          variant_option_id: v.variant_option_id,
-          sku: v.sku || `${formData.title.slice(0, 3)}-${v.value}`,
-          barcode: v.barcode || null,
-          price: parseFloat(v.price) || 0,
-          compare_at_price: v.compare_at_price !== "" ? parseFloat(v.compare_at_price) : null,
-          stock: parseInt(v.stock) || 0,
-          trendyol_psf: v.trendyol_psf !== "" ? parseFloat(v.trendyol_psf) : null,
-          trendyol_price: v.trendyol_price !== "" ? parseFloat(v.trendyol_price) : null,
-          is_active: v.is_active,
-          image_url: formData.variants_have_images ? (v.image_url || null) : null,
-        }));
-
-        const { data: savedVariants, error: variantError } = await supabase
-          .from("product_variants")
-          .insert(variantsPayload)
-          .select();
-        if (variantError) throw variantError;
+        // Var olanı GÜNCELLE (id korunur), yeni olanı EKLE
+        for (const v of formData.variants) {
+          const row = {
+            product_id: finalId,
+            variant_option_id: v.variant_option_id,
+            sku: v.sku || `${formData.title.slice(0, 3)}-${v.value}`,
+            barcode: v.barcode || null,
+            price: parseFloat(v.price) || 0,
+            compare_at_price: v.compare_at_price !== "" ? parseFloat(v.compare_at_price) : null,
+            stock: parseInt(v.stock) || 0,
+            trendyol_psf: v.trendyol_psf !== "" ? parseFloat(v.trendyol_psf) : null,
+            trendyol_price: v.trendyol_price !== "" ? parseFloat(v.trendyol_price) : null,
+            is_active: v.is_active,
+            image_url: formData.variants_have_images ? (v.image_url || null) : null,
+          };
+          const existingId = existingByOption.get(v.variant_option_id);
+          if (existingId) {
+            const { error: upErr } = await supabase.from("product_variants").update(row).eq("id", existingId);
+            if (upErr) throw upErr;
+          } else {
+            const { error: insErr } = await supabase.from("product_variants").insert(row);
+            if (insErr) throw insErr;
+          }
+        }
       }
 
       router.push("/admin/products");
