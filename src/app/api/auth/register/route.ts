@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
+import { issueEmailVerification } from "@/lib/email-verify";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -40,11 +41,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error?.message || "Kayıt oluşturulamadı." }, { status: 400 });
   }
 
-  // Profil garantiye al (trigger yoksa) — ad/soyad dahil
+  // Profil garantiye al (trigger yoksa) — ad/soyad dahil, doğrulanmadı olarak
   await supabase.from("profiles").upsert(
-    { id: created.user.id, email, first_name: firstName || null, last_name: lastName || null } as any,
+    { id: created.user.id, email, first_name: firstName || null, last_name: lastName || null, email_verified: false } as any,
     { onConflict: "id" }
   );
 
-  return NextResponse.json({ ok: true, userId: created.user.id });
+  // Onay e-postası gönder (app SMTP + kendi token) — bloklamaz
+  const mail = await issueEmailVerification(created.user.id, email, [firstName, lastName].filter(Boolean).join(" "));
+
+  return NextResponse.json({ ok: true, userId: created.user.id, emailStatus: mail.status });
 }

@@ -39,6 +39,35 @@ function LoginForm() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  // Kayıt sonrası e-posta doğrulama kutusu
+  const [pendingVerify, setPendingVerify] = useState<string | null>(null); // gönderilen e-posta
+  const [verifyNote, setVerifyNote] = useState<string | null>(null);
+  const [resending, setResending] = useState(false);
+  const [editEmail, setEditEmail] = useState<string | null>(null); // düzeltme inputu (açıksa değer)
+  const [savingEmail, setSavingEmail] = useState(false);
+
+  async function authHeader() {
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
+  }
+  async function resendVerification() {
+    setResending(true); setVerifyNote(null);
+    try {
+      const res = await fetch("/api/auth/resend-verification", { method: "POST", headers: { "Content-Type": "application/json", ...(await authHeader()) } });
+      const d = await res.json().catch(() => ({}));
+      setVerifyNote(res.ok ? "Onay e-postası yeniden gönderildi." : (d?.error || "Gönderilemedi."));
+    } finally { setResending(false); }
+  }
+  async function saveNewEmail() {
+    if (!editEmail) return;
+    setSavingEmail(true); setVerifyNote(null);
+    try {
+      const res = await fetch("/api/auth/change-email", { method: "POST", headers: { "Content-Type": "application/json", ...(await authHeader()) }, body: JSON.stringify({ email: editEmail.trim().toLowerCase() }) });
+      const d = await res.json().catch(() => ({}));
+      if (res.ok) { setPendingVerify(editEmail.trim().toLowerCase()); setEditEmail(null); setVerifyNote("E-posta güncellendi, yeni adrese onay bağlantısı gönderildi."); }
+      else setVerifyNote(d?.error || "Güncellenemedi.");
+    } finally { setSavingEmail(false); }
+  }
 
   const [formData, setFormData] = useState({
     email: "",
@@ -134,7 +163,8 @@ function LoginForm() {
               body: JSON.stringify({ userId: data.userId }),
             }).catch(() => {});
           }
-          router.push(redirect);
+          // Onay kutusunu göster (hesap aktif; alışverişe devam edilebilir)
+          setPendingVerify(formData.email);
         }
       }
     } catch (err: any) {
@@ -176,6 +206,52 @@ function LoginForm() {
         </div>
 
         <CardContent className="p-8 md:p-10">
+          {pendingVerify ? (
+            <div className="space-y-5 animate-in fade-in">
+              <div className="text-center space-y-2">
+                <div className="mx-auto w-14 h-14 rounded-2xl bg-olive-50 flex items-center justify-center">
+                  <Mail className="text-olive-600" size={26} />
+                </div>
+                <h2 className="text-xl font-black text-slate-900">Hesabın hazır! 🎉</h2>
+                <p className="text-sm text-slate-500">
+                  <b className="text-slate-700">{pendingVerify}</b> adresine onay bağlantısı gönderdik.
+                  Onaylamak zorunda değilsin — dilediğin zaman tıklayabilirsin.
+                </p>
+              </div>
+
+              {verifyNote && (
+                <p className="text-xs font-bold text-center text-olive-700 bg-olive-50 border border-olive-100 rounded-lg px-3 py-2">{verifyNote}</p>
+              )}
+
+              {editEmail !== null ? (
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest px-1">DOĞRU E-POSTA</label>
+                  <Input type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} placeholder="dogru@mail.com" className="h-12 rounded-xl" />
+                  <div className="flex gap-2">
+                    <Button type="button" onClick={saveNewEmail} disabled={savingEmail} className="flex-1 h-11 rounded-xl bg-olive-600 hover:bg-olive-700">
+                      {savingEmail ? "Kaydediliyor…" : "Kaydet ve Gönder"}
+                    </Button>
+                    <Button type="button" variant="outline" onClick={() => setEditEmail(null)} className="h-11 rounded-xl">Vazgeç</Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  <Button type="button" onClick={() => router.push(redirect)} className="w-full h-12 rounded-xl bg-olive-600 hover:bg-olive-700 text-sm font-black tracking-wide">
+                    Alışverişe Devam Et
+                  </Button>
+                  <div className="flex gap-2">
+                    <Button type="button" variant="outline" onClick={resendVerification} disabled={resending} className="flex-1 h-11 rounded-xl text-xs font-bold">
+                      {resending ? "Gönderiliyor…" : "Tekrar Gönder"}
+                    </Button>
+                    <Button type="button" variant="outline" onClick={() => setEditEmail(pendingVerify)} className="flex-1 h-11 rounded-xl text-xs font-bold">
+                      E-postamı Düzelt
+                    </Button>
+                  </div>
+                  <p className="text-[11px] text-center text-slate-400">Onay mailini bulamadıysan spam klasörüne de bak.</p>
+                </div>
+              )}
+            </div>
+          ) : (
           <form onSubmit={handleSubmit} className="space-y-6">
             {!isLogin && (
               <div className="grid grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2">
@@ -339,6 +415,7 @@ function LoginForm() {
                </p>
             </div>
           </form>
+          )}
         </CardContent>
       </Card>
 

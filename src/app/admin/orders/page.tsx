@@ -63,6 +63,7 @@ type Order = {
     last_name: string;
     email: string;
     phone: string;
+    email_verified?: boolean | null;
   } | null;
   order_items?: OrderItem[];
 };
@@ -180,7 +181,7 @@ export default function OrdersPage() {
       setLoading(true);
       const { data, error } = await supabase
         .from("orders")
-        .select(`*, profiles(first_name, last_name, email, phone)`)
+        .select(`*, profiles(first_name, last_name, email, phone, email_verified)`)
         .order("created_at", { ascending: false });
 
       if (error) {
@@ -913,7 +914,14 @@ export default function OrdersPage() {
                   </h4>
                   <div className="text-sm space-y-1 bg-muted/30 p-3 rounded-lg border">
                     <p className="font-semibold">{selectedOrder.profiles?.first_name} {selectedOrder.profiles?.last_name}</p>
-                    <p className="text-muted-foreground flex items-center gap-1.5"><Mail size={11} /> {selectedOrder.profiles?.email}</p>
+                    <p className="text-muted-foreground flex items-center gap-1.5 flex-wrap">
+                      <Mail size={11} /> {selectedOrder.profiles?.email}
+                      {selectedOrder.profiles?.email_verified === false ? (
+                        <span className="text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200 rounded px-1.5 py-0.5" title="Müşteri e-postasını doğrulamadı — adres yanlış olabilir">E-posta doğrulanmadı ⚠</span>
+                      ) : selectedOrder.profiles?.email_verified === true ? (
+                        <span className="text-[10px] font-bold bg-green-50 text-green-700 border border-green-200 rounded px-1.5 py-0.5">Doğrulandı ✓</span>
+                      ) : null}
+                    </p>
                     <p className="text-muted-foreground flex items-center gap-1.5"><Phone size={11} /> {selectedOrder.profiles?.phone || "—"}</p>
                     {selectedOrder.payment_method === "bank_transfer" && (
                       <p className="text-amber-600 flex items-center gap-1.5 font-medium"><Landmark size={11} /> Havale / EFT</p>

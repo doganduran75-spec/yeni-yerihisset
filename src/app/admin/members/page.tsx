@@ -26,6 +26,7 @@ type Member = {
   phone: string | null;
   city: string | null;
   created_at: string;
+  email_verified: boolean | null;
   roleIds: string[];
   tagOptionIds: string[];
 };
@@ -93,7 +94,7 @@ export default function MembersPage() {
   async function fetchAll() {
     setLoading(true);
     const [profilesRes, rolesRes, tagGroupsRes, userRolesRes, userTagsRes, contactsRes] = await Promise.all([
-      supabase.from("profiles").select("id, email, first_name, last_name, phone, city, created_at").order("created_at", { ascending: false }),
+      supabase.from("profiles").select("id, email, first_name, last_name, phone, city, created_at, email_verified").order("created_at", { ascending: false }),
       supabase.from("roles").select("id, name, slug").order("name"),
       supabase.from("member_tag_groups").select("id, name, member_tag_options(id, group_id, value)").order("created_at"),
       supabase.from("user_roles").select("user_id, role_id"),
@@ -374,6 +375,9 @@ export default function MembersPage() {
                         <TableCell>
                           <div className="flex flex-wrap gap-1">
                             <Badge className="text-[10px] font-semibold border px-1.5 py-0 bg-green-50 text-green-700 border-green-200">Üye</Badge>
+                            {member.email_verified === false && (
+                              <Badge className="text-[10px] font-semibold border px-1.5 py-0 bg-amber-100 text-amber-800 border-amber-200" title="Bu üye e-posta adresini henüz doğrulamadı">E-posta ✗</Badge>
+                            )}
                             {memberRoles.map(r => (
                               <Badge key={r.id} className={cn("text-[10px] font-semibold border px-1.5 py-0", roleColor(r.slug))}>{r.name}</Badge>
                             ))}
