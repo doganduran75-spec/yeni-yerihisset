@@ -371,8 +371,10 @@ export async function POST(req: NextRequest) {
   }
 
   // Sipariş oluşturma bildirimi gönder (non-blocking, doğrudan lib çağrısı)
-  const { sendOrderNotification } = await import("@/lib/notifications");
+  const { sendOrderNotification, sendAdminNewOrderNotification } = await import("@/lib/notifications");
   sendOrderNotification("order_placed", { orderId: order.id, userId: user.id }).catch(() => {});
+  // Admin'e "yeni sipariş geldi" bildirimi
+  sendAdminNewOrderNotification(order.id).catch(() => {});
 
   return NextResponse.json({ orderId: order.id });
 }

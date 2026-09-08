@@ -545,6 +545,81 @@ export async function sendLeadMagnetWelcome(params: {
 }
 
 /**
+ * ADMIN'e "Yeni Sipariş" bildirimi — sipariş oluşunca mağaza sahibine gider.
+ * Alıcı: settings.admin_notify_email varsa o, yoksa settings.contact_email.
+ * İşlemseldir (abonelik çıkışı yok). Müşteriye giden order_placed'den ayrıdır.
+ */
+export async function sendAdminNewOrderNotification(
+  orderId: string
+): Promise<{ status: "sent" | "failed" | "skipped"; error?: string }> {
+  const supabase = createAdminClient();
+
+  const { data: order } = await (supabase
+    .from("orders")
+    .select(`
+      id, total_amount, status, created_at, shipping_address, payment_method,
+      profiles!orders_user_id_fkey ( first_name, last_name, email, phone ),
+      order_items ( quantity, unit_price, products (title) )
+    `)
+    .eq("id", orderId)
+    .single() as any) as { data: any };
+
+  if (!order) return { status: "skipped", error: "Sipariş bulunamadı" };
+
+  const { data: settings } = await (supabase.from("settings").select("*").single() as any) as { data: any };
+  const storeName = settings?.store_name || "YeriHisset";
+  const storeUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com";
+  const to = settings?.admin_notify_email || settings?.contact_email || settings?.smtp_from_email || settings?.smtp_user;
+  if (!to) return { status: "skipped", error: "Admin e-posta adresi ayarlı değil" };
+
+  const profile = order.profiles as any;
+  const customerName = [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") || "—";
+  const items = ((order.order_items as any[]) || []).map((i) => ({
+    title: i.products?.title ?? "Ürün", quantity: i.quantity, unit_price: i.unit_price,
+  }));
+  const shortId = order.id.slice(0, 8).toUpperCase();
+  const payLabel = order.payment_method === "bank_transfer" ? "Havale/EFT" : "Kart (iyzico)";
+
+  const bodyHtml = `
+    <h1 style="font-size:22px;font-weight:800;color:#111827;margin:0 0 12px">🛒 Yeni Sipariş — #${shortId}</h1>
+    <table style="width:100%;font-size:14px;color:#374151;margin:0 0 16px">
+      <tr><td style="padding:3px 0;color:#6b7280">Müşteri</td><td style="padding:3px 0;font-weight:700">${customerName}</td></tr>
+      <tr><td style="padding:3px 0;color:#6b7280">E-posta</td><td style="padding:3px 0">${profile?.email ?? "—"}</td></tr>
+      <tr><td style="padding:3px 0;color:#6b7280">Telefon</td><td style="padding:3px 0">${profile?.phone ?? "—"}</td></tr>
+      <tr><td style="padding:3px 0;color:#6b7280">Ödeme</td><td style="padding:3px 0;font-weight:700">${payLabel}</td></tr>
+      <tr><td style="padding:3px 0;color:#6b7280">Tutar</td><td style="padding:3px 0;font-weight:800;color:#166534">₺${Number(order.total_amount).toFixed(2)}</td></tr>
+    </table>
+    ${buildOrderItemsHtml(items)}
+    ${order.shipping_address ? `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;margin:0 0 16px;font-size:13px;color:#475569"><b>Teslimat:</b><br>${String(order.shipping_address).replace(/\n/g, "<br>")}</div>` : ""}
+    <div style="text-align:center;margin:8px 0 0">
+      <a href="${storeUrl}/admin/orders" style="display:inline-block;background:#1d4ed8;color:#fff;text-decoration:none;padding:12px 28px;border-radius:12px;font-weight:800;font-size:14px">Siparişi Yönet</a>
+    </div>`;
+
+  const smtpConfig = buildSmtpConfig({
+    smtp_host: settings?.smtp_host || "",
+    smtp_port: settings?.smtp_port,
+    smtp_secure: settings?.smtp_secure,
+    smtp_user: settings?.smtp_user,
+    smtp_password: settings?.smtp_password,
+  });
+  if (!smtpConfig.host || !smtpConfig.auth.user) return { status: "failed", error: "SMTP ayarları eksik" };
+
+  try {
+    const transporter = nodemailer.createTransport(smtpConfig);
+    await transporter.sendMail({
+      from: `"${settings?.smtp_from_name || storeName}" <${settings?.smtp_from_email || smtpConfig.auth.user}>`,
+      to,
+      subject: `🛒 Yeni Sipariş #${shortId} — ₺${Number(order.total_amount).toFixed(2)} (${payLabel})`,
+      html: buildEmailDocument(bodyHtml, storeName),
+      text: htmlToText(bodyHtml),
+    });
+    return { status: "sent" };
+  } catch (err: any) {
+    return { status: "failed", error: err?.message || "Email gönderim hatası" };
+  }
+}
+
+/**
  * Şifre sıfırlama e-postası — uygulama SMTP'si (nodemailer) ile gönderilir.
  * GoTrue'nun kendi SMTP'sine (auth/v1/recover) bağımlı DEĞİL; recovery linki
  * admin.generateLink ile üretilir, markalı e-postayla bu fonksiyon gönderir.

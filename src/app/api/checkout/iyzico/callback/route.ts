@@ -92,6 +92,10 @@ export async function POST(req: NextRequest) {
           import("@/lib/notifications").then(({ sendOrderNotification }) =>
             sendOrderNotification("order_placed", { orderId: order.id, userId: order.user_id })
           ),
+          // Admin'e "yeni sipariş geldi" bildirimi
+          import("@/lib/notifications").then(({ sendAdminNewOrderNotification }) =>
+            sendAdminNewOrderNotification(order.id)
+          ),
           // Kupon kullanımını kaydet (supabase üzerinden)
           (async () => {
             const { data: ord } = await (supabase as any)
