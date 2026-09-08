@@ -5,7 +5,6 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Loader2, Search, Check, Package, Save, BellRing, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { sortByVariantValue } from "@/lib/variant-sort";
@@ -15,8 +14,13 @@ type StockRow = {
   productId: string;
   variantId: string | null;
   title: string;
-  variantLabel: string;
+  description: string;   // ürün kısa açıklaması
+  variantLabel: string;  // grup: değer (arama için)
+  sizeValue: string;     // yalnız numara/değer (tabloda "Numara" sütunu)
   sku: string;
+  barcode: string;
+  taban: string;         // ürün seviyesinde Taban değeri ("" yoksa)
+  saya: string;          // ürün seviyesinde Saya değeri
   stock: number;
   image: string | null;
   search: string;
@@ -50,8 +54,8 @@ export default function StockPage() {
     const { data } = await (supabase as any)
       .from("products")
       .select(`
-        id, title, stock, has_variants, image_url,
-        product_variants ( id, sku, stock, variant_options ( value, variant_groups ( name ) ) )
+        id, title, short_description, stock, has_variants, image_url, taban_option_id, saya_option_id,
+        product_variants ( id, sku, barcode, stock, variant_options ( value, variant_groups ( name ) ) )
       `)
       .order("title");
 
@@ -68,8 +72,20 @@ export default function StockPage() {
     const waitOf = (productId: string, variantId: string | null) =>
       waitMap.get(`${productId}::${variantId ?? ""}`) ?? 0;
 
+    // Taban/Saya option id'lerini değere çöz (variant_options'tan)
+    const prods = (data as any[]) || [];
+    const optIds = [...new Set(prods.flatMap((p) => [p.taban_option_id, p.saya_option_id]).filter(Boolean))] as string[];
+    const optMap = new Map<string, string>();
+    if (optIds.length) {
+      const { data: opts } = await (supabase as any).from("variant_options").select("id, value").in("id", optIds);
+      (opts as any[] || []).forEach((o) => optMap.set(o.id, o.value ?? ""));
+    }
+
     const out: StockRow[] = [];
-    for (const p of (data as any[]) || []) {
+    for (const p of prods) {
+      const taban = p.taban_option_id ? (optMap.get(p.taban_option_id) ?? "") : "";
+      const saya = p.saya_option_id ? (optMap.get(p.saya_option_id) ?? "") : "";
+      const desc = p.short_description ?? "";
       const variants = sortByVariantValue(p.product_variants || [], (v: any) => v.variant_options?.value);
       if (variants.length > 0) {
         for (const v of variants) {
@@ -81,11 +97,16 @@ export default function StockPage() {
             productId: p.id,
             variantId: v.id,
             title: p.title,
+            description: desc,
             variantLabel,
+            sizeValue: value,
             sku: v.sku ?? "",
+            barcode: v.barcode ?? "",
+            taban,
+            saya,
             stock: Number(v.stock ?? 0),
             image: p.image_url,
-            search: norm([p.title, groupName, value, v.sku].filter(Boolean).join(" ")),
+            search: norm([p.title, desc, groupName, value, v.sku, v.barcode, taban, saya].filter(Boolean).join(" ")),
             waiting: waitOf(p.id, v.id),
           });
         }
@@ -95,11 +116,16 @@ export default function StockPage() {
           productId: p.id,
           variantId: null,
           title: p.title,
+          description: desc,
           variantLabel: "",
+          sizeValue: "",
           sku: "",
+          barcode: "",
+          taban,
+          saya,
           stock: Number(p.stock ?? 0),
           image: p.image_url,
-          search: norm(p.title),
+          search: norm([p.title, desc, taban, saya].filter(Boolean).join(" ")),
           waiting: waitOf(p.id, null),
         });
       }
@@ -242,7 +268,7 @@ export default function StockPage() {
         {query && " (aramaya göre)"}
       </p>
 
-      {/* Liste */}
+      {/* Liste — başlıklı tablo (yatay kaydırmalı) */}
       {loading ? (
         <div className="flex h-40 items-center justify-center">
           <Loader2 className="animate-spin h-6 w-6 text-muted-foreground" />
@@ -252,84 +278,111 @@ export default function StockPage() {
           Eşleşen ürün yok.
         </div>
       ) : (
-        <div className="rounded-2xl border overflow-hidden divide-y">
-          {filtered.map((r) => {
-            const dirty = isDirty(r);
-            const value = edited[r.key] ?? String(r.stock);
-            return (
-              <div key={r.key} className="flex items-center gap-3 md:gap-4 p-3 md:p-4 bg-white hover:bg-slate-50/60">
-                {/* Görsel */}
-                <div className="w-11 h-11 rounded-lg overflow-hidden bg-slate-50 border border-slate-100 shrink-0 flex items-center justify-center">
-                  {r.image ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={r.image} alt={r.title} className="w-full h-full object-cover" />
-                  ) : (
-                    <Package size={18} className="text-slate-300" />
-                  )}
-                </div>
-
-                {/* Ad + varyant + sku */}
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-sm text-slate-900 truncate">{r.title}</p>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {r.variantLabel && <span className="text-xs font-medium text-olive-700">{r.variantLabel}</span>}
-                    {r.sku && <span className="text-[10px] font-mono text-slate-400">{r.sku}</span>}
-                    {r.waiting > 0 && (
-                      <span
-                        title={`${r.waiting} kişi bu ürün için stok bekliyor`}
+        <div className="rounded-2xl border overflow-x-auto">
+          <table className="w-full text-sm min-w-[900px]">
+            <thead>
+              <tr className="bg-slate-50 text-left text-[11px] font-black uppercase tracking-wide text-slate-500 border-b">
+                <th className="px-3 py-2.5">Ürün</th>
+                <th className="px-3 py-2.5">Stok Kodu</th>
+                <th className="px-3 py-2.5">Barkod</th>
+                <th className="px-3 py-2.5">Açıklama</th>
+                <th className="px-3 py-2.5 text-center">Numara</th>
+                <th className="px-3 py-2.5">Taban</th>
+                <th className="px-3 py-2.5">Saya</th>
+                <th className="px-3 py-2.5 text-center">Bekleyen</th>
+                <th className="px-3 py-2.5 text-center">Stok</th>
+                <th className="px-3 py-2.5"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {filtered.map((r) => {
+                const dirty = isDirty(r);
+                const value = edited[r.key] ?? String(r.stock);
+                return (
+                  <tr key={r.key} className="bg-white hover:bg-slate-50/60 align-middle">
+                    {/* Ürün (görsel + ad) */}
+                    <td className="px-3 py-2">
+                      <div className="flex items-center gap-2.5 min-w-[180px]">
+                        <div className="w-10 h-10 rounded-lg overflow-hidden bg-slate-50 border border-slate-100 shrink-0 flex items-center justify-center">
+                          {r.image ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={r.image} alt={r.title} className="w-full h-full object-cover" />
+                          ) : (
+                            <Package size={16} className="text-slate-300" />
+                          )}
+                        </div>
+                        <span className="font-semibold text-slate-900 line-clamp-2">{r.title}</span>
+                      </div>
+                    </td>
+                    {/* SKU */}
+                    <td className="px-3 py-2 font-mono text-xs text-slate-500 whitespace-nowrap">{r.sku || "—"}</td>
+                    {/* Barkod */}
+                    <td className="px-3 py-2 font-mono text-xs text-slate-500 whitespace-nowrap">{r.barcode || "—"}</td>
+                    {/* Açıklama */}
+                    <td className="px-3 py-2 text-xs text-slate-400 max-w-[200px]">
+                      <span className="line-clamp-2">{r.description || "—"}</span>
+                    </td>
+                    {/* Numara */}
+                    <td className="px-3 py-2 text-center">
+                      {r.sizeValue ? <span className="font-bold text-olive-700">{r.sizeValue}</span> : <span className="text-slate-300">—</span>}
+                    </td>
+                    {/* Taban */}
+                    <td className="px-3 py-2 text-xs whitespace-nowrap">{r.taban ? r.taban : <span className="text-slate-300">—</span>}</td>
+                    {/* Saya */}
+                    <td className="px-3 py-2 text-xs whitespace-nowrap">{r.saya ? r.saya : <span className="text-slate-300">—</span>}</td>
+                    {/* Bekleyen */}
+                    <td className="px-3 py-2 text-center">
+                      {r.waiting > 0 ? (
+                        <span
+                          title={`${r.waiting} kişi bu ürün için stok bekliyor`}
+                          className={cn(
+                            "inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full",
+                            r.stock <= 0 ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"
+                          )}
+                        >
+                          <BellRing size={10} /> {r.waiting}
+                        </span>
+                      ) : (
+                        <span className="text-slate-300">—</span>
+                      )}
+                    </td>
+                    {/* Stok input */}
+                    <td className="px-3 py-2 text-center">
+                      <Input
+                        type="number"
+                        min={0}
+                        value={value}
+                        onChange={(e) => setEdited((prev) => ({ ...prev, [r.key]: e.target.value }))}
+                        onKeyDown={(e) => { if (e.key === "Enter" && dirty) saveRow(r); }}
                         className={cn(
-                          "inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full",
-                          r.stock <= 0 ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"
+                          "w-20 h-9 text-center font-bold mx-auto",
+                          r.stock === 0 && !dirty && "text-red-600",
+                          dirty && "border-olive-500 ring-1 ring-olive-200"
                         )}
+                      />
+                    </td>
+                    {/* Kaydet */}
+                    <td className="px-3 py-2 text-right">
+                      <Button
+                        onClick={() => saveRow(r)}
+                        disabled={!dirty || savingKey === r.key}
+                        size="sm"
+                        className={cn("h-9 gap-1.5", savedKey === r.key && "bg-green-600 hover:bg-green-600")}
                       >
-                        <BellRing size={10} /> {r.waiting} bekliyor
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Durum rozeti */}
-                <div className="hidden sm:block shrink-0 w-20 text-right">
-                  {r.stock === 0 ? (
-                    <Badge variant="destructive" className="text-[10px]">Tükendi</Badge>
-                  ) : r.stock <= 3 ? (
-                    <Badge className="text-[10px] bg-amber-100 text-amber-700 hover:bg-amber-100">Az: {r.stock}</Badge>
-                  ) : (
-                    <span className="text-xs text-slate-400">Stok: {r.stock}</span>
-                  )}
-                </div>
-
-                {/* Stok input */}
-                <Input
-                  type="number"
-                  min={0}
-                  value={value}
-                  onChange={(e) => setEdited((prev) => ({ ...prev, [r.key]: e.target.value }))}
-                  onKeyDown={(e) => { if (e.key === "Enter" && dirty) saveRow(r); }}
-                  className={cn(
-                    "w-20 h-10 text-center font-bold shrink-0",
-                    dirty && "border-olive-500 ring-1 ring-olive-200"
-                  )}
-                />
-
-                {/* Kaydet */}
-                <Button
-                  onClick={() => saveRow(r)}
-                  disabled={!dirty || savingKey === r.key}
-                  size="sm"
-                  className={cn("h-10 shrink-0 gap-1.5", savedKey === r.key && "bg-green-600 hover:bg-green-600")}
-                >
-                  {savingKey === r.key ? (
-                    <Loader2 size={14} className="animate-spin" />
-                  ) : savedKey === r.key ? (
-                    <><Check size={14} /> Kaydedildi</>
-                  ) : (
-                    "Kaydet"
-                  )}
-                </Button>
-              </div>
-            );
-          })}
+                        {savingKey === r.key ? (
+                          <Loader2 size={14} className="animate-spin" />
+                        ) : savedKey === r.key ? (
+                          <><Check size={14} /> Kaydedildi</>
+                        ) : (
+                          "Kaydet"
+                        )}
+                      </Button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
     </div>

@@ -40,6 +40,8 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
     variants: [] as any[],
     variants_have_images: false, // Her varyasyon için ayrı foto?
     is_active: true,
+    taban_option_id: "", // ürün seviyesinde Taban (variant_options id)
+    saya_option_id: "",  // ürün seviyesinde Saya  (variant_options id)
   });
   const [uploadingVariantIdx, setUploadingVariantIdx] = useState<number | null>(null);
 
@@ -71,6 +73,8 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
           })) || [],
           (v) => v.value
         ),
+        taban_option_id: initialData.taban_option_id || "",
+        saya_option_id: initialData.saya_option_id || "",
         variants_have_images:
           initialData.product_variants?.some((v: any) => v.image_url) || false,
       });
@@ -277,6 +281,8 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
         tags: formData.tags,
         is_active: formData.is_active,
         has_variants: formData.has_variants,
+        taban_option_id: formData.taban_option_id || null,
+        saya_option_id: formData.saya_option_id || null,
       };
 
       let finalId = productId;
@@ -325,6 +331,15 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
       setLoading(false);
     }
   }
+
+  // Taban/Saya: adı "Taban"/"Saya" olan varyasyon gruplarının seçenekleri.
+  const groupNameEq = (g: any, name: string) =>
+    (g.name || "").trim().toLocaleLowerCase("tr-TR") === name;
+  const tabanOptions: any[] = variantGroups.find((g) => groupNameEq(g, "taban"))?.variant_options ?? [];
+  const sayaOptions: any[] = variantGroups.find((g) => groupNameEq(g, "saya"))?.variant_options ?? [];
+  // Stok varyant grubu seçicisinde Taban/Saya gruplarını gösterme (bunlar
+  // numara-stok değil, ürün niteliğidir).
+  const stockGroups = variantGroups.filter((g) => !groupNameEq(g, "taban") && !groupNameEq(g, "saya"));
 
   return (
     <form onSubmit={handleSubmit} className="space-y-10 pb-20">
@@ -396,6 +411,49 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
             </div>
           </section>
 
+          {/* Yapı — Taban & Saya (ürün seviyesinde tek seçim) */}
+          <section className="bg-white p-6 rounded-3xl border shadow-sm space-y-4">
+            <h3 className="text-lg font-bold flex items-center gap-2">
+              <span className="w-1.5 h-6 bg-olive-600 rounded-full" />
+              Yapı
+            </h3>
+            <p className="text-xs text-slate-400 -mt-2">
+              Taban ve saya modelin tüm numaralarında aynıdır. Değerler{" "}
+              <b>&quot;Taban&quot;</b> ve <b>&quot;Saya&quot;</b> adlı varyasyon gruplarından gelir
+              (Ayarlar → Varyasyonlar).
+            </p>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Taban</label>
+                <select
+                  className="flex h-12 w-full rounded-xl border border-input bg-slate-50/50 px-3 py-2 text-sm disabled:opacity-60"
+                  value={formData.taban_option_id}
+                  onChange={(e) => setFormData({ ...formData, taban_option_id: e.target.value })}
+                  disabled={tabanOptions.length === 0}
+                >
+                  <option value="">{tabanOptions.length ? "Taban seçin..." : "Önce \"Taban\" grubu tanımlayın"}</option>
+                  {tabanOptions.map((o) => (
+                    <option key={o.id} value={o.id}>{o.value}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Saya</label>
+                <select
+                  className="flex h-12 w-full rounded-xl border border-input bg-slate-50/50 px-3 py-2 text-sm disabled:opacity-60"
+                  value={formData.saya_option_id}
+                  onChange={(e) => setFormData({ ...formData, saya_option_id: e.target.value })}
+                  disabled={sayaOptions.length === 0}
+                >
+                  <option value="">{sayaOptions.length ? "Saya seçin..." : "Önce \"Saya\" grubu tanımlayın"}</option>
+                  {sayaOptions.map((o) => (
+                    <option key={o.id} value={o.id}>{o.value}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </section>
+
           {/* Varyasyonlar */}
           <section className="bg-white p-6 rounded-3xl border shadow-sm space-y-6">
             <div className="flex items-center justify-between">
@@ -427,7 +485,7 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
                     onChange={(e) => handleGroupSelect(e.target.value)}
                   >
                     <option value="">Grup Seçin...</option>
-                    {variantGroups.map((g) => (
+                    {stockGroups.map((g) => (
                       <option key={g.id} value={g.id}>{g.name}</option>
                     ))}
                   </select>
