@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { supabase } from "@/lib/supabase";
-import { Search, Mail, Phone, AtSign, Loader2, UserCog, Tags, X, Plus, UserPlus, Trash2 } from "lucide-react";
+import { Search, Mail, Phone, AtSign, Loader2, UserCog, Tags, X, Plus, UserPlus, Trash2, Users, Link2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /* -- Tipler ------------------------------------------- */
@@ -85,6 +85,8 @@ export default function MembersPage() {
   const [contactId, setContactId]     = useState<string | null>(null);
   const [cForm, setCForm]             = useState({ ...EMPTY_CONTACT });
   const [cSaving, setCSaving]         = useState(false);
+  const [contactMatch, setContactMatch] = useState<{ id: string; name: string } | null>(null); // eşleşen üye
+  const [merging, setMerging]         = useState(false);
 
   useEffect(() => { fetchAll(); }, []);
 
@@ -152,16 +154,53 @@ export default function MembersPage() {
   function openNewContact() {
     setContactId(null);
     setCForm({ ...EMPTY_CONTACT });
+    setContactMatch(null);
     setContactOpen(true);
   }
-  function openEditContact(c: Contact) {
+  async function openEditContact(c: Contact) {
     setContactId(c.id);
     setCForm({
       full_name: c.full_name ?? "", email: c.email ?? "", phone: c.phone ?? "",
       instagram_handle: c.instagram_handle ?? "", shoe_size: c.shoe_size ?? "",
       source_channel: c.source_channel, status: c.status, note: c.note ?? "",
     });
+    setContactMatch(null);
     setContactOpen(true);
+    // Aynı e-postalı bir ÜYE var mı? → "Üyeyle Birleştir" öner
+    if (c.email) {
+      const { data } = await (supabase as any).from("profiles")
+        .select("id, first_name, last_name, email").ilike("email", c.email).maybeSingle();
+      if (data) setContactMatch({ id: data.id, name: [data.first_name, data.last_name].filter(Boolean).join(" ") || data.email });
+    }
+  }
+
+  // Kişiyi eşleşen üyeye bağla (stok bildirimleri üyeye taşınır, kişi listeden düşer)
+  async function mergeContactWithMember() {
+    if (!contactId || !contactMatch) return;
+    if (!confirm(`Bu kişi "${contactMatch.name}" üyesiyle birleştirilsin mi?\nKişi listeden kalkar, stok bildirimleri üyeye taşınır.`)) return;
+    setMerging(true);
+    try {
+      const { error } = await (supabase as any).rpc("admin_link_contact_to_member", { p_contact: contactId, p_user: contactMatch.id });
+      if (error) throw error;
+      setContactOpen(false);
+      fetchAll();
+    } catch (e: any) {
+      alert("Birleştirilemedi: " + (e?.message ?? "hata"));
+    } finally { setMerging(false); }
+  }
+
+  // Mevcut mükerrer kişileri (aynı e-posta/Instagram) toplu birleştir
+  async function mergeDuplicates() {
+    if (!confirm("Aynı e-posta veya Instagram'a sahip mükerrer kişiler tek kayda birleştirilsin mi?\nBu işlem geri alınamaz.")) return;
+    setMerging(true);
+    try {
+      const { data, error } = await (supabase as any).rpc("admin_merge_duplicate_contacts");
+      if (error) throw error;
+      alert(`${data ?? 0} mükerrer kişi birleştirildi.`);
+      fetchAll();
+    } catch (e: any) {
+      alert("Hata: " + (e?.message ?? ""));
+    } finally { setMerging(false); }
   }
 
   async function saveContact() {
@@ -268,9 +307,14 @@ export default function MembersPage() {
           <h2 className="text-3xl font-bold tracking-tight">Üyeler &amp; Kişiler</h2>
           <p className="text-muted-foreground">Markayla temas etmiş herkes tek yerde — üye olsun olmasın.</p>
         </div>
-        <Button onClick={openNewContact} className="gap-2">
-          <UserPlus size={16} /> Kişi Ekle
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={mergeDuplicates} disabled={merging} className="gap-2" title="Aynı e-posta/Instagram'a sahip mükerrer kişileri birleştir">
+            {merging ? <Loader2 size={16} className="animate-spin" /> : <Users size={16} />} Mükerrerleri Temizle
+          </Button>
+          <Button onClick={openNewContact} className="gap-2">
+            <UserPlus size={16} /> Kişi Ekle
+          </Button>
+        </div>
       </div>
 
       {/* Filtre + arama */}
@@ -477,6 +521,18 @@ export default function MembersPage() {
           </DialogHeader>
           <div className="space-y-3 pt-2">
             <p className="text-xs text-muted-foreground">Bilgilerin hepsi opsiyonel — elinde ne varsa gir (sadece Instagram bile olur).</p>
+
+            {/* Üyeyle Birleştir — aynı e-postalı bir üye bulunduysa */}
+            {contactMatch && (
+              <div className="flex items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5">
+                <div className="text-xs text-blue-900">
+                  Bu kişi <b>{contactMatch.name}</b> üyesiyle eşleşiyor. Birleştirirsen kişi listeden kalkar, geçmişi üyeye taşınır.
+                </div>
+                <Button size="sm" onClick={mergeContactWithMember} disabled={merging} className="gap-1.5 bg-blue-600 hover:bg-blue-700 shrink-0">
+                  {merging ? <Loader2 size={14} className="animate-spin" /> : <Link2 size={14} />} Üyeyle Birleştir
+                </Button>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1 col-span-2">
                 <label className="text-xs font-semibold">Ad Soyad</label>
