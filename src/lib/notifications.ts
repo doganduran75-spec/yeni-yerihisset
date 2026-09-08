@@ -598,6 +598,81 @@ export async function sendPasswordRecoveryEmail(params: {
 }
 
 /**
+ * Stok bildirimi KAYIT ONAYI — kişi ilk kez "stok gelince haber ver" deyip
+ * e-posta bırakınca ANINDA gider. Ürün fotosu + kısa barefoot tanıtımı +
+ * "listemize kaydoldunuz" mesajı. (Stok gelince giden bildirimden ayrıdır.)
+ */
+export async function sendStockNotifySignupWelcome(params: {
+  to: string;
+  name?: string | null;
+  productTitle: string;
+  productUrl: string;
+  productImage?: string | null;
+  variantLabel?: string | null;
+}): Promise<{ status: "sent" | "failed"; error?: string }> {
+  const supabase = createAdminClient();
+  const { data: settings } = await (supabase as any).from("settings").select("*").limit(1).maybeSingle();
+  const storeName = settings?.store_name || "YeriHisset";
+  const name = (params.name || "").trim() || "Merhaba";
+  const forWhat = params.variantLabel
+    ? `<b>${params.productTitle}</b> (${params.variantLabel})`
+    : `<b>${params.productTitle}</b>`;
+
+  const imageBlock = params.productImage
+    ? `<div style="text-align:center;margin:8px 0 20px">
+         <img src="${params.productImage}" alt="${params.productTitle}" width="260"
+           style="max-width:260px;width:100%;border-radius:16px;border:1px solid #eef1e6" />
+       </div>`
+    : "";
+
+  const bodyHtml = `
+    <h1 style="font-size:22px;font-weight:800;color:#111827;margin:0 0 12px">Listemize kaydoldunuz 🌱</h1>
+    <p style="font-size:15px;color:#374151;line-height:1.6;margin:0 0 12px">
+      ${name}, ${forWhat} için stok bildirimi talebinizi aldık. Ürün <b>stoğa girer girmez ilk siz haberdar olacaksınız</b> — kaçırmazsınız.
+    </p>
+    ${imageBlock}
+    <div style="background:#f7f9f0;border:1px solid #e6ecd3;border-radius:16px;padding:16px 18px;margin:0 0 8px">
+      <p style="font-size:14px;color:#4d5e2a;font-weight:800;margin:0 0 6px">Barefoot (çıplak ayak) nedir?</p>
+      <p style="font-size:13px;color:#5b6b3a;line-height:1.6;margin:0">
+        Geniş burun, sıfır topuk farkı ve esnek ince taban ile ayağın doğal hareketini destekleyen ayakkabılardır.
+        Ayak parmakları rahatça yayılır, duruş ve denge güçlenir — âdeta yalınayak yürüyormuş hissi verir.
+      </p>
+    </div>
+    <div style="text-align:center;margin:24px 0 6px">
+      <a href="${params.productUrl}" style="display:inline-block;background:#6b7f3a;color:#fff;text-decoration:none;padding:13px 30px;border-radius:14px;font-weight:800;font-size:15px">
+        Ürünü İncele
+      </a>
+    </div>
+    <p style="font-size:13px;color:#9ca3af;line-height:1.6;margin:16px 0 0">
+      Bu e-postayı, ${storeName}'te bu ürün için "stok gelince haber ver" talebinde bulunduğunuz için aldınız.
+    </p>`;
+
+  const smtpConfig = buildSmtpConfig({
+    smtp_host: settings?.smtp_host || "",
+    smtp_port: settings?.smtp_port,
+    smtp_secure: settings?.smtp_secure,
+    smtp_user: settings?.smtp_user,
+    smtp_password: settings?.smtp_password,
+  });
+  if (!smtpConfig.host || !smtpConfig.auth.user) return { status: "failed", error: "SMTP ayarları eksik" };
+
+  try {
+    const transporter = nodemailer.createTransport(smtpConfig);
+    await transporter.sendMail({
+      from: `"${settings?.smtp_from_name || storeName}" <${settings?.smtp_from_email || smtpConfig.auth.user}>`,
+      to: params.to,
+      subject: `Kaydınız alındı: ${params.productTitle} stoğa girince haber vereceğiz`,
+      html: buildEmailDocument(bodyHtml, storeName),
+      text: htmlToText(bodyHtml),
+      headers: listUnsubHeader(settings),
+    });
+    return { status: "sent" };
+  } catch (err: any) {
+    return { status: "failed", error: err?.message || "Email gönderim hatası" };
+  }
+}
+
+/**
  * "Stok geldi" bildirimi — beklediği ürün tekrar stoğa girince müşteriye gider.
  */
 export async function sendBackInStockNotification(params: {

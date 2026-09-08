@@ -3,6 +3,9 @@ import { createAdminClient } from "@/lib/supabase-admin";
 import { createClient } from "@supabase/supabase-js";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { sendStockNotifySignupWelcome } from "@/lib/notifications";
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 export async function POST(req: NextRequest) {
   try {
@@ -110,6 +113,40 @@ export async function POST(req: NextRequest) {
     } else {
       if (guestEmail) row.email = guestEmail;
       if (guestPhone) row.phone = guestPhone;
+
+      // #9 — Misafir kaydını Kişiler'e (contacts) ekle/bağla → Üyeler & Kişiler
+      // ekranında "Henüz üye değil" olarak görünsün. Mükerrer önleme:
+      // e-posta (ilike) ya da telefon ile mevcut kişiyi bul, yoksa oluştur.
+      try {
+        let existingContact: { id: string; source_channel: string | null } | null = null;
+        if (guestEmail) {
+          const { data } = await supabase.from("contacts").select("id, source_channel").ilike("email", guestEmail).limit(1).maybeSingle();
+          existingContact = (data as any) ?? null;
+        }
+        if (!existingContact && guestPhone) {
+          const { data } = await supabase.from("contacts").select("id, source_channel").eq("phone", guestPhone).limit(1).maybeSingle();
+          existingContact = (data as any) ?? null;
+        }
+
+        if (existingContact) {
+          row.contact_id = existingContact.id;
+        } else {
+          const { data: created } = await supabase
+            .from("contacts")
+            .insert({
+              email: guestEmail,
+              phone: guestPhone,
+              source_channel: "stock_notify",
+              status: "lead",
+            } as any)
+            .select("id")
+            .single();
+          if (created?.id) row.contact_id = created.id;
+        }
+      } catch (e) {
+        console.error("stock_notify contact upsert error:", e);
+        // kişi oluşturulamasa da bildirim kaydı devam etsin
+      }
     }
 
     const { error: insertError } = await supabase
@@ -122,6 +159,39 @@ export async function POST(req: NextRequest) {
         { error: "Kayıt başarısız", detail: insertError.message, code: insertError.code },
         { status: 500 }
       );
+    }
+
+    // #10 — Kayıt onay e-postası (ürün fotosu + barefoot tanıtımı). Yalnız
+    // e-posta varsa ve YENİ kayıtta. Ürün + varyant bilgisini çek.
+    const toEmail: string | null = (user?.email as string) || guestEmail || null;
+    if (toEmail) {
+      try {
+        const storeUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com";
+        const { data: product } = await supabase
+          .from("products")
+          .select("title, slug, image_url, images")
+          .eq("id", productId)
+          .maybeSingle();
+        let variantLabel: string | null = null;
+        if (variantId) {
+          const { data: v } = await supabase
+            .from("product_variants")
+            .select("variant_options(value, variant_groups(name))")
+            .eq("id", variantId)
+            .maybeSingle();
+          const val = (v as any)?.variant_options?.value;
+          const gn = (v as any)?.variant_options?.variant_groups?.name;
+          variantLabel = val ? (gn ? `${gn}: ${val}` : val) : null;
+        }
+        const productTitle = (product as any)?.title ?? "Ürün";
+        const productImage = (product as any)?.image_url || (product as any)?.images?.[0] || null;
+        const productUrl = (product as any)?.slug ? `${storeUrl}/products/${(product as any).slug}` : storeUrl;
+        // fire-and-forget — mail hatası kaydı bozmasın
+        sendStockNotifySignupWelcome({ to: toEmail, name: null, productTitle, productUrl, productImage, variantLabel })
+          .catch((e) => console.error("stock_notify welcome email:", e));
+      } catch (e) {
+        console.error("stock_notify welcome email prep error:", e);
+      }
     }
 
     return NextResponse.json({ success: true });
