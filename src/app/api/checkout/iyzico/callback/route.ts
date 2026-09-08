@@ -99,6 +99,10 @@ export async function POST(req: NextRequest) {
               else console.log("[admin-order-mail] sent");
             })
           ),
+          // Stoğu 0'a düşen ürün(ler) → admin'e "satış noktalarında kapat" uyarısı
+          import("@/lib/notifications").then(({ alertOutOfStockForOrder }) =>
+            alertOutOfStockForOrder(order.id)
+          ),
           // Kupon kullanımını kaydet (supabase üzerinden)
           (async () => {
             const { data: ord } = await (supabase as any)

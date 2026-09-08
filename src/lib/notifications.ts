@@ -291,6 +291,14 @@ export async function sendOrderNotification(
       ${trackingHtml}`;
   }
 
+  // Havale sipariş onayında banka bilgisi GARANTİ: şablon {{bank_info_html}}
+  // içermiyorsa (metinde blok yoksa) sona ekle — müşteri ödeme bilgisini alsın.
+  if (trigger === "order_placed" && isBankTransfer && bankInfoHtml && !bodyHtml.includes("Havale / EFT Banka Bilgileri")) {
+    bodyHtml += `
+      <p style="font-size:14px;color:#374151;margin:20px 0 8px"><b>Ödemeni tamamlamak için</b> aşağıdaki hesaba havale/EFT yapabilirsin. Ödemen onaylanınca siparişin hazırlanır.</p>
+      ${bankInfoHtml}`;
+  }
+
   // --- Push bildirimi ---
   if (pushToken?.token) {
     try {
@@ -591,6 +599,109 @@ export async function sendLeadMagnetWelcome(params: {
   } catch (err: any) {
     return { status: "failed", error: err?.message || "Email gönderim hatası" };
   }
+}
+
+/**
+ * ADMIN'e "Stok 0 oldu" uyarısı — bir ürün/varyant satışla 0'a düşünce, satış
+ * noktaları entegrasyonu gelene kadar admin ELDEN kapatabilsin diye.
+ */
+export async function sendAdminOutOfStockAlert(
+  items: Array<{ title: string; variantLabel?: string | null; sku?: string | null }>
+): Promise<{ status: "sent" | "failed" | "skipped"; error?: string }> {
+  if (!items.length) return { status: "skipped" };
+  const supabase = createAdminClient();
+  const { data: settings } = await (supabase.from("settings").select("*").limit(1).maybeSingle() as any) as { data: any };
+  const storeName = settings?.store_name || "YeriHisset";
+  const to = settings?.admin_notify_email || settings?.contact_email || settings?.smtp_from_email || settings?.smtp_user;
+  if (!to) return { status: "skipped", error: "Admin e-posta adresi ayarlı değil" };
+
+  const rows = items.map((i) => {
+    const label = [i.title, i.variantLabel].filter(Boolean).join(" · ");
+    const sku = i.sku ? ` <span style="font-family:monospace;color:#94a3b8">(${i.sku})</span>` : "";
+    return `<li style="margin:0 0 6px;font-size:14px;color:#334155"><b>${label}</b>${sku}</li>`;
+  }).join("");
+
+  const bodyHtml = `
+    <h1 style="font-size:22px;font-weight:800;color:#b91c1c;margin:0 0 12px">⚠️ Stok 0 oldu</h1>
+    <p style="font-size:15px;color:#374151;line-height:1.6;margin:0 0 12px">
+      Aşağıdaki ürün(ler) son satışla <b>tükendi</b>. Satış noktalarında (Trendyol, Instagram vb.)
+      <b>ürünü kapatmayı</b> unutma — aksi halde olmayan stoktan sipariş gelebilir.
+    </p>
+    <ul style="margin:0 0 16px;padding-left:20px">${rows}</ul>
+    <p style="font-size:13px;color:#9ca3af;margin:0">Stok girişi yaptığında bekleyenlere otomatik "stok geldi" e-postası gider.</p>`;
+
+  const smtpConfig = buildSmtpConfig({
+    smtp_host: settings?.smtp_host || "", smtp_port: settings?.smtp_port, smtp_secure: settings?.smtp_secure,
+    smtp_user: settings?.smtp_user, smtp_password: settings?.smtp_password,
+  });
+  if (!smtpConfig.host || !smtpConfig.auth.user) return { status: "failed", error: "SMTP ayarları eksik" };
+
+  try {
+    const transporter = nodemailer.createTransport(smtpConfig);
+    await transporter.sendMail({
+      from: `"${settings?.smtp_from_name || storeName}" <${settings?.smtp_from_email || smtpConfig.auth.user}>`,
+      to,
+      subject: `⚠️ Stok 0 — ${items.length} ürün tükendi, satış noktalarında kapat`,
+      html: buildEmailDocument(bodyHtml, storeName),
+      text: htmlToText(bodyHtml),
+    });
+    return { status: "sent" };
+  } catch (err: any) {
+    return { status: "failed", error: err?.message || "Email gönderim hatası" };
+  }
+}
+
+/**
+ * Bir siparişin kalemlerinden stoğu 0'a düşenleri bulup admin'e uyarı gönderir.
+ * reduce_order_stock çağrıldıktan SONRA çağrılmalı (stok güncel).
+ */
+export async function alertOutOfStockForOrder(orderId: string): Promise<void> {
+  const supabase = createAdminClient();
+  const { data: oi } = await (supabase as any).from("order_items")
+    .select("product_id, variant_id").eq("order_id", orderId);
+  const items = (oi as any[]) || [];
+  if (!items.length) return;
+
+  const out: Array<{ title: string; variantLabel?: string | null; sku?: string | null }> = [];
+
+  const variantIds = [...new Set(items.filter((i) => i.variant_id).map((i) => i.variant_id))];
+  const productIds = [...new Set(items.map((i) => i.product_id).filter(Boolean))];
+
+  // Ürün başlıkları (tüm kalemler için)
+  const titleMap = new Map<string, string>();
+  if (productIds.length) {
+    const { data: ps } = await (supabase as any).from("products").select("id, title, stock").in("id", productIds);
+    for (const p of (ps as any[]) || []) {
+      titleMap.set(p.id, p.title ?? "Ürün");
+      // Varyantsız ürün: stoğu 0 ise ekle
+      if (items.some((i) => i.product_id === p.id && !i.variant_id) && Number(p.stock ?? 0) <= 0) {
+        out.push({ title: p.title ?? "Ürün", variantLabel: null, sku: null });
+      }
+    }
+  }
+
+  if (variantIds.length) {
+    // Varyantlar (embed'siz) — stok 0 olanları bul
+    const { data: vs } = await (supabase as any).from("product_variants")
+      .select("id, stock, sku, product_id, variant_option_id").in("id", variantIds);
+    const zeroVs = ((vs as any[]) || []).filter((v) => Number(v.stock ?? 0) <= 0);
+    // Varyant değer + grup adı ayrı çek
+    const optIds = [...new Set(zeroVs.map((v) => v.variant_option_id).filter(Boolean))];
+    const optMap = new Map<string, string>();
+    if (optIds.length) {
+      const { data: opts } = await (supabase as any).from("variant_options")
+        .select("id, value, variant_groups(name)").in("id", optIds);
+      for (const o of (opts as any[]) || []) {
+        const gn = o.variant_groups?.name; // tek seviye embed genelde çalışır; yoksa değer yeterli
+        optMap.set(o.id, gn ? `${gn}: ${o.value}` : (o.value ?? ""));
+      }
+    }
+    for (const v of zeroVs) {
+      out.push({ title: titleMap.get(v.product_id) ?? "Ürün", variantLabel: optMap.get(v.variant_option_id) ?? null, sku: v.sku });
+    }
+  }
+
+  if (out.length) await sendAdminOutOfStockAlert(out);
 }
 
 /**

@@ -371,12 +371,14 @@ export async function POST(req: NextRequest) {
   }
 
   // Sipariş oluşturma bildirimi gönder (non-blocking, doğrudan lib çağrısı)
-  const { sendOrderNotification, sendAdminNewOrderNotification } = await import("@/lib/notifications");
+  const { sendOrderNotification, sendAdminNewOrderNotification, alertOutOfStockForOrder } = await import("@/lib/notifications");
   sendOrderNotification("order_placed", { orderId: order.id, userId: user.id }).catch(() => {});
   // Admin'e "yeni sipariş geldi" bildirimi (sonucu logla — teşhis için)
   sendAdminNewOrderNotification(order.id)
     .then((r) => { if (r.status !== "sent") console.error("[admin-order-mail]", JSON.stringify(r)); else console.log("[admin-order-mail] sent"); })
     .catch((e) => console.error("[admin-order-mail] exception", e?.message || e));
+  // Satışla stoğu 0'a düşen ürün(ler) için admin'e "satış noktalarında kapat" uyarısı
+  alertOutOfStockForOrder(order.id).catch((e) => console.error("[out-of-stock-alert]", e?.message || e));
 
   return NextResponse.json({ orderId: order.id });
 }
