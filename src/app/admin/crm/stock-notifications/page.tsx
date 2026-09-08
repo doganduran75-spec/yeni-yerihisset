@@ -244,9 +244,11 @@ export default function StockNotificationsPage() {
   const manualCount   = notifications.filter((n) => n.status === "pending" && !n.has_email).length;
   const notifiedCount = notifications.filter((n) => n.status === "notified").length;
 
-  // Görünen liste — sekmeye göre istemci tarafı filtre
+  // Görünen liste — sekmeye göre istemci tarafı filtre.
+  // Bekleyenler = stok bekleyen HERKES (e-postalı + e-postasız).
+  // Manuel bildirim = onun e-postasız alt kümesi (elden haber verilecekler).
   const shown = notifications.filter((n) => {
-    if (filter === "pending")  return n.status === "pending" && !!n.has_email;
+    if (filter === "pending")  return n.status === "pending";
     if (filter === "manual")   return n.status === "pending" && !n.has_email;
     if (filter === "notified") return n.status === "notified";
     return true; // Hepsi
@@ -403,7 +405,7 @@ export default function StockNotificationsPage() {
       {/* Filtre sekmeleri — dashboard rakamlarını DEĞİŞTİRMEZ, sadece listeyi süzer */}
       <div className="flex gap-2 flex-wrap">
         {([
-          { key: "pending"  as const, label: "Bekleyenler", count: pendingCount - manualCount },
+          { key: "pending"  as const, label: "Bekleyenler", count: pendingCount },
           { key: "manual"   as const, label: "Manuel bildirim", count: manualCount },
           { key: "notified" as const, label: "Bildirildi", count: notifiedCount },
           { key: "all"      as const, label: "Hepsi", count: notifications.length },
@@ -424,7 +426,7 @@ export default function StockNotificationsPage() {
         <CardHeader>
           <CardTitle>Bildirim Talepleri</CardTitle>
           <CardDescription>
-            {filter === "pending" ? "Otomatik e-posta gidecek bekleyenler"
+            {filter === "pending" ? "Stok bekleyen herkes (e-postalılar otomatik bilgilendirilir; e-postasızlar Manuel bildirim'de)"
               : filter === "manual" ? "E-postasız — stok gelince ELDEN haber verilecekler (WhatsApp/Instagram)"
               : filter === "notified" ? "Haber verilmiş (tamamlanmış) talepler"
               : "Tüm bildirim talepleri"}
