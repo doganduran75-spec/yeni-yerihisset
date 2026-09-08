@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { Building2, Tag, CalendarDays, Users, ExternalLink, Lock, Loader2 } from "lucide-react";
+import { Building2, Tag, CalendarDays, Users, ExternalLink, Lock, Loader2, Gift, Check, Ticket } from "lucide-react";
 
 type Opportunity = {
   id: string;
@@ -10,10 +10,14 @@ type Opportunity = {
   title: string;
   description: string | null;
   image_url: string | null;
-  url: string;
+  url: string | null;
   discount_code: string | null;
   valid_until: string | null;
   allowed_role_slugs: string[] | null;
+  kind?: "external" | "coupon";
+  coupon_id?: string | null;
+  claim_limit?: number | null;
+  coupon?: { id: string; code: string; name: string; type: string; amount: number } | null;
 };
 
 type Role = {
@@ -35,6 +39,10 @@ export default function FirsatlarClient({ opps, allRoles }: Props) {
   const [authLoading, setAuthLoading] = useState(true);
   const [accessChecking, setAccessChecking] = useState<string | null>(null);
   const [accessResult, setAccessResult] = useState<Record<string, AccessState>>({});
+  // Kupon fırsatı yararlanma durumu: coupon_id → alınan hak (granted)
+  const [claimGranted, setClaimGranted] = useState<Record<string, number>>({});
+  const [claiming, setClaiming] = useState<string | null>(null);
+  const [loginNeeded, setLoginNeeded] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     async function loadUser() {
@@ -47,11 +55,50 @@ export default function FirsatlarClient({ opps, allRoles }: Props) {
           .eq("user_id", user.id);
         const slugs = (data || []).map((r: any) => r.roles?.slug).filter(Boolean);
         setUserRoles(slugs);
+
+        // Kupon fırsatları için mevcut yararlanma hakkını çek (max_uses = granted)
+        const couponIds = [...new Set(opps.filter((o) => o.kind === "coupon" && o.coupon_id).map((o) => o.coupon_id!))];
+        if (couponIds.length) {
+          const { data: ucs } = await (supabase as any)
+            .from("user_coupons").select("coupon_id, max_uses").eq("user_id", user.id).in("coupon_id", couponIds);
+          const map: Record<string, number> = {};
+          (ucs || []).forEach((u: any) => { map[u.coupon_id] = u.max_uses ?? 0; });
+          setClaimGranted(map);
+        }
       }
       setAuthLoading(false);
     }
     loadUser();
-  }, []);
+  }, [opps]);
+
+  async function handleClaim(opp: Opportunity) {
+    if (!opp.coupon_id) return;
+    if (!userId) { setLoginNeeded((p) => ({ ...p, [opp.id]: true })); return; }
+    setClaiming(opp.id);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch("/api/opportunity/claim", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify({ opportunityId: opp.id }),
+      });
+      const d = await res.json();
+      if (res.ok) {
+        setClaimGranted((p) => ({ ...p, [opp.coupon_id!]: d.granted ?? p[opp.coupon_id!] ?? 0 }));
+      } else if (d.needAuth) {
+        setLoginNeeded((p) => ({ ...p, [opp.id]: true }));
+      } else {
+        alert(d.error || "İşlem başarısız");
+      }
+    } catch {
+      alert("İşlem başarısız");
+    } finally {
+      setClaiming(null);
+    }
+  }
 
   function getRoleName(slug: string) {
     return allRoles.find((r) => r.slug === slug)?.name || slug;
@@ -120,14 +167,33 @@ export default function FirsatlarClient({ opps, allRoles }: Props) {
     );
   }
 
+  // Yararlanma hakkı dolan kupon fırsatları en alta insin
+  const maxedOut = (o: Opportunity) =>
+    o.kind === "coupon" && (claimGranted[o.coupon_id ?? ""] ?? 0) >= (o.claim_limit ?? 1);
+  const sortedOpps = [...opps].sort((a, b) => Number(maxedOut(a)) - Number(maxedOut(b)));
+
+  const couponLabel = (c?: Opportunity["coupon"]) => {
+    if (!c) return "Kupon";
+    if (c.type === "percentage") return `%${c.amount} indirim`;
+    if (c.type === "fixed") return `₺${Number(c.amount).toFixed(0)} indirim`;
+    if (c.type === "free_shipping") return "Ücretsiz kargo";
+    return c.name || "Kupon";
+  };
+
   return (
     <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-      {opps.map((opp) => {
+      {sortedOpps.map((opp) => {
         const expired = isExpired(opp.valid_until);
         const restricted = opp.allowed_role_slugs && opp.allowed_role_slugs.length > 0;
         const userCanAccess = !authLoading && canAccess(opp);
         const checking = accessChecking === opp.id;
         const result = accessResult[opp.id];
+        // Kupon fırsatı durumu
+        const isCoupon = opp.kind === "coupon";
+        const limit = opp.claim_limit ?? 1;
+        const granted = claimGranted[opp.coupon_id ?? ""] ?? 0;
+        const maxed = granted >= limit;
+        const claimingThis = claiming === opp.id;
 
         return (
           <div
@@ -157,6 +223,18 @@ export default function FirsatlarClient({ opps, allRoles }: Props) {
               <h2 className="font-bold text-slate-900 text-base leading-snug mb-1">{opp.title}</h2>
               {opp.description && (
                 <p className="text-sm text-slate-500 line-clamp-2 mb-3">{opp.description}</p>
+              )}
+
+              {/* Kupon fırsatı ödülü */}
+              {isCoupon && (
+                <div className="flex flex-wrap items-center gap-2 mb-3">
+                  <span className="flex items-center gap-1 text-xs font-bold bg-olive-50 text-olive-700 border border-olive-200 px-2 py-0.5 rounded-full">
+                    <Gift size={11} /> {couponLabel(opp.coupon)}
+                  </span>
+                  <span className="text-[11px] text-slate-400">
+                    {limit > 1 ? `${limit} kez yararlanma hakkı` : "1 kez yararlanma hakkı"}
+                  </span>
+                </div>
               )}
 
               {/* Meta bilgiler */}
@@ -221,26 +299,67 @@ export default function FirsatlarClient({ opps, allRoles }: Props) {
                 </div>
               )}
 
+              {/* Giriş gerekli (kupon fırsatı) */}
+              {isCoupon && loginNeeded[opp.id] && (
+                <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3 space-y-2">
+                  <p>Yararlanmak için giriş yapmanız gerekiyor.</p>
+                  <div className="flex gap-2">
+                    <a href="/account?tab=register" className="flex-1 text-center font-bold bg-olive-600 text-white rounded-lg px-3 py-1.5 hover:bg-olive-700 transition-colors">Üye Ol</a>
+                    <a href="/account" className="flex-1 text-center font-bold bg-white border border-amber-300 text-amber-700 rounded-lg px-3 py-1.5 hover:bg-amber-50 transition-colors">Giriş Yap</a>
+                  </div>
+                </div>
+              )}
+              {/* Yararlandıysa bilgi */}
+              {isCoupon && granted > 0 && (
+                <p className="text-[11px] text-olive-700 mb-2 flex items-center gap-1">
+                  <Check size={12} /> Kuponun <a href="/account?tab=coupons" className="underline font-semibold">Kuponlarım</a>&apos;da hazır{granted > 1 ? ` (${granted} hak)` : ""}.
+                </p>
+              )}
+
               {/* Buton */}
-              <button
-                disabled={expired || checking || authLoading}
-                onClick={() => handleViewOpportunity(opp)}
-                className={`w-full mt-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all ${
-                  expired
-                    ? "bg-slate-100 text-slate-400 cursor-not-allowed"
-                    : userCanAccess || !restricted
-                    ? "bg-olive-600 hover:bg-olive-700 text-white shadow-sm shadow-olive-100 active:scale-95"
-                    : "bg-slate-100 hover:bg-indigo-50 text-slate-600 hover:text-indigo-700"
-                }`}
-              >
-                {checking ? (
-                  <><Loader2 size={15} className="animate-spin" /> Kontrol ediliyor…</>
-                ) : expired ? (
-                  "Süresi Doldu"
-                ) : (
-                  <><ExternalLink size={14} /> Fırsatı Gör</>
-                )}
-              </button>
+              {isCoupon ? (
+                <button
+                  disabled={expired || claimingThis || authLoading || maxed}
+                  onClick={() => handleClaim(opp)}
+                  className={`w-full mt-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all ${
+                    expired || maxed
+                      ? "bg-slate-100 text-slate-500 cursor-not-allowed"
+                      : "bg-olive-600 hover:bg-olive-700 text-white shadow-sm shadow-olive-100 active:scale-95"
+                  }`}
+                >
+                  {claimingThis ? (
+                    <><Loader2 size={15} className="animate-spin" /> İşleniyor…</>
+                  ) : expired ? (
+                    "Süresi Doldu"
+                  ) : maxed ? (
+                    <><Check size={15} /> Yararlandın</>
+                  ) : granted > 0 ? (
+                    <><Ticket size={14} /> Tekrar Yararlan ({limit - granted} kaldı)</>
+                  ) : (
+                    <><Gift size={14} /> Yararlan</>
+                  )}
+                </button>
+              ) : (
+                <button
+                  disabled={expired || checking || authLoading}
+                  onClick={() => handleViewOpportunity(opp)}
+                  className={`w-full mt-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all ${
+                    expired
+                      ? "bg-slate-100 text-slate-400 cursor-not-allowed"
+                      : userCanAccess || !restricted
+                      ? "bg-olive-600 hover:bg-olive-700 text-white shadow-sm shadow-olive-100 active:scale-95"
+                      : "bg-slate-100 hover:bg-indigo-50 text-slate-600 hover:text-indigo-700"
+                  }`}
+                >
+                  {checking ? (
+                    <><Loader2 size={15} className="animate-spin" /> Kontrol ediliyor…</>
+                  ) : expired ? (
+                    "Süresi Doldu"
+                  ) : (
+                    <><ExternalLink size={14} /> Fırsatı Gör</>
+                  )}
+                </button>
+              )}
             </div>
           </div>
         );

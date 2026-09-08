@@ -47,23 +47,26 @@ export async function POST(req: NextRequest) {
   if (coupon.is_personal) {
     const { data: uc } = await supabase
       .from("user_coupons")
-      .select("id, use_count")
+      .select("id, use_count, max_uses")
       .eq("user_id", user.id)
       .eq("coupon_id", coupon.id)
       .maybeSingle();
     if (!uc) return NextResponse.json({ error: "Bu kupon size özel değil veya atanmamış" }, { status: 403 });
-    if (uc.use_count >= coupon.per_user_limit) {
+    // Kişiye tanınan hak (max_uses) varsa onu, yoksa kupon per_user_limit'ini kullan
+    const limit = (uc as any).max_uses ?? coupon.per_user_limit;
+    if (uc.use_count >= limit) {
       return NextResponse.json({ error: "Bu kuponu zaten kullandınız" }, { status: 400 });
     }
   } else {
     // Evrensel kupon: kullanıcı daha önce kullanmış mı?
     const { data: uc } = await supabase
       .from("user_coupons")
-      .select("id, use_count")
+      .select("id, use_count, max_uses")
       .eq("user_id", user.id)
       .eq("coupon_id", coupon.id)
       .maybeSingle();
-    if (uc && uc.use_count >= coupon.per_user_limit) {
+    const limit = (uc as any)?.max_uses ?? coupon.per_user_limit;
+    if (uc && uc.use_count >= limit) {
       return NextResponse.json({ error: "Bu kuponu daha önce kullandınız" }, { status: 400 });
     }
   }

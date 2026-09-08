@@ -99,15 +99,16 @@ export async function POST(req: NextRequest) {
       // Kişi başı limit kontrolü
       const { data: uc } = await supabase
         .from("user_coupons")
-        .select("use_count")
+        .select("use_count, max_uses")
         .eq("user_id", user.id)
         .eq("coupon_id", coupon.id)
         .maybeSingle();
       const useCount = uc?.use_count ?? 0;
+      const perUserLimit = (uc as any)?.max_uses ?? coupon.per_user_limit;
 
       if (
         (coupon.max_uses === null || coupon.used_count < coupon.max_uses) &&
-        useCount < coupon.per_user_limit
+        useCount < perUserLimit
       ) {
         couponId = coupon.id;
         validatedCoupon = coupon;

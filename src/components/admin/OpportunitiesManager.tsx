@@ -39,10 +39,11 @@ type Role = {
   slug: string;
 };
 
-const EMPTY: Omit<Opportunity, "id" | "click_count"> = {
+const EMPTY: any = {
   partner_name: "", title: "", description: "", image_url: "",
   url: "", discount_code: "", valid_until: "", is_active: true,
   allowed_role_slugs: [],
+  kind: "external", coupon_id: "", claim_limit: 1,
 };
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com";
@@ -51,6 +52,7 @@ export default function OpportunitiesPage() {
   const [opps, setOpps] = useState<Opportunity[]>([]);
   const [partners, setPartners] = useState<Partner[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
+  const [coupons, setCoupons] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [open, setOpen] = useState(false);
@@ -61,14 +63,16 @@ export default function OpportunitiesPage() {
 
   async function load() {
     setLoading(true);
-    const [{ data: oppsData }, { data: partnersData }, { data: rolesData }] = await Promise.all([
+    const [{ data: oppsData }, { data: partnersData }, { data: rolesData }, { data: couponsData }] = await Promise.all([
       (supabase as any).from("partner_opportunities").select("*").order("created_at", { ascending: false }),
       (supabase as any).from("partners").select("id, company_name").order("company_name", { ascending: true }),
       (supabase as any).from("roles").select("id, name, slug").order("name", { ascending: true }),
+      (supabase as any).from("coupons").select("id, code, name, type, amount").eq("is_active", true).order("code", { ascending: true }),
     ]);
     setOpps(oppsData || []);
     setPartners(partnersData || []);
     setRoles(rolesData || []);
+    setCoupons(couponsData || []);
     setLoading(false);
   }
 
@@ -77,9 +81,12 @@ export default function OpportunitiesPage() {
     setEditingId(o.id);
     setForm({
       partner_name: o.partner_name, title: o.title, description: o.description || "",
-      image_url: o.image_url || "", url: o.url, discount_code: o.discount_code || "",
+      image_url: o.image_url || "", url: o.url || "", discount_code: o.discount_code || "",
       valid_until: o.valid_until || "", is_active: o.is_active,
       allowed_role_slugs: o.allowed_role_slugs || [],
+      kind: (o as any).kind || "external",
+      coupon_id: (o as any).coupon_id || "",
+      claim_limit: (o as any).claim_limit ?? 1,
     });
     setOpen(true);
   }
@@ -93,13 +100,25 @@ export default function OpportunitiesPage() {
   }
 
   async function handleSave() {
-    if (!form.partner_name || !form.title || !form.url) {
-      alert("İş ortağı adı, başlık ve URL zorunlu.");
+    const isCoupon = form.kind === "coupon";
+    if (!form.partner_name || !form.title) {
+      alert("İş ortağı adı ve başlık zorunlu.");
+      return;
+    }
+    if (isCoupon && !form.coupon_id) {
+      alert("Kupon fırsatı için bir kupon seçin.");
+      return;
+    }
+    if (!isCoupon && !form.url) {
+      alert("Dış link fırsatı için URL zorunlu.");
       return;
     }
     setSaving(true);
     const payload = {
       ...form,
+      url: isCoupon ? (form.url || null) : form.url,
+      coupon_id: isCoupon ? form.coupon_id : null,
+      claim_limit: isCoupon ? Math.max(1, Number(form.claim_limit) || 1) : 1,
       valid_until: form.valid_until || null,
       discount_code: form.discount_code || null,
       image_url: form.image_url || null,
@@ -301,16 +320,61 @@ export default function OpportunitiesPage() {
                 placeholder="Fırsat hakkında kısa açıklama..."
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Hedef URL *</label>
-                <Input value={form.url ?? ""} onChange={(e) => setForm({ ...form, url: e.target.value })} placeholder="https://partner.com/indirim" />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Kupon Kodu</label>
-                <Input value={form.discount_code ?? ""} onChange={(e) => setForm({ ...form, discount_code: e.target.value })} placeholder="YERIHISSET20" />
+            {/* Fırsat türü */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Fırsat Türü</label>
+              <div className="flex gap-2">
+                {([["external", "Dış Link (partner sitesi)"], ["coupon", "Kupon (hesaba düşer)"]] as const).map(([k, label]) => (
+                  <button
+                    key={k}
+                    type="button"
+                    onClick={() => setForm({ ...form, kind: k })}
+                    className={`flex-1 rounded-lg border px-3 py-2 text-sm font-bold transition-colors ${
+                      form.kind === k ? "border-olive-500 bg-olive-50 text-olive-700" : "border-slate-200 text-slate-500 hover:bg-slate-50"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
             </div>
+
+            {form.kind === "coupon" ? (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Kupon *</label>
+                  <select
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    value={form.coupon_id ?? ""}
+                    onChange={(e) => setForm({ ...form, coupon_id: e.target.value })}
+                  >
+                    <option value="">Kupon seçin...</option>
+                    {coupons.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.code} — {c.type === "percentage" ? `%${c.amount}` : c.type === "fixed" ? `₺${c.amount}` : c.type === "free_shipping" ? "Ücretsiz kargo" : c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Kaç kez yararlanılabilir?</label>
+                  <Input type="number" min={1} value={form.claim_limit ?? 1}
+                    onChange={(e) => setForm({ ...form, claim_limit: e.target.value })} />
+                  <p className="text-[11px] text-slate-400">Her yararlanma kişiye 1 kullanım hakkı ekler.</p>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Hedef URL *</label>
+                  <Input value={form.url ?? ""} onChange={(e) => setForm({ ...form, url: e.target.value })} placeholder="https://partner.com/indirim" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Kupon Kodu</label>
+                  <Input value={form.discount_code ?? ""} onChange={(e) => setForm({ ...form, discount_code: e.target.value })} placeholder="YERIHISSET20" />
+                </div>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Görsel URL</label>

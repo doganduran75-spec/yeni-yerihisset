@@ -21,6 +21,15 @@ export default async function FirsatlarPage() {
     sb.from("roles").select("id, name, slug").order("name", { ascending: true }),
   ]);
 
+  // Kupon fırsatlarının kupon bilgisini (kod/tür/tutar) ekle
+  const list = (opps || []) as any[];
+  const couponIds = [...new Set(list.filter((o) => o.kind === "coupon" && o.coupon_id).map((o) => o.coupon_id))];
+  if (couponIds.length) {
+    const { data: coupons } = await sb.from("coupons").select("id, code, name, type, amount").in("id", couponIds);
+    const cmap = new Map((coupons || []).map((c: any) => [c.id, c]));
+    for (const o of list) if (o.kind === "coupon" && o.coupon_id) o.coupon = cmap.get(o.coupon_id) ?? null;
+  }
+
   return (
     <>
       <Navbar />
@@ -35,7 +44,7 @@ export default async function FirsatlarPage() {
             </p>
           </div>
           <LeadMagnetForm />
-          <FirsatlarClient opps={opps || []} allRoles={roles || []} />
+          <FirsatlarClient opps={list} allRoles={roles || []} />
         </div>
       </main>
       <Footer />
