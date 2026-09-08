@@ -285,7 +285,6 @@ export default function StockPage() {
                 <th className="px-3 py-2.5">Ürün</th>
                 <th className="px-3 py-2.5">Stok Kodu</th>
                 <th className="px-3 py-2.5">Barkod</th>
-                <th className="px-3 py-2.5">Açıklama</th>
                 <th className="px-3 py-2.5 text-center">Numara</th>
                 <th className="px-3 py-2.5">Taban</th>
                 <th className="px-3 py-2.5">Saya</th>
@@ -318,10 +317,6 @@ export default function StockPage() {
                     <td className="px-3 py-2 font-mono text-xs text-slate-500 whitespace-nowrap">{r.sku || "—"}</td>
                     {/* Barkod */}
                     <td className="px-3 py-2 font-mono text-xs text-slate-500 whitespace-nowrap">{r.barcode || "—"}</td>
-                    {/* Açıklama */}
-                    <td className="px-3 py-2 text-xs text-slate-400 max-w-[200px]">
-                      <span className="line-clamp-2">{r.description || "—"}</span>
-                    </td>
                     {/* Numara */}
                     <td className="px-3 py-2 text-center">
                       {r.sizeValue ? <span className="font-bold text-olive-700">{r.sizeValue}</span> : <span className="text-slate-300">—</span>}
