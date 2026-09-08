@@ -92,9 +92,12 @@ export async function POST(req: NextRequest) {
           import("@/lib/notifications").then(({ sendOrderNotification }) =>
             sendOrderNotification("order_placed", { orderId: order.id, userId: order.user_id })
           ),
-          // Admin'e "yeni sipariş geldi" bildirimi
+          // Admin'e "yeni sipariş geldi" bildirimi (sonucu logla — teşhis için)
           import("@/lib/notifications").then(({ sendAdminNewOrderNotification }) =>
-            sendAdminNewOrderNotification(order.id)
+            sendAdminNewOrderNotification(order.id).then((r) => {
+              if (r.status !== "sent") console.error("[admin-order-mail]", JSON.stringify(r));
+              else console.log("[admin-order-mail] sent");
+            })
           ),
           // Kupon kullanımını kaydet (supabase üzerinden)
           (async () => {
