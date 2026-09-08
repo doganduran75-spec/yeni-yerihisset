@@ -140,6 +140,26 @@ function listUnsubHeader(settings: any): Record<string, string> { // eslint-disa
   return addr ? { "List-Unsubscribe": `<mailto:${addr}?subject=unsubscribe>` } : {};
 }
 
+/**
+ * Teslimat adresini okunur HTML'e çevirir. Adres JSON string olarak saklanıyor
+ * ({name, phone, address, district, city}); düz metinse aynen döner.
+ */
+function formatAddressHtml(raw: any): string { // eslint-disable-line @typescript-eslint/no-explicit-any
+  if (!raw) return "";
+  let a: any = raw;
+  if (typeof raw === "string") {
+    const s = raw.trim();
+    if (s.startsWith("{")) { try { a = JSON.parse(s); } catch { return s.replace(/\n/g, "<br>"); } }
+    else return s.replace(/\n/g, "<br>");
+  }
+  const esc = (v: any) => String(v ?? "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const line1 = [a.name].filter(Boolean).map(esc).join("");
+  const line2 = esc(a.address);
+  const line3 = [a.district, a.city].filter(Boolean).map(esc).join(" / ");
+  const line4 = a.phone ? `Tel: ${esc(a.phone)}` : "";
+  return [line1, line2, line3, line4].filter(Boolean).join("<br>");
+}
+
 // --- Ana fonksiyon ---
 
 export async function sendOrderNotification(
@@ -148,32 +168,41 @@ export async function sendOrderNotification(
 ): Promise<{ channel: "email" | "push" | "skipped"; status: "sent" | "failed" | "skipped"; error?: string }> {
   const supabase = createAdminClient();
 
-  // 1. Sipariş + kullanıcı bilgilerini getir
+  // 1. Sipariş + ilişkileri EMBED'SİZ getir (self-host PostgREST embed kırılgan)
   const { data: order, error: orderError } = await (supabase
     .from("orders")
-    .select(`
-      id, total_amount, status, created_at, shipping_address, payment_method,
-      profiles!orders_user_id_fkey (
-        first_name, last_name, email
-      ),
-      order_items (
-        quantity, unit_price,
-        products (title)
-      )
-    `)
+    .select("id, total_amount, status, created_at, shipping_address, payment_method, user_id")
     .eq("id", context.orderId)
-    .single() as any) as { data: any; error: any };
+    .maybeSingle() as any) as { data: any; error: any };
 
   if (orderError || !order) {
     return { channel: "skipped", status: "failed", error: "Sipariş bulunamadı" };
   }
 
-  const profile = order.profiles as any;
+  // Müşteri (profil)
+  const uid = order.user_id || context.userId;
+  let profile: any = null;
+  if (uid) {
+    const { data: p } = await (supabase as any).from("profiles")
+      .select("first_name, last_name, email").eq("id", uid).maybeSingle();
+    profile = p ?? null;
+  }
   const customerName = [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") || "Değerli Müşterimiz";
   const customerEmail = profile?.email;
+
+  // Kalemler + ürün başlıkları (ayrı sorgu)
+  const { data: oiRows } = await (supabase as any).from("order_items")
+    .select("quantity, unit_price, product_id").eq("order_id", context.orderId);
+  const oiArr = (oiRows as any[]) || [];
+  const oiProdIds = [...new Set(oiArr.map((i) => i.product_id).filter(Boolean))];
+  const oiTitleMap = new Map<string, string>();
+  if (oiProdIds.length) {
+    const { data: ps } = await (supabase as any).from("products").select("id, title").in("id", oiProdIds);
+    (ps as any[] || []).forEach((p) => oiTitleMap.set(p.id, p.title));
+  }
   const orderItems: Array<{ title: string; quantity: number; unit_price: number }> =
-    ((order.order_items as any[]) || []).map((i: any) => ({
-      title: i.products?.title ?? "Ürün",
+    oiArr.map((i: any) => ({
+      title: oiTitleMap.get(i.product_id) ?? "Ürün",
       quantity: i.quantity,
       unit_price: i.unit_price,
     }));
@@ -192,19 +221,8 @@ export async function sendOrderNotification(
     .limit(1)
     .single();
 
-  // 4. Email şablonunu getir
-  const { data: template } = await supabase
-    .from("email_templates")
-    .select("subject, body_html, is_active")
-    .eq("trigger", trigger)
-    .single();
-
-  if (!template?.is_active) {
-    await logNotification(supabase, { ...context, trigger, channel: "skipped", status: "skipped", recipient: customerEmail || "" });
-    return { channel: "skipped", status: "skipped" };
-  }
-
-  // 5. Template değişkenlerini doldur
+  // 4. Değişkenler (şablon olsa da olmasa da lazım)
+  const shortId = order.id.slice(0, 8).toUpperCase();
   const trackingHtml = context.trackingNumber
     ? `<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:16px;margin:0 0 24px 0;">
          <p style="margin:0 0 4px 0;color:#1e40af;font-size:13px;font-weight:700;">🚚 Kargo Takip No</p>
@@ -212,7 +230,7 @@ export async function sendOrderNotification(
        </div>`
     : "";
 
-  // Havale/EFT siparişlerinde banka bilgisi bloğu
+  // Havale/EFT siparişlerinde banka bilgisi bloğu (KRİTİK)
   const isBankTransfer = (order as any).payment_method === "bank_transfer";
   const bankInfo: string = settings?.bank_transfer_info ?? "";
   const bankInfoHtml =
@@ -220,17 +238,19 @@ export async function sendOrderNotification(
       ? `<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:16px;margin:0 0 24px 0;">
            <p style="margin:0 0 8px 0;color:#92400e;font-size:13px;font-weight:700;">🏦 Havale / EFT Banka Bilgileri</p>
            <pre style="margin:0;color:#78350f;font-size:13px;font-family:monospace;white-space:pre-wrap;">${bankInfo}</pre>
-           <p style="margin:12px 0 0 0;color:#92400e;font-size:12px;">Açıklama kısmına sipariş numaranızı (<strong>#${order.id.slice(0, 8).toUpperCase()}</strong>) yazmayı unutmayın.</p>
+           <p style="margin:12px 0 0 0;color:#92400e;font-size:12px;">Açıklama kısmına sipariş numaranızı (<strong>#${shortId}</strong>) yazmayı unutmayın.</p>
          </div>`
       : "";
 
+  const addressHtml = formatAddressHtml((order as any).shipping_address);
+
   const vars: Record<string, string> = {
     customer_name: customerName,
-    order_id: order.id.slice(0, 8).toUpperCase(),
+    order_id: shortId,
     order_date: new Date(order.created_at).toLocaleDateString("tr-TR"),
     order_total: `₺${Number(order.total_amount).toFixed(2)}`,
     order_items_html: buildOrderItemsHtml(orderItems),
-    shipping_address: order.shipping_address || "",
+    shipping_address: addressHtml,
     tracking_html: trackingHtml,
     bank_info_html: bankInfoHtml,
     store_name: storeName,
@@ -238,9 +258,38 @@ export async function sendOrderNotification(
     store_url: storeUrl,
   };
 
-  const subject = replaceVariables(template.subject, vars);
-  let bodyHtml = replaceVariables(template.body_html, vars);
-  bodyHtml = addUtmTracking(bodyHtml, trigger);
+  // 5. Şablon getir — varsa kullan; YOKSA/PASİFSE yerleşik varsayılan
+  // (özellikle havale sipariş onayı banka bilgisiyle GARANTİ gitsin).
+  const { data: template } = await supabase
+    .from("email_templates")
+    .select("subject, body_html, is_active")
+    .eq("trigger", trigger)
+    .maybeSingle();
+
+  let subject: string;
+  let bodyHtml: string;
+  if (template?.is_active) {
+    subject = replaceVariables(template.subject, vars);
+    bodyHtml = addUtmTracking(replaceVariables(template.body_html, vars), trigger);
+  } else {
+    const addrBlock = addressHtml
+      ? `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;margin:0 0 20px;font-size:13px;color:#475569"><b>Teslimat Adresi</b><br>${addressHtml}</div>`
+      : "";
+    const intro = trigger === "order_placed"
+      ? (isBankTransfer
+          ? "Siparişini aldık! Aşağıdaki banka bilgileriyle havale/EFT ödemeni yaptıktan sonra siparişini hazırlayıp kargoya vereceğiz."
+          : "Siparişini aldık! En kısa sürede hazırlayıp kargoya vereceğiz.")
+      : "Sipariş durumun güncellendi.";
+    subject = `${storeName} — Siparişiniz alındı #${shortId}`;
+    bodyHtml = `
+      <h1 style="font-size:22px;font-weight:800;color:#111827;margin:0 0 12px">Siparişiniz alındı 🎉</h1>
+      <p style="font-size:15px;color:#374151;line-height:1.6;margin:0 0 8px">Merhaba ${customerName}, ${intro}</p>
+      <p style="font-size:14px;color:#6b7280;margin:0 0 16px">Sipariş No: <b>#${shortId}</b> · Toplam: <b style="color:#166534">₺${Number(order.total_amount).toFixed(2)}</b></p>
+      ${buildOrderItemsHtml(orderItems)}
+      ${bankInfoHtml}
+      ${addrBlock}
+      ${trackingHtml}`;
+  }
 
   // --- Push bildirimi ---
   if (pushToken?.token) {
@@ -604,7 +653,7 @@ export async function sendAdminNewOrderNotification(
       <tr><td style="padding:3px 0;color:#6b7280">Tutar</td><td style="padding:3px 0;font-weight:800;color:#166534">₺${Number(order.total_amount).toFixed(2)}</td></tr>
     </table>
     ${buildOrderItemsHtml(items)}
-    ${order.shipping_address ? `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;margin:0 0 16px;font-size:13px;color:#475569"><b>Teslimat:</b><br>${String(order.shipping_address).replace(/\n/g, "<br>")}</div>` : ""}
+    ${formatAddressHtml(order.shipping_address) ? `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;margin:0 0 16px;font-size:13px;color:#475569"><b>Teslimat:</b><br>${formatAddressHtml(order.shipping_address)}</div>` : ""}
     <div style="text-align:center;margin:8px 0 0">
       <a href="${storeUrl}/admin/orders" style="display:inline-block;background:#1d4ed8;color:#fff;text-decoration:none;padding:12px 28px;border-radius:12px;font-weight:800;font-size:14px">Siparişi Yönet</a>
     </div>`;
