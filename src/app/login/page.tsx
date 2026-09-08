@@ -47,6 +47,13 @@ function LoginForm() {
     lastName: ""
   });
 
+  // Sosyal giriş yalnızca ilgili sağlayıcı GoTrue'da etkinse gösterilir.
+  // NEXT_PUBLIC_SOCIAL_LOGIN="google" veya "google,apple" (varsayılan: gizli).
+  const socialFlag = (process.env.NEXT_PUBLIC_SOCIAL_LOGIN || "").toLowerCase();
+  const showGoogle = socialFlag.includes("google");
+  const showApple = socialFlag.includes("apple");
+  const anySocial = showGoogle || showApple;
+
   async function handleSocialLogin(provider: 'google' | 'apple') {
     setLoading(true);
     setError(null);
@@ -270,7 +277,7 @@ function LoginForm() {
               <ArrowRight size={18} className="ml-2 group-hover:translate-x-1 transition-transform" />
             </Button>
 
-            {!forgot && (
+            {!forgot && anySocial && (
             <div className="relative py-4">
               <div className="absolute inset-0 flex items-center">
                 <span className="w-full border-t border-slate-100"></span>
@@ -281,8 +288,10 @@ function LoginForm() {
             </div>
             )}
 
-            <div className={cn("grid grid-cols-2 gap-4", forgot && "hidden")}>
-              <Button 
+            {anySocial && (
+            <div className={cn("grid gap-4", showGoogle && showApple ? "grid-cols-2" : "grid-cols-1", forgot && "hidden")}>
+              {showGoogle && (
+              <Button
                 type="button"
                 variant="outline"
                 onClick={() => handleSocialLogin('google')}
@@ -297,7 +306,9 @@ function LoginForm() {
                 </svg>
                 Google
               </Button>
-              <Button 
+              )}
+              {showApple && (
+              <Button
                 type="button"
                 variant="outline"
                 onClick={() => handleSocialLogin('apple')}
@@ -307,7 +318,9 @@ function LoginForm() {
                 <Apple size={18} fill="black" />
                 Apple
               </Button>
+              )}
             </div>
+            )}
 
             <div className="pt-4 text-center">
                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest leading-relaxed">
