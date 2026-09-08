@@ -64,6 +64,7 @@ function AccountPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialTab = (searchParams.get("tab") as TabType) || "orders";
+  const returnTo = searchParams.get("returnTo"); // checkout'tan gelindiyse kaydettikten sonra dönülecek sayfa
   
   const [activeTab, setActiveTab] = useState<TabType>(initialTab);
   const [user, setUser] = useState<any>(null);
@@ -133,6 +134,15 @@ function AccountPageInner() {
   useEffect(() => {
     fetchUserData();
   }, []);
+
+  // Checkout'tan adres eklemeye gelindiyse (returnTo) ve kayıtlı adres yoksa
+  // formu prefill'li otomatik aç — kullanıcı doğrudan doldurmaya başlasın.
+  useEffect(() => {
+    if (!loading && returnTo && addresses.length === 0 && !showAddressForm) {
+      openAddressForm();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, returnTo, addresses.length]);
 
   useEffect(() => {
     if (activeTab === "affiliate" && !affiliate && !affiliateLoading) {
@@ -371,6 +381,25 @@ function AccountPageInner() {
     else alert("Profil başarıyla güncellendi.");
   }
 
+  // Formu prefill ile aç: isim-soyad profilden gelir; İLK adreste varsayılan
+  // sevkiyat + fatura otomatik işaretli (kullanıcı uğraşmasın).
+  function openAddressForm() {
+    const firstAddr = addresses.length === 0;
+    const digits = (profile?.phone ? String(profile.phone).replace(/\D/g, "") : "");
+    setAddressForm({
+      address_name: "",
+      first_name: profile?.first_name || "",
+      last_name: profile?.last_name || "",
+      phone: digits.slice(-10),
+      city: "",
+      district: "",
+      address_detail: "",
+      is_default_shipping: firstAddr,
+      is_default_billing: firstAddr,
+    });
+    setShowAddressForm(true);
+  }
+
   async function handleAddAddress(e: React.FormEvent) {
     e.preventDefault();
     if (!user) return;
@@ -384,22 +413,24 @@ function AccountPageInner() {
       user_id: user.id
     });
 
-    if (error) alert("Hata: " + error.message);
-    else {
-      setShowAddressForm(false);
-      setAddressForm({
-        address_name: "",
-        first_name: "",
-        last_name: "",
-        phone: "",
-        city: "",
-        district: "",
-        address_detail: "",
-        is_default_shipping: false,
-        is_default_billing: false,
-      });
-      fetchUserData();
-    }
+    if (error) { alert("Hata: " + error.message); return; }
+
+    // Checkout'tan gelindiyse: kaydedince ödeme sayfasına GERİ DÖN.
+    if (returnTo) { router.push(returnTo); return; }
+
+    setShowAddressForm(false);
+    setAddressForm({
+      address_name: "",
+      first_name: "",
+      last_name: "",
+      phone: "",
+      city: "",
+      district: "",
+      address_detail: "",
+      is_default_shipping: false,
+      is_default_billing: false,
+    });
+    fetchUserData();
   }
 
   async function handleDeleteAddress(id: string) {
@@ -790,7 +821,7 @@ function AccountPageInner() {
                    <h2 className="text-2xl font-black text-slate-900">Adres Bilgilerim</h2>
                    {!showAddressForm && (
                      <Button 
-                      onClick={() => setShowAddressForm(true)}
+                      onClick={openAddressForm}
                       className="bg-olive-600 hover:bg-olive-700 font-bold rounded-2xl gap-2 h-12 shadow-lg shadow-olive-100"
                      >
                        <Plus size={18} /> Yeni Adres Ekle
@@ -936,7 +967,7 @@ function AccountPageInner() {
                   ))}
                   {addresses.length === 0 && !showAddressForm && (
                      <div 
-                      onClick={() => setShowAddressForm(true)}
+                      onClick={openAddressForm}
                       className="border-2 border-dashed border-slate-200 rounded-2xl flex flex-col items-center justify-center py-12 gap-4 cursor-pointer hover:bg-slate-50 transition-colors"
                      >
                         <Plus className="text-slate-300" size={32} />

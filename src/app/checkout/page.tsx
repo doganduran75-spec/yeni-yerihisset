@@ -496,7 +496,7 @@ export default function CheckoutPage() {
                     <div className="w-10 h-10 bg-blue-600 text-white rounded-2xl flex items-center justify-center font-black shadow-lg shadow-blue-100 italic">02</div>
                     <h3 className="text-2xl font-black text-slate-900 uppercase italic tracking-tighter">Teslimat Adresi</h3>
                   </div>
-                  <Link href="/account?tab=addresses" className="text-blue-600 font-black text-xs uppercase tracking-widest flex items-center gap-2 hover:translate-x-1 transition-transform">
+                  <Link href="/account?tab=addresses&returnTo=/checkout" className="text-blue-600 font-black text-xs uppercase tracking-widest flex items-center gap-2 hover:translate-x-1 transition-transform">
                     <Plus size={16} /> ADRES EKLE
                   </Link>
                </div>
@@ -504,7 +504,7 @@ export default function CheckoutPage() {
                {addresses.length === 0 ? (
                  <div 
                   className="bento-card border-2 border-dashed border-slate-200 bg-slate-50/50 flex flex-col items-center justify-center py-16 gap-4 group cursor-pointer" 
-                  onClick={() => router.push("/account?tab=addresses")}
+                  onClick={() => router.push("/account?tab=addresses&returnTo=/checkout")}
                  >
                     <div className="w-16 h-16 bg-white rounded-3xl flex items-center justify-center text-slate-300 group-hover:text-blue-600 transition-colors shadow-sm">
                       <MapPin size={32} />
