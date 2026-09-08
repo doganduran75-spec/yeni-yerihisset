@@ -554,28 +554,42 @@ export async function sendAdminNewOrderNotification(
 ): Promise<{ status: "sent" | "failed" | "skipped"; error?: string }> {
   const supabase = createAdminClient();
 
+  // EMBED YOK — self-host PostgREST embed'leri kırılgan; ilişkileri ayrı çek.
   const { data: order } = await (supabase
     .from("orders")
-    .select(`
-      id, total_amount, status, created_at, shipping_address, payment_method,
-      profiles!orders_user_id_fkey ( first_name, last_name, email, phone ),
-      order_items ( quantity, unit_price, products (title) )
-    `)
+    .select("id, total_amount, status, created_at, shipping_address, payment_method, user_id")
     .eq("id", orderId)
-    .single() as any) as { data: any };
+    .maybeSingle() as any) as { data: any };
 
   if (!order) return { status: "skipped", error: "Sipariş bulunamadı" };
 
-  const { data: settings } = await (supabase.from("settings").select("*").single() as any) as { data: any };
+  const { data: settings } = await (supabase.from("settings").select("*").limit(1).maybeSingle() as any) as { data: any };
   const storeName = settings?.store_name || "YeriHisset";
   const storeUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com";
   const to = settings?.admin_notify_email || settings?.contact_email || settings?.smtp_from_email || settings?.smtp_user;
   if (!to) return { status: "skipped", error: "Admin e-posta adresi ayarlı değil" };
 
-  const profile = order.profiles as any;
+  // Müşteri (profil)
+  let profile: any = null;
+  if (order.user_id) {
+    const { data: p } = await (supabase as any).from("profiles")
+      .select("first_name, last_name, email, phone").eq("id", order.user_id).maybeSingle();
+    profile = p ?? null;
+  }
   const customerName = [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") || "—";
-  const items = ((order.order_items as any[]) || []).map((i) => ({
-    title: i.products?.title ?? "Ürün", quantity: i.quantity, unit_price: i.unit_price,
+
+  // Sipariş kalemleri + ürün başlıkları (ayrı sorgu)
+  const { data: oiRows } = await (supabase as any).from("order_items")
+    .select("quantity, unit_price, product_id").eq("order_id", orderId);
+  const oi = (oiRows as any[]) || [];
+  const prodIds = [...new Set(oi.map((i) => i.product_id).filter(Boolean))];
+  const titleMap = new Map<string, string>();
+  if (prodIds.length) {
+    const { data: ps } = await (supabase as any).from("products").select("id, title").in("id", prodIds);
+    (ps as any[] || []).forEach((p) => titleMap.set(p.id, p.title));
+  }
+  const items = oi.map((i) => ({
+    title: titleMap.get(i.product_id) ?? "Ürün", quantity: i.quantity, unit_price: i.unit_price,
   }));
   const shortId = order.id.slice(0, 8).toUpperCase();
   const payLabel = order.payment_method === "bank_transfer" ? "Havale/EFT" : "Kart (iyzico)";
