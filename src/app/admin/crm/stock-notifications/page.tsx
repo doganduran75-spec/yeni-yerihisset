@@ -52,6 +52,8 @@ type Notification = {
   notified_at: string | null;
   product_title?: string;
   variant_value?: string | null;
+  sku?: string | null;
+  barcode?: string | null;
   stock?: number;
   has_email?: boolean;
   contact_name?: string | null;
@@ -150,12 +152,15 @@ export default function StockNotificationsPage() {
 
       // Varyant değer + stok (embed yalıtılmış)
       const vids = [...new Set(rows.map((r) => r.variant_id).filter(Boolean))] as string[];
-      const vmap = new Map<string, { value: string | null; stock: number }>();
+      const vmap = new Map<string, { value: string | null; stock: number; sku: string | null; barcode: string | null }>();
       if (vids.length) {
         try {
           const { data: vs } = await (supabase as any)
-            .from("product_variants").select("id, stock, variant_options(value)").in("id", vids);
-          (vs as any[] || []).forEach((v) => vmap.set(v.id, { value: v.variant_options?.value ?? null, stock: Number(v.stock ?? 0) }));
+            .from("product_variants").select("id, stock, sku, barcode, variant_options(value)").in("id", vids);
+          (vs as any[] || []).forEach((v) => vmap.set(v.id, {
+            value: v.variant_options?.value ?? null, stock: Number(v.stock ?? 0),
+            sku: v.sku ?? null, barcode: v.barcode ?? null,
+          }));
         } catch { /* kritik değil */ }
       }
 
@@ -178,6 +183,8 @@ export default function StockNotificationsPage() {
           ...n,
           product_title: p?.title ?? "—",
           variant_value: v ? v.value : null,
+          sku: v?.sku ?? null,
+          barcode: v?.barcode ?? null,
           stock: n.variant_id ? (v?.stock ?? 0) : (p?.stock ?? 0),
           has_email: hasEmail,
           contact_name: c?.full_name ?? null,
@@ -464,6 +471,12 @@ export default function StockNotificationsPage() {
                           {(n.stock ?? 0) > 0 ? `Stok ${n.stock}` : "Stok 0"}
                         </span>
                       </div>
+                      {(n.sku || n.barcode) && (
+                        <div className="flex items-center gap-2 mt-1 text-[10px] font-mono text-slate-400">
+                          {n.sku && <span title="Stok kodu (SKU)">SKU: {n.sku}</span>}
+                          {n.barcode && <span title="Barkod">◼ {n.barcode}</span>}
+                        </div>
+                      )}
                     </TableCell>
                     <TableCell className="text-sm">
                       <div>{contactDisplay(n)}</div>

@@ -20,6 +20,7 @@ type StockRow = {
   stock: number;
   image: string | null;
   search: string;
+  waiting: number; // bu ürün/varyant için stok bekleyen (pending) kişi sayısı
 };
 
 // Türkçe-duyarsız normalize (arama için): küçült + Türkçe karakterleri sadeleştir
@@ -54,6 +55,19 @@ export default function StockPage() {
       `)
       .order("title");
 
+    // Bekleyen (pending) stok bildirimleri → ürün/varyant başına sayım
+    const waitMap = new Map<string, number>();
+    const { data: notifs } = await (supabase as any)
+      .from("stock_notifications")
+      .select("product_id, variant_id")
+      .eq("status", "pending");
+    for (const n of (notifs as any[]) || []) {
+      const k = `${n.product_id}::${n.variant_id ?? ""}`;
+      waitMap.set(k, (waitMap.get(k) ?? 0) + 1);
+    }
+    const waitOf = (productId: string, variantId: string | null) =>
+      waitMap.get(`${productId}::${variantId ?? ""}`) ?? 0;
+
     const out: StockRow[] = [];
     for (const p of (data as any[]) || []) {
       const variants = sortByVariantValue(p.product_variants || [], (v: any) => v.variant_options?.value);
@@ -72,6 +86,7 @@ export default function StockPage() {
             stock: Number(v.stock ?? 0),
             image: p.image_url,
             search: norm([p.title, groupName, value, v.sku].filter(Boolean).join(" ")),
+            waiting: waitOf(p.id, v.id),
           });
         }
       } else {
@@ -85,6 +100,7 @@ export default function StockPage() {
           stock: Number(p.stock ?? 0),
           image: p.image_url,
           search: norm(p.title),
+          waiting: waitOf(p.id, null),
         });
       }
     }
@@ -258,6 +274,17 @@ export default function StockPage() {
                   <div className="flex items-center gap-2 flex-wrap">
                     {r.variantLabel && <span className="text-xs font-medium text-olive-700">{r.variantLabel}</span>}
                     {r.sku && <span className="text-[10px] font-mono text-slate-400">{r.sku}</span>}
+                    {r.waiting > 0 && (
+                      <span
+                        title={`${r.waiting} kişi bu ürün için stok bekliyor`}
+                        className={cn(
+                          "inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full",
+                          r.stock <= 0 ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"
+                        )}
+                      >
+                        <BellRing size={10} /> {r.waiting} bekliyor
+                      </span>
+                    )}
                   </div>
                 </div>
 

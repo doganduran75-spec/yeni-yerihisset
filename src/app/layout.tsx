@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Outfit, Inter } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import PopupBanner from "@/components/PopupBanner";
+import ScrollToTop from "@/components/ScrollToTop";
 import GlobalStructuredData from "@/components/GlobalStructuredData";
 import GoogleAnalytics from "@/components/GoogleAnalytics";
 import "./globals.css";
@@ -86,6 +87,7 @@ export default function RootLayout({
         <TooltipProvider>
           {children}
           <PopupBanner />
+          <ScrollToTop />
         </TooltipProvider>
       </body>
     </html>
