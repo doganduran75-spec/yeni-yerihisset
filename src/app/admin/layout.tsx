@@ -7,7 +7,7 @@ export const metadata: Metadata = {
 import { SidebarProvider, Sidebar, SidebarHeader, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarInset, SidebarGroupLabel } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
-import { LayoutDashboard, ShoppingBag, CreditCard, Settings, Users, ExternalLink, BookOpen, Handshake, MessagesSquare, Link2, Ticket, BellRing, FileEdit, Send, Gift, Star, Boxes } from "lucide-react";
+import { LayoutDashboard, ShoppingBag, CreditCard, Settings, Users, ExternalLink, BookOpen, Handshake, MessagesSquare, Link2, Ticket, BellRing, FileEdit, Send, Star, Boxes } from "lucide-react";
 import AdminGuard from "@/components/admin/AdminGuard";
 
 export default function AdminLayout({
@@ -77,12 +77,7 @@ export default function AdminLayout({
               <SidebarMenu>
                 <SidebarMenuItem>
                   <SidebarMenuButton
-                    render={<Link href="/admin/partners"><Handshake size={18} className="mr-2" /> İş Ortakları</Link>}
-                  />
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    render={<Link href="/admin/kb-articles"><BookOpen size={18} className="mr-2" /> Bilgi Bankası</Link>}
+                    render={<Link href="/admin/partners"><Handshake size={18} className="mr-2" /> İş Ortakları &amp; Fırsatları</Link>}
                   />
                 </SidebarMenuItem>
               </SidebarMenu>
@@ -128,11 +123,6 @@ export default function AdminLayout({
                     render={<Link href="/admin/crm/bulk-email"><Send size={18} className="mr-2" /> Toplu Email</Link>}
                   />
                 </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    render={<Link href="/admin/opportunities"><Gift size={18} className="mr-2" /> İş Ortağı Fırsatları</Link>}
-                  />
-                </SidebarMenuItem>
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
@@ -143,7 +133,7 @@ export default function AdminLayout({
               <SidebarMenu>
                 <SidebarMenuItem>
                   <SidebarMenuButton
-                    render={<Link href="/admin/site-content"><FileEdit size={18} className="mr-2" /> Sayfa İçerikleri</Link>}
+                    render={<Link href="/admin/site-content"><FileEdit size={18} className="mr-2" /> Sayfa İçerikleri &amp; Bilgi Bankası</Link>}
                   />
                 </SidebarMenuItem>
                 <SidebarMenuItem>
