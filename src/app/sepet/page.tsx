@@ -535,12 +535,16 @@ export default function CartPage() {
     setMounted(true);
   }, []);
 
-  // Sepet açılınca / öğeler değişince gerçek stoğu çek
+  // Sepet açılınca / öğeler değişince gerçek stoğu çek + SAYFADAYKEN CANLI takip:
+  // periyodik yenileme (30sn) + sekmeye/pencereye dönünce anında yenileme. Böylece
+  // başkası ürünü tüketince müşteri refresh'e gerek kalmadan uyarıyı görür.
   const cartIdsKey = items.filter((i) => !i.is_gift).map((i) => i.id).join(",");
   useEffect(() => {
-    (async () => {
+    let cancelled = false;
+
+    async function refreshLiveStock() {
       const regs = items.filter((i) => !i.is_gift);
-      if (regs.length === 0) { setLiveStock({}); return; }
+      if (regs.length === 0) { if (!cancelled) setLiveStock({}); return; }
       const variantIds = regs.filter((i) => i.variant_id).map((i) => i.variant_id!) as string[];
       const productIds = regs.filter((i) => !i.variant_id).map((i) => i.product_id);
       const [vRes, pRes] = await Promise.all([
@@ -553,8 +557,27 @@ export default function CartPage() {
       for (const it of regs) {
         map[it.id] = it.variant_id ? (vMap.get(it.variant_id) ?? 0) : (pMap.get(it.product_id) ?? 0);
       }
-      setLiveStock(map);
-    })();
+      if (!cancelled) setLiveStock(map);
+    }
+
+    refreshLiveStock();
+
+    // Sekme görünürken 30sn'de bir yenile (arka plandayken boşa sorgu atma)
+    const interval = setInterval(() => {
+      if (!document.hidden) refreshLiveStock();
+    }, 30000);
+
+    // Sekmeye/pencereye dönünce anında yenile
+    const onFocus = () => { if (!document.hidden) refreshLiveStock(); };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cartIdsKey]);
 
