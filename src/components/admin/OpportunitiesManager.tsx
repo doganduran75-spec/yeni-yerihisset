@@ -44,6 +44,7 @@ const EMPTY: any = {
   url: "", discount_code: "", valid_until: "", is_active: true,
   allowed_role_slugs: [],
   kind: "external", coupon_id: "", claim_limit: 1,
+  tier_level: 0,
 };
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com";
@@ -66,7 +67,7 @@ export default function OpportunitiesPage() {
     const [{ data: oppsData }, { data: partnersData }, { data: rolesData }, { data: couponsData }] = await Promise.all([
       (supabase as any).from("partner_opportunities").select("*").order("created_at", { ascending: false }),
       (supabase as any).from("partners").select("id, company_name").order("company_name", { ascending: true }),
-      (supabase as any).from("roles").select("id, name, slug").order("name", { ascending: true }),
+      (supabase as any).from("roles").select("id, name, slug, level").order("level", { ascending: true }),
       (supabase as any).from("coupons").select("id, code, name, type, amount").eq("is_active", true).order("code", { ascending: true }),
     ]);
     setOpps(oppsData || []);
@@ -87,6 +88,7 @@ export default function OpportunitiesPage() {
       kind: (o as any).kind || "external",
       coupon_id: (o as any).coupon_id || "",
       claim_limit: (o as any).claim_limit ?? 1,
+      tier_level: (o as any).tier_level ?? 0,
     });
     setOpen(true);
   }
@@ -124,6 +126,7 @@ export default function OpportunitiesPage() {
       image_url: form.image_url || null,
       description: form.description || null,
       allowed_role_slugs: form.allowed_role_slugs?.length ? form.allowed_role_slugs : [],
+      tier_level: Math.max(0, Number(form.tier_level) || 0),
       updated_at: new Date().toISOString(),
     };
     if (editingId) {
@@ -320,6 +323,22 @@ export default function OpportunitiesPage() {
                 placeholder="Fırsat hakkında kısa açıklama..."
               />
             </div>
+            {/* Seviye (erişim merdiveni) */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Seviye (kimler görebilir?)</label>
+              <select
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                value={String(form.tier_level ?? 0)}
+                onChange={(e) => setForm({ ...form, tier_level: Number(e.target.value) })}
+              >
+                <option value="0">Ziyaretçi — herkes (giriş gerekmez)</option>
+                {roles.filter((r: any) => (r.level ?? 0) > 0).sort((a: any, b: any) => a.level - b.level).map((r: any) => (
+                  <option key={r.id} value={String(r.level)}>{r.name} ve üstü</option>
+                ))}
+              </select>
+              <p className="text-[11px] text-slate-400">Bu seviye ve ÜSTÜ kullanıcılar bu fırsatı kullanabilir (kümülatif). Fırsatlar sayfasında ilgili satırda görünür.</p>
+            </div>
+
             {/* Fırsat türü */}
             <div className="space-y-2">
               <label className="text-sm font-medium">Fırsat Türü</label>
