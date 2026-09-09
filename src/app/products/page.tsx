@@ -48,14 +48,6 @@ export default async function ProductsPage() {
             <span className="text-slate-900 font-medium">Tüm Ürünler</span>
           </nav>
 
-          {/* Başlık */}
-          <div className="mb-10">
-            <h1 className="text-4xl font-black tracking-tight text-slate-900 uppercase italic">
-              Tüm Ürünler
-            </h1>
-            <p className="text-slate-400 mt-1 text-sm">{list.length} ürün</p>
-          </div>
-
           {/* Ürün grid + numara filtresi */}
           <SizeFilterGrid products={list} />
         </div>
