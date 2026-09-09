@@ -1,10 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
 import type { Metadata } from "next";
-import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import SizeFilterGrid from "@/components/SizeFilterGrid";
-import { ChevronRight } from "lucide-react";
 
 export const revalidate = 60;
 
@@ -41,13 +39,6 @@ export default async function ProductsPage() {
       <Navbar />
       <main className="min-h-screen bg-background">
         <div className="container mx-auto px-4 py-8 max-w-7xl">
-          {/* Breadcrumb */}
-          <nav className="flex items-center gap-2 text-sm text-slate-500 mb-8">
-            <Link href="/" className="hover:text-olive-600">Anasayfa</Link>
-            <ChevronRight size={14} />
-            <span className="text-slate-900 font-medium">Tüm Ürünler</span>
-          </nav>
-
           {/* Ürün grid + numara filtresi */}
           <SizeFilterGrid products={list} />
         </div>
