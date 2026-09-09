@@ -47,7 +47,7 @@ export default async function SearchPage({
         id, title, slug, price, images, image_url, has_variants,
         categories(name),
         brands(name, slug),
-        product_variants(price, is_active, variant_options(value, variant_groups(name)))
+        product_variants(id, price, is_active, variant_options(value, variant_groups(name)))
       `)
       .eq("is_active", true)
       .order("created_at", { ascending: false });

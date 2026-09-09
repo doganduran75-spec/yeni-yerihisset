@@ -51,7 +51,7 @@ export default async function KategoriPage({
     .select(`
       id, title, slug, price, images, image_url, has_variants,
       brands(name, slug),
-      product_variants(price, is_active, stock, variant_options(value, variant_groups(name)))
+      product_variants(id, price, is_active, stock, variant_options(value, variant_groups(name)))
     `)
     .eq("category_id", category.id)
     .eq("is_active", true)

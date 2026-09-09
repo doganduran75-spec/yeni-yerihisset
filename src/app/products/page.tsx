@@ -27,7 +27,7 @@ export default async function ProductsPage() {
       id, title, slug, price, images, image_url, has_variants,
       categories(id, name, slug),
       brands(name, slug),
-      product_variants(price, is_active, stock, variant_options(value, variant_groups(name)))
+      product_variants(id, price, is_active, stock, variant_options(value, variant_groups(name)))
     `)
     .eq("is_active", true)
     .not("category_id", "is", null)

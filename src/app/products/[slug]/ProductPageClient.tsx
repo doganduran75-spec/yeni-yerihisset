@@ -66,7 +66,7 @@ type Product = {
   product_variants: Variant[] | null;
 };
 
-export default function ProductPageClient({ product }: { product: Product }) {
+export default function ProductPageClient({ product, initialSize = null }: { product: Product; initialSize?: string | null }) {
   const images =
     product.images && product.images.length > 0
       ? product.images
@@ -76,6 +76,13 @@ export default function ProductPageClient({ product }: { product: Product }) {
     product.product_variants?.filter((v) => v.is_active) ?? [],
     (v) => v.variant_options?.value
   );
+
+  // Listeden numara filtresiyle gelindiyse (?beden=40) o numarayı önseç — stokta
+  // olmasa da; müşteri doğru numaranın "haber ver" butonunu görür. Eşleşme yoksa
+  // ilk (en küçük) varyanta düşer.
+  const initialVariant =
+    (initialSize && activeVariants.find((v) => (v.variant_options?.value ?? "").trim() === initialSize.trim()))
+    || (activeVariants.length > 0 ? activeVariants[0] : null);
 
   const [selectedImage, setSelectedImage] = useState<string>(images[0]);
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
@@ -88,9 +95,7 @@ export default function ProductPageClient({ product }: { product: Product }) {
     const cur = idx < 0 ? 0 : idx;
     setSelectedImage(images[(cur + dir + images.length) % images.length]);
   };
-  const [selectedVariant, setSelectedVariant] = useState<Variant | null>(
-    activeVariants.length > 0 ? activeVariants[0] : null
-  );
+  const [selectedVariant, setSelectedVariant] = useState<Variant | null>(initialVariant);
   const [isAdding, setIsAdding] = useState(false);
   const [toast, setToast] = useState(false);
   const [notifyModalOpen, setNotifyModalOpen] = useState(false);

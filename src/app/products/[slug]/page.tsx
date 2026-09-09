@@ -126,10 +126,13 @@ export async function generateMetadata(
 
 export default async function ProductDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<{ beden?: string }>;
 }) {
   const { slug } = await params;
+  const { beden } = await searchParams;
   const product = await getProduct(slug);
 
   if (!product) notFound();
@@ -148,7 +151,7 @@ export default async function ProductDetailPage({
       />
 
       {/* İnteraktif ürün sayfası (client component) */}
-      <ProductPageClient product={product as any} />
+      <ProductPageClient product={product as any} initialSize={beden ?? null} />
     </>
   );
 }

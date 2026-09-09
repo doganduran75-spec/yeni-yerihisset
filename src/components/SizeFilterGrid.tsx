@@ -3,9 +3,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, @next/next/no-img-element */
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Search, Star, PackageX } from "lucide-react";
+import { Search, Star, PackageX, Bell } from "lucide-react";
 import { formatPriceDisplay, getMinPrice } from "@/lib/product-price";
 import { compareVariantValues } from "@/lib/variant-sort";
+import StockNotifyModal from "@/components/products/StockNotifyModal";
 
 const FALLBACK_IMG = "https://images.unsplash.com/photo-1494438639946-1ebd1d20bf85?q=80&w=400";
 
@@ -20,21 +21,45 @@ function sizeValue(v: any): string {
   return (v.variant_options?.value ?? "").trim();
 }
 
-function ProductCard({ product, categoryName }: { product: any; categoryName?: string }) {
+function ProductCard({ product, categoryName, size, outOfStock, onNotify }: {
+  product: any;
+  categoryName?: string;
+  size?: string | null;          // aktif numara filtresi (varsa linke eklenir)
+  outOfStock?: boolean;          // bu numara stokta değil → "Haber Ver" göster
+  onNotify?: (product: any) => void;
+}) {
   const img = product.images?.[0] ?? product.image_url ?? FALLBACK_IMG;
   const minPrice = getMinPrice(product);
   const priceText = formatPriceDisplay(product);
   const brand = product.brands as any;
+  // Numara filtresi aktifse ürün sayfası o numarayı önseçsin
+  const href = size ? `/products/${product.slug}?beden=${encodeURIComponent(size)}` : `/products/${product.slug}`;
   return (
     <div className="group cursor-pointer">
       <div className="relative aspect-[3/4] overflow-hidden rounded-[2.5rem] bg-olive-50 mb-6 border border-slate-100 shadow-sm transition-all duration-700 hover:shadow-2xl hover:shadow-slate-200">
-        <Link href={`/products/${product.slug}`} className="block w-full h-full">
+        <Link href={href} className="block w-full h-full">
           <img src={img} alt={product.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000" />
         </Link>
-        <Link href={`/products/${product.slug}`}
-          className="absolute bottom-6 left-1/2 -translate-x-1/2 w-[85%] h-14 glass rounded-2xl text-slate-900 font-black text-xs uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-all transform translate-y-4 group-hover:translate-y-0 flex items-center justify-center gap-2 hover:bg-olive-600 hover:text-white hover:border-olive-600 active:scale-95 shadow-xl">
-          <Search size={18} /> İNCELE
-        </Link>
+        {outOfStock && onNotify ? (
+          /* Stokta olmayan (numara filtresi) — kalıcı aksiyonlar: Haber Ver (birincil) + İncele (ikincil) */
+          <div className="absolute bottom-5 left-1/2 -translate-x-1/2 w-[88%] flex flex-col gap-2">
+            <button
+              onClick={(e) => { e.preventDefault(); onNotify(product); }}
+              className="h-12 rounded-2xl bg-olive-600 text-white font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-olive-700 active:scale-95 shadow-xl shadow-olive-900/10"
+            >
+              <Bell size={16} /> Stoğa Girince Haber Ver
+            </button>
+            <Link href={href}
+              className="h-10 rounded-2xl glass text-slate-700 font-black text-[11px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-white active:scale-95">
+              <Search size={14} /> İncele
+            </Link>
+          </div>
+        ) : (
+          <Link href={href}
+            className="absolute bottom-6 left-1/2 -translate-x-1/2 w-[85%] h-14 glass rounded-2xl text-slate-900 font-black text-xs uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-all transform translate-y-4 group-hover:translate-y-0 flex items-center justify-center gap-2 hover:bg-olive-600 hover:text-white hover:border-olive-600 active:scale-95 shadow-xl">
+            <Search size={18} /> İNCELE
+          </Link>
+        )}
         <div className="absolute top-6 left-6 flex flex-col gap-2">
           {brand?.name && (
             <span className="px-3 py-1 bg-white/90 backdrop-blur-md text-[9px] font-black uppercase tracking-widest rounded-full border border-slate-100 text-slate-900">{brand.name}</span>
@@ -52,7 +77,7 @@ function ProductCard({ product, categoryName }: { product: any; categoryName?: s
             <span className="text-[10px] text-slate-500 font-bold italic">4.9 (124+)</span>
           </div>
         </div>
-        <Link href={`/products/${product.slug}`}>
+        <Link href={href}>
           <h3 className="text-lg font-black text-slate-900 group-hover:text-olive-600 transition-colors tracking-tight uppercase italic">{product.title}</h3>
         </Link>
         <p className="font-black text-2xl text-olive-600 italic tracking-tighter">{priceText}</p>
@@ -64,6 +89,19 @@ function ProductCard({ product, categoryName }: { product: any; categoryName?: s
 export default function SizeFilterGrid({ products, categoryName }: { products: any[]; categoryName?: string }) {
   const [size, setSize] = useState<string | null>(null);
   const [cat, setCat] = useState<string | null>(null); // seçili kategori id'si
+  // "Haber Ver" modalı hedefi (stokta olmayan kart tıklanınca)
+  const [notifyTarget, setNotifyTarget] = useState<{ productId: string; productTitle: string; variantId?: string; variantName?: string } | null>(null);
+
+  // Stokta olmayan bir kart için "Haber Ver" — o numaranın varyantını bulup modalı aç
+  function openNotify(product: any) {
+    const v = (product.product_variants ?? []).find((x: any) => isSizeVariant(x) && sizeValue(x) === size);
+    setNotifyTarget({
+      productId: product.id,
+      productTitle: product.title,
+      variantId: v?.id,
+      variantName: v ? sizeValue(v) : (size ?? undefined),
+    });
+  }
 
   // URL'de ?kategori=<slug> varsa (ör. funnel'dan gelen) o kategori önseçili
   // açılır — kullanıcı yine tüm kategoriler arasında gezebilir. Hydration
@@ -171,7 +209,7 @@ export default function SizeFilterGrid({ products, categoryName }: { products: a
           <div className="text-center py-20 text-slate-400">Bu kategoride henüz ürün bulunmuyor.</div>
         ) : (
           <div className={gridCls}>
-            {base.map((p) => <ProductCard key={p.id} product={p} categoryName={categoryName} />)}
+            {base.map((p) => <ProductCard key={p.id} product={p} categoryName={categoryName} size={size} />)}
           </div>
         )
       ) : (
@@ -185,7 +223,7 @@ export default function SizeFilterGrid({ products, categoryName }: { products: a
             {inStock.length === 0 ? (
               <p className="text-slate-400 text-sm py-4">Bu numarada stokta ürün yok.</p>
             ) : (
-              <div className={gridCls}>{inStock.map((p) => <ProductCard key={p.id} product={p} categoryName={categoryName} />)}</div>
+              <div className={gridCls}>{inStock.map((p) => <ProductCard key={p.id} product={p} categoryName={categoryName} size={size} />)}</div>
             )}
           </div>
 
@@ -196,13 +234,24 @@ export default function SizeFilterGrid({ products, categoryName }: { products: a
                 <PackageX size={16} className="text-slate-400" />
                 <h2 className="text-lg font-black text-slate-400 uppercase italic">{size} Numara — Şu An Stokta Değil ({outStock.length})</h2>
               </div>
-              <div className={`${gridCls} opacity-60`}>
-                {outStock.map((p) => <ProductCard key={p.id} product={p} categoryName={categoryName} />)}
+              <div className={gridCls}>
+                {outStock.map((p) => <ProductCard key={p.id} product={p} categoryName={categoryName} size={size} outOfStock onNotify={openNotify} />)}
               </div>
             </div>
           )}
         </div>
       )}
+
+      {/* Stoğa girince haber ver — kart üstünden açılır */}
+      <StockNotifyModal
+        open={!!notifyTarget}
+        onClose={() => setNotifyTarget(null)}
+        onSuccess={() => setNotifyTarget(null)}
+        productId={notifyTarget?.productId ?? ""}
+        productTitle={notifyTarget?.productTitle ?? ""}
+        variantId={notifyTarget?.variantId}
+        variantName={notifyTarget?.variantName}
+      />
     </div>
   );
 }
