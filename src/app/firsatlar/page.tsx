@@ -1,5 +1,4 @@
 import FirsatlarClient from "./FirsatlarClient";
-import LeadMagnetForm from "@/components/LeadMagnetForm";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { createClient } from "@supabase/supabase-js";
@@ -43,7 +42,6 @@ export default async function FirsatlarPage() {
               İş ortaklarımızdan size özel fırsatlar ve indirimler.
             </p>
           </div>
-          <LeadMagnetForm />
           <FirsatlarClient opps={list} allRoles={roles || []} />
         </div>
       </main>

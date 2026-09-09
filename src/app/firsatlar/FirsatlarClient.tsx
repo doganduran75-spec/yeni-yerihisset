@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { Building2, CalendarDays, ExternalLink, Lock, Loader2, Gift, Check, Ticket, ArrowRight } from "lucide-react";
+import LeadMagnetForm from "@/components/LeadMagnetForm";
 
 type Opportunity = {
   id: string;
@@ -148,9 +149,16 @@ export default function FirsatlarClient({ opps, allRoles }: Props) {
               )}
             </div>
 
+            {/* Ziyaretçi satırı: misafire "kayıt ol → ücretsiz kargo" (lead-magnet) */}
+            {tier.level === 0 && !userId && !authLoading && (
+              <div className="mb-3"><LeadMagnetForm /></div>
+            )}
+
             {/* Yatay kaydırmalı kart şeridi (sabit yükseklik) */}
             {rowOpps.length === 0 ? (
-              <p className="text-xs text-slate-400 italic px-1 py-6">Bu seviyeye özel fırsat yakında.</p>
+              (tier.level === 0 && !userId && !authLoading)
+                ? null
+                : <p className="text-xs text-slate-400 italic px-1 py-6">Bu seviyeye özel fırsat yakında.</p>
             ) : (
               <div className="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1">
                 {rowOpps.map((opp) => {
