@@ -171,7 +171,7 @@ export async function sendOrderNotification(
   // 1. Sipariş + ilişkileri EMBED'SİZ getir (self-host PostgREST embed kırılgan)
   const { data: order, error: orderError } = await (supabase
     .from("orders")
-    .select("id, total_amount, status, created_at, shipping_address, payment_method, user_id")
+    .select("id, order_number, total_amount, status, created_at, shipping_address, payment_method, user_id")
     .eq("id", context.orderId)
     .maybeSingle() as any) as { data: any; error: any };
 
@@ -221,8 +221,8 @@ export async function sendOrderNotification(
     .limit(1)
     .single();
 
-  // 4. Değişkenler (şablon olsa da olmasa da lazım)
-  const shortId = order.id.slice(0, 8).toUpperCase();
+  // 4. Değişkenler (şablon olsa da olmasa da lazım). Sipariş no: YH<sayı>.
+  const shortId = (order as any).order_number ? `YH${(order as any).order_number}` : order.id.slice(0, 8).toUpperCase();
   const trackingHtml = context.trackingNumber
     ? `<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:16px;margin:0 0 24px 0;">
          <p style="margin:0 0 4px 0;color:#1e40af;font-size:13px;font-weight:700;">🚚 Kargo Takip No</p>
@@ -238,7 +238,7 @@ export async function sendOrderNotification(
       ? `<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:16px;margin:0 0 24px 0;">
            <p style="margin:0 0 8px 0;color:#92400e;font-size:13px;font-weight:700;">🏦 Havale / EFT Banka Bilgileri</p>
            <pre style="margin:0;color:#78350f;font-size:13px;font-family:monospace;white-space:pre-wrap;">${bankInfo}</pre>
-           <p style="margin:12px 0 0 0;color:#92400e;font-size:12px;">Açıklama kısmına sipariş numaranızı (<strong>#${shortId}</strong>) yazmayı unutmayın.</p>
+           <p style="margin:12px 0 0 0;color:#92400e;font-size:12px;">Açıklama kısmına sipariş numaranızı (<strong>${shortId}</strong>) yazmayı unutmayın.</p>
          </div>`
       : "";
 
@@ -280,11 +280,11 @@ export async function sendOrderNotification(
           ? "Siparişini aldık! Aşağıdaki banka bilgileriyle havale/EFT ödemeni yaptıktan sonra siparişini hazırlayıp kargoya vereceğiz."
           : "Siparişini aldık! En kısa sürede hazırlayıp kargoya vereceğiz.")
       : "Sipariş durumun güncellendi.";
-    subject = `${storeName} — Siparişiniz alındı #${shortId}`;
+    subject = `${storeName} — Siparişiniz alındı ${shortId}`;
     bodyHtml = `
       <h1 style="font-size:22px;font-weight:800;color:#111827;margin:0 0 12px">Siparişiniz alındı 🎉</h1>
       <p style="font-size:15px;color:#374151;line-height:1.6;margin:0 0 8px">Merhaba ${customerName}, ${intro}</p>
-      <p style="font-size:14px;color:#6b7280;margin:0 0 16px">Sipariş No: <b>#${shortId}</b> · Toplam: <b style="color:#166534">₺${Number(order.total_amount).toFixed(2)}</b></p>
+      <p style="font-size:14px;color:#6b7280;margin:0 0 16px">Sipariş No: <b>${shortId}</b> · Toplam: <b style="color:#166534">₺${Number(order.total_amount).toFixed(2)}</b></p>
       ${buildOrderItemsHtml(orderItems)}
       ${bankInfoHtml}
       ${addrBlock}
@@ -308,7 +308,7 @@ export async function sendOrderNotification(
         body: JSON.stringify({
           to: pushToken.token,
           title: subject,
-          body: `Sipariş #${order.id.slice(0, 8).toUpperCase()}`,
+          body: `Sipariş ${shortId}`,
           data: { orderId: context.orderId, trigger },
         }),
       });
@@ -717,7 +717,7 @@ export async function sendAdminNewOrderNotification(
   // EMBED YOK — self-host PostgREST embed'leri kırılgan; ilişkileri ayrı çek.
   const { data: order } = await (supabase
     .from("orders")
-    .select("id, total_amount, status, created_at, shipping_address, payment_method, user_id")
+    .select("id, order_number, total_amount, status, created_at, shipping_address, payment_method, user_id")
     .eq("id", orderId)
     .maybeSingle() as any) as { data: any };
 
@@ -751,11 +751,11 @@ export async function sendAdminNewOrderNotification(
   const items = oi.map((i) => ({
     title: titleMap.get(i.product_id) ?? "Ürün", quantity: i.quantity, unit_price: i.unit_price,
   }));
-  const shortId = order.id.slice(0, 8).toUpperCase();
+  const shortId = (order as any).order_number ? `YH${(order as any).order_number}` : order.id.slice(0, 8).toUpperCase();
   const payLabel = order.payment_method === "bank_transfer" ? "Havale/EFT" : "Kart (iyzico)";
 
   const bodyHtml = `
-    <h1 style="font-size:22px;font-weight:800;color:#111827;margin:0 0 12px">🛒 Yeni Sipariş — #${shortId}</h1>
+    <h1 style="font-size:22px;font-weight:800;color:#111827;margin:0 0 12px">🛒 Yeni Sipariş — ${shortId}</h1>
     <table style="width:100%;font-size:14px;color:#374151;margin:0 0 16px">
       <tr><td style="padding:3px 0;color:#6b7280">Müşteri</td><td style="padding:3px 0;font-weight:700">${customerName}</td></tr>
       <tr><td style="padding:3px 0;color:#6b7280">E-posta</td><td style="padding:3px 0">${profile?.email ?? "—"}</td></tr>
@@ -783,7 +783,7 @@ export async function sendAdminNewOrderNotification(
     await transporter.sendMail({
       from: `"${settings?.smtp_from_name || storeName}" <${settings?.smtp_from_email || smtpConfig.auth.user}>`,
       to,
-      subject: `🛒 Yeni Sipariş #${shortId} — ₺${Number(order.total_amount).toFixed(2)} (${payLabel})`,
+      subject: `🛒 Yeni Sipariş ${shortId} — ₺${Number(order.total_amount).toFixed(2)} (${payLabel})`,
       html: buildEmailDocument(bodyHtml, storeName),
       text: htmlToText(bodyHtml),
     });

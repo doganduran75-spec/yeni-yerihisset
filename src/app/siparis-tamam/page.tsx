@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, Suspense } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { CheckCircle2 } from "lucide-react";
@@ -14,6 +14,7 @@ function SiparisTamamInner() {
   const searchParams = useSearchParams();
   const orderId = searchParams.get("id") ?? "";
   const { clearCart } = useCartStore();
+  const [orderNumber, setOrderNumber] = useState<string | null>(null);
 
   useEffect(() => {
     clearCart();
@@ -27,6 +28,7 @@ function SiparisTamamInner() {
         .eq("id", orderId)
         .single();
       if (!order) return;
+      setOrderNumber(order.order_number ?? null);
       trackPurchase({
         orderId: order.id,
         items: (order.order_items ?? []).map((i: any) => ({
@@ -52,7 +54,7 @@ function SiparisTamamInner() {
           <h2 className="text-3xl font-black text-slate-900 mb-2">Siparişiniz Alındı!</h2>
           {orderId && (
             <p className="text-slate-500 font-medium">
-              Sipariş No: <span className="font-bold text-slate-900">#{orderId.slice(0, 8).toUpperCase()}</span>
+              Sipariş No: <span className="font-bold text-slate-900">{orderNumber ? `YH${orderNumber}` : `#${orderId.slice(0, 8).toUpperCase()}`}</span>
             </p>
           )}
         </div>

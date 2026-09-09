@@ -647,7 +647,7 @@ export default function OrdersPage() {
                       <TableCell>
                         <div className="flex flex-col">
                           <span className="font-mono text-[11px] font-bold text-blue-600">
-                            YH{order.order_number ?? order.id.slice(0, 8).toUpperCase()}
+                            {order.order_number ? `YH${order.order_number}` : `#${order.id.slice(0, 8).toUpperCase()}`}
                           </span>
                           <span className="font-medium text-sm">
                             {order.profiles?.first_name} {order.profiles?.last_name}
@@ -798,7 +798,7 @@ export default function OrdersPage() {
               <Truck size={18} className="text-purple-600" /> Kargoya Ver
             </DialogTitle>
             <DialogDescription>
-              Sipariş #{shipDialogOrder?.id.slice(0, 8).toUpperCase()} — Kargonomi üzerinden gönderi oluşturulacak.
+              Sipariş {shipDialogOrder?.order_number ? `YH${shipDialogOrder.order_number}` : `#${shipDialogOrder?.id.slice(0, 8).toUpperCase()}`} — Kargonomi üzerinden gönderi oluşturulacak.
             </DialogDescription>
           </DialogHeader>
 
@@ -900,7 +900,7 @@ export default function OrdersPage() {
             <DialogTitle className="flex items-center gap-2">
               Sipariş Detayı
               <span className="text-sm font-mono font-bold text-blue-600">
-                YH{selectedOrder?.order_number ?? selectedOrder?.id.slice(0, 8).toUpperCase()}
+                {selectedOrder?.order_number ? `YH${selectedOrder.order_number}` : `#${selectedOrder?.id.slice(0, 8).toUpperCase()}`}
               </span>
             </DialogTitle>
           </DialogHeader>

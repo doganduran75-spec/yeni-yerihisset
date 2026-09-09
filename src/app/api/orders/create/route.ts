@@ -380,5 +380,5 @@ export async function POST(req: NextRequest) {
   // Satışla stoğu 0'a düşen ürün(ler) için admin'e "satış noktalarında kapat" uyarısı
   alertOutOfStockForOrder(order.id).catch((e) => console.error("[out-of-stock-alert]", e?.message || e));
 
-  return NextResponse.json({ orderId: order.id });
+  return NextResponse.json({ orderId: order.id, orderNumber: (order as any).order_number ?? null });
 }

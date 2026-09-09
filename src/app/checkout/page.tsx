@@ -45,6 +45,7 @@ export default function CheckoutPage() {
   const [loading, setLoading] = useState(true);
   const [placing, setPlacing] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState<string | null>(null);
+  const [orderNumber, setOrderNumber] = useState<string | null>(null);
   const [couponCode, setCouponCode] = useState("");
   const [couponInput, setCouponInput] = useState("");
   const [couponData, setCouponData] = useState<{ name: string; type: string; discount_amount: number; free_shipping: boolean } | null>(null);
@@ -276,6 +277,7 @@ export default function CheckoutPage() {
       });
       clearCart();
       setOrderSuccess(data.orderId);
+      setOrderNumber(data.orderNumber ?? null);
     } else {
       alert(data.error || "Sipariş oluşturulamadı. Lütfen tekrar deneyin.");
     }
@@ -350,7 +352,7 @@ export default function CheckoutPage() {
             <h2 className="text-3xl font-black text-slate-900 mb-2">
               {isBankTransfer ? "Siparişiniz Oluşturuldu!" : "Siparişiniz Alındı!"}
             </h2>
-            <p className="text-slate-500 font-medium">Sipariş numaranız: <span className="font-bold text-slate-900">#{orderSuccess.slice(0, 8)}</span></p>
+            <p className="text-slate-500 font-medium">Sipariş numaranız: <span className="font-bold text-slate-900">{orderNumber ? `YH${orderNumber}` : `#${orderSuccess.slice(0, 8)}`}</span></p>
           </div>
           {isBankTransfer ? (
             <div className="space-y-4 text-left">

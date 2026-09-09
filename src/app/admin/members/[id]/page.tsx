@@ -170,7 +170,7 @@ export default function MemberDetailPage() {
               {orders.map((o) => (
                 <li key={o.id} className="flex items-center justify-between border border-slate-100 rounded-xl px-3 py-2">
                   <div>
-                    <span className="font-bold text-slate-800 text-sm">#{o.order_number || o.id.slice(0, 8).toUpperCase()}</span>
+                    <span className="font-bold text-slate-800 text-sm">{o.order_number ? `YH${o.order_number}` : `#${o.id.slice(0, 8).toUpperCase()}`}</span>
                     <span className="text-[10px] text-slate-400 ml-2">{fmtDate(o.created_at)}</span>
                   </div>
                   <div className="text-right">
