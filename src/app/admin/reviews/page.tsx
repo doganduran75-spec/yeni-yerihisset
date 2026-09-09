@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import AdminOpsTabs from "@/components/admin/AdminOpsTabs";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -125,6 +126,7 @@ export default function AdminReviewsPage() {
 
   return (
     <div className="space-y-6 max-w-5xl">
+      <AdminOpsTabs active="reviews" />
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Ürün Yorumları</h2>

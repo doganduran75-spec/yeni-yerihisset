@@ -2,6 +2,7 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect, useMemo, useState } from "react";
+import AdminOpsTabs from "@/components/admin/AdminOpsTabs";
 import { supabase } from "@/lib/supabase";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -210,6 +211,7 @@ export default function StockPage() {
 
   return (
     <div className="space-y-6">
+      <AdminOpsTabs active="stock" />
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Stok Yönetimi</h2>

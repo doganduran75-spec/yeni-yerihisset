@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
+import AdminOpsTabs from "@/components/admin/AdminOpsTabs";
 import OrderTimeline from "@/components/admin/OrderTimeline";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -595,6 +596,7 @@ export default function OrdersPage() {
 
   return (
     <div className="space-y-6">
+      <AdminOpsTabs active="orders" />
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Siparişler</h2>

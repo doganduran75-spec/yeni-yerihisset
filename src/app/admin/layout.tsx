@@ -7,7 +7,7 @@ export const metadata: Metadata = {
 import { SidebarProvider, Sidebar, SidebarHeader, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarInset, SidebarGroupLabel } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
-import { LayoutDashboard, ShoppingBag, CreditCard, Settings, Users, ExternalLink, BookOpen, Handshake, MessagesSquare, Link2, Ticket, BellRing, FileEdit, Send, Star, Boxes } from "lucide-react";
+import { LayoutDashboard, Settings, Users, ExternalLink, BookOpen, Handshake, MessagesSquare, Link2, Ticket, BellRing, FileEdit, Send, Boxes } from "lucide-react";
 import AdminGuard from "@/components/admin/AdminGuard";
 
 export default function AdminLayout({
@@ -44,27 +44,12 @@ export default function AdminLayout({
                 </SidebarMenuItem>
                 <SidebarMenuItem>
                   <SidebarMenuButton
-                    render={<Link href="/admin/products"><ShoppingBag size={18} className="mr-2" /> Ürünler</Link>}
+                    render={<Link href="/admin/orders"><Boxes size={18} className="mr-2" /> Stok Yönetimi</Link>}
                   />
                 </SidebarMenuItem>
                 <SidebarMenuItem>
                   <SidebarMenuButton
-                    render={<Link href="/admin/stock"><Boxes size={18} className="mr-2" /> Stok Yönetimi</Link>}
-                  />
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    render={<Link href="/admin/orders"><CreditCard size={18} className="mr-2" /> Siparişler</Link>}
-                  />
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    render={<Link href="/admin/members"><Users size={18} className="mr-2" /> Üyeler</Link>}
-                  />
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    render={<Link href="/admin/reviews"><Star size={18} className="mr-2" /> Yorumlar</Link>}
+                    render={<Link href="/admin/messages"><MessagesSquare size={18} className="mr-2" /> Mesajlar</Link>}
                   />
                 </SidebarMenuItem>
               </SidebarMenu>
@@ -85,9 +70,14 @@ export default function AdminLayout({
           </SidebarGroup>
 
           <SidebarGroup className="py-1">
-            <SidebarGroupLabel>Müşteri İlişkileri</SidebarGroupLabel>
+            <SidebarGroupLabel>Müşteri Yönetimi</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    render={<Link href="/admin/members"><Users size={18} className="mr-2" /> Üyeler</Link>}
+                  />
+                </SidebarMenuItem>
                 <SidebarMenuItem>
                   <SidebarMenuButton
                     render={<Link href="/admin/crm"><MessagesSquare size={18} className="mr-2" /> CRM Genel Bakış</Link>}
@@ -101,11 +91,6 @@ export default function AdminLayout({
                 <SidebarMenuItem>
                   <SidebarMenuButton
                     render={<Link href="/admin/affiliates"><Link2 size={18} className="mr-2" /> Satış Ortaklığı</Link>}
-                  />
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    render={<Link href="/admin/messages"><MessagesSquare size={18} className="mr-2" /> Mesajlar</Link>}
                   />
                 </SidebarMenuItem>
                 <SidebarMenuItem>
