@@ -18,6 +18,20 @@ type Role = { id: string; name: string; slug: string };
 type TagOption = { id: string; value: string; group_id: string };
 type TagGroup = { id: string; name: string; options: TagOption[] };
 
+// "3 gün önce" gibi göreli zaman
+function relativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return "az önce";
+  if (m < 60) return `${m} dk önce`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h} sa önce`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return `${d} gün önce`;
+  const mo = Math.floor(d / 30);
+  return `${mo} ay önce`;
+}
+
 type Member = {
   id: string;
   email: string | null;
@@ -27,6 +41,7 @@ type Member = {
   city: string | null;
   created_at: string;
   email_verified: boolean | null;
+  last_active_at: string | null;
   roleIds: string[];
   tagOptionIds: string[];
 };
@@ -94,7 +109,7 @@ export default function MembersPage() {
   async function fetchAll() {
     setLoading(true);
     const [profilesRes, rolesRes, tagGroupsRes, userRolesRes, userTagsRes, contactsRes] = await Promise.all([
-      supabase.from("profiles").select("id, email, first_name, last_name, phone, city, created_at, email_verified").order("created_at", { ascending: false }),
+      supabase.from("profiles").select("id, email, first_name, last_name, phone, city, created_at, email_verified, last_active_at").order("created_at", { ascending: false }),
       supabase.from("roles").select("id, name, slug").order("name"),
       supabase.from("member_tag_groups").select("id, name, member_tag_options(id, group_id, value)").order("created_at"),
       supabase.from("user_roles").select("user_id, role_id"),
@@ -390,7 +405,14 @@ export default function MembersPage() {
                             )) : <span className="text-xs text-muted-foreground">—</span>}
                           </div>
                         </TableCell>
-                        <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{new Date(member.created_at).toLocaleDateString("tr-TR")}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                          <div>{new Date(member.created_at).toLocaleDateString("tr-TR")}</div>
+                          {member.last_active_at && (
+                            <div className="text-[10px] text-slate-400 mt-0.5" title={new Date(member.last_active_at).toLocaleString("tr-TR")}>
+                              Son görülme: {relativeTime(member.last_active_at)}
+                            </div>
+                          )}
+                        </TableCell>
                         <TableCell>
                           <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
                             onClick={(e) => { e.stopPropagation(); openEdit(member); }} title="Rol ve Etiket Düzenle">

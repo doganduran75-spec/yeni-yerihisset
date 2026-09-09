@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import SizeFilterGrid from "@/components/SizeFilterGrid";
+import FeedbackForm from "@/components/FeedbackForm";
 
 export const revalidate = 60;
 
@@ -44,6 +45,9 @@ export default async function ProductsPage() {
         <div className="container mx-auto px-4 py-8 max-w-7xl">
           {/* Ürün grid + numara filtresi */}
           <SizeFilterGrid products={list} />
+
+          {/* Aradığını bulamadın mı? — talep yakalama */}
+          <FeedbackForm source="products" />
         </div>
       </main>
       <Footer />
