@@ -30,9 +30,12 @@ export default async function ProductsPage() {
       product_variants(price, is_active, stock, variant_options(value, variant_groups(name)))
     `)
     .eq("is_active", true)
+    .not("category_id", "is", null)
     .order("created_at", { ascending: false });
 
-  const list = (products ?? []) as any[];
+  // Kategorisiz ürünler bu sayfada gösterilmez (silinen kategori kenar durumu
+  // için embed de kontrol edilir).
+  const list = ((products ?? []) as any[]).filter((p) => p.categories?.id);
 
   return (
     <>
