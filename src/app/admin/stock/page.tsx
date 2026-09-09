@@ -6,7 +6,7 @@ import AdminOpsTabs from "@/components/admin/AdminOpsTabs";
 import { supabase } from "@/lib/supabase";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Loader2, Search, Check, Package, Save, BellRing, X } from "lucide-react";
+import { Loader2, Search, Check, Package, Save, BellRing, X, FileDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { sortByVariantValue } from "@/lib/variant-sort";
 
@@ -23,6 +23,7 @@ type StockRow = {
   taban: string;         // ürün seviyesinde Taban değeri ("" yoksa)
   saya: string;          // ürün seviyesinde Saya değeri
   stock: number;
+  inProduction: number;  // üreticiye verilen (üretimdeki) adet — elle girilir
   image: string | null;
   search: string;
   waiting: number; // bu ürün/varyant için stok bekleyen (pending) kişi sayısı
@@ -45,6 +46,10 @@ export default function StockPage() {
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [savedKey, setSavedKey] = useState<string | null>(null);
   const [bulkSaving, setBulkSaving] = useState(false);
+  // "Üretimde" kolonu (üreticiye verilen adet) — elle düzenlenir
+  const [prodEdited, setProdEdited] = useState<Record<string, string>>({});
+  const [prodSaving, setProdSaving] = useState<string | null>(null);
+  const [prodSaved, setProdSaved] = useState<string | null>(null);
   // Stok gelince: bu ürünü bekleyenler uyarısı
   const [restockAlert, setRestockAlert] = useState<{ product: string; total: number; sent: number; manual: number; failed: number; error?: string } | null>(null);
 
@@ -55,8 +60,8 @@ export default function StockPage() {
     const { data } = await (supabase as any)
       .from("products")
       .select(`
-        id, title, short_description, stock, has_variants, image_url, taban_option_id, saya_option_id,
-        product_variants ( id, sku, barcode, stock, variant_options ( value, variant_groups ( name ) ) )
+        id, title, short_description, stock, in_production, has_variants, image_url, taban_option_id, saya_option_id,
+        product_variants ( id, sku, barcode, stock, in_production, variant_options ( value, variant_groups ( name ) ) )
       `)
       .order("title");
 
@@ -106,6 +111,7 @@ export default function StockPage() {
             taban,
             saya,
             stock: Number(v.stock ?? 0),
+            inProduction: Number(v.in_production ?? 0),
             image: p.image_url,
             search: norm([p.title, desc, groupName, value, v.sku, v.barcode, taban, saya].filter(Boolean).join(" ")),
             waiting: waitOf(p.id, v.id),
@@ -125,6 +131,7 @@ export default function StockPage() {
           taban,
           saya,
           stock: Number(p.stock ?? 0),
+          inProduction: Number(p.in_production ?? 0),
           image: p.image_url,
           search: norm([p.title, desc, taban, saya].filter(Boolean).join(" ")),
           waiting: waitOf(p.id, null),
@@ -199,6 +206,57 @@ export default function StockPage() {
     }
   }
 
+  // "Üretimde" adedini kaydet (ürün/varyant seviyesinde, doğrudan güncelleme)
+  async function saveProduction(r: StockRow) {
+    const raw = prodEdited[r.key];
+    if (raw === undefined) return;
+    const val = Number(raw);
+    if (!(val >= 0)) { setProdEdited((p) => { const n = { ...p }; delete n[r.key]; return n; }); return; }
+    if (val === r.inProduction) { setProdEdited((p) => { const n = { ...p }; delete n[r.key]; return n; }); return; }
+    setProdSaving(r.key);
+    try {
+      const table = r.variantId ? "product_variants" : "products";
+      const id = r.variantId ?? r.productId;
+      const { error } = await (supabase as any).from(table).update({ in_production: val }).eq("id", id);
+      if (error) throw error;
+      setRows((prev) => prev.map((x) => x.key === r.key ? { ...x, inProduction: val } : x));
+      setProdEdited((p) => { const n = { ...p }; delete n[r.key]; return n; });
+      setProdSaved(r.key);
+      setTimeout(() => setProdSaved((k) => (k === r.key ? null : k)), 1500);
+    } catch (e: any) {
+      alert("Üretimde güncellenemedi: " + (e?.message ?? "hata"));
+    } finally {
+      setProdSaving(null);
+    }
+  }
+
+  // Excel'e aktar — tüm satırlar + tüm kolonlar (.xls; Excel HTML tablosu olarak açar)
+  function exportExcel() {
+    const esc = (s: any) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const headers = ["Ürün", "Numara", "Stok Kodu", "Barkod", "Taban", "Saya", "Bekleyen", "Stok", "Üretimde"];
+    const body = rows.map((r) => `<tr>
+      <td>${esc(r.title)}</td>
+      <td>${esc(r.sizeValue)}</td>
+      <td>${esc(r.sku)}</td>
+      <td>${esc(r.barcode)}</td>
+      <td>${esc(r.taban)}</td>
+      <td>${esc(r.saya)}</td>
+      <td>${r.waiting}</td>
+      <td>${r.stock}</td>
+      <td>${r.inProduction}</td>
+    </tr>`).join("");
+    const html = `<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"></head><body><table border="1"><thead><tr>${headers.map((h) => `<th>${h}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table></body></html>`;
+    const blob = new Blob(["﻿" + html], { type: "application/vnd.ms-excel;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `stok-${new Date().toISOString().slice(0, 10)}.xls`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
   async function saveAll() {
     setBulkSaving(true);
     for (const r of dirtyRows) {
@@ -219,12 +277,17 @@ export default function StockPage() {
             Ara, stok adedini değiştir, satır başında Kaydet'e bas. Web sitesi anında güncellenir.
           </p>
         </div>
-        {dirtyRows.length > 0 && (
-          <Button onClick={saveAll} disabled={bulkSaving} className="gap-2">
-            {bulkSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-            {dirtyRows.length} değişikliği kaydet
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={exportExcel} className="gap-2" title="Tüm stok listesini Excel'e aktar">
+            <FileDown size={16} /> Excel'e Aktar
           </Button>
-        )}
+          {dirtyRows.length > 0 && (
+            <Button onClick={saveAll} disabled={bulkSaving} className="gap-2">
+              {bulkSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+              {dirtyRows.length} değişikliği kaydet
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Stok gelince: bekleyenler uyarısı */}
@@ -292,6 +355,7 @@ export default function StockPage() {
                 <th className="px-3 py-2.5">Saya</th>
                 <th className="px-3 py-2.5 text-center">Bekleyen</th>
                 <th className="px-3 py-2.5 text-center">Stok</th>
+                <th className="px-3 py-2.5 text-center">Üretimde</th>
                 <th className="px-3 py-2.5"></th>
               </tr>
             </thead>
@@ -357,6 +421,29 @@ export default function StockPage() {
                           dirty && "border-olive-500 ring-1 ring-olive-200"
                         )}
                       />
+                    </td>
+                    {/* Üretimde — elle düzenle, blur/Enter'da kaydeder */}
+                    <td className="px-3 py-2 text-center">
+                      <div className="relative w-24 mx-auto">
+                        <Input
+                          type="number"
+                          min={0}
+                          value={prodEdited[r.key] ?? String(r.inProduction)}
+                          onChange={(e) => setProdEdited((prev) => ({ ...prev, [r.key]: e.target.value }))}
+                          onBlur={() => saveProduction(r)}
+                          onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                          className={cn(
+                            "w-24 h-9 text-center font-bold",
+                            (r.inProduction ?? 0) > 0 && "text-blue-700",
+                            prodEdited[r.key] !== undefined && "border-blue-400 ring-1 ring-blue-200"
+                          )}
+                        />
+                        {prodSaving === r.key ? (
+                          <Loader2 size={13} className="animate-spin absolute right-1.5 top-1/2 -translate-y-1/2 text-blue-500" />
+                        ) : prodSaved === r.key ? (
+                          <Check size={13} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-green-600" />
+                        ) : null}
+                      </div>
                     </td>
                     {/* Kaydet */}
                     <td className="px-3 py-2 text-right">

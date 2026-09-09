@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/lib/supabase";
 import { ShoppingBag, Users, CreditCard, TrendingUp, Loader2, MessageCircle, ArrowRight, Star, Clock, PackageOpen, BellRing } from "lucide-react";
 
@@ -12,15 +11,6 @@ type Stats = {
   activeOrders: number;
   totalProducts: number;
   totalMembers: number;
-};
-
-type RecentOrder = {
-  id: string;
-  order_number: number | null;
-  total_amount: number;
-  status: string;
-  created_at: string;
-  profiles: { first_name: string; last_name: string } | null;
 };
 
 const orderStatusMap: Record<string, { label: string; color: string }> = {
@@ -82,7 +72,6 @@ type OpenOrder = {
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState<Stats>({ totalSales: 0, activeOrders: 0, totalProducts: 0, totalMembers: 0 });
-  const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
   const [openOrders, setOpenOrders] = useState<OpenOrder[]>([]);
   const [openEventMap, setOpenEventMap] = useState<Record<string, string>>({});
   const [manualAlerts, setManualAlerts] = useState<{ id: string; product: string; who: string; channel: string }[]>([]);
@@ -111,13 +100,6 @@ export default function AdminDashboard() {
         totalProducts: productsCount.count || 0,
         totalMembers: membersCount.count || 0,
       });
-
-      const { data: orders } = await supabase
-        .from('orders')
-        .select('id, order_number, total_amount, status, created_at, profiles (first_name, last_name)')
-        .order('created_at', { ascending: false })
-        .limit(5);
-      setRecentOrders((orders as any) || []);
 
       // Tamamlanmamış (kapanmamış) siparişler — süreç takibi
       const { data: openData } = await (supabase as any)
@@ -353,59 +335,6 @@ export default function AdminDashboard() {
       </Card>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        {/* Son Siparişler */}
-        <Card className="shadow-sm border-muted lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Son Siparişler</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {recentOrders.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-4 text-center">Henüz sipariş bulunmuyor.</p>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-28">Sipariş No</TableHead>
-                    <TableHead>Müşteri</TableHead>
-                    <TableHead>Tarih</TableHead>
-                    <TableHead>Tutar</TableHead>
-                    <TableHead className="text-right">Durum</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {recentOrders.map((order) => {
-                    const st = orderStatusMap[order.status] ?? { label: order.status, color: "bg-slate-50 text-slate-600 ring-slate-400/20" };
-                    return (
-                      <TableRow key={order.id}>
-                        <TableCell>
-                          <Link
-                            href={`/admin/orders?id=${order.id}`}
-                            className="font-mono text-xs font-bold text-blue-600 hover:text-blue-800 hover:underline"
-                          >
-                            YH{order.order_number ?? "—"}
-                          </Link>
-                        </TableCell>
-                        <TableCell className="font-medium text-sm">
-                          {order.profiles?.first_name} {order.profiles?.last_name}
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {new Date(order.created_at).toLocaleDateString('tr-TR')}
-                        </TableCell>
-                        <TableCell className="text-sm">₺{order.total_amount.toFixed(2)}</TableCell>
-                        <TableCell className="text-right">
-                          <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ${st.color}`}>
-                            {st.label}
-                          </span>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
-
         {/* Yeni Mesajlar */}
         <Card className="shadow-sm border-l-4 border-l-rose-500">
           <CardHeader className="flex flex-row items-center justify-between pb-3">
