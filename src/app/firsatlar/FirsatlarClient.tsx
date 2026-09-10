@@ -90,10 +90,18 @@ export default function FirsatlarClient({ opps, allRoles }: Props) {
   };
 
   // Seviye satırları: Ziyaretçi(0) + level>0 olan roller (artan). Yukarıdan aşağı.
+  // roles sorgusu (level) boş dönerse (ör. PostgREST şema cache tazelenmemiş)
+  // yine de standart merdiven iskeleti gösterilsin diye varsayılan seviyeler.
+  const DEFAULT_TIERS = [
+    { level: 1, name: "Üye", slug: "uye" },
+    { level: 2, name: "Müşteri", slug: "musteri" },
+    { level: 3, name: "Müdavim", slug: "mudavim" },
+  ];
   const roleTiers = allRoles.filter((r) => (r.level ?? 0) > 0).sort((a, b) => a.level - b.level);
+  const usedRoleTiers = roleTiers.length ? roleTiers : DEFAULT_TIERS;
   const tiers: { level: number; name: string; slug: string }[] = [
     { level: 0, name: "Ziyaretçi", slug: "ziyaretci" },
-    ...roleTiers.map((r) => ({ level: r.level, name: r.name, slug: r.slug })),
+    ...usedRoleTiers.map((r) => ({ level: r.level, name: r.name, slug: r.slug })),
   ];
 
   // Bir seviyeyi açmak için CTA
