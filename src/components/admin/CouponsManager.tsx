@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
-  Loader2, Plus, Pencil, Trash2, Ticket, Percent, DollarSign, Truck,
+  Loader2, Plus, Pencil, Power, PowerOff, Ticket, Percent, DollarSign, Truck,
   Users, CheckCircle2, UserPlus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -163,10 +163,11 @@ export default function CouponsManager() {
     }
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm("Bu kuponu silmek istediğinize emin misiniz?")) return;
-    await supabase.from("coupons").delete().eq("id", id);
-    fetchCoupons();
+  // Kuponlar SİLİNMEZ (istatistik/geçmiş korunur) — pasife alınır.
+  async function toggleActive(c: Coupon) {
+    const next = !c.is_active;
+    await (supabase as any).from("coupons").update({ is_active: next }).eq("id", c.id);
+    setCoupons((prev) => prev.map((x) => (x.id === c.id ? { ...x, is_active: next } : x)));
   }
 
   async function handleBulkAssign() {
@@ -310,8 +311,14 @@ export default function CouponsManager() {
                         <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => openEdit(c)}>
                           <Pencil size={14} />
                         </Button>
-                        <Button size="icon" variant="ghost" className="h-8 w-8 text-red-500 hover:bg-red-50" onClick={() => handleDelete(c.id)}>
-                          <Trash2 size={14} />
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className={`h-8 w-8 ${c.is_active ? "text-slate-500 hover:bg-slate-100" : "text-green-600 hover:bg-green-50"}`}
+                          title={c.is_active ? "Pasife Al" : "Aktifleştir"}
+                          onClick={() => toggleActive(c)}
+                        >
+                          {c.is_active ? <PowerOff size={14} /> : <Power size={14} />}
                         </Button>
                       </div>
                     </TableCell>
