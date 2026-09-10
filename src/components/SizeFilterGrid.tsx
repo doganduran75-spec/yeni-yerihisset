@@ -3,10 +3,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, @next/next/no-img-element */
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Search, Star, PackageX, Bell } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Search, Star, PackageX, Bell, ShoppingBag } from "lucide-react";
 import { formatPriceDisplay, getMinPrice } from "@/lib/product-price";
 import { compareVariantValues } from "@/lib/variant-sort";
 import StockNotifyModal from "@/components/products/StockNotifyModal";
+import { useCartStore } from "@/store/useCartStore";
+import { supabase } from "@/lib/supabase";
 
 const FALLBACK_IMG = "https://images.unsplash.com/photo-1494438639946-1ebd1d20bf85?q=80&w=400";
 
@@ -21,12 +24,14 @@ function sizeValue(v: any): string {
   return (v.variant_options?.value ?? "").trim();
 }
 
-function ProductCard({ product, categoryName, size, outOfStock, onNotify }: {
+function ProductCard({ product, categoryName, size, outOfStock, onNotify, canQuickBuy, onQuickBuy }: {
   product: any;
   categoryName?: string;
   size?: string | null;          // aktif numara filtresi (varsa linke eklenir)
   outOfStock?: boolean;          // bu numara stokta değil → "Haber Ver" göster
   onNotify?: (product: any) => void;
+  canQuickBuy?: boolean;         // bu numara stokta → "Hemen Sipariş Ver" göster
+  onQuickBuy?: (product: any) => void;
 }) {
   const img = product.images?.[0] ?? product.image_url ?? FALLBACK_IMG;
   const minPrice = getMinPrice(product);
@@ -48,6 +53,20 @@ function ProductCard({ product, categoryName, size, outOfStock, onNotify }: {
               className="h-12 rounded-2xl bg-olive-600 text-white font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-olive-700 active:scale-95 shadow-xl shadow-olive-900/10"
             >
               <Bell size={16} /> Stoğa Girince Haber Ver
+            </button>
+            <Link href={href}
+              className="h-10 rounded-2xl glass text-slate-700 font-black text-[11px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-white active:scale-95">
+              <Search size={14} /> İncele
+            </Link>
+          </div>
+        ) : canQuickBuy && onQuickBuy ? (
+          /* Stokta (numara filtresi) — Hemen Sipariş Ver (birincil) + İncele (ikincil) */
+          <div className="absolute bottom-5 left-1/2 -translate-x-1/2 w-[88%] flex flex-col gap-2">
+            <button
+              onClick={(e) => { e.preventDefault(); onQuickBuy(product); }}
+              className="h-12 rounded-2xl bg-olive-600 text-white font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-olive-700 active:scale-95 shadow-xl shadow-olive-900/10"
+            >
+              <ShoppingBag size={16} /> Hemen Sipariş Ver
             </button>
             <Link href={href}
               className="h-10 rounded-2xl glass text-slate-700 font-black text-[11px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-white active:scale-95">
@@ -91,6 +110,33 @@ export default function SizeFilterGrid({ products, categoryName }: { products: a
   const [cat, setCat] = useState<string | null>(null); // seçili kategori id'si
   // "Haber Ver" modalı hedefi (stokta olmayan kart tıklanınca)
   const [notifyTarget, setNotifyTarget] = useState<{ productId: string; productTitle: string; variantId?: string; variantName?: string } | null>(null);
+
+  const router = useRouter();
+  const { addItem, checkGiftRules } = useCartStore();
+
+  // "Hemen Sipariş Ver" — seçili numaranın stoktaki varyantını sepete at, /sepet'e git
+  async function quickBuy(product: any) {
+    const v = (product.product_variants ?? []).find((x: any) => isSizeVariant(x) && sizeValue(x) === size && Number(x.stock ?? 0) > 0);
+    if (!v) { router.push(`/products/${product.slug}?beden=${encodeURIComponent(size ?? "")}`); return; }
+    const price = Number(v.price) || getMinPrice(product) || product.price || 0;
+    addItem({
+      id: `var_${v.id}`,
+      product_id: product.id,
+      variant_id: v.id,
+      title: product.title,
+      image: product.images?.[0] ?? product.image_url ?? FALLBACK_IMG,
+      price,
+      quantity: 1,
+      stock: Number(v.stock ?? 0),
+      variant_name: sizeValue(v),
+      category_id: product.categories?.id,
+    });
+    // Ödül/bedelsiz ürün kuralları — ürün sayfasıyla aynı tetikleme
+    if (product.categories?.id) {
+      try { const { data: { user } } = await supabase.auth.getUser(); await checkGiftRules(product.categories.id, `var_${v.id}`, user?.id); } catch { /* kritik değil */ }
+    }
+    router.push("/sepet");
+  }
 
   // Stokta olmayan bir kart için "Haber Ver" — o numaranın varyantını bulup modalı aç
   function openNotify(product: any) {
@@ -223,7 +269,7 @@ export default function SizeFilterGrid({ products, categoryName }: { products: a
             {inStock.length === 0 ? (
               <p className="text-slate-400 text-sm py-4">Bu numarada stokta ürün yok.</p>
             ) : (
-              <div className={gridCls}>{inStock.map((p) => <ProductCard key={p.id} product={p} categoryName={categoryName} size={size} />)}</div>
+              <div className={gridCls}>{inStock.map((p) => <ProductCard key={p.id} product={p} categoryName={categoryName} size={size} canQuickBuy onQuickBuy={quickBuy} />)}</div>
             )}
           </div>
 
