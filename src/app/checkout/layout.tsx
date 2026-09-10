@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Ödeme | YeriHisset",
+  title: "Ödeme",
   robots: { index: false, follow: false },
 };
 

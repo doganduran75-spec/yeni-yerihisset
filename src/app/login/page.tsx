@@ -262,7 +262,7 @@ function LoginForm() {
                     placeholder="Ad" 
                     value={formData.firstName}
                     onChange={e => setFormData({...formData, firstName: e.target.value})}
-                    className="h-12 rounded-xl bg-slate-50 border-slate-100 font-bold"
+                    className="h-12 rounded-xl bg-slate-50 border-slate-100 font-bold placeholder:font-normal placeholder:text-slate-400"
                   />
                 </div>
                 <div className="space-y-2">
@@ -272,7 +272,7 @@ function LoginForm() {
                     placeholder="Soyad" 
                     value={formData.lastName}
                     onChange={e => setFormData({...formData, lastName: e.target.value})}
-                    className="h-12 rounded-xl bg-slate-50 border-slate-100 font-bold"
+                    className="h-12 rounded-xl bg-slate-50 border-slate-100 font-bold placeholder:font-normal placeholder:text-slate-400"
                   />
                 </div>
               </div>
@@ -288,7 +288,7 @@ function LoginForm() {
                   placeholder="name@example.com" 
                   value={formData.email}
                   onChange={e => setFormData({...formData, email: e.target.value})}
-                  className="h-12 pl-12 rounded-xl bg-slate-50 border-slate-100 font-bold"
+                  className="h-12 pl-12 rounded-xl bg-slate-50 border-slate-100 font-bold placeholder:font-normal placeholder:text-slate-400"
                 />
               </div>
             </div>
@@ -315,7 +315,7 @@ function LoginForm() {
                   placeholder="••••••••"
                   value={formData.password}
                   onChange={e => setFormData({...formData, password: e.target.value})}
-                  className="h-12 pl-12 pr-12 rounded-xl bg-slate-50 border-slate-100 font-bold"
+                  className="h-12 pl-12 pr-12 rounded-xl bg-slate-50 border-slate-100 font-bold placeholder:font-normal placeholder:text-slate-400"
                 />
                 <button
                   type="button"

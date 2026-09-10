@@ -77,7 +77,7 @@ export async function generateMetadata(
 
   if (!product) {
     return {
-      title: "Ürün Bulunamadı | YeriHisset",
+      title: "Ürün Bulunamadı",
     };
   }
 
@@ -88,7 +88,7 @@ export async function generateMetadata(
     `${product.title} - YeriHisset'te ₺${product.price.toFixed(2)} fiyatıyla.`;
 
   return {
-    title: `${product.title} | YeriHisset`,
+    title: `${product.title}`,
     description,
     openGraph: {
       title: product.title,

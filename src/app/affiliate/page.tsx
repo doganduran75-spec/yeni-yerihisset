@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 
 export const metadata = {
-  title: "Affiliate Programı | YeriHisset",
+  title: "Affiliate Programı",
   description:
     "YeriHisset affiliate programına katıl, paylaşımlarından kazanç elde et.",
 };
