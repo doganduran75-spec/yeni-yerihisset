@@ -10,6 +10,7 @@ import { compareVariantValues } from "@/lib/variant-sort";
 import StockNotifyModal from "@/components/products/StockNotifyModal";
 import { useCartStore } from "@/store/useCartStore";
 import { supabase } from "@/lib/supabase";
+import { track } from "@/lib/track";
 
 const FALLBACK_IMG = "https://images.unsplash.com/photo-1494438639946-1ebd1d20bf85?q=80&w=400";
 
@@ -131,6 +132,7 @@ export default function SizeFilterGrid({ products, categoryName }: { products: a
       variant_name: sizeValue(v),
       category_id: product.categories?.id,
     });
+    track("quick_buy", { product_id: product.id, variant_id: v.id, size: sizeValue(v), price });
     // Ödül/bedelsiz ürün kuralları — ürün sayfasıyla aynı tetikleme
     if (product.categories?.id) {
       try { const { data: { user } } = await supabase.auth.getUser(); await checkGiftRules(product.categories.id, `var_${v.id}`, user?.id); } catch { /* kritik değil */ }
@@ -218,7 +220,7 @@ export default function SizeFilterGrid({ products, categoryName }: { products: a
           {cats.map((c) => (
             <button
               key={c.id}
-              onClick={() => setCat((prev) => (prev === c.id ? null : c.id))}
+              onClick={() => { setCat((prev) => (prev === c.id ? null : c.id)); track("category_click", { category_id: c.id, category: c.name }); }}
               className={`px-4 h-9 rounded-xl text-sm font-bold border-2 transition-all ${cat === c.id ? "border-olive-600 bg-olive-600 text-white" : "border-slate-200 text-slate-700 hover:border-olive-300"}`}
             >
               {c.name}
@@ -240,7 +242,7 @@ export default function SizeFilterGrid({ products, categoryName }: { products: a
           {sizes.map((s) => (
             <button
               key={s}
-              onClick={() => setSize(s)}
+              onClick={() => { setSize(s); track("size_filter", { size: s, category: categoryName }); }}
               className={`min-w-[44px] h-9 px-2 rounded-xl text-sm font-bold border-2 transition-all ${size === s ? "border-olive-600 bg-olive-600 text-white" : "border-slate-200 text-slate-700 hover:border-olive-300"}`}
             >
               {s}

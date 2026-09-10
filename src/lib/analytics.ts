@@ -1,7 +1,9 @@
 /**
  * GA4 e-ticaret event yardımcıları
  * Tüm fonksiyonlar sadece client-side (window.gtag mevcutsa) çalışır.
+ * Her biri aynı anda first-party analitiğe (src/lib/track.ts) de yazar.
  */
+import { track } from "./track";
 
 type GtagItem = {
   item_id: string;
@@ -47,6 +49,7 @@ export function trackViewItem(params: {
       } satisfies GtagItem,
     ],
   });
+  track("view_item", { product_id: params.productId, name: params.productName, category: params.category, brand: params.brand, price: params.price });
 }
 
 // ─── Sepete eklendi ───────────────────────────────────────────────────────────
@@ -75,6 +78,7 @@ export function trackAddToCart(params: {
       } satisfies GtagItem,
     ],
   });
+  track("add_to_cart", { product_id: params.productId, name: params.productName, variant: params.variantName, category: params.category, price: params.price, quantity: params.quantity });
 }
 
 // ─── Ödeme başlatıldı ─────────────────────────────────────────────────────────
@@ -102,6 +106,7 @@ export function trackBeginCheckout(params: {
       quantity: item.quantity,
     })),
   });
+  track("begin_checkout", { value: params.total, coupon: params.couponCode, item_count: params.items.length });
 }
 
 // ─── Satın alma tamamlandı ────────────────────────────────────────────────────
@@ -135,6 +140,7 @@ export function trackPurchase(params: {
       quantity: item.quantity,
     })),
   });
+  track("purchase", { order_id: params.orderId, value: params.total, shipping: params.shipping, coupon: params.couponCode, affiliate: params.affiliateCode, item_count: params.items.length });
 }
 
 // ─── Sepetten kaldırıldı ──────────────────────────────────────────────────────
@@ -156,11 +162,13 @@ export function trackRemoveFromCart(params: {
       },
     ],
   });
+  track("remove_from_cart", { product_id: params.productId, name: params.productName, price: params.price, quantity: params.quantity });
 }
 
 // ─── Arama yapıldı ────────────────────────────────────────────────────────────
-export function trackSearch(term: string) {
+export function trackSearch(term: string, resultsCount?: number) {
   gtag("event", "search", { search_term: term });
+  track("search", { term, results_count: resultsCount });
 }
 
 // ─── Fırsat/partner link tıklandı ────────────────────────────────────────────
@@ -174,4 +182,10 @@ export function trackOpportunityClick(params: {
     promotion_name: params.title,
     creative_name: params.partnerName,
   });
+  track("opportunity_click", { opportunity_id: params.opportunityId, partner: params.partnerName, title: params.title });
+}
+
+// ─── Kupon kodu uygulandı / denendi (başarısız dahil — Instagram ölçümü) ──────
+export function trackCouponApply(params: { code: string; success: boolean; reason?: string; discount?: number }) {
+  track("coupon_apply", { code: params.code, success: params.success, reason: params.reason, discount: params.discount });
 }

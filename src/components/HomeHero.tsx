@@ -1,5 +1,8 @@
+"use client";
+
 import Link from "next/link";
 import { Footprints, ShoppingBag, ArrowRight, ChevronDown } from "lucide-react";
+import { track } from "@/lib/track";
 
 /**
  * Ana sayfa karşılama terminali (popup yerine). Tam ekran, iki segmentasyon
@@ -17,6 +20,7 @@ export default function HomeHero() {
         {/* SOL — Keşif */}
         <Link
           href="/barefoot-nedir"
+          onClick={() => track("hero_click", { side: "kesif", to: "/barefoot-nedir" })}
           className="group relative flex flex-col justify-center items-start gap-5 p-8 md:p-14 overflow-hidden bg-gradient-to-br from-olive-700 to-olive-900 text-white min-h-[45vh] md:min-h-0"
           style={KESIF_BG ? { backgroundImage: `url(${KESIF_BG})`, backgroundSize: "cover", backgroundPosition: "center" } : undefined}
         >
@@ -41,6 +45,7 @@ export default function HomeHero() {
         {/* SAĞ — Mağaza */}
         <Link
           href="/products"
+          onClick={() => track("hero_click", { side: "magaza", to: "/products" })}
           className="group relative flex flex-col justify-center items-start gap-5 p-8 md:p-14 overflow-hidden bg-gradient-to-br from-slate-50 to-slate-200 text-slate-900 min-h-[45vh] md:min-h-0 border-t md:border-t-0 md:border-l border-slate-200"
           style={MAGAZA_BG ? { backgroundImage: `url(${MAGAZA_BG})`, backgroundSize: "cover", backgroundPosition: "center" } : undefined}
         >

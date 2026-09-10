@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { trackCouponApply } from "@/lib/analytics";
 
 // ── Varyant Seçici Modal ─────────────────────────────────────────────────────
 function GiftVariantModal({
@@ -201,6 +202,8 @@ function CouponSection({
 
   const onAppliedRef = useRef(onApplied);
   onAppliedRef.current = onApplied;
+  // coupon_apply event'i kod başına bir kez (cartTotal değişimiyle tekrar etmesin)
+  const lastTrackedCode = useRef<string | null>(null);
 
   // Kullanıcı + hesabına tanımlı kuponları yükle
   useEffect(() => {
@@ -249,13 +252,16 @@ function CouponSection({
         let d: any = {};
         try { d = await res.json(); } catch { /* JSON değil */ }
         if (!active) return;
+        const firstTimeForCode = lastTrackedCode.current !== couponCode;
         if (res.ok && d.valid) {
           setApplied({ name: d.name || "İndirim", discount: d.discount_amount || 0, free_shipping: !!d.free_shipping });
           onAppliedRef.current(d.discount_amount || 0, !!d.free_shipping);
+          if (firstTimeForCode) { trackCouponApply({ code: couponCode, success: true, discount: d.discount_amount || 0 }); lastTrackedCode.current = couponCode; }
         } else {
           setApplied(null);
           onAppliedRef.current(0, false);
           setError(d.error || (res.status === 401 ? "Kupon için giriş yapın." : `Kupon uygulanamadı (${res.status})`));
+          if (firstTimeForCode) { trackCouponApply({ code: couponCode, success: false, reason: d.error || String(res.status) }); lastTrackedCode.current = couponCode; }
           setCouponCode("");
         }
       } catch {
