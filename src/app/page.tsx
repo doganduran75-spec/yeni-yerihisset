@@ -11,7 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { useCartStore } from "@/store/useCartStore";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import WelcomeFunnel from "@/components/WelcomeFunnel";
+import HomeHero from "@/components/HomeHero";
 import { formatPriceDisplay, getMinPrice } from "@/lib/product-price";
 
 export default function HomePage() {
@@ -125,7 +125,6 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-cream">
-      <WelcomeFunnel />
       {/* Top Bar for Admin Link (Geliştirme Süreci İçin) */}
       <div className="bg-slate-900 text-white py-2 px-4 text-xs font-black uppercase tracking-widest flex justify-between items-center z-[60] relative">
         <span>Geliştirme Modu Aktif</span>
@@ -136,7 +135,10 @@ export default function HomePage() {
 
       <Navbar />
 
-      <main>
+      {/* Karşılama terminali (popup yerine) */}
+      <HomeHero />
+
+      <main id="anasayfa-devam">
         {/* Hero Section */}
         <section className="relative min-h-[700px] flex items-center overflow-hidden bg-cream pt-12">
           <div className="absolute top-0 right-0 w-1/2 h-full bg-olive-50/50 rounded-l-[10rem] -z-10 hidden lg:block animate-in slide-in-from-right duration-1000" />
