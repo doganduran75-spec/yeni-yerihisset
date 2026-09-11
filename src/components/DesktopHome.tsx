@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { formatPriceDisplay, getMinPrice } from "@/lib/product-price";
 import { track } from "@/lib/track";
+import { homeContent as HC } from "@/config/homeContent";
 
 // DESIGN.md ("YeriHisset Grounded Wellness") temelli MASAÜSTÜ ana sayfa.
 // page.tsx'te hidden md:block ile yalnız masaüstünde gösterilir. Kendi footer'ını
@@ -32,33 +33,8 @@ const C = {
 const EPI = "var(--font-epilogue), 'Epilogue', system-ui, sans-serif";
 const JAK = "var(--font-jakarta), 'Plus Jakarta Sans', system-ui, sans-serif";
 
-const TRUST = [
-  { icon: Footprints, label: "Doğal Ayak Sağlığı" },
-  { icon: BadgeCheck, label: "%100 Doğal Deri" },
-  { icon: Truck, label: "Hızlı & Güvenli Kargo" },
-  { icon: CreditCard, label: "Vade Farksız 3 Taksit" },
-];
-
-const FOOT_COLS = [
-  {
-    title: "Koleksiyonlar",
-    links: [
-      { label: "Tüm Barefoot Modelleri", href: "/products" },
-      { label: "Dodura Yetişkin Serisi", href: "/marka/dodura" },
-      { label: "Attipas İlk Adım", href: "/marka/attipas" },
-      { label: "Doğal Taban Çoraplar", href: "/products" },
-    ],
-  },
-  {
-    title: "Faydalı Bilgiler",
-    links: [
-      { label: "Barefoot Ayakkabı Nedir?", href: "/barefoot-nedir" },
-      { label: "Ayak Ölçüm Rehberi", href: "/bilgi-bankasi" },
-      { label: "Sıkça Sorulan Sorular", href: "/bilgi-bankasi" },
-      { label: "İade ve Değişim", href: "/bilgi-bankasi" },
-    ],
-  },
-];
+// Güven barı ikon anahtarı → lucide bileşeni (config data-only kalsın diye)
+const TRUST_ICON = { foot: Footprints, leaf: BadgeCheck, truck: Truck, card: CreditCard } as const;
 
 export default function DesktopHome({
   products, loading, onQuickAdd, addedId,
@@ -68,7 +44,7 @@ export default function DesktopHome({
   onQuickAdd?: (p: any) => void;
   addedId?: string | null;
 }) {
-  const popular = (products || []).slice(0, 4);
+  const popular = (products || []).slice(0, HC.products.limitDesktop);
 
   return (
     <div style={{ fontFamily: JAK, background: C.base, color: C.ink }}>
@@ -76,44 +52,44 @@ export default function DesktopHome({
       <section className="container mx-auto px-8 pt-16 pb-4 max-w-6xl text-center">
         <span className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 mb-7"
           style={{ background: C.leafTint, border: `1px solid ${C.leafBorder}`, color: C.greenText, fontSize: 13, fontWeight: 600 }}>
-          <Sprout size={15} /> Yerin Hissini Keşfedin — Doğal Adımlara Hoş Geldiniz
+          <Sprout size={15} /> {HC.hero.badge}
         </span>
         <h1 style={{ fontFamily: EPI, fontWeight: 600, fontSize: 46, lineHeight: 1.1, letterSpacing: "-0.02em", color: C.ink, textWrap: "balance" }}>
-          Bugün YeriHisset&apos;e hangi adımla geldin?
+          {HC.hero.question}
         </h1>
         <p className="mx-auto" style={{ color: C.stone, fontSize: 18, lineHeight: 1.55, marginTop: 16, maxWidth: 640 }}>
-          Sana en doğru deneyimi sunabilmemiz için ihtiyacını seç, yolculuğunu birlikte başlatalım.
+          {HC.hero.subtitleDesktop}
         </p>
 
         {/* İki büyük kart */}
         <div className="grid grid-cols-2 gap-6 mt-12 text-left max-w-5xl mx-auto">
           <ChoiceCard
-            href="/barefoot-nedir" onClick={() => track("hero_click", { side: "kesif", to: "/barefoot-nedir" })}
-            icon={GraduationCap} pill="İlk Kez Başlayanlar İçin"
-            title="Barefoot Rehberini Keşfet"
-            body="Yalınayak felsefesi, anatomik ayak yapısı ve sağlıklı adımların biyomekaniğini keşfedin."
-            cta="Rehberi İncele" ctaBg={C.green} ctaHover={C.greenBtnHover}
+            href={HC.cards.learn.href} onClick={() => track("hero_click", { side: "kesif", to: HC.cards.learn.href })}
+            icon={GraduationCap} pill={HC.cards.learn.pill}
+            title={HC.cards.learn.title}
+            body={HC.cards.learn.body}
+            cta={HC.cards.learn.cta} ctaBg={C.green} ctaHover={C.greenBtnHover}
           />
           <ChoiceCard
-            href="/products" onClick={() => track("hero_click", { side: "magaza", to: "/products" })}
-            icon={ShoppingBag} pill="Doğrudan Alışveriş"
-            title="Doğrudan Mağazaya Geç"
-            body="Dodura deri ayakkabılar, Attipas ilk adım modelleri ve denge barlarını hemen inceleyin."
-            cta="Koleksiyonları Gör" ctaBg={C.charcoal} ctaHover="#000"
+            href={HC.cards.shop.href} onClick={() => track("hero_click", { side: "magaza", to: HC.cards.shop.href })}
+            icon={ShoppingBag} pill={HC.cards.shop.pill}
+            title={HC.cards.shop.title}
+            body={HC.cards.shop.body}
+            cta={HC.cards.shop.cta} ctaBg={C.charcoal} ctaHover="#000"
           />
         </div>
 
         <div className="mt-8">
           <a href="#populer-desktop" className="inline-flex items-center gap-2" style={{ color: C.muted, fontSize: 15, fontWeight: 600 }}>
-            Veya doğrudan ana sayfaya devam et <ArrowRight size={17} />
+            {HC.hero.continueLink} <ArrowRight size={17} />
           </a>
         </div>
 
         {/* Güven barı */}
         <div className="mt-12 rounded-2xl flex items-center justify-between px-8 py-5 max-w-5xl mx-auto"
           style={{ background: C.card, border: `1px solid ${C.border}`, boxShadow: "0 4px 20px -2px rgba(39,39,36,0.05)" }}>
-          {TRUST.map((t) => {
-            const Icon = t.icon;
+          {HC.trust.map((t) => {
+            const Icon = TRUST_ICON[t.icon];
             return (
               <div key={t.label} className="flex items-center gap-2.5">
                 <Icon size={20} style={{ color: C.green }} />
@@ -128,11 +104,11 @@ export default function DesktopHome({
       <section id="populer-desktop" className="container mx-auto px-8 pt-16 pb-16 max-w-6xl">
         <div className="flex items-end justify-between mb-8">
           <div>
-            <p style={{ color: C.greenText, fontSize: 12, fontWeight: 700, letterSpacing: "0.08em" }}>POPÜLER MODELLER</p>
-            <h2 style={{ fontFamily: EPI, fontWeight: 600, fontSize: 34, letterSpacing: "-0.015em", color: C.ink, marginTop: 4 }}>Öne Çıkan Barefoot Seçenekleri</h2>
+            <p style={{ color: C.greenText, fontSize: 12, fontWeight: 700, letterSpacing: "0.08em" }}>{HC.products.eyebrow}</p>
+            <h2 style={{ fontFamily: EPI, fontWeight: 600, fontSize: 34, letterSpacing: "-0.015em", color: C.ink, marginTop: 4 }}>{HC.products.title}</h2>
           </div>
-          <Link href="/products" className="inline-flex items-center gap-1.5 shrink-0" style={{ color: C.greenText, fontSize: 15, fontWeight: 700 }}>
-            Tümünü Gör <ChevronRight size={17} />
+          <Link href={HC.products.href} className="inline-flex items-center gap-1.5 shrink-0" style={{ color: C.greenText, fontSize: 15, fontWeight: 700 }}>
+            {HC.products.seeAll} <ChevronRight size={17} />
           </Link>
         </div>
 
@@ -157,24 +133,26 @@ export default function DesktopHome({
         )}
       </section>
 
-      {/* ── Vade Farksız 3 Taksit ── */}
-      <section style={{ background: C.clay }}>
-        <div className="container mx-auto px-8 py-8 max-w-6xl flex items-center justify-between gap-6">
-          <div className="flex items-center gap-5">
-            <div className="w-14 h-14 rounded-xl flex items-center justify-center shrink-0" style={{ background: "rgba(255,255,255,0.16)" }}>
-              <CreditCard size={26} color="#fff" />
+      {/* ── Reklam bandı (Vade Farksız 3 Taksit) ── */}
+      {HC.promo.enabled && (
+        <section style={{ background: C.clay }}>
+          <div className="container mx-auto px-8 py-8 max-w-6xl flex items-center justify-between gap-6">
+            <div className="flex items-center gap-5">
+              <div className="w-14 h-14 rounded-xl flex items-center justify-center shrink-0" style={{ background: "rgba(255,255,255,0.16)" }}>
+                <CreditCard size={26} color="#fff" />
+              </div>
+              <div>
+                <p style={{ fontFamily: EPI, fontStyle: "italic", fontWeight: 700, fontSize: 26, color: "#fff", letterSpacing: "0.01em" }}>{HC.promo.title}</p>
+                <p style={{ color: "rgba(255,255,255,0.9)", fontSize: 14, marginTop: 2 }}>{HC.promo.subtitle}</p>
+              </div>
             </div>
-            <div>
-              <p style={{ fontFamily: EPI, fontStyle: "italic", fontWeight: 700, fontSize: 26, color: "#fff", letterSpacing: "0.01em" }}>VADE FARKSIZ 3 TAKSİT</p>
-              <p style={{ color: "rgba(255,255,255,0.9)", fontSize: 14, marginTop: 2 }}>Tüm Dodura &amp; Attipas ayakkabılarda peşin fiyatına taksit avantajı</p>
-            </div>
+            <Link href={HC.promo.href} className="shrink-0 rounded-full px-7 h-12 inline-flex items-center font-bold active:scale-95 transition-transform"
+              style={{ background: "#fff", color: C.clay, fontSize: 14 }}>
+              {HC.promo.cta}
+            </Link>
           </div>
-          <Link href="/products" className="shrink-0 rounded-full px-7 h-12 inline-flex items-center font-bold active:scale-95 transition-transform"
-            style={{ background: "#fff", color: C.clay, fontSize: 14 }}>
-            Alışverişe Başla
-          </Link>
-        </div>
-      </section>
+        </section>
+      )}
 
       {/* ── Footer (ana sayfaya özel) ── */}
       <DesktopFooter />
@@ -267,14 +245,12 @@ function DesktopFooter() {
         <div>
           <div className="flex items-center gap-2 mb-4">
             <Sprout size={22} style={{ color: C.green }} />
-            <span style={{ fontFamily: EPI, fontWeight: 700, fontSize: 20, color: C.ink }}>YeriHisset</span>
+            <span style={{ fontFamily: EPI, fontWeight: 700, fontSize: 20, color: C.ink }}>{HC.footer.brandName}</span>
           </div>
-          <p style={{ color: C.muted, fontSize: 14, lineHeight: 1.6 }}>
-            Doğal ayak anatomisini koruyan, sıfır düşüş ve geniş burun tasarımlı barefoot ayakkabılarla yeri hissedin.
-          </p>
+          <p style={{ color: C.muted, fontSize: 14, lineHeight: 1.6 }}>{HC.footer.brandDesc}</p>
         </div>
 
-        {FOOT_COLS.map((col) => (
+        {HC.footer.columns.map((col) => (
           <div key={col.title}>
             <h4 style={{ fontFamily: EPI, fontWeight: 600, fontSize: 15, color: C.ink, marginBottom: 16 }}>{col.title}</h4>
             <ul className="space-y-2.5">
@@ -288,10 +264,8 @@ function DesktopFooter() {
         ))}
 
         <div>
-          <h4 style={{ fontFamily: EPI, fontWeight: 600, fontSize: 15, color: C.ink, marginBottom: 16 }}>Bülten</h4>
-          <p style={{ color: C.muted, fontSize: 14, lineHeight: 1.6, marginBottom: 14 }}>
-            Yeni modeller ve yalınayak sağlık rehberlerinden haberdar olun.
-          </p>
+          <h4 style={{ fontFamily: EPI, fontWeight: 600, fontSize: 15, color: C.ink, marginBottom: 16 }}>{HC.footer.newsletterTitle}</h4>
+          <p style={{ color: C.muted, fontSize: 14, lineHeight: 1.6, marginBottom: 14 }}>{HC.footer.newsletterBody}</p>
           <form onSubmit={submit} className="flex gap-2">
             <input
               type="email" required value={email} onChange={(e) => { setEmail(e.target.value); setState("idle"); }}
@@ -311,9 +285,9 @@ function DesktopFooter() {
 
       <div style={{ borderTop: `1px solid ${C.border}` }}>
         <div className="container mx-auto px-8 py-5 max-w-6xl flex items-center justify-between">
-          <p style={{ color: C.stone, fontSize: 13 }}>© 2024 YeriHisset. Tüm hakları saklıdır.</p>
+          <p style={{ color: C.stone, fontSize: 13 }}>{HC.footer.copyright}</p>
           <p className="inline-flex items-center gap-1.5" style={{ color: C.stone, fontSize: 13 }}>
-            <Sprout size={14} style={{ color: C.green }} /> Doğal adımlar, sağlıklı beden.
+            <Sprout size={14} style={{ color: C.green }} /> {HC.footer.tagline}
           </p>
         </div>
       </div>

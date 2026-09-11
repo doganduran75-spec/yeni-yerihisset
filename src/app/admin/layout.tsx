@@ -7,7 +7,7 @@ export const metadata: Metadata = {
 import { SidebarProvider, Sidebar, SidebarHeader, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarInset, SidebarGroupLabel } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
-import { LayoutDashboard, Settings, Users, ExternalLink, BookOpen, Handshake, MessagesSquare, Link2, Ticket, BellRing, FileEdit, Send, Boxes, Inbox, BarChart3 } from "lucide-react";
+import { LayoutDashboard, Settings, Users, ExternalLink, BookOpen, Handshake, MessagesSquare, Link2, Ticket, BellRing, Send, Boxes, Inbox, BarChart3 } from "lucide-react";
 import AdminGuard from "@/components/admin/AdminGuard";
 
 export default function AdminLayout({
@@ -128,7 +128,7 @@ export default function AdminLayout({
               <SidebarMenu>
                 <SidebarMenuItem>
                   <SidebarMenuButton
-                    render={<Link href="/admin/site-content"><FileEdit size={18} className="mr-2" /> Sayfa İçerikleri &amp; Bilgi Bankası</Link>}
+                    render={<Link href="/admin/site-content"><BookOpen size={18} className="mr-2" /> Bilgi Bankası</Link>}
                   />
                 </SidebarMenuItem>
                 <SidebarMenuItem>
