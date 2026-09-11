@@ -10,8 +10,9 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { supabase } from "@/lib/supabase";
-import { Search, Mail, Phone, AtSign, Loader2, UserCog, Tags, X, Plus, UserPlus, Trash2, Users, Link2 } from "lucide-react";
+import { Search, Mail, Phone, AtSign, Loader2, UserCog, Tags, X, Plus, UserPlus, Trash2, Users, Link2, Activity } from "lucide-react";
 import { cn } from "@/lib/utils";
+import MemberJourney from "@/components/admin/MemberJourney";
 
 /* -- Tipler ------------------------------------------- */
 type Role = { id: string; name: string; slug: string };
@@ -526,6 +527,10 @@ export default function MembersPage() {
                   </div>
                 )}
               </div>
+            </div>
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-sm font-semibold"><Activity size={15} className="text-olive-600" /> Ziyaret Geçmişi</div>
+              {editing?.id && <MemberJourney userId={editing.id} />}
             </div>
           </div>
           <div className="flex justify-end gap-3 pt-2 border-t">
