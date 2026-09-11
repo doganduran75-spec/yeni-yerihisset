@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
-import { Outfit, Inter } from "next/font/google";
+import { Outfit, Inter, Epilogue, Plus_Jakarta_Sans } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import PopupBanner from "@/components/PopupBanner";
 import ScrollToTop from "@/components/ScrollToTop";
 import VisitTracker from "@/components/VisitTracker";
 import GlobalStructuredData from "@/components/GlobalStructuredData";
 import GoogleAnalytics from "@/components/GoogleAnalytics";
+import MobileTabBar from "@/components/MobileTabBar";
 import "./globals.css";
 
 const outfit = Outfit({
@@ -17,6 +18,21 @@ const outfit = Outfit({
 const inter = Inter({
   variable: "--font-inter",
   subsets: ["latin"],
+});
+
+// DESIGN.md — yeni mobil ana sayfa bölümleri için (şimdilik yalnız orada kullanılır)
+const epilogue = Epilogue({
+  variable: "--font-epilogue",
+  subsets: ["latin"],
+  weight: ["500", "600", "700"],
+  display: "swap",
+});
+
+const jakarta = Plus_Jakarta_Sans({
+  variable: "--font-jakarta",
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  display: "swap",
 });
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com";
@@ -79,17 +95,18 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="tr" className={`${outfit.variable} ${inter.variable} antialiased`} data-scroll-behavior="smooth">
+    <html lang="tr" className={`${outfit.variable} ${inter.variable} ${epilogue.variable} ${jakarta.variable} antialiased`} data-scroll-behavior="smooth">
       <head>
         <GlobalStructuredData />
         <GoogleAnalytics />
       </head>
-      <body className="font-sans bg-background text-foreground selection:bg-olive-100 selection:text-olive-800" suppressHydrationWarning>
+      <body className="font-sans bg-background text-foreground selection:bg-olive-100 selection:text-olive-800 pb-16 md:pb-0" suppressHydrationWarning>
         <TooltipProvider>
           {children}
           <PopupBanner />
           <ScrollToTop />
           <VisitTracker />
+          <MobileTabBar />
         </TooltipProvider>
       </body>
     </html>

@@ -12,6 +12,7 @@ import { useCartStore } from "@/store/useCartStore";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import HomeHero from "@/components/HomeHero";
+import MobileHome from "@/components/MobileHome";
 import { formatPriceDisplay, getMinPrice } from "@/lib/product-price";
 
 export default function HomePage() {
@@ -127,6 +128,11 @@ export default function HomePage() {
     <div className="min-h-screen bg-cream">
       <Navbar />
 
+      {/* Mobil: DESIGN.md app-benzeri ana sayfa (yalnız mobilde) */}
+      <MobileHome products={products} />
+
+      {/* Masaüstü: klasik karşılama terminali + bölümler (mobilde gizli) */}
+      <div className="hidden md:block">
       {/* Karşılama terminali (popup yerine) */}
       <HomeHero />
 
@@ -404,8 +410,11 @@ export default function HomePage() {
           </div>
         </section>
       </main>
+      </div>
 
-      <Footer />
+      <div className="hidden md:block">
+        <Footer />
+      </div>
     </div>
   );
 }
