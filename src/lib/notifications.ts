@@ -32,18 +32,21 @@ function addUtmTracking(html: string, campaign: string): string {
 
 /** Email ürün satırları HTML'i */
 function buildOrderItemsHtml(
-  items: Array<{ title: string; quantity: number; unit_price: number }>
+  items: Array<{ title: string; quantity: number; unit_price: number; variantLabel?: string | null; sku?: string | null }>
 ): string {
   if (!items.length) return "";
   const rows = items
     .map(
-      (item) => `
+      (item) => {
+      const meta = [item.variantLabel, item.sku ? `Stok Kodu: ${item.sku}` : ""].filter(Boolean).join(" · ");
+      const metaHtml = meta ? `<div style="font-size:12px;color:#94a3b8;margin-top:3px;font-family:monospace">${meta}</div>` : "";
+      return `
       <tr>
-        <td style="padding:8px 12px;font-size:14px;color:#334155;border-bottom:1px solid #e2e8f0;">${item.title}</td>
+        <td style="padding:8px 12px;font-size:14px;color:#334155;border-bottom:1px solid #e2e8f0;">${item.title}${metaHtml}</td>
         <td style="padding:8px 12px;font-size:14px;color:#64748b;text-align:center;border-bottom:1px solid #e2e8f0;">${item.quantity}</td>
         <td style="padding:8px 12px;font-size:14px;color:#334155;text-align:right;border-bottom:1px solid #e2e8f0;">₺${(item.unit_price * item.quantity).toFixed(2)}</td>
-      </tr>`
-    )
+      </tr>`;
+    })
     .join("");
   return `
     <table style="width:100%;border-collapse:collapse;margin-bottom:24px;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
@@ -56,6 +59,58 @@ function buildOrderItemsHtml(
       </thead>
       <tbody>${rows}</tbody>
     </table>`;
+}
+
+/**
+ * Sipariş kalemlerini e-posta için zenginleştir: ürün başlığı + numara/varyant
+ * (variantLabel) + stok kodu (sku). Embed'siz, ayrı sorgularla (self-host PostgREST).
+ */
+async function fetchOrderLineItems(
+  supabase: any,
+  orderId: string
+): Promise<Array<{ title: string; quantity: number; unit_price: number; variantLabel: string | null; sku: string | null }>> {
+  const { data: oiRows } = await supabase
+    .from("order_items")
+    .select("quantity, unit_price, product_id, variant_id")
+    .eq("order_id", orderId);
+  const oi = (oiRows as any[]) || [];
+  if (!oi.length) return [];
+
+  const productIds = [...new Set(oi.map((i) => i.product_id).filter(Boolean))];
+  const variantIds = [...new Set(oi.map((i) => i.variant_id).filter(Boolean))];
+
+  const titleMap = new Map<string, string>();
+  if (productIds.length) {
+    const { data: ps } = await supabase.from("products").select("id, title").in("id", productIds);
+    for (const p of (ps as any[]) || []) titleMap.set(p.id, p.title ?? "Ürün");
+  }
+
+  const vMap = new Map<string, { sku: string | null; optId: string | null }>();
+  if (variantIds.length) {
+    const { data: vs } = await supabase.from("product_variants").select("id, sku, variant_option_id").in("id", variantIds);
+    for (const v of (vs as any[]) || []) vMap.set(v.id, { sku: v.sku ?? null, optId: v.variant_option_id ?? null });
+  }
+
+  const optIds = [...new Set([...vMap.values()].map((v) => v.optId).filter(Boolean))];
+  const optMap = new Map<string, string>();
+  if (optIds.length) {
+    const { data: opts } = await supabase.from("variant_options").select("id, value, variant_groups(name)").in("id", optIds);
+    for (const o of (opts as any[]) || []) {
+      const gn = o.variant_groups?.name;
+      optMap.set(o.id, gn ? `${gn}: ${o.value}` : (o.value ?? ""));
+    }
+  }
+
+  return oi.map((i) => {
+    const v = i.variant_id ? vMap.get(i.variant_id) : null;
+    return {
+      title: titleMap.get(i.product_id) ?? "Ürün",
+      quantity: i.quantity,
+      unit_price: i.unit_price,
+      variantLabel: v?.optId ? (optMap.get(v.optId) ?? null) : null,
+      sku: v?.sku ?? null,
+    };
+  });
 }
 
 /** Tam email HTML dokümanı (wrapper) */
@@ -190,22 +245,8 @@ export async function sendOrderNotification(
   const customerName = [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") || "Değerli Müşterimiz";
   const customerEmail = profile?.email;
 
-  // Kalemler + ürün başlıkları (ayrı sorgu)
-  const { data: oiRows } = await (supabase as any).from("order_items")
-    .select("quantity, unit_price, product_id").eq("order_id", context.orderId);
-  const oiArr = (oiRows as any[]) || [];
-  const oiProdIds = [...new Set(oiArr.map((i) => i.product_id).filter(Boolean))];
-  const oiTitleMap = new Map<string, string>();
-  if (oiProdIds.length) {
-    const { data: ps } = await (supabase as any).from("products").select("id, title").in("id", oiProdIds);
-    (ps as any[] || []).forEach((p) => oiTitleMap.set(p.id, p.title));
-  }
-  const orderItems: Array<{ title: string; quantity: number; unit_price: number }> =
-    oiArr.map((i: any) => ({
-      title: oiTitleMap.get(i.product_id) ?? "Ürün",
-      quantity: i.quantity,
-      unit_price: i.unit_price,
-    }));
+  // Kalemler + ürün başlığı + numara/varyant + stok kodu (ayrı sorgularla)
+  const orderItems = await fetchOrderLineItems(supabase, context.orderId);
 
   // 2. Mağaza ayarlarını getir (SMTP + GA + mağaza adı + ödeme bilgileri)
   const { data: settings } = await (supabase.from("settings").select("*").single() as any) as { data: any };
@@ -606,7 +647,7 @@ export async function sendLeadMagnetWelcome(params: {
  * noktaları entegrasyonu gelene kadar admin ELDEN kapatabilsin diye.
  */
 export async function sendAdminOutOfStockAlert(
-  items: Array<{ title: string; variantLabel?: string | null; sku?: string | null }>
+  items: Array<{ title: string; variantLabel?: string | null; sku?: string | null; barcode?: string | null }>
 ): Promise<{ status: "sent" | "failed" | "skipped"; error?: string }> {
   if (!items.length) return { status: "skipped" };
   const supabase = createAdminClient();
@@ -618,7 +659,8 @@ export async function sendAdminOutOfStockAlert(
   const rows = items.map((i) => {
     const label = [i.title, i.variantLabel].filter(Boolean).join(" · ");
     const sku = i.sku ? ` <span style="font-family:monospace;color:#94a3b8">(${i.sku})</span>` : "";
-    return `<li style="margin:0 0 6px;font-size:14px;color:#334155"><b>${label}</b>${sku}</li>`;
+    const barcode = i.barcode ? `<div style="font-size:12px;color:#94a3b8;font-family:monospace;margin-top:2px">Barkod: ${i.barcode}</div>` : "";
+    return `<li style="margin:0 0 8px;font-size:14px;color:#334155"><b>${label}</b>${sku}${barcode}</li>`;
   }).join("");
 
   const bodyHtml = `
@@ -662,7 +704,7 @@ export async function alertOutOfStockForOrder(orderId: string): Promise<void> {
   const items = (oi as any[]) || [];
   if (!items.length) return;
 
-  const out: Array<{ title: string; variantLabel?: string | null; sku?: string | null }> = [];
+  const out: Array<{ title: string; variantLabel?: string | null; sku?: string | null; barcode?: string | null }> = [];
 
   const variantIds = [...new Set(items.filter((i) => i.variant_id).map((i) => i.variant_id))];
   const productIds = [...new Set(items.map((i) => i.product_id).filter(Boolean))];
@@ -683,7 +725,7 @@ export async function alertOutOfStockForOrder(orderId: string): Promise<void> {
   if (variantIds.length) {
     // Varyantlar (embed'siz) — stok 0 olanları bul
     const { data: vs } = await (supabase as any).from("product_variants")
-      .select("id, stock, sku, product_id, variant_option_id").in("id", variantIds);
+      .select("id, stock, sku, barcode, product_id, variant_option_id").in("id", variantIds);
     const zeroVs = ((vs as any[]) || []).filter((v) => Number(v.stock ?? 0) <= 0);
     // Varyant değer + grup adı ayrı çek
     const optIds = [...new Set(zeroVs.map((v) => v.variant_option_id).filter(Boolean))];
@@ -697,7 +739,7 @@ export async function alertOutOfStockForOrder(orderId: string): Promise<void> {
       }
     }
     for (const v of zeroVs) {
-      out.push({ title: titleMap.get(v.product_id) ?? "Ürün", variantLabel: optMap.get(v.variant_option_id) ?? null, sku: v.sku });
+      out.push({ title: titleMap.get(v.product_id) ?? "Ürün", variantLabel: optMap.get(v.variant_option_id) ?? null, sku: v.sku, barcode: v.barcode ?? null });
     }
   }
 
@@ -738,19 +780,8 @@ export async function sendAdminNewOrderNotification(
   }
   const customerName = [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") || "—";
 
-  // Sipariş kalemleri + ürün başlıkları (ayrı sorgu)
-  const { data: oiRows } = await (supabase as any).from("order_items")
-    .select("quantity, unit_price, product_id").eq("order_id", orderId);
-  const oi = (oiRows as any[]) || [];
-  const prodIds = [...new Set(oi.map((i) => i.product_id).filter(Boolean))];
-  const titleMap = new Map<string, string>();
-  if (prodIds.length) {
-    const { data: ps } = await (supabase as any).from("products").select("id, title").in("id", prodIds);
-    (ps as any[] || []).forEach((p) => titleMap.set(p.id, p.title));
-  }
-  const items = oi.map((i) => ({
-    title: titleMap.get(i.product_id) ?? "Ürün", quantity: i.quantity, unit_price: i.unit_price,
-  }));
+  // Sipariş kalemleri + ürün başlığı + numara/varyant + stok kodu (ayrı sorgularla)
+  const items = await fetchOrderLineItems(supabase, orderId);
   const shortId = (order as any).order_number ? `YH${(order as any).order_number}` : order.id.slice(0, 8).toUpperCase();
   const payLabel = order.payment_method === "bank_transfer" ? "Havale/EFT" : "Kart (iyzico)";
 
