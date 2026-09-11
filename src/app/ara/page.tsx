@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import SearchTracker from "@/components/SearchTracker";
 import { ChevronRight, Search, Star } from "lucide-react";
 import { formatPriceDisplay, getMinPrice } from "@/lib/product-price";
 
@@ -69,6 +70,7 @@ export default async function SearchPage({
 
   return (
     <>
+      {query && <SearchTracker term={query} count={list.length} />}
       <Navbar />
       <main className="min-h-screen bg-background">
         <div className="container mx-auto px-4 py-8 max-w-7xl">
