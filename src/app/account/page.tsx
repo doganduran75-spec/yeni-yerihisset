@@ -30,7 +30,10 @@ import {
   Loader2,
   MessageSquare,
   Send,
+  XCircle,
+  RotateCcw,
 } from "lucide-react";
+import { useCartStore } from "@/store/useCartStore";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -62,7 +65,31 @@ function formatPhone(digits: string): string {
 
 function AccountPageInner() {
   const router = useRouter();
+  const { addItem, clearCart } = useCartStore();
   const searchParams = useSearchParams();
+
+  // Otomatik iptal olmuş (ödeme yarıda kalmış) siparişi sepete geri yükle → /sepet.
+  // Eski siparişe DOKUNMAZ; checkout yeni sipariş oluşturur (taze stok/fiyat/kupon).
+  function reactivateOrder(order: any) {
+    const items = order.order_items || [];
+    if (!items.length) return;
+    clearCart();
+    for (const it of items) {
+      addItem({
+        id: it.variant_id ? `var_${it.variant_id}` : `prod_${it.product_id}`,
+        product_id: it.product_id,
+        variant_id: it.variant_id || undefined,
+        title: it.products?.title || "Ürün",
+        image: it.products?.images?.[0] || it.products?.image_url || "/placeholder.png",
+        price: Number(it.unit_price) || 0,
+        quantity: it.quantity || 1,
+        stock: it.quantity || 1, // gerçek stok kontrolünü checkout/create yapar (oversell guard)
+        variant_name: it.variant_name || undefined,
+      });
+    }
+    router.push("/sepet");
+  }
+
   const initialTab = (searchParams.get("tab") as TabType) || "orders";
   const returnTo = searchParams.get("returnTo"); // checkout'tan gelindiyse kaydettikten sonra dönülecek sayfa
   
@@ -776,10 +803,23 @@ function AccountPageInner() {
                                 <Badge className="bg-green-100 text-green-700 hover:bg-green-100 border-none font-bold py-1 px-3 flex gap-2">
                                   <CheckCircle2 size={14} /> Teslim Edildi
                                 </Badge>
+                              ) : order.status === 'cancelled' ? (
+                                <Badge className="bg-red-50 text-red-600 hover:bg-red-50 border-none font-bold py-1 px-3 flex gap-2">
+                                  <XCircle size={14} /> İptal Edildi
+                                </Badge>
                               ) : (
                                 <Badge className="bg-olive-50 text-olive-600 hover:bg-olive-50 border-blue-100 font-bold py-1 px-3 flex gap-2">
                                   <Clock size={14} /> {order.status === 'processing' ? 'Hazırlanıyor' : order.status === 'shipped' ? 'Kargoya Verildi' : 'Onay Bekliyor'}
                                 </Badge>
+                              )}
+                              {order.status === 'cancelled' && order.auto_expired && (order.order_items?.length > 0) && (
+                                <Button
+                                  onClick={() => reactivateOrder(order)}
+                                  size="sm"
+                                  className="bg-olive-600 hover:bg-olive-700 text-white font-bold text-xs rounded-xl gap-1.5 h-9"
+                                >
+                                  <RotateCcw size={14} /> Siparişi Tekrar Oluştur
+                                </Button>
                               )}
                               <Button variant="ghost" size="sm" className="font-bold text-xs underline">Detaylar</Button>
                            </div>
