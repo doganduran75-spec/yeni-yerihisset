@@ -33,6 +33,7 @@ type Coupon = {
   starts_at: string;
   expires_at: string | null;
   is_active: boolean;
+  campaign_slug: string | null;
 };
 
 const EMPTY: Omit<Coupon, "id" | "used_count"> = {
@@ -50,6 +51,7 @@ const EMPTY: Omit<Coupon, "id" | "used_count"> = {
   starts_at: new Date().toISOString().split("T")[0],
   expires_at: null,
   is_active: true,
+  campaign_slug: null,
 };
 
 const TYPE_LABEL: Record<string, string> = {
@@ -361,6 +363,20 @@ export default function CouponsManager() {
             <div className="space-y-1.5">
               <label className="text-xs font-semibold">Açıklama</label>
               <Input value={editingCoupon.description || ""} onChange={(e) => setEditingCoupon((p) => ({ ...p, description: e.target.value }))} placeholder="İsteğe bağlı..." />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold">Kampanya Linki (opsiyonel)</label>
+              <Input
+                value={editingCoupon.campaign_slug || ""}
+                onChange={(e) => setEditingCoupon((p) => ({ ...p, campaign_slug: e.target.value.trim().toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-") || null }))}
+                placeholder="ör: eylul-fiyat"
+              />
+              {editingCoupon.campaign_slug && (
+                <p className="text-[11px] text-slate-500">
+                  Paylaşılacak link: <span className="font-mono text-olive-700">/kampanya/{editingCoupon.campaign_slug}</span> — tıklayan kişi bu kodu otomatik alır, analitikte kampanya olarak ayrışır.
+                </p>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-3">

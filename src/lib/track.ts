@@ -158,6 +158,22 @@ export function setTrackUser(userId: string | null) {
   currentUserId = userId;
 }
 
+/**
+ * Kampanya landing (/kampanya/[slug]) çağırır: oturuma ilk-temas kaynağını
+ * atar (utm yoksa). Böylece slug'lı kısa link, analitikte kampanya olarak ayrışır.
+ */
+export function setCampaign(source: string, campaign: string, content?: string) {
+  if (typeof window === "undefined") return;
+  try {
+    bootstrapSession();
+    if (!sessionStorage.getItem(UTM_KEY)) {
+      sessionStorage.setItem(UTM_KEY, JSON.stringify({ source, medium: "referral", campaign, content: content || "", term: "" }));
+    }
+  } catch {
+    /* yut */
+  }
+}
+
 let listenersReady = false;
 /** Bir kez: sayfa kapanışında kalan kuyruğu beacon ile boşalt. */
 export function initTrackFlush() {
