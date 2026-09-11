@@ -125,14 +125,6 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-cream">
-      {/* Top Bar for Admin Link (Geliştirme Süreci İçin) */}
-      <div className="bg-slate-900 text-white py-2 px-4 text-xs font-black uppercase tracking-widest flex justify-between items-center z-[60] relative">
-        <span>Geliştirme Modu Aktif</span>
-        <Link href="/admin" className="flex items-center gap-1 hover:text-blue-400 transition-colors bg-white/10 px-3 h-6 rounded-full">
-          <Shield size={12} /> Admin
-        </Link>
-      </div>
-
       <Navbar />
 
       {/* Karşılama terminali (popup yerine) */}
