@@ -71,7 +71,7 @@ export default function CampaignClient({ slug, coupon }: { slug: string; coupon:
               className="group mx-auto flex items-center gap-3 bg-white text-olive-900 rounded-2xl px-6 py-4 mb-3 shadow-2xl hover:scale-[1.02] transition-transform"
             >
               <Ticket size={22} className="text-olive-600" />
-              <span className="text-2xl font-black tracking-[0.15em] font-mono">{coupon.code}</span>
+              <span className="text-2xl font-black tracking-[0.15em] font-mono text-slate-900">{coupon.code}</span>
               {copied ? <Check size={18} className="text-green-600" /> : <Copy size={18} className="text-slate-400 group-hover:text-olive-600" />}
             </button>
             <p className="text-xs text-white/60 mb-8">Kod sepetine tanımlandı — ödemede otomatik uygulanır.</p>
