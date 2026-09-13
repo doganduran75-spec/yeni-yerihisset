@@ -1,6 +1,6 @@
 "use client";
 
-/* eslint-disable @next/next/no-img-element */
+import Image from "next/image";
 import Link from "next/link";
 import { GraduationCap, ShoppingBag, ArrowRight, ChevronRight, BadgeCheck, Truck, Footprints, CreditCard } from "lucide-react";
 import { formatPriceDisplay, getMinPrice } from "@/lib/product-price";
@@ -116,7 +116,7 @@ export default function MobileHome({ products }: { products: any[] }) {
               <Link key={p.id} href={`/products/${p.slug}`} className="shrink-0" style={{ width: 232 }}>
                 <div className="rounded-2xl overflow-hidden" style={{ background: C.card, border: `1px solid ${C.border}` }}>
                   <div className="relative" style={{ aspectRatio: "4 / 3", background: "#F3EFEA" }}>
-                    <img src={img} alt={p.title} className="w-full h-full object-cover" />
+                    <Image src={img} alt={p.title} fill sizes="232px" className="object-cover" />
                     {badge && (
                       <span className="absolute top-3 left-3 rounded-full px-3 py-1"
                         style={{ background: "rgba(255,255,255,0.92)", color: C.ink, fontSize: 11, fontWeight: 700 }}>

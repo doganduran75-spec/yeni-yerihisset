@@ -1,7 +1,7 @@
 "use client";
 
-/* eslint-disable @next/next/no-img-element */
 import { useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import {
   GraduationCap, ShoppingBag, ArrowRight, ChevronRight, Footprints, BadgeCheck,
@@ -186,8 +186,8 @@ function ProductCard({ p, onQuickAdd, added }: { p: any; onQuickAdd?: (p: any) =
   const code = p.sku || null;
   return (
     <div className="rounded-2xl overflow-hidden group" style={{ background: C.card, border: `1px solid ${C.border}` }}>
-      <Link href={`/products/${p.slug}`} className="block relative" style={{ aspectRatio: "4 / 3", background: C.warm }}>
-        <img src={img} alt={p.title} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
+      <Link href={`/products/${p.slug}`} className="block relative overflow-hidden" style={{ aspectRatio: "4 / 3", background: C.warm }}>
+        <Image src={img} alt={p.title} fill sizes="(max-width: 1024px) 50vw, 300px" className="object-cover transition-transform duration-700 group-hover:scale-105" />
         {badge && (
           <span className="absolute top-3 left-3 rounded-full px-3 py-1" style={{ background: "rgba(255,255,255,0.94)", color: C.ink, fontSize: 11.5, fontWeight: 700 }}>{badge}</span>
         )}
