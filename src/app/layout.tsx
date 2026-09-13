@@ -87,6 +87,16 @@ export const metadata: Metadata = {
   alternates: {
     canonical: SITE_URL,
   },
+  // Google Search Console doğrulaması — token'ı env'e koy (NEXT_PUBLIC_GSC_VERIFICATION).
+  // Yoksa hiçbir şey render edilmez.
+  ...(process.env.NEXT_PUBLIC_GSC_VERIFICATION
+    ? { verification: { google: process.env.NEXT_PUBLIC_GSC_VERIFICATION } }
+    : {}),
+  // Staging'i arama motorlarından gizle: sunucuda NEXT_PUBLIC_NOINDEX=true iken
+  // tüm site noindex olur. Canlıda bu env KALDIRILIR → normal indekslenir.
+  ...(process.env.NEXT_PUBLIC_NOINDEX === "true"
+    ? { robots: { index: false, follow: false } }
+    : {}),
 };
 
 export default function RootLayout({

@@ -54,9 +54,9 @@ export default function DesktopHome({
           style={{ background: C.leafTint, border: `1px solid ${C.leafBorder}`, color: C.greenText, fontSize: 13, fontWeight: 600 }}>
           <Sprout size={15} /> {HC.hero.badge}
         </span>
-        <h1 style={{ fontFamily: EPI, fontWeight: 600, fontSize: 46, lineHeight: 1.1, letterSpacing: "-0.02em", color: C.ink, textWrap: "balance" }}>
+        <h2 style={{ fontFamily: EPI, fontWeight: 600, fontSize: 46, lineHeight: 1.1, letterSpacing: "-0.02em", color: C.ink, textWrap: "balance" }}>
           {HC.hero.question}
-        </h1>
+        </h2>
         <p className="mx-auto" style={{ color: C.stone, fontSize: 18, lineHeight: 1.55, marginTop: 16, maxWidth: 640 }}>
           {HC.hero.subtitleDesktop}
         </p>

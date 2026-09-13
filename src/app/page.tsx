@@ -58,6 +58,9 @@ export default function HomePage() {
     <div className="min-h-screen" style={{ background: "#FCFAF6" }}>
       <Navbar />
 
+      {/* Tek, SEO-odaklı H1 (görünmez) — hero başlıkları h2; sayfada tek h1 kalır */}
+      <h1 className="sr-only">YeriHisset — Doğal Barefoot Ayakkabılar: Geniş Burun, Sıfır Topuk Farkı</h1>
+
       {/* Mobil: app-benzeri ana sayfa */}
       <MobileHome products={products} />
 

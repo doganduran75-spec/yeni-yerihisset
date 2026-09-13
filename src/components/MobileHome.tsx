@@ -39,9 +39,9 @@ export default function MobileHome({ products }: { products: any[] }) {
     <div className="md:hidden" style={{ fontFamily: JAK, background: C.base, color: C.ink }}>
       {/* Soru + alt başlık */}
       <div className="px-5 pt-6 pb-4 text-center">
-        <h1 style={{ fontFamily: EPI, fontWeight: 600, fontSize: 27, lineHeight: 1.18, letterSpacing: "-0.015em", color: C.ink, textWrap: "balance" }}>
+        <h2 style={{ fontFamily: EPI, fontWeight: 600, fontSize: 27, lineHeight: 1.18, letterSpacing: "-0.015em", color: C.ink, textWrap: "balance" }}>
           {HC.hero.question}
-        </h1>
+        </h2>
         <p style={{ color: C.stone, fontSize: 14.5, marginTop: 8 }}>{HC.hero.subtitleMobile}</p>
       </div>
 

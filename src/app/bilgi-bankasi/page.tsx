@@ -1,8 +1,15 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { BookOpen, Play, ChevronRight } from "lucide-react";
+
+export const metadata: Metadata = {
+  title: "Bilgi Bankası",
+  description: "Barefoot ayakkabı, ayak sağlığı ve doğru numara seçimi üzerine rehberler ve sık sorulan sorular.",
+  alternates: { canonical: `${process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com"}/bilgi-bankasi` },
+};
 
 // Server-side Supabase (public anon key yeterli — RLS SELECT izni var)
 function getSupabase() {

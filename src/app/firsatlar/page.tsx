@@ -1,7 +1,14 @@
+import type { Metadata } from "next";
 import FirsatlarClient from "./FirsatlarClient";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { createClient } from "@supabase/supabase-js";
+
+export const metadata: Metadata = {
+  title: "Fırsatlar & Ayrıcalıklar",
+  description: "Üyelik seviyene özel fırsatlar, kuponlar ve ödüller. Alışverişten kazan, avantajları yakala.",
+  alternates: { canonical: `${process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com"}/firsatlar` },
+};
 
 function getSupabase() {
   return createClient(

@@ -27,6 +27,7 @@ export async function generateMetadata({
   return {
     title: cat?.name ?? "Kategori",
     description: `${cat?.name ?? "Kategori"} kategorisindeki tüm ürünler`,
+    alternates: { canonical: `${process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com"}/kategori/${slug}` },
   };
 }
 

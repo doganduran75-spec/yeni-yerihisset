@@ -38,7 +38,11 @@ export async function generateMetadata({
     ? data.content.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 160)
     : "";
 
-  return { title: data.title, description };
+  return {
+    title: data.title,
+    description,
+    alternates: { canonical: `${process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com"}/bilgi-bankasi/${slug}` },
+  };
 }
 
 export default async function ArticlePage({

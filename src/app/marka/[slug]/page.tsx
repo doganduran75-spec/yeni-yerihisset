@@ -27,6 +27,7 @@ export async function generateMetadata({
   return {
     title: brand?.name ?? "Marka",
     description: `${brand?.name ?? "Marka"} markasına ait tüm ürünler`,
+    alternates: { canonical: `${process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com"}/marka/${slug}` },
   };
 }
 
