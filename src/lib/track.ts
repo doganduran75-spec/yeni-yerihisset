@@ -139,9 +139,19 @@ function flush(useBeacon = false) {
   }
 }
 
+// KVKK: çerez banner'ında "Reddet" seçildiyse analitik toplama.
+function consentRejected(): boolean {
+  try {
+    return localStorage.getItem("yh:cookie-consent") === "rejected";
+  } catch {
+    return false;
+  }
+}
+
 /** Bir analitik event'i kuyruğa al. Her yerden güvenle çağrılabilir. */
 export function track(type: string, meta?: unknown) {
   if (typeof window === "undefined") return;
+  if (consentRejected()) return; // onay reddedildiyse toplama yok
   try {
     bootstrapSession();
     getSessionId(); // ts tazele

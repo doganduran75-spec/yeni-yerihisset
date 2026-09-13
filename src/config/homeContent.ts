@@ -103,7 +103,8 @@ export const homeContent = {
           { label: "Barefoot Ayakkabı Nedir?", href: "/barefoot-nedir" },
           { label: "Ayak Ölçüm Rehberi", href: "/bilgi-bankasi" },
           { label: "Sıkça Sorulan Sorular", href: "/bilgi-bankasi" },
-          { label: "İade ve Değişim", href: "/bilgi-bankasi" },
+          { label: "İade ve Değişim", href: "/iade-degisim" },
+          { label: "İletişim", href: "/iletisim" },
         ],
       },
     ],
@@ -111,6 +112,12 @@ export const homeContent = {
     newsletterBody: "Yeni modeller ve yalınayak sağlık rehberlerinden haberdar olun.",
     copyright: "© 2024 YeriHisset. Tüm hakları saklıdır.",
     tagline: "Doğal adımlar, sağlıklı beden.",
+    legal: [
+      { label: "Gizlilik", href: "/gizlilik" },
+      { label: "KVKK", href: "/kvkk" },
+      { label: "Çerez Politikası", href: "/cerez-politikasi" },
+      { label: "Mesafeli Satış", href: "/mesafeli-satis" },
+    ],
   },
 };
 

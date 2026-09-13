@@ -7,6 +7,7 @@ import VisitTracker from "@/components/VisitTracker";
 import GlobalStructuredData from "@/components/GlobalStructuredData";
 import GoogleAnalytics from "@/components/GoogleAnalytics";
 import MobileTabBar from "@/components/MobileTabBar";
+import CookieBanner from "@/components/CookieBanner";
 import "./globals.css";
 
 const outfit = Outfit({
@@ -117,6 +118,7 @@ export default function RootLayout({
           <ScrollToTop />
           <VisitTracker />
           <MobileTabBar />
+          <CookieBanner />
         </TooltipProvider>
       </body>
     </html>

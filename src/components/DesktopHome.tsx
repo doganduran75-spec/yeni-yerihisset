@@ -284,8 +284,13 @@ function DesktopFooter() {
       </div>
 
       <div style={{ borderTop: `1px solid ${C.border}` }}>
-        <div className="container mx-auto px-8 py-5 max-w-6xl flex items-center justify-between">
+        <div className="container mx-auto px-8 py-5 max-w-6xl flex flex-wrap items-center justify-between gap-3">
           <p style={{ color: C.stone, fontSize: 13 }}>{HC.footer.copyright}</p>
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
+            {HC.footer.legal.map((l) => (
+              <Link key={l.href} href={l.href} style={{ color: C.stone, fontSize: 12.5 }} className="hover:underline">{l.label}</Link>
+            ))}
+          </div>
           <p className="inline-flex items-center gap-1.5" style={{ color: C.stone, fontSize: 13 }}>
             <Sprout size={14} style={{ color: C.green }} /> {HC.footer.tagline}
           </p>

@@ -13,7 +13,7 @@ export default function Footer() {
             Yeri<span className="text-slate-900">Hisset</span>
           </Link>
           <p className="text-sm font-medium text-slate-500 leading-bold">
-            Yaşam alanlarınıza değer katacak tasarımlar. Modern, estetik ve işlevsel ev dekorasyonunun öncüsü. 2026 Trendleriyle evinize ruh katıyoruz.
+            Doğal ayak anatomisini koruyan, sıfır düşüş ve geniş burun tasarımlı barefoot ayakkabılarla yeri hissedin.
           </p>
           <div className="flex gap-4">
              {/* Social placeholders - in a real app these would be icons */}
@@ -26,20 +26,20 @@ export default function Footer() {
         <div className="space-y-8">
           <h5 className="text-xs font-black uppercase tracking-[0.2em] text-slate-900">Kurumsal</h5>
           <ul className="space-y-4 text-sm font-bold text-slate-500 italic">
-            <li><Link href="#" className="hover:text-olive-600 transition-colors uppercase">Hakkımızda</Link></li>
-            <li><Link href="#" className="hover:text-olive-600 transition-colors uppercase">İletişim</Link></li>
-            <li><Link href="#" className="hover:text-olive-600 transition-colors uppercase">Kariyer</Link></li>
-            <li><Link href="#" className="hover:text-olive-600 transition-colors uppercase">Mağazalarımız</Link></li>
+            <li><Link href="/barefoot-nedir" className="hover:text-olive-600 transition-colors uppercase">Barefoot Nedir?</Link></li>
+            <li><Link href="/iletisim" className="hover:text-olive-600 transition-colors uppercase">İletişim</Link></li>
+            <li><Link href="/bilgi-bankasi" className="hover:text-olive-600 transition-colors uppercase">Bilgi Bankası</Link></li>
+            <li><Link href="/firsatlar" className="hover:text-olive-600 transition-colors uppercase">Fırsatlar</Link></li>
           </ul>
         </div>
         
         <div className="space-y-8">
           <h5 className="text-xs font-black uppercase tracking-[0.2em] text-slate-900">Yardım & Destek</h5>
           <ul className="space-y-4 text-sm font-bold text-slate-500 italic">
-            <li><Link href="#" className="hover:text-olive-600 transition-colors uppercase">Sipariş Takibi</Link></li>
-            <li><Link href="#" className="hover:text-olive-600 transition-colors uppercase">İade ve Değişim</Link></li>
-            <li><Link href="#" className="hover:text-olive-600 transition-colors uppercase">Kargo Bilgileri</Link></li>
-            <li><Link href="#" className="hover:text-olive-600 transition-colors uppercase">Sıkça Sorulan Sorular</Link></li>
+            <li><Link href="/account?tab=orders" className="hover:text-olive-600 transition-colors uppercase">Sipariş Takibi</Link></li>
+            <li><Link href="/iade-degisim" className="hover:text-olive-600 transition-colors uppercase">İade ve Değişim</Link></li>
+            <li><Link href="/iade-degisim" className="hover:text-olive-600 transition-colors uppercase">Kargo Bilgileri</Link></li>
+            <li><Link href="/bilgi-bankasi" className="hover:text-olive-600 transition-colors uppercase">Sıkça Sorulan Sorular</Link></li>
           </ul>
         </div>
         
@@ -57,10 +57,12 @@ export default function Footer() {
         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest italic">
           © {new Date().getFullYear()} YeriHisset. TÜM HAKLARI SAKLIDIR.
         </p>
-        <div className="flex gap-8 text-[10px] font-black text-slate-400 uppercase tracking-widest italic">
-           <Link href="#" className="hover:text-slate-900 transition-colors">KVKK</Link>
-           <Link href="#" className="hover:text-slate-900 transition-colors">Çerez Politikası</Link>
-           <Link href="#" className="hover:text-slate-900 transition-colors">Mesafeli Satış</Link>
+        <div className="flex flex-wrap gap-x-6 gap-y-2 text-[10px] font-black text-slate-400 uppercase tracking-widest italic">
+           <Link href="/gizlilik" className="hover:text-slate-900 transition-colors">Gizlilik</Link>
+           <Link href="/kvkk" className="hover:text-slate-900 transition-colors">KVKK</Link>
+           <Link href="/cerez-politikasi" className="hover:text-slate-900 transition-colors">Çerez Politikası</Link>
+           <Link href="/mesafeli-satis" className="hover:text-slate-900 transition-colors">Mesafeli Satış</Link>
+           <Link href="/iade-degisim" className="hover:text-slate-900 transition-colors">İade & Değişim</Link>
         </div>
       </div>
     </footer>
