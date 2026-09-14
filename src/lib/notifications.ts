@@ -594,17 +594,19 @@ export async function sendMessageNotification(
   const orderLabel = order.order_number ? `YH${order.order_number}` : `#${order.id.slice(0, 8)}`;
   const customerName = [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") || "Müşteri";
   const thread = (msgs as any[]) || [];
-  const last = thread[thread.length - 1];
 
-  // Yazışma balonları (rol etiketli — alıcıdan bağımsız net)
-  const bubbles = thread.map((m: any) => {
+  // Yazışma balonları (rol etiketli — alıcıdan bağımsız net). Son balon vurgulu.
+  const bubbles = thread.map((m: any, i: number) => {
     const isAdmin = m.sender_role === "admin";
+    const isLast = i === thread.length - 1;
     const who = isAdmin ? "Destek Ekibi" : "Müşteri";
-    const bg = isAdmin ? "#eef4ff" : "#f1f5f9";
+    // Son mesaj farklı arka plan (açık zeytin); diğerleri rol rengine göre
+    const bg = isLast ? "#e9f2d6" : (isAdmin ? "#eef4ff" : "#f1f5f9");
+    const border = isLast ? "border:1px solid #cfe0a8;" : "";
     const align = isAdmin ? "right" : "left";
     const time = new Date(m.created_at).toLocaleString("tr-TR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
     return `<tr><td style="padding:3px 0" align="${align}">
-      <div style="display:inline-block;max-width:85%;text-align:left;background:${bg};border-radius:12px;padding:9px 13px">
+      <div style="display:inline-block;max-width:85%;text-align:left;background:${bg};${border}border-radius:12px;padding:9px 13px">
         <div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:2px">${who} · ${time}</div>
         <div style="font-size:14px;color:#1e293b;white-space:pre-wrap">${(m.content || "").replace(/</g, "&lt;")}</div>
       </div></td></tr>`;
@@ -627,12 +629,8 @@ export async function sendMessageNotification(
   const bodyHtml = `
     <div style="color:#334155">
       <h2 style="font-size:20px;font-weight:800;color:#1e293b;margin:0 0 10px">Sipariş ${orderLabel} — Mesajlar</h2>
-      <p style="font-size:15px;margin:0 0 16px">${intro}</p>
-      ${last ? `<div style="background:#eef4ff;border-left:4px solid #4d7c0f;border-radius:8px;padding:12px 14px;margin:0 0 18px">
-        <div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:3px">SON MESAJ</div>
-        <div style="font-size:15px;color:#1e293b;white-space:pre-wrap">${(last.content || "").replace(/</g, "&lt;")}</div>
-      </div>` : ""}
-      <p style="font-size:12px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin:0 0 6px">Yazışmanın tamamı</p>
+      <p style="font-size:15px;margin:0 0 18px">${intro}</p>
+      <p style="font-size:12px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin:0 0 6px">Yazışma</p>
       <table style="width:100%;border-collapse:collapse;margin:0 0 22px">${bubbles}</table>
       <div style="text-align:center">
         <a href="${cta}" style="display:inline-block;background:#4d7c0f;color:#fff;text-decoration:none;padding:13px 30px;border-radius:12px;font-weight:800;font-size:15px">Yanıtla</a>
