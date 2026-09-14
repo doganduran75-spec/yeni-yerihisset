@@ -1089,7 +1089,7 @@ function AccountPageInner() {
                           <label className="text-xs font-bold uppercase text-slate-500 px-1">Açık Adres</label>
                           <textarea 
                             required
-                            className="flex min-h-[100px] w-full rounded-2xl border border-input bg-slate-50/50 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-olive-600 transition-all font-medium"
+                            className="flex min-h-[100px] w-full rounded-2xl border border-input bg-slate-50/50 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-olive-600 transition-all font-medium placeholder:text-slate-400 placeholder:font-normal"
                             value={addressForm.address_detail || ""}
                             onChange={e => setAddressForm({...addressForm, address_detail: e.target.value})}
                             placeholder="Mahalle, sokak, bina ve daire bilgileri..."
