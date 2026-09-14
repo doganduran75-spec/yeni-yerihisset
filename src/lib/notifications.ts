@@ -570,6 +570,94 @@ export async function sendAdminReplyNotification(
 }
 
 /**
+ * Sipariş-bağlantılı mesajlaşma bildirimi. Müşteri yazınca ADMİN'e, admin
+ * yazınca MÜŞTERİ'ye gider. İçerikte tüm yazışma + son mesaj vurgulu + "Yanıtla"
+ * butonu (ilgili konuşmaya derin link).
+ */
+export async function sendMessageNotification(
+  orderId: string,
+  senderRole: "user" | "admin"
+): Promise<{ status: "sent" | "failed" | "skipped"; error?: string }> {
+  const supabase = createAdminClient();
+  const { data: order } = await (supabase as any)
+    .from("orders").select("id, order_number, user_id").eq("id", orderId).maybeSingle();
+  if (!order) return { status: "skipped", error: "Sipariş bulunamadı" };
+
+  const [{ data: profile }, { data: settings }, { data: msgs }] = await Promise.all([
+    (supabase as any).from("profiles").select("first_name, last_name, email").eq("id", order.user_id).maybeSingle(),
+    (supabase.from("settings").select("*").single() as any),
+    (supabase as any).from("messages").select("content, sender_role, created_at").eq("order_id", orderId).order("created_at", { ascending: true }),
+  ]);
+
+  const storeName = settings?.store_name || "YeriHisset";
+  const storeUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com";
+  const orderLabel = order.order_number ? `YH${order.order_number}` : `#${order.id.slice(0, 8)}`;
+  const customerName = [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") || "Müşteri";
+  const thread = (msgs as any[]) || [];
+  const last = thread[thread.length - 1];
+
+  // Yazışma balonları (rol etiketli — alıcıdan bağımsız net)
+  const bubbles = thread.map((m: any) => {
+    const isAdmin = m.sender_role === "admin";
+    const who = isAdmin ? "Destek Ekibi" : "Müşteri";
+    const bg = isAdmin ? "#eef4ff" : "#f1f5f9";
+    const align = isAdmin ? "right" : "left";
+    const time = new Date(m.created_at).toLocaleString("tr-TR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+    return `<tr><td style="padding:3px 0" align="${align}">
+      <div style="display:inline-block;max-width:85%;text-align:left;background:${bg};border-radius:12px;padding:9px 13px">
+        <div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:2px">${who} · ${time}</div>
+        <div style="font-size:14px;color:#1e293b;white-space:pre-wrap">${(m.content || "").replace(/</g, "&lt;")}</div>
+      </div></td></tr>`;
+  }).join("");
+
+  const toAdmin = senderRole === "user";
+  const to = toAdmin
+    ? (settings?.admin_notify_email || settings?.contact_email || settings?.smtp_from_email || settings?.smtp_user)
+    : profile?.email;
+  if (!to) return { status: "skipped", error: "Alıcı e-posta yok" };
+
+  const cta = toAdmin ? `${storeUrl}/admin/messages?order=${orderId}` : `${storeUrl}/account?tab=orders&msg=${orderId}`;
+  const subject = toAdmin
+    ? `💬 Yeni mesaj — ${orderLabel} · ${customerName}`
+    : `${storeName} — ${orderLabel} siparişinize yanıt`;
+  const intro = toAdmin
+    ? `<b>${customerName}</b>, <b>${orderLabel}</b> siparişi için yeni bir mesaj gönderdi.`
+    : `Merhaba <b>${customerName}</b>, <b>${orderLabel}</b> siparişinizle ilgili destek ekibimiz yanıt verdi.`;
+
+  const bodyHtml = `
+    <div style="color:#334155">
+      <h2 style="font-size:20px;font-weight:800;color:#1e293b;margin:0 0 10px">Sipariş ${orderLabel} — Mesajlar</h2>
+      <p style="font-size:15px;margin:0 0 16px">${intro}</p>
+      ${last ? `<div style="background:#eef4ff;border-left:4px solid #4d7c0f;border-radius:8px;padding:12px 14px;margin:0 0 18px">
+        <div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:3px">SON MESAJ</div>
+        <div style="font-size:15px;color:#1e293b;white-space:pre-wrap">${(last.content || "").replace(/</g, "&lt;")}</div>
+      </div>` : ""}
+      <p style="font-size:12px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin:0 0 6px">Yazışmanın tamamı</p>
+      <table style="width:100%;border-collapse:collapse;margin:0 0 22px">${bubbles}</table>
+      <div style="text-align:center">
+        <a href="${cta}" style="display:inline-block;background:#4d7c0f;color:#fff;text-decoration:none;padding:13px 30px;border-radius:12px;font-weight:800;font-size:15px">Yanıtla</a>
+      </div>
+    </div>`;
+
+  const smtpConfig = buildSmtpConfig({
+    smtp_host: settings?.smtp_host || "", smtp_port: settings?.smtp_port, smtp_secure: settings?.smtp_secure,
+    smtp_user: settings?.smtp_user, smtp_password: settings?.smtp_password,
+  });
+  if (!smtpConfig.host || !smtpConfig.auth.user) return { status: "failed", error: "SMTP ayarları eksik" };
+
+  try {
+    const transporter = nodemailer.createTransport(smtpConfig);
+    await transporter.sendMail({
+      from: `"${settings?.smtp_from_name || storeName}" <${settings?.smtp_from_email || smtpConfig.auth.user}>`,
+      to, subject, html: buildEmailDocument(bodyHtml, storeName), text: htmlToText(bodyHtml),
+    });
+    return { status: "sent" };
+  } catch (err: any) {
+    return { status: "failed", error: err?.message || "Email gönderim hatası" };
+  }
+}
+
+/**
  * Lead-magnet (Fırsat) e-postası: kupon + şifre belirleme bağlantısı.
  * mode 'created' → yeni şifresiz üye (set-password linki gönderilir)
  * mode 'existing' → zaten üye (giriş linki + kupon hesabında bilgisi)

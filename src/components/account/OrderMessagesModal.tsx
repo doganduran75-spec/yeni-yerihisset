@@ -48,7 +48,20 @@ export default function OrderMessagesModal({
     const { data, error } = await (supabase as any).from("messages").insert({
       user_id: userId, order_id: orderId, content, sender_role: "user",
     }).select().single();
-    if (!error && data) { setMessages((m) => [...m, data]); setText(""); }
+    if (!error && data) {
+      setMessages((m) => [...m, data]); setText("");
+      // Admin'e e-posta bildirimi (kritik değil)
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) {
+          fetch("/api/messages/notify", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+            body: JSON.stringify({ orderId, senderRole: "user" }),
+          }).catch(() => {});
+        }
+      } catch { /* yut */ }
+    }
     setSending(false);
   }
 

@@ -43,6 +43,7 @@ function MessagesInner() {
   const [newMessage, setNewMessage] = useState("");
   const [sending, setSending] = useState(false);
   const [search, setSearch] = useState("");
+  const [orderCtx, setOrderCtx] = useState<{ total: number; orderCount: number; lines: { title: string; size: string | null; sku: string | null; qty: number }[] } | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -53,9 +54,37 @@ function MessagesInner() {
       router.replace(`/admin/messages?order=${selectedId}`, { scroll: false });
       fetchMessages(selectedId);
       markAsRead(selectedId);
+      const t = threads.find((x) => x.order_id === selectedId);
+      if (t) fetchOrderContext(selectedId, t.user_id);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedId]);
+  }, [selectedId, threads.length]);
+
+  async function fetchOrderContext(orderId: string, userId: string) {
+    setOrderCtx(null);
+    const [{ data: order }, { data: items }, { data: cntOrders }] = await Promise.all([
+      (supabase as any).from("orders").select("total_amount").eq("id", orderId).maybeSingle(),
+      (supabase as any).from("order_items").select("product_id, variant_id, variant_name, quantity").eq("order_id", orderId),
+      (supabase as any).from("orders").select("status").eq("user_id", userId),
+    ]);
+    const orderCount = ((cntOrders as any[]) || []).filter((o) => o.status !== "cancelled" && o.status !== "refunded").length;
+    const its = (items as any[]) || [];
+    const productIds = [...new Set(its.map((i) => i.product_id).filter(Boolean))];
+    const variantIds = [...new Set(its.map((i) => i.variant_id).filter(Boolean))];
+    const [{ data: prods }, { data: vars }] = await Promise.all([
+      productIds.length ? (supabase as any).from("products").select("id, title").in("id", productIds) : Promise.resolve({ data: [] }),
+      variantIds.length ? (supabase as any).from("product_variants").select("id, sku").in("id", variantIds) : Promise.resolve({ data: [] }),
+    ]);
+    const pMap = new Map(((prods as any[]) || []).map((p) => [p.id, p.title]));
+    const vMap = new Map(((vars as any[]) || []).map((v) => [v.id, v.sku]));
+    const lines = its.map((i) => ({
+      title: (pMap.get(i.product_id) as string) || "Ürün",
+      size: i.variant_name || null,
+      sku: i.variant_id ? ((vMap.get(i.variant_id) as string) || null) : null,
+      qty: i.quantity,
+    }));
+    setOrderCtx({ total: Number(order?.total_amount || 0), orderCount, lines });
+  }
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -132,12 +161,17 @@ function MessagesInner() {
       setMessages((m) => [...m, data as any]);
       setThreads((prev) => prev.map((t) => t.order_id === selectedId ? { ...t, last_at: data.created_at, last_content: content, last_role: "admin" } : t));
       setNewMessage("");
-      if (thread.email) {
-        fetch("/api/crm/send-email", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId: thread.user_id, body: content }),
-        }).catch((e) => console.error("Email error:", e));
-      }
+      // Müşteriye e-posta bildirimi (tüm yazışma + Yanıtla linki)
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) {
+          fetch("/api/messages/notify", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+            body: JSON.stringify({ orderId: selectedId, senderRole: "admin" }),
+          }).catch(() => {});
+        }
+      } catch { /* yut */ }
     } catch {
       alert("Hata: Mesaj gönderilemedi.");
     } finally {
@@ -231,6 +265,27 @@ function MessagesInner() {
               </div>
               <Button variant="outline" size="sm" className="rounded-xl font-bold text-xs shrink-0" onClick={() => fetchMessages(selectedId)}>Yenile</Button>
             </div>
+
+            {/* Sipariş bağlamı — ürün kodu/numara, tutar, müşteri sipariş sayısı */}
+            {orderCtx && (
+              <div className="px-4 py-3 border-b bg-slate-50/60 shrink-0 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs">
+                <span className="font-bold text-slate-700">₺{orderCtx.total.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span>
+                <span className="text-slate-400">·</span>
+                <span className="text-slate-600">Müşteri toplam <b className="text-slate-800">{orderCtx.orderCount}</b> sipariş</span>
+                {orderCtx.lines.length > 0 && (
+                  <div className="w-full flex flex-wrap gap-2 pt-1">
+                    {orderCtx.lines.map((l, i) => (
+                      <span key={i} className="inline-flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-2.5 py-1">
+                        <span className="font-semibold text-slate-700">{l.title}</span>
+                        {l.size && <span className="text-slate-500">· {l.size}</span>}
+                        {l.sku && <span className="font-mono text-[10px] text-slate-400">{l.sku}</span>}
+                        <span className="text-slate-400">×{l.qty}</span>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-50/30">
               {messagesLoading ? (

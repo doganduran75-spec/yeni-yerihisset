@@ -128,6 +128,7 @@ function AccountPageInner() {
   // Tüm hesap sayfası tek akordiyon — üst menü kutusu yok. ?tab= eski linkleri
   // ilgili bölüme eşler.
   const rawTab = searchParams.get("tab") as TabType | null;
+  const msgParam = searchParams.get("msg"); // e-postadaki "Yanıtla" → o siparişin mesaj modalını aç
   const returnTo = searchParams.get("returnTo"); // checkout'tan gelindiyse kaydettikten sonra dönülecek sayfa
 
   const initialSection: SectionKey = (() => {
@@ -460,6 +461,11 @@ function AccountPageInner() {
     setReviewedOrderIds(new Set(((revs.data as any[]) || []).map((r) => r.order_id)));
     setLoading(false);
     fetchOrderUnread(user.id);
+    // E-postadan "Yanıtla" ile gelindiyse o siparişin mesaj modalını aç
+    if (msgParam) {
+      const o = (ords.data || []).find((x: any) => x.id === msgParam);
+      if (o) setMsgOrder({ id: o.id, label: o.order_number ? `YH${o.order_number}` : `#${o.id.slice(0, 8)}` });
+    }
   }
 
   async function handleSignOut() {
