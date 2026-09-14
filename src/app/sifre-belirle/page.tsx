@@ -92,8 +92,8 @@ export default function SetPasswordPage() {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col justify-center items-center p-4">
-      <Link href="/" className="mb-8 text-3xl font-black tracking-tighter text-blue-600 flex items-center gap-2">
-        <div className="w-10 h-10 bg-blue-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-blue-100">Y</div>
+      <Link href="/" className="mb-8 text-3xl font-black tracking-tighter text-olive-600 flex items-center gap-2">
+        <div className="w-10 h-10 bg-olive-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-olive-100">Y</div>
         Yeri<span className="text-slate-900">Hisset</span>
       </Link>
 
@@ -169,7 +169,7 @@ export default function SetPasswordPage() {
                 </div>
               )}
 
-              <Button type="submit" disabled={loading} className="w-full h-14 rounded-2xl bg-blue-600 hover:bg-blue-700 text-sm font-black tracking-widest uppercase shadow-xl shadow-blue-100 group">
+              <Button type="submit" disabled={loading} className="w-full h-14 rounded-2xl bg-olive-600 hover:bg-olive-700 text-sm font-black tracking-widest uppercase shadow-xl shadow-olive-100 group">
                 {loading ? "KAYDEDİLİYOR..." : "ŞİFREYİ KAYDET"}
                 <ArrowRight size={18} className="ml-2 group-hover:translate-x-1 transition-transform" />
               </Button>

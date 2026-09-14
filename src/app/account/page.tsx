@@ -684,7 +684,7 @@ function AccountPageInner() {
                           key={uc.id}
                           className={cn(
                             "rounded-2xl border-2 overflow-hidden transition-all",
-                            expired || used ? "opacity-50 grayscale" : soonExpiry ? "border-amber-300 bg-amber-50/30" : "border-slate-200 bg-white hover:border-blue-200 hover:shadow-sm"
+                            expired || used ? "opacity-50 grayscale" : soonExpiry ? "border-amber-300 bg-amber-50/30" : "border-slate-200 bg-white hover:border-olive-200 hover:shadow-sm"
                           )}
                         >
                           {/* Üst renk bandı */}
@@ -719,7 +719,7 @@ function AccountPageInner() {
                               {c.description && <p className="text-xs text-slate-500 mt-0.5">{c.description}</p>}
                             </div>
                             <div className="flex items-center justify-between">
-                              <span className="font-mono font-black text-olive-700 bg-olive-50 px-3 py-1 rounded-lg text-sm tracking-widest border border-blue-100">
+                              <span className="font-mono font-black text-olive-700 bg-olive-50 px-3 py-1 rounded-lg text-sm tracking-widest border border-olive-100">
                                 {c.code}
                               </span>
                               {c.expires_at && !expired && (
@@ -780,7 +780,7 @@ function AccountPageInner() {
                               <div className="hidden md:block">
                                 <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">SİPARİŞ NO</p>
                                 <div className="flex items-center gap-2">
-                                  <p className="text-sm font-bold text-blue-600">
+                                  <p className="text-sm font-bold text-olive-600">
                                     {order.order_number ? `YH${order.order_number}` : `#${order.id.slice(0,8)}`}
                                   </p>
                                   {reviewedOrderIds.has(order.id) ? (
@@ -808,7 +808,7 @@ function AccountPageInner() {
                                   <XCircle size={14} /> İptal Edildi
                                 </Badge>
                               ) : (
-                                <Badge className="bg-olive-50 text-olive-600 hover:bg-olive-50 border-blue-100 font-bold py-1 px-3 flex gap-2">
+                                <Badge className="bg-olive-50 text-olive-600 hover:bg-olive-50 border-olive-100 font-bold py-1 px-3 flex gap-2">
                                   <Clock size={14} /> {order.status === 'processing' ? 'Hazırlanıyor' : order.status === 'shipped' ? 'Kargoya Verildi' : 'Onay Bekliyor'}
                                 </Badge>
                               )}
@@ -1082,7 +1082,7 @@ function AccountPageInner() {
                 ) : !affiliate ? (
                   /* Başvuru Formu */
                   <Card className="border-none shadow-sm overflow-hidden">
-                    <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-8 text-white">
+                    <div className="bg-gradient-to-r from-olive-600 to-olive-700 p-8 text-white">
                       <h3 className="text-2xl font-black mb-2">Satış Ortağı Ol, Kazan</h3>
                       <p className="text-olive-100 font-medium">
                         Her satıştan %10 komisyon kazan. Aşağıdaki soruları yanıtla ve hemen başla.
@@ -1139,7 +1139,7 @@ function AccountPageInner() {
                             />
                           </div>
                         </div>
-                        <div className="bg-olive-50 rounded-2xl p-4 border border-blue-100 text-sm text-olive-700 font-medium">
+                        <div className="bg-olive-50 rounded-2xl p-4 border border-olive-100 text-sm text-olive-700 font-medium">
                           Başvurunuz anında onaylanır ve satış ortaklığı linkinizi hemen kullanabilirsiniz.
                         </div>
                         <Button
@@ -1258,7 +1258,7 @@ function AccountPageInner() {
                 <h2 className="text-2xl font-black text-slate-900">Güvenlik Ayarları</h2>
                 <Card className="border-none shadow-sm">
                    <CardContent className="p-8 space-y-8">
-                      <div className="flex items-center gap-6 p-6 bg-olive-50 rounded-3xl border-2 border-blue-100 border-dashed">
+                      <div className="flex items-center gap-6 p-6 bg-olive-50 rounded-3xl border-2 border-olive-100 border-dashed">
                          <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-olive-600 shadow-sm">
                             <ShieldCheck size={32} />
                          </div>

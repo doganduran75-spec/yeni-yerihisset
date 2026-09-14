@@ -129,7 +129,7 @@ export default function PopupBanner() {
           {/* İçerik */}
           {popup.content && (
             <div
-              className="text-sm text-slate-600 leading-relaxed mb-6 prose prose-sm max-w-none prose-a:text-blue-600 prose-strong:text-slate-800"
+              className="text-sm text-slate-600 leading-relaxed mb-6 prose prose-sm max-w-none prose-a:text-olive-600 prose-strong:text-slate-800"
               dangerouslySetInnerHTML={{ __html: popup.content }}
             />
           )}
@@ -141,14 +141,14 @@ export default function PopupBanner() {
                 <Link
                   href={popup.button_url}
                   onClick={dismiss}
-                  className="inline-block bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold px-6 py-3 rounded-xl transition-colors"
+                  className="inline-block bg-olive-600 hover:bg-olive-700 text-white text-sm font-bold px-6 py-3 rounded-xl transition-colors"
                 >
                   {popup.button_text}
                 </Link>
               ) : (
                 <button
                   onClick={dismiss}
-                  className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold px-6 py-3 rounded-xl transition-colors"
+                  className="bg-olive-600 hover:bg-olive-700 text-white text-sm font-bold px-6 py-3 rounded-xl transition-colors"
                 >
                   {popup.button_text}
                 </button>

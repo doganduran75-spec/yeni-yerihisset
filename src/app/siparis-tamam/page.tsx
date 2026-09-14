@@ -65,7 +65,7 @@ function SiparisTamamInner() {
         <div className="flex flex-col gap-3">
           <Link
             href="/account?tab=orders"
-            className={cn(buttonVariants({ variant: "default" }), "h-12 rounded-2xl bg-blue-600 font-bold")}
+            className={cn(buttonVariants({ variant: "default" }), "h-12 rounded-2xl bg-olive-600 font-bold")}
           >
             Siparişlerimi Gör
           </Link>
@@ -83,7 +83,7 @@ function SiparisTamamInner() {
 
 export default function SiparisTamamPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center animate-pulse text-blue-600 font-bold">Yükleniyor...</div>}>
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center animate-pulse text-olive-600 font-bold">Yükleniyor...</div>}>
       <SiparisTamamInner />
     </Suspense>
   );

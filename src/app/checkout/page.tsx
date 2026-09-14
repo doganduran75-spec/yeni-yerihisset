@@ -333,7 +333,7 @@ export default function CheckoutPage() {
   // URL'den hata parametresini oku (iyzico başarısız callback)
   const paymentFailed = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("hatali") === "1";
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center animate-pulse text-blue-600 font-bold">Ödeme Sayfası Hazırlanıyor...</div>;
+  if (loading) return <div className="min-h-screen flex items-center justify-center animate-pulse text-olive-600 font-bold">Ödeme Sayfası Hazırlanıyor...</div>;
 
   if (orderSuccess) {
     const isBankTransfer = paymentMethod === "bank_transfer";
@@ -374,7 +374,7 @@ export default function CheckoutPage() {
             </p>
           )}
           <div className="flex flex-col gap-3">
-            <Link href="/account?tab=orders" className={cn(buttonVariants({ variant: "default" }), "h-12 rounded-2xl bg-blue-600 font-bold")}>
+            <Link href="/account?tab=orders" className={cn(buttonVariants({ variant: "default" }), "h-12 rounded-2xl bg-olive-600 font-bold")}>
               Siparişlerimi Gör
             </Link>
             <Link href="/" className={cn(buttonVariants({ variant: "ghost" }), "h-12 rounded-2xl font-bold")}>
@@ -434,7 +434,7 @@ export default function CheckoutPage() {
             {/* Step 0: Personal Info */}
             <section className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 bg-blue-600 text-white rounded-2xl flex items-center justify-center font-black shadow-lg shadow-blue-100 italic">01</div>
+                  <div className="w-10 h-10 bg-olive-600 text-white rounded-2xl flex items-center justify-center font-black shadow-lg shadow-olive-100 italic">01</div>
                   <h3 className="text-2xl font-black text-slate-900 uppercase italic tracking-tighter">Müşteri Bilgileri</h3>
                </div>
                <div className="bento-card bg-white !p-8">
@@ -457,7 +457,7 @@ export default function CheckoutPage() {
                           value={personalInfo.firstName}
                           onChange={e => setPersonalInfo({...personalInfo, firstName: e.target.value})}
                           placeholder="Ad"
-                          className="h-14 rounded-2xl bg-white border-slate-200 font-bold focus:ring-blue-600"
+                          className="h-14 rounded-2xl bg-white border-slate-200 font-bold focus:ring-olive-600"
                         />
                       </div>
                       <div className="space-y-2">
@@ -466,7 +466,7 @@ export default function CheckoutPage() {
                           value={personalInfo.lastName}
                           onChange={e => setPersonalInfo({...personalInfo, lastName: e.target.value})}
                           placeholder="Soyad"
-                          className="h-14 rounded-2xl bg-white border-slate-200 font-bold focus:ring-blue-600"
+                          className="h-14 rounded-2xl bg-white border-slate-200 font-bold focus:ring-olive-600"
                         />
                       </div>
                     </div>
@@ -481,10 +481,10 @@ export default function CheckoutPage() {
                         onChange={e => setIdentityNumber(e.target.value.replace(/\D/g, "").slice(0, 11))}
                         placeholder="Örn: 12345678901"
                         maxLength={11}
-                        className="h-14 rounded-2xl bg-white border-slate-200 font-bold font-mono tracking-widest focus:ring-blue-600"
+                        className="h-14 rounded-2xl bg-white border-slate-200 font-bold font-mono tracking-widest focus:ring-olive-600"
                       />
                       <p className="text-[10px] text-slate-400 font-medium px-1 leading-relaxed">
-                        <span className="text-blue-500 font-bold">Yasal zorunluluk:</span> iyzico, 6493 sayılı Ödeme Hizmetleri Kanunu gereğince kimlik doğrulaması yapmaktadır. Bilgileriniz yalnızca fatura ve ödeme işlemleri için kullanılır.
+                        <span className="text-olive-600 font-bold">Yasal zorunluluk:</span> iyzico, 6493 sayılı Ödeme Hizmetleri Kanunu gereğince kimlik doğrulaması yapmaktadır. Bilgileriniz yalnızca fatura ve ödeme işlemleri için kullanılır.
                       </p>
                     </div>
                   </div>
@@ -495,10 +495,10 @@ export default function CheckoutPage() {
             <section className="space-y-6 animate-in fade-in slide-in-from-bottom-6">
                <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 bg-blue-600 text-white rounded-2xl flex items-center justify-center font-black shadow-lg shadow-blue-100 italic">02</div>
+                    <div className="w-10 h-10 bg-olive-600 text-white rounded-2xl flex items-center justify-center font-black shadow-lg shadow-olive-100 italic">02</div>
                     <h3 className="text-2xl font-black text-slate-900 uppercase italic tracking-tighter">Teslimat Adresi</h3>
                   </div>
-                  <Link href="/account?tab=addresses&returnTo=/checkout" className="text-blue-600 font-black text-xs uppercase tracking-widest flex items-center gap-2 hover:translate-x-1 transition-transform">
+                  <Link href="/account?tab=addresses&returnTo=/checkout" className="text-olive-600 font-black text-xs uppercase tracking-widest flex items-center gap-2 hover:translate-x-1 transition-transform">
                     <Plus size={16} /> ADRES EKLE
                   </Link>
                </div>
@@ -508,12 +508,12 @@ export default function CheckoutPage() {
                   className="bento-card border-2 border-dashed border-slate-200 bg-slate-50/50 flex flex-col items-center justify-center py-16 gap-4 group cursor-pointer" 
                   onClick={() => router.push("/account?tab=addresses&returnTo=/checkout")}
                  >
-                    <div className="w-16 h-16 bg-white rounded-3xl flex items-center justify-center text-slate-300 group-hover:text-blue-600 transition-colors shadow-sm">
+                    <div className="w-16 h-16 bg-white rounded-3xl flex items-center justify-center text-slate-300 group-hover:text-olive-600 transition-colors shadow-sm">
                       <MapPin size={32} />
                     </div>
                     <p className="text-sm font-bold text-slate-500 text-center leading-relaxed italic">
                       Henüz kayıtlı adresiniz bulunmuyor. <br/> 
-                      <span className="text-blue-600 not-italic uppercase font-black tracking-widest text-xs">YENİ ADRES EKLEMEK İÇİN TIKLAYIN</span>
+                      <span className="text-olive-600 not-italic uppercase font-black tracking-widest text-xs">YENİ ADRES EKLEMEK İÇİN TIKLAYIN</span>
                     </p>
                  </div>
                ) : (
@@ -525,19 +525,19 @@ export default function CheckoutPage() {
                       className={cn(
                         "bento-card !p-6 cursor-pointer relative transition-all duration-300",
                         selectedShippingId === addr.id 
-                          ? "border-blue-600 bg-blue-50/30 group ring-4 ring-blue-50" 
+                          ? "border-olive-600 bg-olive-50/30 group ring-4 ring-olive-50" 
                           : "bg-white hover:border-slate-300"
                       )}
                      >
                         <div className="flex justify-between items-start mb-4">
                            <span className={cn(
                              "text-[9px] font-black uppercase tracking-[0.2em] px-3 py-1 rounded-full",
-                             selectedShippingId === addr.id ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"
+                             selectedShippingId === addr.id ? "bg-olive-600 text-white" : "bg-slate-100 text-slate-500"
                            )}>
                              {addr.address_name}
                            </span>
                            {selectedShippingId === addr.id && (
-                             <div className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center shadow-lg animate-in zoom-in">
+                             <div className="w-6 h-6 bg-olive-600 text-white rounded-full flex items-center justify-center shadow-lg animate-in zoom-in">
                                <CheckCircle2 size={14} />
                              </div>
                            )}
@@ -556,18 +556,18 @@ export default function CheckoutPage() {
             {/* Step 2: Billing Address */}
             <section className="space-y-6 animate-in fade-in slide-in-from-bottom-8">
                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 bg-blue-600 text-white rounded-2xl flex items-center justify-center font-black shadow-lg shadow-blue-100 italic">03</div>
+                  <div className="w-10 h-10 bg-olive-600 text-white rounded-2xl flex items-center justify-center font-black shadow-lg shadow-olive-100 italic">03</div>
                   <h3 className="text-2xl font-black text-slate-900 uppercase italic tracking-tighter">Fatura Bilgileri</h3>
                </div>
                
                <div className="bento-card bg-white !p-0 overflow-hidden">
                   <div 
-                    className="p-8 flex items-center gap-4 cursor-pointer select-none bg-blue-50/30 border-b border-blue-100 transition-colors hover:bg-blue-50/50"
+                    className="p-8 flex items-center gap-4 cursor-pointer select-none bg-olive-50/30 border-b border-olive-100 transition-colors hover:bg-olive-50/50"
                     onClick={() => setIsSameAsShipping(!isSameAsShipping)}
                   >
                     <div className={cn(
                       "w-8 h-8 rounded-xl border-2 flex items-center justify-center transition-all shadow-sm",
-                      isSameAsShipping ? "bg-blue-600 border-blue-600 text-white" : "bg-white border-slate-200"
+                      isSameAsShipping ? "bg-olive-600 border-olive-600 text-white" : "bg-white border-slate-200"
                     )}>
                       {isSameAsShipping && <CheckCircle2 size={18} />}
                     </div>
@@ -582,12 +582,12 @@ export default function CheckoutPage() {
                           onClick={() => setSelectedBillingId(addr.id)}
                           className={cn(
                             "bento-card !p-6 cursor-pointer transition-all",
-                            selectedBillingId === addr.id ? "border-blue-600 bg-blue-50/30 ring-4 ring-blue-50" : "bg-white"
+                            selectedBillingId === addr.id ? "border-olive-600 bg-olive-50/30 ring-4 ring-olive-50" : "bg-white"
                           )}
                          >
                             <div className="flex justify-between items-start mb-4">
                                <span className="text-[9px] font-black uppercase tracking-[0.2em] bg-slate-100 text-slate-500 px-3 py-1 rounded-full">{addr.address_name}</span>
-                               {selectedBillingId === addr.id && <CheckCircle2 size={18} className="text-blue-600 animate-in zoom-in" />}
+                               {selectedBillingId === addr.id && <CheckCircle2 size={18} className="text-olive-600 animate-in zoom-in" />}
                             </div>
                             <p className="font-black text-slate-900 text-md italic uppercase">{addr.first_name} {addr.last_name}</p>
                             <p className="text-xs text-slate-500 mt-2 font-medium line-clamp-1">{addr.address_detail}</p>
@@ -601,7 +601,7 @@ export default function CheckoutPage() {
             {/* Step 3: Payment */}
             <section className="space-y-6 animate-in fade-in slide-in-from-bottom-10">
                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 bg-blue-600 text-white rounded-2xl flex items-center justify-center font-black shadow-lg shadow-blue-100 italic">04</div>
+                  <div className="w-10 h-10 bg-olive-600 text-white rounded-2xl flex items-center justify-center font-black shadow-lg shadow-olive-100 italic">04</div>
                   <h3 className="text-2xl font-black text-slate-900 uppercase italic tracking-tighter">Ödeme Yöntemi</h3>
                </div>
                <div className={cn("grid gap-6", bankTransferEnabled ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1")}>
@@ -617,7 +617,7 @@ export default function CheckoutPage() {
                   >
                      <div className={cn(
                        "w-20 h-20 rounded-[2rem] flex items-center justify-center transition-transform group-hover:scale-110",
-                       paymentMethod === "credit_card" ? "bg-white/10 text-blue-400" : "bg-slate-100 text-slate-500"
+                       paymentMethod === "credit_card" ? "bg-white/10 text-olive-400" : "bg-slate-100 text-slate-500"
                      )}>
                         <CreditCard size={40} />
                      </div>
@@ -626,7 +626,7 @@ export default function CheckoutPage() {
                         <p className={cn("text-[10px] font-bold uppercase tracking-widest", paymentMethod === "credit_card" ? "text-slate-400" : "text-slate-400")}>iyzico Güvencesiyle Ödeyin</p>
                      </div>
                      {paymentMethod === "credit_card" && (
-                       <div className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center shadow-lg animate-in zoom-in absolute top-4 right-4">
+                       <div className="w-6 h-6 bg-olive-600 text-white rounded-full flex items-center justify-center shadow-lg animate-in zoom-in absolute top-4 right-4">
                          <CheckCircle2 size={14} />
                        </div>
                      )}
@@ -683,7 +683,7 @@ export default function CheckoutPage() {
             <div className="sticky top-32 space-y-8 animate-in fade-in slide-in-from-right duration-1000">
                <div className="bento-card !p-0 bg-white shadow-2xl shadow-slate-200/50">
                   <div className="bg-slate-900 p-8 text-white relative overflow-hidden">
-                     <div className="absolute top-0 right-0 w-32 h-32 bg-blue-600 blur-[80px] opacity-30 -mr-16 -mt-16" />
+                     <div className="absolute top-0 right-0 w-32 h-32 bg-olive-600 blur-[80px] opacity-30 -mr-16 -mt-16" />
                      <h2 className="text-2xl font-black uppercase tracking-tighter italic relative z-10">Sipariş Özeti</h2>
                      <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] relative z-10 mt-1">Ödeme Öncesi Son Kontrol</p>
                   </div>
@@ -789,10 +789,10 @@ export default function CheckoutPage() {
 
                     <Separator className="bg-slate-100" />
                     
-                    <div className="flex flex-col gap-1 p-6 bg-blue-50/50 rounded-3xl border-2 border-blue-100 relative overflow-hidden group">
-                      <div className="absolute top-0 right-0 w-16 h-16 bg-blue-100 blur-3xl opacity-50 group-hover:scale-150 transition-transform duration-1000" />
-                      <span className="text-[9px] font-black text-blue-400 uppercase tracking-widest leading-none">Ödenecek Tutar</span>
-                      <span className="text-4xl font-black text-blue-600 italic tracking-tighter pt-1">
+                    <div className="flex flex-col gap-1 p-6 bg-olive-50/50 rounded-3xl border-2 border-olive-100 relative overflow-hidden group">
+                      <div className="absolute top-0 right-0 w-16 h-16 bg-olive-100 blur-3xl opacity-50 group-hover:scale-150 transition-transform duration-1000" />
+                      <span className="text-[9px] font-black text-olive-400 uppercase tracking-widest leading-none">Ödenecek Tutar</span>
+                      <span className="text-4xl font-black text-olive-600 italic tracking-tighter pt-1">
                         ₺{finalTotal.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
                       </span>
                     </div>
@@ -800,7 +800,7 @@ export default function CheckoutPage() {
                     <Button
                       onClick={handlePlaceOrder}
                       disabled={placing || !selectedShippingId}
-                      className="w-full h-20 rounded-[2rem] bg-blue-600 hover:bg-blue-700 text-xl font-black shadow-2xl shadow-blue-100 uppercase tracking-tighter group mt-2 transition-all active:scale-95 disabled:opacity-50"
+                      className="w-full h-20 rounded-[2rem] bg-olive-600 hover:bg-olive-700 text-xl font-black shadow-2xl shadow-olive-100 uppercase tracking-tighter group mt-2 transition-all active:scale-95 disabled:opacity-50"
                     >
                       {placing ? "Hazırlanıyor..." : <>SİPARİŞİ TAMAMLA <ArrowRight size={24} className="ml-2 group-hover:translate-x-3 transition-transform duration-500" /></>}
                     </Button>
@@ -811,15 +811,15 @@ export default function CheckoutPage() {
                         <span>Güvenli <br/> Ödeme</span>
                       </div>
                       <div className="flex items-center gap-3 text-[9px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 p-3 rounded-2xl">
-                        <Truck size={16} className="text-blue-500" />
+                        <Truck size={16} className="text-olive-600" />
                         <span>Ücretsiz <br/> Sigorta</span>
                       </div>
                     </div>
                   </div>
                </div>
 
-               <div className="p-8 bg-blue-600/5 rounded-[2rem] border-2 border-blue-100 border-dashed text-center">
-                  <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest leading-relaxed italic">
+               <div className="p-8 bg-olive-600/5 rounded-[2rem] border-2 border-olive-100 border-dashed text-center">
+                  <p className="text-[10px] font-black text-olive-600 uppercase tracking-widest leading-relaxed italic">
                      "Siparişi Tamamla" butonuna basarak Mesafeli Satış Sözleşmesi'ni ve Ön Bilgilendirme Formu'nu kabul etmiş sayılırsınız.
                   </p>
                </div>

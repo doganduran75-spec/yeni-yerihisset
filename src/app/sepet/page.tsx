@@ -822,7 +822,7 @@ export default function CartPage() {
                     <span>GÜVENLİ ÖDEME (SSL 256-BIT)</span>
                   </div>
                   <div className="flex items-center gap-3 text-[11px] font-bold text-slate-500">
-                    <CreditCard size={18} className="text-blue-500" />
+                    <CreditCard size={18} className="text-olive-600" />
                     <span>TÜM KARTLARA TAKSİT İMKANI</span>
                   </div>
                   <div className="flex items-center gap-3 text-[11px] font-bold text-slate-500">

@@ -126,7 +126,7 @@ export default function StockNotifyModal({
             </div>
             <Button
               onClick={onClose}
-              className="w-full h-12 rounded-2xl bg-blue-600 hover:bg-blue-700 font-bold"
+              className="w-full h-12 rounded-2xl bg-olive-600 hover:bg-olive-700 font-bold"
             >
               Tamam
             </Button>
@@ -160,7 +160,7 @@ export default function StockNotifyModal({
               ) : user ? (
                 /* Kayıtlı kullanıcı */
                 <div className="space-y-4">
-                  <div className="p-4 bg-blue-50 rounded-2xl text-sm text-blue-700 font-medium">
+                  <div className="p-4 bg-olive-50 rounded-2xl text-sm text-olive-700 font-medium">
                     <span className="font-bold">{user.email}</span> adresinize
                     haber vereceğiz.
                   </div>
@@ -170,7 +170,7 @@ export default function StockNotifyModal({
                   <Button
                     onClick={handleSubmit}
                     disabled={loading}
-                    className="w-full h-12 rounded-2xl bg-blue-600 hover:bg-blue-700 font-bold"
+                    className="w-full h-12 rounded-2xl bg-olive-600 hover:bg-olive-700 font-bold"
                   >
                     {loading ? (
                       <Loader2 size={18} className="animate-spin mr-2" />
@@ -237,7 +237,7 @@ export default function StockNotifyModal({
                     <Button
                       onClick={handleSubmit}
                       disabled={loading || !canSubmitGuest}
-                      className="w-full h-11 rounded-xl bg-blue-600 hover:bg-blue-700 font-bold disabled:opacity-40"
+                      className="w-full h-11 rounded-xl bg-olive-600 hover:bg-olive-700 font-bold disabled:opacity-40"
                     >
                       {loading ? (
                         <Loader2 size={16} className="animate-spin mr-2" />

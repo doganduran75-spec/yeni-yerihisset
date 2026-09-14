@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils";
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center font-bold text-blue-600">Yükleniyor...</div>}>
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center font-bold text-olive-600">Yükleniyor...</div>}>
       <LoginForm />
     </Suspense>
   );
@@ -176,8 +176,8 @@ function LoginForm() {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col justify-center items-center p-4">
-      <Link href="/" className="mb-8 text-3xl font-black tracking-tighter text-blue-600 flex items-center gap-2">
-        <div className="w-10 h-10 bg-blue-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-blue-100">
+      <Link href="/" className="mb-8 text-3xl font-black tracking-tighter text-olive-600 flex items-center gap-2">
+        <div className="w-10 h-10 bg-olive-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-olive-100">
            Y
         </div>
         Yeri<span className="text-slate-900">Hisset</span>
@@ -189,7 +189,7 @@ function LoginForm() {
             onClick={() => { setIsLogin(true); setForgot(false); setError(null); }}
             className={cn(
               "flex-1 py-5 text-sm font-black transition-all",
-              isLogin && !forgot ? "text-blue-600 border-b-2 border-blue-600 bg-blue-50/30" : "text-slate-400 hover:text-slate-600"
+              isLogin && !forgot ? "text-olive-600 border-b-2 border-olive-600 bg-olive-50/30" : "text-slate-400 hover:text-slate-600"
             )}
           >
             GİRİŞ YAP
@@ -198,7 +198,7 @@ function LoginForm() {
             onClick={() => { setIsLogin(false); setForgot(false); setError(null); }}
             className={cn(
               "flex-1 py-5 text-sm font-black transition-all",
-              !isLogin && !forgot ? "text-blue-600 border-b-2 border-blue-600 bg-blue-50/30" : "text-slate-400 hover:text-slate-600"
+              !isLogin && !forgot ? "text-olive-600 border-b-2 border-olive-600 bg-olive-50/30" : "text-slate-400 hover:text-slate-600"
             )}
           >
             KAYIT OL
@@ -301,7 +301,7 @@ function LoginForm() {
                   <button
                     type="button"
                     onClick={() => { setForgot(true); setError(null); setSuccess(null); }}
-                    className="text-[10px] font-bold text-blue-600 hover:underline"
+                    className="text-[10px] font-bold text-olive-600 hover:underline"
                   >
                     Şifremi Unuttum
                   </button>
@@ -334,7 +334,7 @@ function LoginForm() {
                 <button
                   type="button"
                   onClick={() => { setForgot(false); setError(null); setSuccess(null); }}
-                  className="font-bold text-blue-600 hover:underline"
+                  className="font-bold text-olive-600 hover:underline"
                 >
                   ← Girişe dön
                 </button>
@@ -358,7 +358,7 @@ function LoginForm() {
             <Button 
               type="submit" 
               disabled={loading}
-              className="w-full h-14 rounded-2xl bg-blue-600 hover:bg-blue-700 text-sm font-black tracking-widest uppercase shadow-xl shadow-blue-100 group transition-all"
+              className="w-full h-14 rounded-2xl bg-olive-600 hover:bg-olive-700 text-sm font-black tracking-widest uppercase shadow-xl shadow-olive-100 group transition-all"
             >
               {loading ? "İŞLEM YAPILIYOR..." : forgot ? "SIFIRLAMA BAĞLANTISI GÖNDER" : (isLogin ? "GİRİŞ YAP" : "HESAP OLUŞTUR")}
               <ArrowRight size={18} className="ml-2 group-hover:translate-x-1 transition-transform" />

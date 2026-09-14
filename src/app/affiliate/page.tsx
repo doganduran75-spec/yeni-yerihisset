@@ -48,7 +48,7 @@ export default function AffiliateLandingPage() {
       {/* Header */}
       <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <Link href="/" className="text-xl font-black tracking-tighter text-blue-600">
+          <Link href="/" className="text-xl font-black tracking-tighter text-olive-600">
             Yeri<span className="text-slate-900">Hisset</span>
           </Link>
           <div className="flex items-center gap-3">
@@ -59,7 +59,7 @@ export default function AffiliateLandingPage() {
               href="/account?tab=affiliate"
               className={cn(
                 buttonVariants({ variant: "default" }),
-                "bg-blue-600 font-bold rounded-xl shadow-lg shadow-blue-100"
+                "bg-olive-600 font-bold rounded-xl shadow-lg shadow-olive-100"
               )}
             >
               Hemen Başvur
@@ -69,7 +69,7 @@ export default function AffiliateLandingPage() {
       </header>
 
       {/* Hero */}
-      <section className="py-24 md:py-32 bg-gradient-to-br from-blue-600 to-blue-800 text-white relative overflow-hidden">
+      <section className="py-24 md:py-32 bg-gradient-to-br from-olive-600 to-olive-800 text-white relative overflow-hidden">
         <div className="absolute inset-0 opacity-10">
           <div className="absolute top-20 left-20 w-72 h-72 bg-white rounded-full blur-3xl" />
           <div className="absolute bottom-20 right-20 w-96 h-96 bg-white rounded-full blur-3xl" />
@@ -80,9 +80,9 @@ export default function AffiliateLandingPage() {
           </div>
           <h1 className="text-5xl md:text-7xl font-black tracking-tighter mb-6 leading-tight">
             Paylaş,<br />
-            <span className="text-blue-200">Kazan.</span>
+            <span className="text-olive-200">Kazan.</span>
           </h1>
-          <p className="text-xl text-blue-100 max-w-2xl mx-auto mb-10 font-medium leading-relaxed">
+          <p className="text-xl text-olive-100 max-w-2xl mx-auto mb-10 font-medium leading-relaxed">
             YeriHisset ürünlerini paylaş, her satıştan %10 komisyon kazan.
             Bağlantı oluşturmana gerek yok — sadece URL'ye <code className="bg-white/20 px-2 py-0.5 rounded font-mono">?ref=KODUN</code> ekle.
           </p>
@@ -90,7 +90,7 @@ export default function AffiliateLandingPage() {
             href="/account?tab=affiliate"
             className={cn(
               buttonVariants({ variant: "secondary" }),
-              "h-16 px-10 text-lg font-black rounded-2xl shadow-2xl gap-2 text-blue-700"
+              "h-16 px-10 text-lg font-black rounded-2xl shadow-2xl gap-2 text-olive-700"
             )}
           >
             Ücretsiz Katıl <ChevronRight size={20} />
@@ -110,7 +110,7 @@ export default function AffiliateLandingPage() {
           <div className="grid md:grid-cols-3 gap-8 max-w-4xl mx-auto">
             {steps.map((step) => (
               <div key={step.num} className="bg-white p-8 rounded-3xl border shadow-sm text-center space-y-4">
-                <div className="w-14 h-14 bg-blue-600 text-white rounded-2xl flex items-center justify-center text-2xl font-black mx-auto">
+                <div className="w-14 h-14 bg-olive-600 text-white rounded-2xl flex items-center justify-center text-2xl font-black mx-auto">
                   {step.num}
                 </div>
                 <h3 className="text-xl font-black text-slate-900">{step.title}</h3>
@@ -130,7 +130,7 @@ export default function AffiliateLandingPage() {
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6 max-w-5xl mx-auto">
             {benefits.map(({ icon: Icon, title, desc }) => (
               <div key={title} className="p-6 rounded-3xl border bg-slate-50 space-y-3">
-                <div className="w-12 h-12 bg-blue-100 rounded-2xl flex items-center justify-center text-blue-600">
+                <div className="w-12 h-12 bg-olive-100 rounded-2xl flex items-center justify-center text-olive-600">
                   <Icon size={24} />
                 </div>
                 <h3 className="font-black text-slate-900">{title}</h3>
@@ -166,7 +166,7 @@ export default function AffiliateLandingPage() {
             ].map(({ q, a }) => (
               <div key={q} className="bg-white p-6 rounded-2xl border space-y-2">
                 <div className="flex items-start gap-3">
-                  <CheckCircle2 size={18} className="text-blue-600 shrink-0 mt-0.5" />
+                  <CheckCircle2 size={18} className="text-olive-600 shrink-0 mt-0.5" />
                   <div>
                     <h4 className="font-bold text-slate-900">{q}</h4>
                     <p className="text-sm text-slate-500 mt-1 font-medium leading-relaxed">{a}</p>
@@ -179,10 +179,10 @@ export default function AffiliateLandingPage() {
       </section>
 
       {/* CTA */}
-      <section className="py-24 bg-blue-600 text-white text-center">
+      <section className="py-24 bg-olive-600 text-white text-center">
         <div className="container mx-auto px-4">
           <h2 className="text-4xl font-black mb-4">Hemen Başlamaya Hazır mısın?</h2>
-          <p className="text-blue-100 mb-8 font-medium text-lg">
+          <p className="text-olive-100 mb-8 font-medium text-lg">
             Hesabın varsa şimdi başvur, yoksa ücretsiz kayıt ol.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -190,7 +190,7 @@ export default function AffiliateLandingPage() {
               href="/account?tab=affiliate"
               className={cn(
                 buttonVariants({ variant: "secondary" }),
-                "h-14 px-10 text-lg font-black rounded-2xl text-blue-700"
+                "h-14 px-10 text-lg font-black rounded-2xl text-olive-700"
               )}
             >
               Affiliate Ol
