@@ -49,20 +49,9 @@ export default function DesktopHome({
   return (
     <div style={{ fontFamily: JAK, background: C.base, color: C.ink }}>
       {/* ── Karşılama / segmentasyon ── */}
-      <section className="container mx-auto px-8 pt-16 pb-4 max-w-6xl text-center">
-        <span className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 mb-7"
-          style={{ background: C.leafTint, border: `1px solid ${C.leafBorder}`, color: C.greenText, fontSize: 13, fontWeight: 600 }}>
-          <Sprout size={15} /> {HC.hero.badge}
-        </span>
-        <h2 style={{ fontFamily: EPI, fontWeight: 600, fontSize: 46, lineHeight: 1.1, letterSpacing: "-0.02em", color: C.ink, textWrap: "balance" }}>
-          {HC.hero.question}
-        </h2>
-        <p className="mx-auto" style={{ color: C.stone, fontSize: 18, lineHeight: 1.55, marginTop: 16, maxWidth: 640 }}>
-          {HC.hero.subtitleDesktop}
-        </p>
-
+      <section className="container mx-auto px-8 pt-14 pb-4 max-w-6xl text-center">
         {/* İki büyük kart */}
-        <div className="grid grid-cols-2 gap-6 mt-12 text-left max-w-5xl mx-auto">
+        <div className="grid grid-cols-2 gap-6 text-left max-w-5xl mx-auto">
           <ChoiceCard
             href={HC.cards.learn.href} onClick={() => track("hero_click", { side: "kesif", to: HC.cards.learn.href })}
             icon={GraduationCap} pill={HC.cards.learn.pill}
