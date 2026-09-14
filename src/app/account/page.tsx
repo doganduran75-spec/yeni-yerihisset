@@ -65,6 +65,14 @@ function formatPhone(digits: string): string {
   return `${d.slice(0, 3)} ${d.slice(3, 6)} ${d.slice(6, 8)} ${d.slice(8, 10)}`;
 }
 
+// Sipariş "Detaylar" paneli yardımcıları
+function parseShippingAddr(raw: any): { name?: string; phone?: string; address?: string; district?: string; city?: string } | null {
+  if (!raw) return null;
+  try { return typeof raw === "string" ? JSON.parse(raw) : raw; } catch { return null; }
+}
+function payMethodLabel(m?: string): string { return m === "bank_transfer" ? "Havale / EFT" : "Kart (iyzico)"; }
+function payStatusLabel(s?: string): string { return s === "paid" ? "Ödendi" : s === "failed" ? "Başarısız" : "Bekliyor"; }
+
 // Profilim akordiyon bölümü (Profil / Adres / Güvenlik). Kapalı içerik DOM'da
 // kalır (hidden), böylece form durumları korunur.
 function AccSection({ title, isOpen, onToggle, children }: {
@@ -121,6 +129,7 @@ function AccountPageInner() {
   const returnTo = searchParams.get("returnTo"); // checkout'tan gelindiyse kaydettikten sonra dönülecek sayfa
   
   const [activeTab, setActiveTab] = useState<TabType>(initialTab);
+  const [expandedOrder, setExpandedOrder] = useState<string | null>(null); // sipariş "Detaylar"
   // Profilim akordiyonu: aynı anda tek bölüm açık (Profil / Adres / Güvenlik)
   const [openSection, setOpenSection] = useState<"profil" | "adres" | "guvenlik" | null>(
     rawTab === "addresses" ? "adres" : rawTab === "security" ? "guvenlik" : "profil"
@@ -868,7 +877,14 @@ function AccountPageInner() {
                                   <RotateCcw size={14} /> Siparişi Tekrar Oluştur
                                 </Button>
                               )}
-                              <Button variant="ghost" size="sm" className="font-bold text-xs underline">Detaylar</Button>
+                              <Button
+                                variant="ghost" size="sm"
+                                onClick={() => setExpandedOrder(expandedOrder === order.id ? null : order.id)}
+                                className="font-bold text-xs gap-1"
+                              >
+                                Detaylar
+                                <ChevronDown size={14} className={cn("transition-transform", expandedOrder === order.id && "rotate-180")} />
+                              </Button>
                            </div>
                         </div>
                         <CardContent className="p-4 md:p-6">
@@ -896,6 +912,51 @@ function AccountPageInner() {
                                 </div>
                               ))}
                            </div>
+
+                           {expandedOrder === order.id && (() => {
+                             const addr = parseShippingAddr(order.shipping_address);
+                             const itemsTotal = (order.order_items || []).reduce((s: number, i: any) => s + (Number(i.unit_price) * Number(i.quantity)), 0);
+                             const discount = Number(order.coupon_discount || 0);
+                             const shipping = Math.max(0, Number(order.total_amount) - itemsTotal + discount);
+                             return (
+                               <div className="mt-5 pt-5 border-t border-slate-100 grid sm:grid-cols-2 gap-5 text-sm animate-in fade-in slide-in-from-top-1">
+                                 {/* Teslimat */}
+                                 <div>
+                                   <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-1.5">Teslimat Adresi</p>
+                                   {addr ? (
+                                     <div className="text-slate-600 leading-relaxed">
+                                       {addr.name && <p className="font-bold text-slate-800">{addr.name}</p>}
+                                       {addr.address && <p>{addr.address}</p>}
+                                       {(addr.district || addr.city) && <p>{[addr.district, addr.city].filter(Boolean).join(" / ")}</p>}
+                                       {addr.phone && <p className="text-slate-400">{addr.phone}</p>}
+                                     </div>
+                                   ) : <p className="text-slate-400">—</p>}
+                                 </div>
+                                 {/* Ödeme & Kargo */}
+                                 <div className="space-y-3">
+                                   <div>
+                                     <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-1.5">Ödeme</p>
+                                     <p className="text-slate-700">
+                                       {payMethodLabel(order.payment_method)} · <span className={cn("font-bold", order.payment_status === "paid" ? "text-green-600" : order.payment_status === "failed" ? "text-red-500" : "text-amber-600")}>{payStatusLabel(order.payment_status)}</span>
+                                     </p>
+                                   </div>
+                                   {order.kargonomi_tracking_code && (
+                                     <div>
+                                       <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-1.5">Kargo Takip No</p>
+                                       <p className="font-mono font-bold text-slate-700">{order.kargonomi_tracking_code}</p>
+                                     </div>
+                                   )}
+                                 </div>
+                                 {/* Tutar dökümü */}
+                                 <div className="sm:col-span-2 rounded-xl bg-slate-50 p-4 space-y-1.5">
+                                   <div className="flex justify-between"><span className="text-slate-500">Ürünler</span><span className="font-bold text-slate-800">₺{itemsTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span></div>
+                                   {discount > 0 && <div className="flex justify-between text-green-600"><span>İndirim</span><span className="font-bold">-₺{discount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span></div>}
+                                   <div className="flex justify-between"><span className="text-slate-500">Kargo</span><span className="font-bold text-slate-800">{shipping > 0 ? `₺${shipping.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}` : "Ücretsiz"}</span></div>
+                                   <div className="flex justify-between pt-1.5 border-t border-slate-200"><span className="font-black text-slate-900">Toplam</span><span className="font-black text-olive-600">₺{Number(order.total_amount).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span></div>
+                                 </div>
+                               </div>
+                             );
+                           })()}
                         </CardContent>
                       </Card>
                     ))}
