@@ -224,9 +224,6 @@ function MessagesInner() {
                     )}
                   </div>
                   <p className="text-xs font-bold text-slate-700 truncate">{t.first_name} {t.last_name}</p>
-                  <p className="text-[11px] text-slate-400 truncate mt-0.5">
-                    {t.last_role === "admin" ? "Siz: " : ""}{t.last_content}
-                  </p>
                 </div>
                 {selectedId === t.order_id && <div className="absolute right-0 top-0 bottom-0 w-1 bg-blue-600" />}
               </button>
@@ -260,20 +257,27 @@ function MessagesInner() {
                         <Phone size={10} /> {selected.phone}
                       </span>
                     )}
+                    {orderCtx && (
+                      <>
+                        <span className="flex items-center gap-1 text-[10px] font-black text-green-600 uppercase tracking-wider border-l pl-3">
+                          ₺{orderCtx.total.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                        </span>
+                        <span className="flex items-center gap-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-l pl-3">
+                          Toplam {orderCtx.orderCount} sipariş
+                        </span>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
               <Button variant="outline" size="sm" className="rounded-xl font-bold text-xs shrink-0" onClick={() => fetchMessages(selectedId)}>Yenile</Button>
             </div>
 
-            {/* Sipariş bağlamı — ürün kodu/numara, tutar, müşteri sipariş sayısı */}
-            {orderCtx && (
+            {/* Sipariş ürünleri (kod/numara ×adet) */}
+            {orderCtx && orderCtx.lines.length > 0 && (
               <div className="px-4 py-3 border-b bg-slate-50/60 shrink-0 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs">
-                <span className="font-bold text-slate-700">₺{orderCtx.total.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span>
-                <span className="text-slate-400">·</span>
-                <span className="text-slate-600">Müşteri toplam <b className="text-slate-800">{orderCtx.orderCount}</b> sipariş</span>
-                {orderCtx.lines.length > 0 && (
-                  <div className="w-full flex flex-wrap gap-2 pt-1">
+                {(
+                  <div className="w-full flex flex-wrap gap-2">
                     {orderCtx.lines.map((l, i) => (
                       <span key={i} className="inline-flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-2.5 py-1">
                         <span className="font-semibold text-slate-700">{l.title}</span>
