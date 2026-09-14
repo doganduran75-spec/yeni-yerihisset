@@ -91,10 +91,24 @@ function AccountPageInner() {
     router.push("/sepet");
   }
 
-  const initialTab = (searchParams.get("tab") as TabType) || "orders";
+  // "addresses" ve "security" artık ayrı sekme değil — Profilim altında; eski
+  // linkler (ör. checkout ?tab=addresses) Profilim'e düşsün.
+  const rawTab = searchParams.get("tab") as TabType | null;
+  const initialTab: TabType = (rawTab === "addresses" || rawTab === "security") ? "profile" : (rawTab || "orders");
   const returnTo = searchParams.get("returnTo"); // checkout'tan gelindiyse kaydettikten sonra dönülecek sayfa
   
   const [activeTab, setActiveTab] = useState<TabType>(initialTab);
+
+  // Eski derin linkler (?tab=addresses/security) Profilim'e düşer; ilgili
+  // alt bölüme yumuşak kaydır.
+  useEffect(() => {
+    if (rawTab === "addresses" || rawTab === "security") {
+      const id = rawTab === "security" ? "hesap-guvenlik" : "hesap-adres";
+      setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" }), 300);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
   const [orders, setOrders] = useState<any[]>([]);
@@ -522,8 +536,8 @@ function AccountPageInner() {
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
           {/* Navigation Sidebar */}
           <aside className="lg:col-span-1 space-y-4">
-            <div className="bg-white p-6 rounded-3xl border shadow-sm space-y-4">
-               <div className="flex items-center gap-4 mb-6">
+            <div className="bg-white p-4 lg:p-6 rounded-3xl border shadow-sm space-y-4">
+               <div className="flex items-center gap-3 lg:gap-4 mb-3 lg:mb-6">
                   <div className="w-12 h-12 bg-olive-100 rounded-full flex items-center justify-center text-olive-600">
                     <User size={24} />
                   </div>
@@ -533,22 +547,22 @@ function AccountPageInner() {
                   </div>
                </div>
                
-               <nav className="space-y-1">
+               <nav className="flex gap-2 overflow-x-auto -mx-4 px-4 pb-1 lg:mx-0 lg:px-0 lg:pb-0 lg:flex-col lg:gap-1 lg:overflow-visible" style={{ scrollbarWidth: "none" }}>
                   {[
                     { id: "orders", icon: Package, label: "Siparişlerim" },
                     { id: "messages", icon: MessageSquare, label: "Mesajlarım" },
                     { id: "coupons", icon: Ticket, label: "Kuponlarım" },
-                    { id: "addresses", icon: MapPin, label: "Adres Bilgilerim" },
-                    { id: "profile", icon: User, label: "Profil Bilgilerim" },
-                    { id: "security", icon: ShieldCheck, label: "Güvenlik Ayarları" },
+                    { id: "profile", icon: User, label: "Profilim" },
                     { id: "affiliate", icon: Link2, label: "Satış Ortaklığı" },
                   ].map((tab) => (
-                    <button 
+                    <button
                       key={tab.id}
                       onClick={() => setActiveTab(tab.id as TabType)}
                       className={cn(
-                        "w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-bold transition-all",
-                        activeTab === tab.id ? "bg-olive-600 text-white shadow-lg shadow-olive-100" : "text-slate-500 hover:bg-slate-50"
+                        "shrink-0 lg:w-full flex items-center gap-2 px-4 py-2.5 rounded-2xl text-sm font-bold whitespace-nowrap transition-all border lg:border-0",
+                        activeTab === tab.id
+                          ? "bg-olive-600 text-white border-olive-600 shadow-lg shadow-olive-100"
+                          : "text-slate-500 bg-slate-50 border-slate-100 lg:bg-transparent hover:bg-slate-100 lg:hover:bg-slate-50"
                       )}
                     >
                       <tab.icon size={18} /> {tab.label}
@@ -858,8 +872,56 @@ function AccountPageInner() {
               </section>
             )}
 
-            {activeTab === "addresses" && (
+            {activeTab === "profile" && (
               <section className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
+                <h2 className="text-2xl font-black text-slate-900">Profil Bilgilerim</h2>
+                <Card className="border-none shadow-sm overflow-hidden">
+                   <div className="bg-slate-50 p-6 border-b">
+                     <p className="text-sm font-medium text-slate-500 italic">Kişisel bilgilerinizi buradan güncelleyerek deneyiminizi özelleştirebilirsiniz.</p>
+                   </div>
+                   <CardContent className="p-8">
+                      <form onSubmit={handleUpdateProfile} className="space-y-6">
+                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            <div className="space-y-2">
+                               <label className="text-xs font-bold uppercase text-slate-500 px-1">E-Posta Adresi</label>
+                               <Input disabled value={user?.email} className="h-12 bg-slate-50 border-slate-100 text-slate-400 font-bold" />
+                               <p className="text-[10px] text-slate-400 mt-1 pl-1">E-posta adresi güvenliğiniz nedeniyle değiştirilemez.</p>
+                            </div>
+                            <div className="space-y-2">
+                               <label className="text-xs font-bold uppercase text-slate-500 px-1">Telefon</label>
+                               <Input
+                                 type="tel"
+                                 inputMode="numeric"
+                                 value={formatPhone(profile?.phone || "")}
+                                 onChange={e => {
+                                   const digits = e.target.value.replace(/\D/g, "").slice(0, 10);
+                                   if (digits.length > 0 && digits[0] !== "5") return;
+                                   setProfile({...profile, phone: digits});
+                                 }}
+                                 placeholder="5XX XXX XX XX"
+                                 className="h-12 tracking-wide"
+                               />
+                            </div>
+                            <div className="space-y-2">
+                               <label className="text-xs font-bold uppercase text-slate-500 px-1">Ad</label>
+                               <Input value={profile?.first_name || ""} onChange={e => setProfile({...profile, first_name: e.target.value})} placeholder="Adınız" className="h-12 font-bold" />
+                            </div>
+                            <div className="space-y-2">
+                               <label className="text-xs font-bold uppercase text-slate-500 px-1">Soyad</label>
+                               <Input value={profile?.last_name || ""} onChange={e => setProfile({...profile, last_name: e.target.value})} placeholder="Soyadınız" className="h-12 font-bold" />
+                            </div>
+                         </div>
+                         <div className="flex justify-end pt-4">
+                            <Button type="submit" className="bg-olive-600 px-12 h-14 rounded-2xl font-black shadow-lg shadow-olive-100 tracking-tighter uppercase transition-transform active:scale-95">DEĞİŞİKLİKLERİ KAYDET</Button>
+                         </div>
+                      </form>
+                   </CardContent>
+                </Card>
+              </section>
+            )}
+
+            {activeTab === "profile" && (
+              <section id="hesap-adres" className="space-y-6 animate-in fade-in slide-in-from-bottom-2 scroll-mt-24">
                 <div className="flex items-center justify-between">
                    <h2 className="text-2xl font-black text-slate-900">Adres Bilgilerim</h2>
                    {!showAddressForm && (
@@ -1021,53 +1083,6 @@ function AccountPageInner() {
               </section>
             )}
 
-            {activeTab === "profile" && (
-              <section className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
-                <h2 className="text-2xl font-black text-slate-900">Profil Bilgilerim</h2>
-                <Card className="border-none shadow-sm overflow-hidden">
-                   <div className="bg-slate-50 p-6 border-b">
-                     <p className="text-sm font-medium text-slate-500 italic">Kişisel bilgilerinizi buradan güncelleyerek deneyiminizi özelleştirebilirsiniz.</p>
-                   </div>
-                   <CardContent className="p-8">
-                      <form onSubmit={handleUpdateProfile} className="space-y-6">
-                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                            <div className="space-y-2">
-                               <label className="text-xs font-bold uppercase text-slate-500 px-1">E-Posta Adresi</label>
-                               <Input disabled value={user?.email} className="h-12 bg-slate-50 border-slate-100 text-slate-400 font-bold" />
-                               <p className="text-[10px] text-slate-400 mt-1 pl-1">E-posta adresi güvenliğiniz nedeniyle değiştirilemez.</p>
-                            </div>
-                            <div className="space-y-2">
-                               <label className="text-xs font-bold uppercase text-slate-500 px-1">Telefon</label>
-                               <Input
-                                 type="tel"
-                                 inputMode="numeric"
-                                 value={formatPhone(profile?.phone || "")}
-                                 onChange={e => {
-                                   const digits = e.target.value.replace(/\D/g, "").slice(0, 10);
-                                   if (digits.length > 0 && digits[0] !== "5") return;
-                                   setProfile({...profile, phone: digits});
-                                 }}
-                                 placeholder="5XX XXX XX XX"
-                                 className="h-12 tracking-wide"
-                               />
-                            </div>
-                            <div className="space-y-2">
-                               <label className="text-xs font-bold uppercase text-slate-500 px-1">Ad</label>
-                               <Input value={profile?.first_name || ""} onChange={e => setProfile({...profile, first_name: e.target.value})} placeholder="Adınız" className="h-12 font-bold" />
-                            </div>
-                            <div className="space-y-2">
-                               <label className="text-xs font-bold uppercase text-slate-500 px-1">Soyad</label>
-                               <Input value={profile?.last_name || ""} onChange={e => setProfile({...profile, last_name: e.target.value})} placeholder="Soyadınız" className="h-12 font-bold" />
-                            </div>
-                         </div>
-                         <div className="flex justify-end pt-4">
-                            <Button type="submit" className="bg-olive-600 px-12 h-14 rounded-2xl font-black shadow-lg shadow-olive-100 tracking-tighter uppercase transition-transform active:scale-95">DEĞİŞİKLİKLERİ KAYDET</Button>
-                         </div>
-                      </form>
-                   </CardContent>
-                </Card>
-              </section>
-            )}
 
             {activeTab === "affiliate" && (
               <section className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
@@ -1256,8 +1271,8 @@ function AccountPageInner() {
               </section>
             )}
 
-            {activeTab === "security" && (
-              <section className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
+            {activeTab === "profile" && (
+              <section id="hesap-guvenlik" className="space-y-6 animate-in fade-in slide-in-from-bottom-2 scroll-mt-24">
                 <h2 className="text-2xl font-black text-slate-900">Güvenlik Ayarları</h2>
                 <Card className="border-none shadow-sm">
                    <CardContent className="p-8 space-y-8">
