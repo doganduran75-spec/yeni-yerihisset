@@ -199,7 +199,7 @@ export default function AffiliateLandingPage() {
               href="/login"
               className={cn(
                 buttonVariants({ variant: "outline" }),
-                "h-14 px-10 text-lg font-black rounded-2xl border-white/30 text-white hover:bg-white/10"
+                "h-14 px-10 text-lg font-black rounded-2xl bg-transparent border-2 border-white/70 text-white hover:bg-white hover:text-olive-700"
               )}
             >
               Üye Ol
