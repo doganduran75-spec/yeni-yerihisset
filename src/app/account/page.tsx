@@ -46,6 +46,8 @@ import { CITIES, DISTRICTS } from "@/lib/turkey-geo";
 import { cn } from "@/lib/utils";
 
 type TabType = "orders" | "addresses" | "profile" | "security" | "affiliate" | "coupons" | "messages";
+// Akordiyon bölüm anahtarları (tek akordiyon; üst menü yok)
+type SectionKey = "orders" | "messages" | "coupons" | "affiliate" | "profil" | "adres" | "guvenlik";
 
 export default function AccountPage() {
   return (
@@ -75,11 +77,11 @@ function payStatusLabel(s?: string): string { return s === "paid" ? "Ödendi" : 
 
 // Profilim akordiyon bölümü (Profil / Adres / Güvenlik). Kapalı içerik DOM'da
 // kalır (hidden), böylece form durumları korunur.
-function AccSection({ title, isOpen, onToggle, children }: {
-  title: string; isOpen: boolean; onToggle: () => void; children: React.ReactNode;
+function AccSection({ title, isOpen, onToggle, children, className }: {
+  title: string; isOpen: boolean; onToggle: () => void; children: React.ReactNode; className?: string;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-100 bg-white overflow-hidden shadow-sm">
+    <div className={cn("rounded-2xl border border-slate-100 bg-white overflow-hidden shadow-sm", className)}>
       <button
         type="button"
         onClick={onToggle}
@@ -122,18 +124,25 @@ function AccountPageInner() {
     router.push("/sepet");
   }
 
-  // "addresses" ve "security" artık ayrı sekme değil — Profilim altında; eski
-  // linkler (ör. checkout ?tab=addresses) Profilim'e düşsün.
+  // Tüm hesap sayfası tek akordiyon — üst menü kutusu yok. ?tab= eski linkleri
+  // ilgili bölüme eşler.
   const rawTab = searchParams.get("tab") as TabType | null;
-  const initialTab: TabType = (rawTab === "addresses" || rawTab === "security") ? "profile" : (rawTab || "orders");
   const returnTo = searchParams.get("returnTo"); // checkout'tan gelindiyse kaydettikten sonra dönülecek sayfa
-  
-  const [activeTab, setActiveTab] = useState<TabType>(initialTab);
+
+  const initialSection: SectionKey = (() => {
+    switch (rawTab) {
+      case "messages": return "messages";
+      case "coupons": return "coupons";
+      case "affiliate": return "affiliate";
+      case "profile": return "profil";
+      case "addresses": return "adres";
+      case "security": return "guvenlik";
+      default: return "orders";
+    }
+  })();
+
+  const [openSection, setOpenSection] = useState<SectionKey | null>(initialSection);
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null); // sipariş "Detaylar"
-  // Profilim akordiyonu: aynı anda tek bölüm açık (Profil / Adres / Güvenlik)
-  const [openSection, setOpenSection] = useState<"profil" | "adres" | "guvenlik" | null>(
-    rawTab === "addresses" ? "adres" : rawTab === "security" ? "guvenlik" : "profil"
-  );
 
   // Eski derin linkler (?tab=addresses/security) Profilim'e düşer; ilgili
   // alt bölüme yumuşak kaydır.
@@ -223,16 +232,17 @@ function AccountPageInner() {
   }, [loading, returnTo, addresses.length]);
 
   useEffect(() => {
-    if (activeTab === "affiliate" && !affiliate && !affiliateLoading) {
+    if (openSection === "affiliate" && !affiliate && !affiliateLoading) {
       fetchAffiliateData();
     }
-    if (activeTab === "coupons") {
+    if (openSection === "coupons") {
       fetchUserCoupons();
     }
-    if (activeTab === "messages") {
+    if (openSection === "messages") {
       fetchMessages();
     }
-  }, [activeTab]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openSection]);
 
   async function fetchMessages() {
     if (!user) return;
@@ -569,61 +579,12 @@ function AccountPageInner() {
       </header>
 
       <main className="container mx-auto px-4 py-8 md:py-12">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-          {/* Navigation Sidebar */}
-          <aside className="lg:col-span-1 space-y-4">
-            <div className="bg-white p-4 lg:p-6 rounded-3xl border shadow-sm space-y-4">
-               <div className="flex items-center gap-3 lg:gap-4 mb-3 lg:mb-5">
-                  {/* Avatar yalnız masaüstünde (mobilde yükseklik kazanmak için gizli) */}
-                  <div className="hidden lg:flex w-12 h-12 bg-olive-100 rounded-full items-center justify-center text-olive-600">
-                    <User size={24} />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-slate-900 leading-none">{profile?.first_name} {profile?.last_name}</h3>
-                    {/* E-posta yalnız masaüstünde */}
-                    <p className="hidden lg:block text-xs font-medium text-slate-400 mt-1">{user?.email}</p>
-                  </div>
-               </div>
-
-               {/* Mobilde 5 buton kutu içinde 2 sütunlu grid; masaüstünde dikey liste */}
-               <nav className="grid grid-cols-2 gap-2 lg:flex lg:flex-col lg:gap-1">
-                  {[
-                    { id: "orders", icon: Package, label: "Siparişlerim" },
-                    { id: "messages", icon: MessageSquare, label: "Mesajlarım" },
-                    { id: "coupons", icon: Ticket, label: "Kuponlarım" },
-                    { id: "profile", icon: User, label: "Profilim" },
-                    { id: "affiliate", icon: Link2, label: "Satış Ortaklığı" },
-                  ].map((tab, i, arr) => (
-                    <button
-                      key={tab.id}
-                      onClick={() => setActiveTab(tab.id as TabType)}
-                      className={cn(
-                        "lg:w-full flex items-center gap-2 px-3.5 py-2.5 rounded-2xl text-sm font-bold transition-all border lg:border-0",
-                        // Tek kalan son buton mobilde iki sütuna yayılsın
-                        i === arr.length - 1 && arr.length % 2 === 1 ? "col-span-2 lg:col-span-1" : "",
-                        activeTab === tab.id
-                          ? "bg-olive-600 text-white border-olive-600 shadow-lg shadow-olive-100"
-                          : "text-slate-500 bg-slate-50 border-slate-100 lg:bg-transparent hover:bg-slate-100 lg:hover:bg-slate-50"
-                      )}
-                    >
-                      <tab.icon size={18} className="shrink-0" /> {tab.label}
-                    </button>
-                  ))}
-               </nav>
-            </div>
-          </aside>
-
-          {/* Tab Content Area */}
-          <div className="lg:col-span-3 space-y-6">
+        {/* Tek akordiyon — üst menü kutusu yok, her bölüm katlanır */}
+        <div className="max-w-3xl mx-auto flex flex-col gap-4">
 
             {/* ── Mesajlaşma ── */}
-            {activeTab === "messages" && (
-              <section className="space-y-6 animate-in fade-in slide-in-from-bottom-2 h-[calc(100vh-200px)] flex flex-col">
-                <div className="flex items-center justify-between shrink-0">
-                  <h2 className="text-2xl font-black text-slate-900">Mesajlarım</h2>
-                  <Badge variant="outline" className="text-slate-500">Müşteri Destek</Badge>
-                </div>
-
+            <AccSection title="Mesajlarım" isOpen={openSection === "messages"} onToggle={() => setOpenSection(openSection === "messages" ? null : "messages")} className="order-2">
+              <div className="h-[60vh] flex flex-col">
                 <Card className="flex-1 flex flex-col border-none shadow-sm overflow-hidden min-h-0 bg-white rounded-3xl">
                   {/* Chat Messages */}
                   <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
@@ -681,16 +642,12 @@ function AccountPageInner() {
                     </form>
                   </div>
                 </Card>
-              </section>
-            )}
+              </div>
+            </AccSection>
 
             {/* ── Kuponlarım ── */}
-            {activeTab === "coupons" && (
-              <section className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-2xl font-black text-slate-900">Kuponlarım</h2>
-                </div>
-                <p className="text-sm text-slate-500 -mt-2">Size tanımlı indirim kuponları burada görünür ve ödeme sırasında kullanılabilir.</p>
+            <AccSection title="Kuponlarım" isOpen={openSection === "coupons"} onToggle={() => setOpenSection(openSection === "coupons" ? null : "coupons")} className="order-3">
+                <p className="text-sm text-slate-500 -mt-1">Size tanımlı indirim kuponları burada görünür ve ödeme sırasında kullanılabilir.</p>
 
                 {/* Yakında sona erecek uyarıları */}
                 {(() => {
@@ -794,13 +751,10 @@ function AccountPageInner() {
                     })}
                   </div>
                 )}
-              </section>
-            )}
+            </AccSection>
 
-            {activeTab === "orders" && (
-              <section className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
-                <div className="flex items-center justify-between">
-                   <h2 className="text-2xl font-black text-slate-900">Siparişlerim</h2>
+            <AccSection title="Siparişlerim" isOpen={openSection === "orders"} onToggle={() => setOpenSection(openSection === "orders" ? null : "orders")} className="order-1">
+                <div className="flex items-center justify-end -mt-1">
                    <Badge variant="secondary" className="bg-white border text-slate-500 font-bold px-3 py-1">
                      Toplam {orders.length} Sipariş
                    </Badge>
@@ -962,11 +916,9 @@ function AccountPageInner() {
                     ))}
                   </div>
                 )}
-              </section>
-            )}
+            </AccSection>
 
-            {activeTab === "profile" && (
-              <AccSection title="Profil Bilgilerim" isOpen={openSection === "profil"} onToggle={() => setOpenSection(openSection === "profil" ? null : "profil")}>
+              <AccSection title="Profil Bilgilerim" isOpen={openSection === "profil"} onToggle={() => setOpenSection(openSection === "profil" ? null : "profil")} className="order-5">
                 <Card className="border-none shadow-sm overflow-hidden">
                    <div className="bg-slate-50 p-6 border-b">
                      <p className="text-sm font-medium text-slate-500 italic">Kişisel bilgilerinizi buradan güncelleyerek deneyiminizi özelleştirebilirsiniz.</p>
@@ -1010,10 +962,8 @@ function AccountPageInner() {
                    </CardContent>
                 </Card>
               </AccSection>
-            )}
 
-            {activeTab === "profile" && (
-              <div id="hesap-adres" className="scroll-mt-24">
+              <div id="hesap-adres" className="scroll-mt-24 order-6">
               <AccSection title="Adres Bilgilerim" isOpen={openSection === "adres"} onToggle={() => setOpenSection(openSection === "adres" ? null : "adres")}>
                 <div className="flex items-center justify-end">
                    {!showAddressForm && (
@@ -1174,13 +1124,9 @@ function AccountPageInner() {
                 </div>
               </AccSection>
               </div>
-            )}
 
-
-            {activeTab === "affiliate" && (
-              <section className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-2xl font-black text-slate-900">Satış Ortaklığı Programı</h2>
+            <AccSection title="Satış Ortaklığı" isOpen={openSection === "affiliate"} onToggle={() => setOpenSection(openSection === "affiliate" ? null : "affiliate")} className="order-4">
+                <div className="flex items-center justify-end -mt-1">
                   <Link href="/affiliate" className={cn(buttonVariants({ variant: "ghost" }), "text-olive-600 font-bold text-sm gap-1")}>
                     Program Hakkında <ChevronRight size={14} />
                   </Link>
@@ -1361,11 +1307,9 @@ function AccountPageInner() {
                     )}
                   </div>
                 )}
-              </section>
-            )}
+            </AccSection>
 
-            {activeTab === "profile" && (
-              <div id="hesap-guvenlik" className="scroll-mt-24">
+              <div id="hesap-guvenlik" className="scroll-mt-24 order-7">
               <AccSection title="Güvenlik Ayarları" isOpen={openSection === "guvenlik"} onToggle={() => setOpenSection(openSection === "guvenlik" ? null : "guvenlik")}>
                 <Card className="border-none shadow-sm">
                    <CardContent className="p-8 space-y-8">
@@ -1416,9 +1360,7 @@ function AccountPageInner() {
                 </Card>
               </AccSection>
               </div>
-            )}
           </div>
-        </div>
       </main>
 
       {/* ─── Yorum Dialog ───────────────────────────────────────────────────── */}
