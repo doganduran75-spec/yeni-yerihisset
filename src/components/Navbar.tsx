@@ -22,6 +22,7 @@ const NAV_LINKS = [
 export default function Navbar({ variant = "default" }: NavbarProps) {
   const [mounted, setMounted] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [hidden, setHidden] = useState(false); // mobilde aşağı kaydırınca gizle
   const [search, setSearch] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const router = useRouter();
@@ -35,8 +36,18 @@ export default function Navbar({ variant = "default" }: NavbarProps) {
 
   useEffect(() => {
     setMounted(true);
-    const handleScroll = () => setScrolled(window.scrollY > 20);
-    window.addEventListener("scroll", handleScroll);
+    let lastY = window.scrollY;
+    const handleScroll = () => {
+      const y = window.scrollY;
+      setScrolled(y > 20);
+      // Yukarıdayken veya menü açıkken hep görünür; aşağı kaydırınca gizle,
+      // yukarı kaydırınca geri getir (yalnız mobilde uygulanır — bkz. className).
+      if (y < 80) setHidden(false);
+      else if (y > lastY + 4) setHidden(true);
+      else if (y < lastY - 4) setHidden(false);
+      lastY = y;
+    };
+    window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
@@ -59,10 +70,13 @@ export default function Navbar({ variant = "default" }: NavbarProps) {
   }
 
   return (
-    <header 
+    <header
       className={cn(
-        "sticky top-0 z-50 transition-all duration-300 border-b",
-        scrolled ? "bg-white/80 backdrop-blur-md h-16" : "bg-white h-24"
+        "sticky top-0 z-50 transition-all duration-300 border-b will-change-transform",
+        // Mobil her zaman kompakt (h-16); masaüstünde üstteyken uzun, kaydırınca kısalır
+        scrolled ? "bg-white/90 backdrop-blur-md h-16" : "bg-white h-16 md:h-24",
+        // Auto-hide: mobilde aşağı kaydırınca yukarı kayıp gizlenir (masaüstünde hep görünür)
+        (hidden && !menuOpen) ? "-translate-y-full md:translate-y-0" : "translate-y-0"
       )}
     >
       <div className="container mx-auto px-4 h-full flex items-center justify-between">
