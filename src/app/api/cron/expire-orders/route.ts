@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
+import { renderEmailTemplate } from "@/lib/notifications";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -37,23 +38,26 @@ async function queueRecoveryEmails(supabase: any, ids: string[]) {
   const profById: Record<string, any> = {};
   for (const p of (profiles as any[]) || []) profById[p.id] = p;
 
-  const rows = list
-    .map((o) => {
-      const prof = profById[o.user_id];
-      if (!prof?.email) return null;
-      const orderNo = o.order_number ? `YH${o.order_number}` : o.id.slice(0, 8).toUpperCase();
-      return {
-        kind: "order_recovery",
-        recipient_email: prof.email,
-        to_name: prof.first_name || null,
-        subject: `${storeName} — Siparişini tamamlamak ister misin? (${orderNo})`,
-        html_body: recoveryHtml(storeName, storeUrl, prof.first_name || "Değerli Müşterimiz", orderNo),
-        from_name: fromName,
-        from_email: fromEmail,
-        status: "pending",
-      };
-    })
-    .filter(Boolean);
+  const rows = (await Promise.all(list.map(async (o) => {
+    const prof = profById[o.user_id];
+    if (!prof?.email) return null;
+    const orderNo = o.order_number ? `YH${o.order_number}` : o.id.slice(0, 8).toUpperCase();
+    const custName = prof.first_name || "Değerli Müşterimiz";
+    // Düzenlenebilir şablon (email_templates) varsa onu kullan; yoksa hardcoded.
+    const tpl = await renderEmailTemplate("order_recovery", {
+      customer_name: custName, order_id: orderNo, store_url: storeUrl, store_name: storeName,
+    });
+    return {
+      kind: "order_recovery",
+      recipient_email: prof.email,
+      to_name: prof.first_name || null,
+      subject: tpl?.subject ?? `${storeName} — Siparişini tamamlamak ister misin? (${orderNo})`,
+      html_body: tpl?.html ?? recoveryHtml(storeName, storeUrl, custName, orderNo),
+      from_name: fromName,
+      from_email: fromEmail,
+      status: "pending",
+    };
+  }))).filter(Boolean);
 
   if (rows.length) await supabase.from("email_queue").insert(rows);
 }

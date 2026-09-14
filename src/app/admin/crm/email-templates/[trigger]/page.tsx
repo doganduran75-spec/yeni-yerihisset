@@ -15,6 +15,15 @@ const TRIGGER_LABELS: Record<string, string> = {
   order_shipped: "Kargoya Verildi",
   order_delivered: "Teslim Edildi",
   order_cancelled: "İptal Edildi",
+  coupon_assigned: "Yeni Kupon Tanımlandı",
+  cart_abandonment: "Sepet Hatırlatma",
+  order_recovery: "Sipariş Kurtarma",
+};
+
+// Şablon başına kullanılabilir değişkenler (düzenleme ipucu)
+const TRIGGER_VARS: Record<string, string[]> = {
+  cart_abandonment: ["{{customer_name}}", "{{items_html}}", "{{store_url}}", "{{store_name}}"],
+  order_recovery: ["{{customer_name}}", "{{order_id}}", "{{store_url}}", "{{store_name}}"],
 };
 
 export default function EditTemplatePage({ params }: { params: Promise<{ trigger: string }> }) {
@@ -139,6 +148,15 @@ export default function EditTemplatePage({ params }: { params: Promise<{ trigger
                 required
               />
             </div>
+
+            {TRIGGER_VARS[trigger] && (
+              <div className="flex flex-wrap items-center gap-1.5 text-xs bg-slate-50 border border-slate-100 rounded-lg px-3 py-2">
+                <span className="font-bold text-slate-500">Kullanılabilir değişkenler:</span>
+                {TRIGGER_VARS[trigger].map((v) => (
+                  <code key={v} className="bg-white border border-slate-200 rounded px-1.5 py-0.5 font-mono text-[11px] text-slate-600">{v}</code>
+                ))}
+              </div>
+            )}
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">

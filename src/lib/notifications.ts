@@ -570,6 +570,30 @@ export async function sendAdminReplyNotification(
 }
 
 /**
+ * email_templates'ten bir trigger'ı render eder (aktifse). Cron e-postalarını
+ * (sepet-terk, sipariş kurtarma) admin panelinden düzenlenebilir kılar.
+ * Aktif şablon yoksa null döner → çağıran hardcoded içeriğe düşer.
+ */
+export async function renderEmailTemplate(
+  trigger: string,
+  vars: Record<string, string>
+): Promise<{ subject: string; html: string } | null> {
+  try {
+    const supabase = createAdminClient();
+    const { data: tpl } = await (supabase as any)
+      .from("email_templates").select("subject, body_html, is_active").eq("trigger", trigger).maybeSingle();
+    if (!tpl?.is_active) return null;
+    const storeName = vars.store_name || "YeriHisset";
+    return {
+      subject: replaceVariables(tpl.subject, vars),
+      html: buildEmailDocument(replaceVariables(tpl.body_html, vars), storeName),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Sipariş-bağlantılı mesajlaşma bildirimi. Müşteri yazınca ADMİN'e, admin
  * yazınca MÜŞTERİ'ye gider. İçerikte tüm yazışma + son mesaj vurgulu + "Yanıtla"
  * butonu (ilgili konuşmaya derin link).

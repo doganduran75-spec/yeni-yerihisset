@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
+import { renderEmailTemplate } from "@/lib/notifications";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -102,12 +103,21 @@ async function run(req: NextRequest) {
       .filter((it) => !removedNames.has(it.name));
     if (!items.length) continue;
 
+    const custName = prof.first_name || "Değerli Müşterimiz";
+    // Düzenlenebilir şablon (email_templates) varsa onu kullan; yoksa hardcoded.
+    const itemsHtml = items.slice(0, 6).map((it: any) =>
+      `<li style="margin:0 0 6px;font-size:14px;color:#334155"><b>${it.name}</b>${it.price ? ` — ₺${Number(it.price).toLocaleString("tr-TR")}` : ""}</li>`
+    ).join("");
+    const tpl = await renderEmailTemplate("cart_abandonment", {
+      customer_name: custName, items_html: itemsHtml, store_url: storeUrl, store_name: storeName,
+    });
+
     await (supabase as any).from("email_queue").insert({
       kind: "cart_abandonment",
       recipient_email: prof.email,
       to_name: prof.first_name || null,
-      subject: `${storeName} — Sepetini tamamlamak ister misin? 👟`,
-      html_body: HTML(storeName, storeUrl, prof.first_name || "Değerli Müşterimiz", items),
+      subject: tpl?.subject ?? `${storeName} — Sepetini tamamlamak ister misin? 👟`,
+      html_body: tpl?.html ?? HTML(storeName, storeUrl, custName, items),
       from_name: fromName,
       from_email: fromEmail,
       status: "pending",

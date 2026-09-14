@@ -22,6 +22,8 @@ const TRIGGERS = [
   { key: "order_delivered", label: "Teslim Edildi", desc: "Sipariş müşteriye ulaştığında gönderilir.", color: "bg-green-50 text-green-700" },
   { key: "order_cancelled", label: "İptal Edildi", desc: "Sipariş iptal edildiğinde gönderilir.", color: "bg-red-50 text-red-700" },
   { key: "coupon_assigned", label: "Yeni Kupon Tanımlandı", desc: "Bir üyeye indirim kuponu atandığında gönderilir.", color: "bg-amber-50 text-amber-700" },
+  { key: "cart_abandonment", label: "Sepet Hatırlatma", desc: "Sepete ürün ekleyip ayrılan üyeye otomatik hatırlatma.", color: "bg-orange-50 text-orange-700" },
+  { key: "order_recovery", label: "Sipariş Kurtarma", desc: "Ödemesi tamamlanmayıp iptal olan siparişi tamamlaması için.", color: "bg-rose-50 text-rose-700" },
 ];
 
 export default function EmailTemplatesPage() {
