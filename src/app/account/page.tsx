@@ -12,6 +12,7 @@ import {
   ShieldCheck,
   LogOut,
   ChevronRight,
+  ChevronDown,
   Plus,
   Trash2,
   CheckCircle2,
@@ -64,6 +65,28 @@ function formatPhone(digits: string): string {
   return `${d.slice(0, 3)} ${d.slice(3, 6)} ${d.slice(6, 8)} ${d.slice(8, 10)}`;
 }
 
+// Profilim akordiyon bölümü (Profil / Adres / Güvenlik). Kapalı içerik DOM'da
+// kalır (hidden), böylece form durumları korunur.
+function AccSection({ title, isOpen, onToggle, children }: {
+  title: string; isOpen: boolean; onToggle: () => void; children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-100 bg-white overflow-hidden shadow-sm">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left hover:bg-slate-50/60 transition-colors"
+      >
+        <span className="text-lg font-black text-slate-900">{title}</span>
+        <ChevronDown size={20} className={cn("text-slate-400 transition-transform shrink-0", isOpen && "rotate-180")} />
+      </button>
+      <div hidden={!isOpen} className="px-5 pb-6 pt-5 border-t border-slate-100 space-y-6">
+        {children}
+      </div>
+    </div>
+  );
+}
+
 function AccountPageInner() {
   const router = useRouter();
   const { addItem, clearCart } = useCartStore();
@@ -98,6 +121,10 @@ function AccountPageInner() {
   const returnTo = searchParams.get("returnTo"); // checkout'tan gelindiyse kaydettikten sonra dönülecek sayfa
   
   const [activeTab, setActiveTab] = useState<TabType>(initialTab);
+  // Profilim akordiyonu: aynı anda tek bölüm açık (Profil / Adres / Güvenlik)
+  const [openSection, setOpenSection] = useState<"profil" | "adres" | "guvenlik" | null>(
+    rawTab === "addresses" ? "adres" : rawTab === "security" ? "guvenlik" : "profil"
+  );
 
   // Eski derin linkler (?tab=addresses/security) Profilim'e düşer; ilgili
   // alt bölüme yumuşak kaydır.
@@ -537,35 +564,40 @@ function AccountPageInner() {
           {/* Navigation Sidebar */}
           <aside className="lg:col-span-1 space-y-4">
             <div className="bg-white p-4 lg:p-6 rounded-3xl border shadow-sm space-y-4">
-               <div className="flex items-center gap-3 lg:gap-4 mb-3 lg:mb-6">
-                  <div className="w-12 h-12 bg-olive-100 rounded-full flex items-center justify-center text-olive-600">
+               <div className="flex items-center gap-3 lg:gap-4 mb-3 lg:mb-5">
+                  {/* Avatar yalnız masaüstünde (mobilde yükseklik kazanmak için gizli) */}
+                  <div className="hidden lg:flex w-12 h-12 bg-olive-100 rounded-full items-center justify-center text-olive-600">
                     <User size={24} />
                   </div>
                   <div>
                     <h3 className="font-bold text-slate-900 leading-none">{profile?.first_name} {profile?.last_name}</h3>
-                    <p className="text-xs font-medium text-slate-400 mt-1">{user?.email}</p>
+                    {/* E-posta yalnız masaüstünde */}
+                    <p className="hidden lg:block text-xs font-medium text-slate-400 mt-1">{user?.email}</p>
                   </div>
                </div>
-               
-               <nav className="flex gap-2 overflow-x-auto -mx-4 px-4 pb-1 lg:mx-0 lg:px-0 lg:pb-0 lg:flex-col lg:gap-1 lg:overflow-visible" style={{ scrollbarWidth: "none" }}>
+
+               {/* Mobilde 5 buton kutu içinde 2 sütunlu grid; masaüstünde dikey liste */}
+               <nav className="grid grid-cols-2 gap-2 lg:flex lg:flex-col lg:gap-1">
                   {[
                     { id: "orders", icon: Package, label: "Siparişlerim" },
                     { id: "messages", icon: MessageSquare, label: "Mesajlarım" },
                     { id: "coupons", icon: Ticket, label: "Kuponlarım" },
                     { id: "profile", icon: User, label: "Profilim" },
                     { id: "affiliate", icon: Link2, label: "Satış Ortaklığı" },
-                  ].map((tab) => (
+                  ].map((tab, i, arr) => (
                     <button
                       key={tab.id}
                       onClick={() => setActiveTab(tab.id as TabType)}
                       className={cn(
-                        "shrink-0 lg:w-full flex items-center gap-2 px-4 py-2.5 rounded-2xl text-sm font-bold whitespace-nowrap transition-all border lg:border-0",
+                        "lg:w-full flex items-center gap-2 px-3.5 py-2.5 rounded-2xl text-sm font-bold transition-all border lg:border-0",
+                        // Tek kalan son buton mobilde iki sütuna yayılsın
+                        i === arr.length - 1 && arr.length % 2 === 1 ? "col-span-2 lg:col-span-1" : "",
                         activeTab === tab.id
                           ? "bg-olive-600 text-white border-olive-600 shadow-lg shadow-olive-100"
                           : "text-slate-500 bg-slate-50 border-slate-100 lg:bg-transparent hover:bg-slate-100 lg:hover:bg-slate-50"
                       )}
                     >
-                      <tab.icon size={18} /> {tab.label}
+                      <tab.icon size={18} className="shrink-0" /> {tab.label}
                     </button>
                   ))}
                </nav>
@@ -873,8 +905,7 @@ function AccountPageInner() {
             )}
 
             {activeTab === "profile" && (
-              <section className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
-                <h2 className="text-2xl font-black text-slate-900">Profil Bilgilerim</h2>
+              <AccSection title="Profil Bilgilerim" isOpen={openSection === "profil"} onToggle={() => setOpenSection(openSection === "profil" ? null : "profil")}>
                 <Card className="border-none shadow-sm overflow-hidden">
                    <div className="bg-slate-50 p-6 border-b">
                      <p className="text-sm font-medium text-slate-500 italic">Kişisel bilgilerinizi buradan güncelleyerek deneyiminizi özelleştirebilirsiniz.</p>
@@ -917,15 +948,15 @@ function AccountPageInner() {
                       </form>
                    </CardContent>
                 </Card>
-              </section>
+              </AccSection>
             )}
 
             {activeTab === "profile" && (
-              <section id="hesap-adres" className="space-y-6 animate-in fade-in slide-in-from-bottom-2 scroll-mt-24">
-                <div className="flex items-center justify-between">
-                   <h2 className="text-2xl font-black text-slate-900">Adres Bilgilerim</h2>
+              <div id="hesap-adres" className="scroll-mt-24">
+              <AccSection title="Adres Bilgilerim" isOpen={openSection === "adres"} onToggle={() => setOpenSection(openSection === "adres" ? null : "adres")}>
+                <div className="flex items-center justify-end">
                    {!showAddressForm && (
-                     <Button 
+                     <Button
                       onClick={openAddressForm}
                       className="bg-olive-600 hover:bg-olive-700 font-bold rounded-2xl gap-2 h-12 shadow-lg shadow-olive-100"
                      >
@@ -1080,7 +1111,8 @@ function AccountPageInner() {
                      </div>
                   )}
                 </div>
-              </section>
+              </AccSection>
+              </div>
             )}
 
 
@@ -1272,8 +1304,8 @@ function AccountPageInner() {
             )}
 
             {activeTab === "profile" && (
-              <section id="hesap-guvenlik" className="space-y-6 animate-in fade-in slide-in-from-bottom-2 scroll-mt-24">
-                <h2 className="text-2xl font-black text-slate-900">Güvenlik Ayarları</h2>
+              <div id="hesap-guvenlik" className="scroll-mt-24">
+              <AccSection title="Güvenlik Ayarları" isOpen={openSection === "guvenlik"} onToggle={() => setOpenSection(openSection === "guvenlik" ? null : "guvenlik")}>
                 <Card className="border-none shadow-sm">
                    <CardContent className="p-8 space-y-8">
                       <div className="flex items-center gap-6 p-6 bg-olive-50 rounded-3xl border-2 border-olive-100 border-dashed">
@@ -1321,7 +1353,8 @@ function AccountPageInner() {
                       </div>
                    </CardContent>
                 </Card>
-              </section>
+              </AccSection>
+              </div>
             )}
           </div>
         </div>
