@@ -44,10 +44,11 @@ import { Separator } from "@/components/ui/separator";
 import { GeoSelect } from "@/components/ui/geo-select";
 import { CITIES, DISTRICTS } from "@/lib/turkey-geo";
 import { cn } from "@/lib/utils";
+import OrderMessagesModal from "@/components/account/OrderMessagesModal";
 
 type TabType = "orders" | "addresses" | "profile" | "security" | "affiliate" | "coupons" | "messages";
 // Akordiyon bölüm anahtarları (tek akordiyon; üst menü yok)
-type SectionKey = "orders" | "messages" | "coupons" | "affiliate" | "profil" | "adres" | "guvenlik";
+type SectionKey = "orders" | "coupons" | "affiliate" | "profil" | "adres" | "guvenlik";
 
 export default function AccountPage() {
   return (
@@ -131,7 +132,6 @@ function AccountPageInner() {
 
   const initialSection: SectionKey = (() => {
     switch (rawTab) {
-      case "messages": return "messages";
       case "coupons": return "coupons";
       case "affiliate": return "affiliate";
       case "profile": return "profil";
@@ -143,6 +143,8 @@ function AccountPageInner() {
 
   const [openSection, setOpenSection] = useState<SectionKey | null>(initialSection);
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null); // sipariş "Detaylar"
+  const [msgOrder, setMsgOrder] = useState<{ id: string; label: string } | null>(null); // açık mesaj modalı
+  const [orderUnread, setOrderUnread] = useState<Record<string, number>>({}); // sipariş → okunmamış admin mesajı
 
   // Eski derin linkler (?tab=addresses/security) Profilim'e düşer; ilgili
   // alt bölüme yumuşak kaydır.
@@ -238,11 +240,19 @@ function AccountPageInner() {
     if (openSection === "coupons") {
       fetchUserCoupons();
     }
-    if (openSection === "messages") {
-      fetchMessages();
-    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openSection]);
+
+  // Sipariş başına okunmamış admin mesajı sayısı (Mesaj butonu rozeti)
+  async function fetchOrderUnread(uid?: string) {
+    const id = uid || user?.id;
+    if (!id) return;
+    const { data } = await (supabase as any)
+      .from("messages").select("order_id").eq("user_id", id).eq("sender_role", "admin").eq("is_read", false);
+    const map: Record<string, number> = {};
+    for (const m of (data as any[]) || []) if (m.order_id) map[m.order_id] = (map[m.order_id] || 0) + 1;
+    setOrderUnread(map);
+  }
 
   async function fetchMessages() {
     if (!user) return;
@@ -449,6 +459,7 @@ function AccountPageInner() {
     setAddresses(addrs.data || []);
     setReviewedOrderIds(new Set(((revs.data as any[]) || []).map((r) => r.order_id)));
     setLoading(false);
+    fetchOrderUnread(user.id);
   }
 
   async function handleSignOut() {
@@ -582,71 +593,8 @@ function AccountPageInner() {
         {/* Tek akordiyon — üst menü kutusu yok, her bölüm katlanır */}
         <div className="max-w-3xl mx-auto flex flex-col gap-4">
 
-            {/* ── Mesajlaşma ── */}
-            <AccSection title="Mesajlarım" isOpen={openSection === "messages"} onToggle={() => setOpenSection(openSection === "messages" ? null : "messages")} className="order-2">
-              <div className="h-[60vh] flex flex-col">
-                <Card className="flex-1 flex flex-col border-none shadow-sm overflow-hidden min-h-0 bg-white rounded-3xl">
-                  {/* Chat Messages */}
-                  <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
-                    {messagesLoading ? (
-                      <div className="h-full flex items-center justify-center"><Loader2 className="animate-spin text-olive-600" /></div>
-                    ) : messages.length === 0 ? (
-                      <div className="h-full flex flex-col items-center justify-center gap-4 text-center p-8">
-                        <div className="w-16 h-16 bg-olive-50 rounded-full flex items-center justify-center text-olive-400">
-                          <MessageSquare size={28} />
-                        </div>
-                        <p className="text-sm font-medium text-slate-400 max-w-[200px]">Destek ekibimize ilk mesajınızı hemen gönderin.</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-4">
-                        {messages.map((msg) => (
-                          <div key={msg.id} className={cn(
-                            "flex flex-col max-w-[80%]",
-                            msg.sender_role === "user" ? "ml-auto items-end" : "mr-auto items-start"
-                          )}>
-                            <div className={cn(
-                              "px-4 py-2.5 rounded-2xl text-sm font-medium leading-relaxed",
-                              msg.sender_role === "user" 
-                                ? "bg-olive-600 text-white rounded-tr-none" 
-                                : "bg-slate-100 text-slate-900 rounded-tl-none"
-                            )}>
-                              {msg.content}
-                            </div>
-                            <span className="text-[10px] text-slate-400 mt-1 px-1">
-                              {new Date(msg.created_at).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Input Area */}
-                  <div className="p-4 border-t bg-slate-50/50 shrink-0">
-                    <form onSubmit={handleSendMessage} className="flex gap-2 relative">
-                      <Input 
-                        placeholder="Mesajınızı yazın..." 
-                        value={newMessage}
-                        onChange={(e) => setNewMessage(e.target.value)}
-                        className="h-12 pr-12 rounded-2xl border-slate-200 focus:ring-olive-600 bg-white"
-                        disabled={sendingMessage}
-                      />
-                      <Button 
-                        type="submit" 
-                        size="icon" 
-                        disabled={!newMessage.trim() || sendingMessage}
-                        className="absolute right-1 top-1 h-10 w-10 bg-olive-600 hover:bg-olive-700 rounded-xl transition-all active:scale-90"
-                      >
-                        {sendingMessage ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
-                      </Button>
-                    </form>
-                  </div>
-                </Card>
-              </div>
-            </AccSection>
-
             {/* ── Kuponlarım ── */}
-            <AccSection title="Kuponlarım" isOpen={openSection === "coupons"} onToggle={() => setOpenSection(openSection === "coupons" ? null : "coupons")} className="order-3">
+            <AccSection title="Kuponlarım" isOpen={openSection === "coupons"} onToggle={() => setOpenSection(openSection === "coupons" ? null : "coupons")} className="order-2">
                 <p className="text-sm text-slate-500 -mt-1">Size tanımlı indirim kuponları burada görünür ve ödeme sırasında kullanılabilir.</p>
 
                 {/* Yakında sona erecek uyarıları */}
@@ -832,6 +780,16 @@ function AccountPageInner() {
                                 </Button>
                               )}
                               <Button
+                                variant="outline" size="sm"
+                                onClick={() => setMsgOrder({ id: order.id, label: order.order_number ? `YH${order.order_number}` : `#${order.id.slice(0,8)}` })}
+                                className="relative font-bold text-xs gap-1.5 rounded-xl border-olive-200 text-olive-700 hover:bg-olive-50 h-9"
+                              >
+                                <MessageSquare size={14} /> Mesaj
+                                {orderUnread[order.id] > 0 && (
+                                  <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center">{orderUnread[order.id]}</span>
+                                )}
+                              </Button>
+                              <Button
                                 variant="ghost" size="sm"
                                 onClick={() => setExpandedOrder(expandedOrder === order.id ? null : order.id)}
                                 className="font-bold text-xs gap-1"
@@ -918,7 +876,7 @@ function AccountPageInner() {
                 )}
             </AccSection>
 
-              <AccSection title="Profil Bilgilerim" isOpen={openSection === "profil"} onToggle={() => setOpenSection(openSection === "profil" ? null : "profil")} className="order-5">
+              <AccSection title="Profil Bilgilerim" isOpen={openSection === "profil"} onToggle={() => setOpenSection(openSection === "profil" ? null : "profil")} className="order-4">
                 <Card className="border-none shadow-sm overflow-hidden">
                    <div className="bg-slate-50 p-6 border-b">
                      <p className="text-sm font-medium text-slate-500 italic">Kişisel bilgilerinizi buradan güncelleyerek deneyiminizi özelleştirebilirsiniz.</p>
@@ -963,7 +921,7 @@ function AccountPageInner() {
                 </Card>
               </AccSection>
 
-              <div id="hesap-adres" className="scroll-mt-24 order-6">
+              <div id="hesap-adres" className="scroll-mt-24 order-5">
               <AccSection title="Adres Bilgilerim" isOpen={openSection === "adres"} onToggle={() => setOpenSection(openSection === "adres" ? null : "adres")}>
                 <div className="flex items-center justify-end">
                    {!showAddressForm && (
@@ -1125,7 +1083,7 @@ function AccountPageInner() {
               </AccSection>
               </div>
 
-            <AccSection title="Satış Ortaklığı" isOpen={openSection === "affiliate"} onToggle={() => setOpenSection(openSection === "affiliate" ? null : "affiliate")} className="order-4">
+            <AccSection title="Satış Ortaklığı" isOpen={openSection === "affiliate"} onToggle={() => setOpenSection(openSection === "affiliate" ? null : "affiliate")} className="order-3">
                 <div className="flex items-center justify-end -mt-1">
                   <Link href="/affiliate" className={cn(buttonVariants({ variant: "ghost" }), "text-olive-600 font-bold text-sm gap-1")}>
                     Program Hakkında <ChevronRight size={14} />
@@ -1309,7 +1267,7 @@ function AccountPageInner() {
                 )}
             </AccSection>
 
-              <div id="hesap-guvenlik" className="scroll-mt-24 order-7">
+              <div id="hesap-guvenlik" className="scroll-mt-24 order-6">
               <AccSection title="Güvenlik Ayarları" isOpen={openSection === "guvenlik"} onToggle={() => setOpenSection(openSection === "guvenlik" ? null : "guvenlik")}>
                 <Card className="border-none shadow-sm">
                    <CardContent className="p-8 space-y-8">
@@ -1362,6 +1320,17 @@ function AccountPageInner() {
               </div>
           </div>
       </main>
+
+      {/* ─── Sipariş Mesaj Modalı ───────────────────────────────────────────── */}
+      {msgOrder && user && (
+        <OrderMessagesModal
+          orderId={msgOrder.id}
+          orderLabel={msgOrder.label}
+          userId={user.id}
+          onClose={() => { setMsgOrder(null); fetchOrderUnread(); }}
+          onRead={() => fetchOrderUnread()}
+        />
+      )}
 
       {/* ─── Yorum Dialog ───────────────────────────────────────────────────── */}
       {reviewDialog?.open && (

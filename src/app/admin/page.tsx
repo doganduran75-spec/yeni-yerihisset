@@ -41,6 +41,8 @@ const EVENT_LABELS: Record<string, { label: string; color: string }> = {
 
 type PendingMessage = {
   user_id: string;
+  order_id: string;
+  order_number: number | null;
   content: string;
   created_at: string;
   first_name: string;
@@ -153,33 +155,34 @@ export default function AdminDashboard() {
         });
       setManualAlerts(alerts);
 
-      // Cevaplanmayan mesajlar: son mesajı 'user' olan yazışmalar
+      // Cevaplanmayan mesajlar: SİPARİŞ bazlı — son mesajı 'user' olan konuşmalar
       const { data: allMessages } = await (supabase as any)
         .from('messages')
-        .select('user_id, content, sender_role, created_at')
+        .select('order_id, user_id, content, sender_role, created_at')
+        .not('order_id', 'is', null)
         .order('created_at', { ascending: false });
 
       if (allMessages) {
-        const lastPerUser = new Map<string, { content: string; sender_role: string; created_at: string }>();
+        const lastPerOrder = new Map<string, any>();
         for (const msg of allMessages) {
-          if (!lastPerUser.has(msg.user_id)) lastPerUser.set(msg.user_id, msg);
+          if (!lastPerOrder.has(msg.order_id)) lastPerOrder.set(msg.order_id, msg);
         }
+        const unanswered = [...lastPerOrder.values()].filter((m) => m.sender_role === 'user').slice(0, 5);
 
-        const unansweredIds = [...lastPerUser.entries()]
-          .filter(([, msg]) => msg.sender_role === 'user')
-          .slice(0, 5);
-
-        if (unansweredIds.length > 0) {
-          const { data: profiles } = await supabase
-            .from('profiles')
-            .select('id, first_name, last_name')
-            .in('id', unansweredIds.map(([id]) => id));
-
+        if (unanswered.length > 0) {
+          const [{ data: profiles }, { data: ords }] = await Promise.all([
+            supabase.from('profiles').select('id, first_name, last_name').in('id', [...new Set(unanswered.map((m) => m.user_id))]),
+            (supabase as any).from('orders').select('id, order_number').in('id', unanswered.map((m) => m.order_id)),
+          ]);
           const profileMap = new Map((profiles || []).map(p => [p.id, p]));
-          const pending: PendingMessage[] = unansweredIds.map(([userId, msg]) => {
-            const p = profileMap.get(userId);
+          const ordMap = new Map((ords || []).map((o: any) => [o.id, o]));
+          const pending: PendingMessage[] = unanswered.map((msg) => {
+            const p: any = profileMap.get(msg.user_id);
+            const o: any = ordMap.get(msg.order_id);
             return {
-              user_id: userId,
+              user_id: msg.user_id,
+              order_id: msg.order_id,
+              order_number: o?.order_number ?? null,
               content: msg.content,
               created_at: msg.created_at,
               first_name: p?.first_name || "",
@@ -363,8 +366,8 @@ export default function AdminDashboard() {
               <div className="space-y-1">
                 {pendingMessages.map((msg) => (
                   <Link
-                    key={msg.user_id}
-                    href={`/admin/messages?user=${msg.user_id}`}
+                    key={msg.order_id}
+                    href={`/admin/messages?order=${msg.order_id}`}
                     className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-rose-50 transition-colors group"
                   >
                     <div className="w-8 h-8 rounded-full bg-rose-100 flex items-center justify-center shrink-0 text-xs font-black text-rose-600 uppercase">
@@ -372,7 +375,7 @@ export default function AdminDashboard() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-bold text-slate-900 leading-none">
-                        {msg.first_name} {msg.last_name}
+                        <span className="text-blue-600">{msg.order_number ? `YH${msg.order_number}` : "#" + msg.order_id.slice(0,6)}</span> · {msg.first_name} {msg.last_name}
                       </p>
                       <p className="text-xs text-slate-400 truncate mt-0.5">{msg.content}</p>
                     </div>
