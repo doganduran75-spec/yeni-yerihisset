@@ -2,15 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Sprout, Footprints, Search, Heart, User } from "lucide-react";
+import { Home, Store, Search, Heart, User } from "lucide-react";
 
 // Mobil alt sekme çubuğu (app hissi). Yalnız mobilde; masaüstünde gizli.
 // DESIGN.md yeşili (#588E28) + Plus Jakarta Sans etiketler.
 const TABS = [
-  { href: "/", label: "Keşfet", icon: Sprout, match: (p: string) => p === "/" },
-  { href: "/products", label: "Ayakkabılar", icon: Footprints, match: (p: string) => p.startsWith("/products") || p.startsWith("/kategori") || p.startsWith("/marka") },
+  { href: "/", label: "Ana Sayfa", icon: Home, match: (p: string) => p === "/" },
+  { href: "/products", label: "Mağaza", icon: Store, match: (p: string) => p.startsWith("/products") || p.startsWith("/kategori") || p.startsWith("/marka") },
   { href: "/ara", label: "Arama", icon: Search, match: (p: string) => p.startsWith("/ara") },
-  { href: "/favoriler", label: "Favoriler", icon: Heart, match: (p: string) => p.startsWith("/favoriler") },
+  { href: "/firsatlar", label: "Fırsatlar", icon: Heart, match: (p: string) => p.startsWith("/firsatlar") },
   { href: "/account", label: "Profil", icon: User, match: (p: string) => p.startsWith("/account") },
 ];
 

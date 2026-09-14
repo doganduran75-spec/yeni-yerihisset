@@ -226,31 +226,31 @@ export default function ProductPageClient({ product, initialSize = null }: { pro
       {/* ── Sepete Eklendi Toast ─────────────────────────────── */}
       <div
         className={cn(
-          "fixed top-6 right-6 z-[200] flex items-center gap-3 bg-white rounded-2xl shadow-2xl shadow-slate-200 border border-slate-100 px-4 py-3 max-w-xs transition-all duration-300",
+          "fixed top-6 right-4 md:right-6 z-[200] flex items-center gap-4 bg-white rounded-2xl shadow-2xl shadow-slate-200 border border-slate-100 px-5 py-4 max-w-sm transition-all duration-300",
           toast
             ? "opacity-100 translate-y-0 pointer-events-auto"
             : "opacity-0 -translate-y-4 pointer-events-none"
         )}
       >
         {/* Ürün küçük görseli */}
-        <div className="w-12 h-12 rounded-xl overflow-hidden bg-slate-50 flex-shrink-0 border border-slate-100">
-          <Image src={selectedImage} alt={product.title} width={48} height={48} className="w-full h-full object-cover" />
+        <div className="w-16 h-16 rounded-xl overflow-hidden bg-slate-50 flex-shrink-0 border border-slate-100">
+          <Image src={selectedImage} alt={product.title} width={64} height={64} className="w-full h-full object-cover" />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 mb-0.5">
-            <div className="w-4 h-4 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
-              <Check size={10} className="text-white" strokeWidth={3} />
+          <div className="flex items-center gap-2 mb-1">
+            <div className="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
+              <Check size={13} className="text-white" strokeWidth={3} />
             </div>
-            <span className="text-[11px] font-bold text-green-600 uppercase tracking-wide">Sepete eklendi</span>
+            <span className="text-sm font-bold text-green-600 uppercase tracking-wide">Sepete eklendi</span>
           </div>
-          <p className="text-xs font-semibold text-slate-800 truncate">{product.title}</p>
+          <p className="text-[15px] font-semibold text-slate-800 truncate">{product.title}</p>
           {selectedVariant?.variant_options?.value && (
-            <p className="text-[11px] text-slate-400">{selectedVariant.variant_options.value}</p>
+            <p className="text-sm text-slate-400">{selectedVariant.variant_options.value}</p>
           )}
         </div>
         <Link
           href="/sepet"
-          className="flex-shrink-0 text-[11px] font-bold text-olive-600 hover:text-olive-800 whitespace-nowrap border border-olive-200 rounded-full px-2.5 py-1 hover:bg-olive-50 transition-colors"
+          className="flex-shrink-0 text-sm font-bold text-olive-600 hover:text-olive-800 whitespace-nowrap border border-olive-200 rounded-full px-4 py-2 hover:bg-olive-50 transition-colors"
         >
           Sepete Git →
         </Link>
@@ -503,9 +503,6 @@ export default function ProductPageClient({ product, initialSize = null }: { pro
                     >
                       {isAdding ? <Check size={22} className="animate-in zoom-in" /> : <ShoppingBag size={22} />}
                       {isAdding ? "Sepete Eklendi!" : "Sepete Ekle"}
-                    </Button>
-                    <Button size="lg" variant="outline" className="h-16 w-16 rounded-2xl p-0 border-2">
-                      <Star size={22} className="text-slate-400" />
                     </Button>
                   </>
                 ) : selectedVariant && notifiedVariants.has(selectedVariant.id) ? (
