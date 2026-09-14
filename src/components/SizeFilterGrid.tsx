@@ -26,7 +26,7 @@ function sizeValue(v: any): string {
   return (v.variant_options?.value ?? "").trim();
 }
 
-function ProductCard({ product, categoryName, size, outOfStock, onNotify, canQuickBuy, onQuickBuy }: {
+function ProductCard({ product, categoryName, size, outOfStock, onNotify, canQuickBuy, onQuickBuy, priority }: {
   product: any;
   categoryName?: string;
   size?: string | null;          // aktif numara filtresi (varsa linke eklenir)
@@ -34,6 +34,7 @@ function ProductCard({ product, categoryName, size, outOfStock, onNotify, canQui
   onNotify?: (product: any) => void;
   canQuickBuy?: boolean;         // bu numara stokta → "Hemen Sipariş Ver" göster
   onQuickBuy?: (product: any) => void;
+  priority?: boolean;            // üst sıra kartları → görsel öncelikli yüklensin
 }) {
   const img = product.images?.[0] ?? product.image_url ?? FALLBACK_IMG;
   const minPrice = getMinPrice(product);
@@ -45,7 +46,7 @@ function ProductCard({ product, categoryName, size, outOfStock, onNotify, canQui
     <div className="group cursor-pointer">
       <div className="relative aspect-[3/4] overflow-hidden rounded-[2.5rem] bg-olive-50 mb-6 border border-slate-100 shadow-sm transition-all duration-700 hover:shadow-2xl hover:shadow-slate-200">
         <Link href={href} className="block w-full h-full relative">
-          <Image src={img} alt={product.title} fill sizes="(max-width: 640px) 100vw, (max-width: 768px) 50vw, 25vw" className="object-cover group-hover:scale-110 transition-transform duration-1000" />
+          <Image src={img} alt={product.title} fill priority={priority} sizes="(max-width: 640px) 100vw, (max-width: 768px) 50vw, 25vw" className="object-cover group-hover:scale-110 transition-transform duration-1000" />
         </Link>
         {outOfStock && onNotify ? (
           /* Stokta olmayan (numara filtresi) — kalıcı aksiyonlar: Haber Ver (birincil) + İncele (ikincil) */
@@ -258,7 +259,7 @@ export default function SizeFilterGrid({ products, categoryName }: { products: a
           <div className="text-center py-20 text-slate-400">Bu kategoride henüz ürün bulunmuyor.</div>
         ) : (
           <div className={gridCls}>
-            {base.map((p) => <ProductCard key={p.id} product={p} categoryName={categoryName} size={size} />)}
+            {base.map((p, i) => <ProductCard key={p.id} product={p} categoryName={categoryName} size={size} priority={i < 4} />)}
           </div>
         )
       ) : (
@@ -272,7 +273,7 @@ export default function SizeFilterGrid({ products, categoryName }: { products: a
             {inStock.length === 0 ? (
               <p className="text-slate-400 text-sm py-4">Bu numarada stokta ürün yok.</p>
             ) : (
-              <div className={gridCls}>{inStock.map((p) => <ProductCard key={p.id} product={p} categoryName={categoryName} size={size} canQuickBuy onQuickBuy={quickBuy} />)}</div>
+              <div className={gridCls}>{inStock.map((p, i) => <ProductCard key={p.id} product={p} categoryName={categoryName} size={size} canQuickBuy onQuickBuy={quickBuy} priority={i < 4} />)}</div>
             )}
           </div>
 
