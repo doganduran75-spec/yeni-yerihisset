@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Store, Search, Heart, User } from "lucide-react";
+import { Home, Store, Search, Gift, User } from "lucide-react";
 
 // Mobil alt sekme çubuğu (app hissi). Yalnız mobilde; masaüstünde gizli.
 // DESIGN.md yeşili (#588E28) + Plus Jakarta Sans etiketler.
@@ -10,7 +10,7 @@ const TABS = [
   { href: "/", label: "Ana Sayfa", icon: Home, match: (p: string) => p === "/" },
   { href: "/products", label: "Mağaza", icon: Store, match: (p: string) => p.startsWith("/products") || p.startsWith("/kategori") || p.startsWith("/marka") },
   { href: "/ara", label: "Arama", icon: Search, match: (p: string) => p.startsWith("/ara") },
-  { href: "/firsatlar", label: "Fırsatlar", icon: Heart, match: (p: string) => p.startsWith("/firsatlar") },
+  { href: "/firsatlar", label: "Fırsatlar", icon: Gift, match: (p: string) => p.startsWith("/firsatlar") },
   { href: "/account", label: "Profil", icon: User, match: (p: string) => p.startsWith("/account") },
 ];
 
@@ -34,7 +34,7 @@ export default function MobileTabBar() {
                 className="flex flex-col items-center justify-center gap-1 h-16 transition-colors"
                 style={{ color: active ? "#3F6D14" : "#8A897F" }}
               >
-                <Icon size={22} strokeWidth={active ? 2.4 : 1.9} fill={t.icon === Heart && active ? "currentColor" : "none"} />
+                <Icon size={22} strokeWidth={active ? 2.4 : 1.9} />
                 <span className="text-[10.5px] font-semibold tracking-wide" style={{ fontWeight: active ? 700 : 500 }}>{t.label}</span>
               </Link>
             </li>
