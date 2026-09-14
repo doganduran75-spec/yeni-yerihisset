@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { Building2, CalendarDays, ExternalLink, Lock, Loader2, Gift, Check, Ticket, ArrowRight } from "lucide-react";
@@ -172,8 +173,7 @@ export default function FirsatlarClient({ opps, allRoles }: Props) {
                     <div key={opp.id} className={`shrink-0 w-64 bg-white rounded-2xl border shadow-sm flex flex-col overflow-hidden ${(!unlocked || expired) ? "opacity-60" : ""}`}>
                       <div className="h-24 bg-gradient-to-br from-olive-50 to-slate-100 flex items-center justify-center overflow-hidden">
                         {opp.image_url ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={opp.image_url} alt={opp.title} className="w-full h-full object-cover" />
+                          <Image src={opp.image_url} alt={opp.title} width={256} height={96} className="w-full h-full object-cover" />
                         ) : <Gift size={26} className="text-olive-300" />}
                       </div>
                       <div className="p-3 flex flex-col flex-1">

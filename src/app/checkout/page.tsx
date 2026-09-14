@@ -6,6 +6,7 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -693,7 +694,7 @@ export default function CheckoutPage() {
                     <div className="flex -space-x-5 overflow-hidden py-2">
                       {items.slice(0, 5).map((item, idx) => (
                         <div key={idx} className="inline-block h-16 w-16 rounded-2xl ring-4 ring-white shadow-xl overflow-hidden bg-slate-100 transform hover:-translate-y-2 transition-transform duration-500">
-                          <img src={item.image} alt="" className="h-full w-full object-cover" />
+                          <Image src={item.image} alt="" width={64} height={64} className="h-full w-full object-cover" />
                         </div>
                       ))}
                       {items.length > 5 && (

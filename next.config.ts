@@ -33,6 +33,11 @@ const nextConfig: NextConfig = {
         protocol: "https",
         hostname: "images.unsplash.com",
       },
+      // YouTube thumbnail (Bilgi Bankası video kapakları)
+      {
+        protocol: "https",
+        hostname: "img.youtube.com",
+      },
     ],
     // Desteklenen formatlar (AVIF daha iyi sıkıştırma, WebP geniş destek)
     formats: ["image/avif", "image/webp"],

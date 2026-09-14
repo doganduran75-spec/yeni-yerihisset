@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import {
   ShoppingBag,
@@ -233,8 +234,7 @@ export default function ProductPageClient({ product, initialSize = null }: { pro
       >
         {/* Ürün küçük görseli */}
         <div className="w-12 h-12 rounded-xl overflow-hidden bg-slate-50 flex-shrink-0 border border-slate-100">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={selectedImage} alt={product.title} className="w-full h-full object-cover" />
+          <Image src={selectedImage} alt={product.title} width={48} height={48} className="w-full h-full object-cover" />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 mb-0.5">
@@ -278,10 +278,13 @@ export default function ProductPageClient({ product, initialSize = null }: { pro
                 setTouchStartX(null);
               }}
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
+              <Image
                 src={selectedImage}
                 alt={product.title}
+                width={800}
+                height={1000}
+                priority
+                sizes="(max-width: 768px) 100vw, 50vw"
                 className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
               />
               <Badge className="absolute top-6 left-6 bg-white/90 text-slate-900 border-none px-3 py-1 font-bold shadow-sm">
@@ -322,10 +325,11 @@ export default function ProductPageClient({ product, initialSize = null }: { pro
                         : "border-transparent hover:border-slate-200"
                     }`}
                   >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
+                    <Image
                       src={img}
                       alt={`${product.title} ${idx + 1}`}
+                      width={96}
+                      height={96}
                       className="w-full h-full object-cover"
                     />
                   </button>

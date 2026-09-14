@@ -1,6 +1,7 @@
 "use client";
 
 import { useCartStore, CartItem, GiftVariant, PendingGift } from "@/store/useCartStore";
+import Image from "next/image";
 import Link from "next/link";
 import {
   ShoppingBag, Trash2, Plus, Minus, ArrowLeft, ChevronRight,
@@ -52,8 +53,7 @@ function GiftVariantModal({
         {/* Ürün önizleme */}
         <div className="flex items-center gap-3 p-3 bg-olive-50 rounded-2xl">
           {image ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={image} alt={title} className="w-14 h-14 rounded-xl object-cover flex-shrink-0" />
+            <Image src={image} alt={title} width={56} height={56} className="w-14 h-14 rounded-xl object-cover flex-shrink-0" />
           ) : (
             <div className="w-14 h-14 rounded-xl bg-olive-100 flex items-center justify-center flex-shrink-0">
               <Gift size={20} className="text-olive-400" />
@@ -130,7 +130,7 @@ function CartCard({
       <CardContent className="p-4 md:p-6">
         <div className="flex gap-4 md:gap-6">
           <div className="w-24 h-32 md:w-32 md:h-40 bg-slate-50 rounded-2xl overflow-hidden shrink-0 border border-slate-100">
-            <img src={item.image} alt={item.title} className="w-full h-full object-cover" />
+            <Image src={item.image} alt={item.title} width={200} height={260} className="w-full h-full object-cover" />
           </div>
           <div className="flex-1 flex flex-col justify-between py-1">
             <div className="space-y-1">
@@ -398,7 +398,7 @@ function RewardRows({ onPickVariant }: { onPickVariant: (p: PendingGift) => void
                 <div className="w-12 h-12 bg-white rounded-xl overflow-hidden shrink-0 border border-olive-100 flex items-center justify-center">
                   {chosen.image ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={chosen.image} alt={chosen.title} className="w-full h-full object-cover" />
+                    <Image src={chosen.image} alt={chosen.title} width={200} height={260} className="w-full h-full object-cover" />
                   ) : (
                     <Gift size={18} className="text-olive-300" />
                   )}
@@ -455,7 +455,7 @@ function RewardRows({ onPickVariant }: { onPickVariant: (p: PendingGift) => void
                 <div className="w-12 h-12 bg-olive-50 rounded-xl overflow-hidden shrink-0 border border-olive-100 flex items-center justify-center">
                   {p.image ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={p.image} alt={p.title} className="w-full h-full object-cover" />
+                    <Image src={p.image} alt={p.title} width={200} height={260} className="w-full h-full object-cover" />
                   ) : (
                     <Gift size={18} className="text-olive-300" />
                   )}

@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -76,7 +77,7 @@ export default async function MarkaPage({
           <div className="mb-10 flex items-center gap-4">
             {brand.logo_url && (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={brand.logo_url} alt={brand.name} className="h-10 object-contain" />
+              <Image src={brand.logo_url} alt={brand.name} width={160} height={40} className="h-10 w-auto object-contain" />
             )}
             <div>
               <h1 className="text-4xl font-black tracking-tight text-slate-900 uppercase italic">
@@ -104,12 +105,13 @@ export default async function MarkaPage({
                 return (
                   <div key={product.id} className="group cursor-pointer">
                     <div className="relative aspect-[3/4] overflow-hidden rounded-[2.5rem] bg-olive-50 mb-6 border border-slate-100 shadow-sm transition-all duration-700 hover:shadow-2xl hover:shadow-slate-200">
-                      <Link href={`/products/${product.slug}`} className="block w-full h-full">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
+                      <Link href={`/products/${product.slug}`} className="block w-full h-full relative">
+                        <Image
                           src={img}
                           alt={product.title}
-                          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000"
+                          fill
+                          sizes="(max-width: 640px) 100vw, (max-width: 768px) 50vw, 25vw"
+                          className="object-cover group-hover:scale-110 transition-transform duration-1000"
                         />
                       </Link>
 

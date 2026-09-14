@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import Navbar from "@/components/Navbar";
@@ -148,11 +149,12 @@ export default async function KnowledgeBasePage({
                   {/* Kapak görseli */}
                   <div className="aspect-[16/9] overflow-hidden bg-olive-50 relative">
                     {cover ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
+                      <Image
                         src={cover}
                         alt={article.title}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        fill
+                        sizes="(max-width: 768px) 100vw, 33vw"
+                        className="object-cover group-hover:scale-105 transition-transform duration-500"
                       />
                     ) : (
                       /* Kapak görseli yoksa dekoratif placeholder */

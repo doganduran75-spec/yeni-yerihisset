@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -113,12 +114,13 @@ export default async function SearchPage({
                 return (
                   <div key={product.id} className="group cursor-pointer">
                     <div className="relative aspect-[3/4] overflow-hidden rounded-[2.5rem] bg-olive-50 mb-6 border border-slate-100 shadow-sm transition-all duration-700 hover:shadow-2xl hover:shadow-slate-200">
-                      <Link href={`/products/${product.slug}`} className="block w-full h-full">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
+                      <Link href={`/products/${product.slug}`} className="block w-full h-full relative">
+                        <Image
                           src={img}
                           alt={product.title}
-                          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000"
+                          fill
+                          sizes="(max-width: 640px) 100vw, (max-width: 768px) 50vw, 25vw"
+                          className="object-cover group-hover:scale-110 transition-transform duration-1000"
                         />
                       </Link>
                       <Link

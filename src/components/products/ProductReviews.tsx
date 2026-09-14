@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { Star, MessageSquare, Loader2, User } from "lucide-react";
@@ -140,11 +141,12 @@ export default function ProductReviews({ productId }: { productId: string }) {
                 {review.images.length > 0 && (
                   <div className="flex flex-wrap gap-2">
                     {review.images.map((img, i) => (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
+                      <Image
                         key={i}
                         src={img}
                         alt={`Yorum görseli ${i + 1}`}
+                        width={80}
+                        height={80}
                         className="w-20 h-20 object-cover rounded-xl border border-slate-100"
                       />
                     ))}

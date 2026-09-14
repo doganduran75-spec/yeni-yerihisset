@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter, useSearchParams } from "next/navigation";
+import Image from "next/image";
 import Link from "next/link";
 import {
   User,
@@ -829,9 +830,11 @@ function AccountPageInner() {
                               {order.order_items?.map((item: any, idx: number) => (
                                 <div key={idx} className="flex gap-4 items-center">
                                    <div className="w-16 h-16 bg-slate-100 rounded-xl overflow-hidden shrink-0">
-                                      <img 
-                                        src={item.products?.images?.[0] || item.products?.image_url || "/placeholder.png"} 
-                                        alt={item.products?.title}
+                                      <Image
+                                        src={item.products?.images?.[0] || item.products?.image_url || "/placeholder.png"}
+                                        alt={item.products?.title || "Ürün"}
+                                        width={64}
+                                        height={64}
                                         className="w-full h-full object-cover"
                                       />
                                    </div>
