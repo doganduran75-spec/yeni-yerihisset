@@ -25,8 +25,8 @@ import {
 import { supabase } from "@/lib/supabase";
 import {
   Eye, MoreVertical, Loader2, Package, Truck, CheckCircle, XCircle,
-  Clock, MapPin, Phone, Mail, Users, ShoppingBag, Copy, ExternalLink,
-  Landmark, FileText, ChevronDown, AlertCircle, Send, Search,
+  Clock, MapPin, Phone, Mail, ShoppingBag, Copy, ExternalLink,
+  Landmark, FileText, ChevronDown, AlertCircle, Send, Search, Fingerprint,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -49,6 +49,7 @@ type Order = {
   status: string;
   created_at: string;
   shipping_address: string;
+  billing_address?: string | null;
   user_id: string;
   payment_method?: string | null;
   payment_status?: string | null;
@@ -954,26 +955,54 @@ export default function OrdersPage() {
           {selectedOrder && (
             <div className="space-y-6 py-2">
 
-              {/* Müşteri + Adres */}
+              {/* Fatura Bilgileri + Teslimat Adresi */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                    <Users size={13} /> Müşteri
+                    <FileText size={13} /> Fatura Bilgileri
                   </h4>
                   <div className="text-sm space-y-1 bg-muted/30 p-3 rounded-lg border">
-                    <p className="font-semibold">{selectedOrder.profiles?.first_name} {selectedOrder.profiles?.last_name}</p>
-                    <p className="text-muted-foreground flex items-center gap-1.5 flex-wrap">
-                      <Mail size={11} /> {selectedOrder.profiles?.email}
-                      {selectedOrder.profiles?.email_verified === false ? (
-                        <span className="text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200 rounded px-1.5 py-0.5" title="Müşteri e-postasını doğrulamadı — adres yanlış olabilir">E-posta doğrulanmadı ⚠</span>
-                      ) : selectedOrder.profiles?.email_verified === true ? (
-                        <span className="text-[10px] font-bold bg-green-50 text-green-700 border border-green-200 rounded px-1.5 py-0.5">Doğrulandı ✓</span>
-                      ) : null}
-                    </p>
-                    <p className="text-muted-foreground flex items-center gap-1.5"><Phone size={11} /> {selectedOrder.profiles?.phone || "—"}</p>
-                    {selectedOrder.payment_method === "bank_transfer" && (
-                      <p className="text-amber-600 flex items-center gap-1.5 font-medium"><Landmark size={11} /> Havale / EFT</p>
-                    )}
+                    {(() => {
+                      const parse = (v: unknown) => { try { return typeof v === "string" ? JSON.parse(v) : v; } catch { return null; } };
+                      const bill: any = parse(selectedOrder.billing_address);
+                      const ship: any = parse(selectedOrder.shipping_address);
+                      // Fatura snapshot'ı yoksa (eski siparişler) teslimatı baz al.
+                      const b: any = bill || (ship ? { ...ship, same_as_shipping: true } : null);
+                      const sameAsShip = !bill || bill.same_as_shipping;
+                      const billAddrText = b
+                        ? [b.address, [b.district, b.city].filter(Boolean).join(", ")].filter(Boolean).join("\n")
+                        : "";
+                      return (
+                        <>
+                          <p className="font-semibold">{b?.name || `${selectedOrder.profiles?.first_name ?? ""} ${selectedOrder.profiles?.last_name ?? ""}`}</p>
+                          {b?.identity_number && (
+                            <p className="text-muted-foreground flex items-center gap-1.5 text-xs font-mono"><Fingerprint size={11} /> TCKN: {b.identity_number}</p>
+                          )}
+                          <p className="text-muted-foreground flex items-center gap-1.5 flex-wrap">
+                            <Mail size={11} /> {selectedOrder.profiles?.email}
+                            {selectedOrder.profiles?.email_verified === false ? (
+                              <span className="text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200 rounded px-1.5 py-0.5" title="Müşteri e-postasını doğrulamadı — adres yanlış olabilir">E-posta doğrulanmadı ⚠</span>
+                            ) : selectedOrder.profiles?.email_verified === true ? (
+                              <span className="text-[10px] font-bold bg-green-50 text-green-700 border border-green-200 rounded px-1.5 py-0.5">Doğrulandı ✓</span>
+                            ) : null}
+                          </p>
+                          <p className="text-muted-foreground flex items-center gap-1.5"><Phone size={11} /> {b?.phone || selectedOrder.profiles?.phone || "—"}</p>
+                          {selectedOrder.payment_method === "bank_transfer" && (
+                            <p className="text-amber-600 flex items-center gap-1.5 font-medium"><Landmark size={11} /> Havale / EFT</p>
+                          )}
+                          <div className="pt-1.5 mt-1.5 border-t border-dashed border-slate-200">
+                            {sameAsShip ? (
+                              <p className="text-[11px] text-green-700 font-medium flex items-center gap-1"><CheckCircle size={11} /> Fatura adresi teslimatla aynı</p>
+                            ) : (
+                              <>
+                                <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mb-0.5">Fatura Adresi (teslimattan farklı)</p>
+                                <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap text-xs">{billAddrText || "—"}</p>
+                              </>
+                            )}
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
                 <div className="space-y-2">

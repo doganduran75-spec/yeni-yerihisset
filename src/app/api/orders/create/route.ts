@@ -20,9 +20,11 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { items, shippingAddressId, affiliateCode, couponCode, paymentMethod } = body as {
+  const { items, shippingAddressId, billingAddressId, billingSameAsShipping, affiliateCode, couponCode, paymentMethod } = body as {
     items: CartItem[];
     shippingAddressId: string;
+    billingAddressId?: string | null;
+    billingSameAsShipping?: boolean;
     affiliateCode?: string;
     couponCode?: string;
     paymentMethod?: string;
@@ -141,6 +143,32 @@ export async function POST(req: NextRequest) {
     city: address.city,
   });
 
+  // Fatura adresi snapshot'ı. Teslimatla aynıysa (veya seçim yoksa) teslimat
+  // adresini kopyalarız; farklı bir adres seçildiyse onu doğrulayıp saklarız.
+  let billingSnap: Record<string, unknown> = {
+    same_as_shipping: true,
+    name: `${address.first_name} ${address.last_name}`,
+    phone: address.phone,
+    address: address.address_detail,
+    district: address.district,
+    city: address.city,
+  };
+  if (billingSameAsShipping === false && billingAddressId && billingAddressId !== shippingAddressId) {
+    const { data: bAddr } = await supabase
+      .from("user_addresses").select("*").eq("id", billingAddressId).eq("user_id", user.id).single();
+    if (bAddr) {
+      billingSnap = {
+        same_as_shipping: false,
+        name: `${bAddr.first_name} ${bAddr.last_name}`,
+        phone: bAddr.phone,
+        address: bAddr.address_detail,
+        district: bAddr.district,
+        city: bAddr.city,
+      };
+    }
+  }
+  const billingAddressJson = JSON.stringify(billingSnap);
+
   // Ödeme yöntemine göre başlangıç durumları
   const isBankTransfer = paymentMethod === "bank_transfer";
   // Eski tek kolon (geriye dönük uyumluluk)
@@ -158,6 +186,7 @@ export async function POST(req: NextRequest) {
       status: initialStatus,
       total_amount: Math.max(0, totalAmount),
       shipping_address: shippingAddressJson,
+      billing_address: billingAddressJson,
       affiliate_id: affiliateId,
       coupon_id: couponId,
       coupon_discount: couponDiscount,

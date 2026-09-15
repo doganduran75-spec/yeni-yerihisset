@@ -22,12 +22,16 @@ export async function POST(req: NextRequest) {
   const {
     items,
     shippingAddressId,
+    billingAddressId,
+    billingSameAsShipping,
     affiliateCode,
     couponCode,
     identityNumber,
   } = body as {
     items: CartItem[];
     shippingAddressId: string;
+    billingAddressId?: string | null;
+    billingSameAsShipping?: boolean;
     affiliateCode?: string;
     couponCode?: string;
     identityNumber: string;
@@ -143,6 +147,34 @@ export async function POST(req: NextRequest) {
     city: address.city,
   });
 
+  // Fatura adresi snapshot'ı (TCKN dahil). Teslimatla aynıysa teslimatı kopyalar.
+  const tckn = identityNumber.replace(/\D/g, "");
+  let billingSnap: Record<string, unknown> = {
+    same_as_shipping: true,
+    name: `${address.first_name} ${address.last_name}`,
+    phone: address.phone,
+    address: address.address_detail,
+    district: address.district,
+    city: address.city,
+    identity_number: tckn,
+  };
+  if (billingSameAsShipping === false && billingAddressId && billingAddressId !== shippingAddressId) {
+    const { data: bAddr } = await supabase
+      .from("user_addresses").select("*").eq("id", billingAddressId).eq("user_id", user.id).single();
+    if (bAddr) {
+      billingSnap = {
+        same_as_shipping: false,
+        name: `${bAddr.first_name} ${bAddr.last_name}`,
+        phone: bAddr.phone,
+        address: bAddr.address_detail,
+        district: bAddr.district,
+        city: bAddr.city,
+        identity_number: tckn,
+      };
+    }
+  }
+  const billingAddressJson = JSON.stringify(billingSnap);
+
   // conversationId → sipariş kaydından önce üret
   const conversationId = newConversationId();
 
@@ -154,6 +186,7 @@ export async function POST(req: NextRequest) {
       status: "pending",
       total_amount: totalAmount,
       shipping_address: shippingAddressJson,
+      billing_address: billingAddressJson,
       affiliate_id: affiliateId,
       coupon_id: couponId,
       coupon_discount: couponDiscount,
