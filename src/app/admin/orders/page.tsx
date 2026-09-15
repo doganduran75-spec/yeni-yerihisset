@@ -26,7 +26,7 @@ import { supabase } from "@/lib/supabase";
 import {
   Eye, MoreVertical, Loader2, Package, Truck, CheckCircle, XCircle,
   Clock, MapPin, Phone, Mail, ShoppingBag, Copy, ExternalLink,
-  Landmark, FileText, ChevronDown, AlertCircle, Send, Search, Fingerprint,
+  Landmark, FileText, ChevronDown, AlertCircle, Send, Search, Fingerprint, Building2,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -974,8 +974,19 @@ export default function OrdersPage() {
                         : "";
                       return (
                         <>
-                          <p className="font-semibold">{b?.name || `${selectedOrder.profiles?.first_name ?? ""} ${selectedOrder.profiles?.last_name ?? ""}`}</p>
-                          {b?.identity_number && (
+                          <p className="font-semibold flex items-center gap-1.5">
+                            {b?.name || `${selectedOrder.profiles?.first_name ?? ""} ${selectedOrder.profiles?.last_name ?? ""}`}
+                            {b?.is_corporate && (
+                              <span className="text-[9px] font-bold bg-blue-100 text-blue-700 border border-blue-200 rounded px-1.5 py-0.5 uppercase tracking-wide">Kurumsal</span>
+                            )}
+                          </p>
+                          {b?.is_corporate && (
+                            <div className="text-xs bg-blue-50/60 border border-blue-100 rounded-lg px-2.5 py-1.5 space-y-0.5 my-1">
+                              <p className="font-bold text-slate-800 flex items-center gap-1.5"><Building2 size={11} /> {b.company_name || "—"}</p>
+                              <p className="text-muted-foreground">V.D.: {b.tax_office || "—"} · VKN: <span className="font-mono">{b.tax_number || "—"}</span></p>
+                            </div>
+                          )}
+                          {b?.identity_number && !b?.is_corporate && (
                             <p className="text-muted-foreground flex items-center gap-1.5 text-xs font-mono"><Fingerprint size={11} /> TCKN: {b.identity_number}</p>
                           )}
                           <p className="text-muted-foreground flex items-center gap-1.5 flex-wrap">

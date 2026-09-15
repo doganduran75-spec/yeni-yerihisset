@@ -595,6 +595,9 @@ export default function CheckoutPage() {
                                {selectedBillingId === addr.id && <CheckCircle2 size={18} className="text-olive-600 animate-in zoom-in" />}
                             </div>
                             <p className="font-black text-slate-900 text-md italic uppercase">{addr.first_name} {addr.last_name}</p>
+                            {addr.is_corporate && (
+                              <p className="text-[11px] text-blue-700 font-bold mt-1 line-clamp-1">🏢 {addr.company_name} · VKN {addr.tax_number}</p>
+                            )}
                             <p className="text-xs text-slate-500 mt-2 font-medium line-clamp-1">{addr.address_detail}</p>
                          </div>
                        ))}

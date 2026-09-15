@@ -197,6 +197,10 @@ function AccountPageInner() {
     address_detail: "",
     is_default_shipping: false,
     is_default_billing: false,
+    is_corporate: false,
+    company_name: "",
+    tax_office: "",
+    tax_number: "",
   });
 
   // Password State
@@ -501,6 +505,10 @@ function AccountPageInner() {
       address_detail: "",
       is_default_shipping: firstAddr,
       is_default_billing: firstAddr,
+      is_corporate: false,
+      company_name: "",
+      tax_office: "",
+      tax_number: "",
     });
     setShowAddressForm(true);
   }
@@ -512,9 +520,19 @@ function AccountPageInner() {
     if (!addressForm.city) { alert("Lütfen il seçiniz."); return; }
     if (!addressForm.district) { alert("Lütfen ilçe seçiniz."); return; }
     if (addressForm.phone.length !== 10) { alert("Telefon numarası 10 haneli olmalıdır."); return; }
+    if (addressForm.is_corporate) {
+      if (!addressForm.company_name.trim()) { alert("Lütfen şirket ünvanını girin."); return; }
+      if (!addressForm.tax_office.trim()) { alert("Lütfen vergi dairesini girin."); return; }
+      const vkn = addressForm.tax_number.replace(/\D/g, "");
+      if (vkn.length !== 10 && vkn.length !== 11) { alert("Vergi numarası 10 (VKN) veya 11 (TCKN) haneli olmalıdır."); return; }
+    }
 
+    // Kurumsal değilse şirket/vergi alanlarını boşalt (tutarlılık için)
     const { error } = await supabase.from('user_addresses').insert({
       ...addressForm,
+      company_name: addressForm.is_corporate ? addressForm.company_name.trim() : null,
+      tax_office: addressForm.is_corporate ? addressForm.tax_office.trim() : null,
+      tax_number: addressForm.is_corporate ? addressForm.tax_number.replace(/\D/g, "") : null,
       user_id: user.id
     });
 
@@ -534,6 +552,10 @@ function AccountPageInner() {
       address_detail: "",
       is_default_shipping: false,
       is_default_billing: false,
+      is_corporate: false,
+      company_name: "",
+      tax_office: "",
+      tax_number: "",
     });
     fetchUserData();
   }
@@ -1010,11 +1032,45 @@ function AccountPageInner() {
                           />
                         </div>
 
-                        <div className="flex flex-col gap-3 p-4 bg-slate-50 rounded-2xl border-2 border-slate-100">
+                        <div className="flex flex-col gap-4 p-4 bg-slate-50 rounded-2xl border-2 border-slate-100">
                            <div className="flex items-center gap-3">
-                              <input 
-                                type="checkbox" 
-                                id="def_shipping" 
+                              <input
+                                type="checkbox"
+                                id="is_corporate"
+                                className="w-4 h-4 rounded text-olive-600"
+                                checked={addressForm.is_corporate}
+                                onChange={e => setAddressForm({...addressForm, is_corporate: e.target.checked})}
+                              />
+                              <label htmlFor="is_corporate" className="text-sm font-bold text-slate-700 select-none cursor-pointer">Kurumsal Fatura (şirket adına)</label>
+                           </div>
+
+                           {addressForm.is_corporate && (
+                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2">
+                               <div className="space-y-2 md:col-span-2">
+                                 <label className="text-xs font-bold uppercase text-slate-500 px-1">Şirket Ünvanı</label>
+                                 <Input value={addressForm.company_name} onChange={e => setAddressForm({...addressForm, company_name: e.target.value})} placeholder="Örn: Yeri Hisset Tic. Ltd. Şti." className="h-12" />
+                               </div>
+                               <div className="space-y-2">
+                                 <label className="text-xs font-bold uppercase text-slate-500 px-1">Vergi Dairesi</label>
+                                 <Input value={addressForm.tax_office} onChange={e => setAddressForm({...addressForm, tax_office: e.target.value})} placeholder="Örn: Kadıköy" className="h-12" />
+                               </div>
+                               <div className="space-y-2">
+                                 <label className="text-xs font-bold uppercase text-slate-500 px-1">Vergi No (VKN / TCKN)</label>
+                                 <Input
+                                   inputMode="numeric"
+                                   value={addressForm.tax_number}
+                                   onChange={e => setAddressForm({...addressForm, tax_number: e.target.value.replace(/\D/g, "").slice(0, 11)})}
+                                   placeholder="10 veya 11 haneli"
+                                   className="h-12 tracking-wide font-mono"
+                                 />
+                               </div>
+                             </div>
+                           )}
+
+                           <div className="flex items-center gap-3">
+                              <input
+                                type="checkbox"
+                                id="def_shipping"
                                 className="w-4 h-4 rounded text-olive-600"
                                 checked={addressForm.is_default_shipping}
                                 onChange={e => setAddressForm({...addressForm, is_default_shipping: e.target.checked})}
@@ -1060,6 +1116,12 @@ function AccountPageInner() {
                           
                           <div className="text-sm space-y-1 text-slate-600 font-medium">
                              <p className="font-bold text-slate-900 border-b pb-2 mb-2">{addr.first_name} {addr.last_name}</p>
+                             {addr.is_corporate && (
+                               <div className="text-xs bg-slate-100 rounded-lg px-3 py-2 mb-2 space-y-0.5">
+                                 <p className="font-bold text-slate-800">{addr.company_name}</p>
+                                 <p className="text-slate-500">V.D.: {addr.tax_office} · VKN: <span className="font-mono">{addr.tax_number}</span></p>
+                               </div>
+                             )}
                              <p className="flex items-center gap-2 text-slate-400 italic text-xs"><Box size={12} /> {addr.phone}</p>
                              <p className="line-clamp-2 mt-2 leading-relaxed text-slate-500">{addr.address_detail}</p>
                              <p className="font-black text-slate-900 mt-2 uppercase tracking-tight">{addr.district} / {addr.city}</p>
@@ -1071,6 +1133,9 @@ function AccountPageInner() {
                              )}
                              {addr.is_default_billing && (
                                <Badge className="bg-slate-900 text-white border-none px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider">Fatura</Badge>
+                             )}
+                             {addr.is_corporate && (
+                               <Badge className="bg-blue-600 text-white border-none px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider">Kurumsal</Badge>
                              )}
                           </div>
                        </CardContent>

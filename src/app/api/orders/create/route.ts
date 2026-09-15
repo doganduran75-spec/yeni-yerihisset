@@ -145,27 +145,23 @@ export async function POST(req: NextRequest) {
 
   // Fatura adresi snapshot'ı. Teslimatla aynıysa (veya seçim yoksa) teslimat
   // adresini kopyalarız; farklı bir adres seçildiyse onu doğrulayıp saklarız.
-  let billingSnap: Record<string, unknown> = {
-    same_as_shipping: true,
-    name: `${address.first_name} ${address.last_name}`,
-    phone: address.phone,
-    address: address.address_detail,
-    district: address.district,
-    city: address.city,
-  };
+  const billingFrom = (a: any, same: boolean) => ({
+    same_as_shipping: same,
+    name: `${a.first_name} ${a.last_name}`,
+    phone: a.phone,
+    address: a.address_detail,
+    district: a.district,
+    city: a.city,
+    is_corporate: !!a.is_corporate,
+    company_name: a.is_corporate ? a.company_name : null,
+    tax_office: a.is_corporate ? a.tax_office : null,
+    tax_number: a.is_corporate ? a.tax_number : null,
+  });
+  let billingSnap: Record<string, unknown> = billingFrom(address, true);
   if (billingSameAsShipping === false && billingAddressId && billingAddressId !== shippingAddressId) {
     const { data: bAddr } = await supabase
       .from("user_addresses").select("*").eq("id", billingAddressId).eq("user_id", user.id).single();
-    if (bAddr) {
-      billingSnap = {
-        same_as_shipping: false,
-        name: `${bAddr.first_name} ${bAddr.last_name}`,
-        phone: bAddr.phone,
-        address: bAddr.address_detail,
-        district: bAddr.district,
-        city: bAddr.city,
-      };
-    }
+    if (bAddr) billingSnap = billingFrom(bAddr, false);
   }
   const billingAddressJson = JSON.stringify(billingSnap);
 
