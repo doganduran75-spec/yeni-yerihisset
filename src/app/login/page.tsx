@@ -89,6 +89,19 @@ function LoginForm() {
     lastName: ""
   });
 
+  // Tarayıcının İngilizce form-doğrulama baloncuklarını Türkçeleştir
+  // ("Please fill out this field", geçersiz e-posta vb.).
+  function trInvalid(e: React.FormEvent<HTMLInputElement>) {
+    const el = e.currentTarget;
+    if (el.validity.valueMissing) el.setCustomValidity("Lütfen bu alanı doldurun.");
+    else if (el.validity.typeMismatch) el.setCustomValidity("Lütfen geçerli bir e-posta adresi girin.");
+    else if (el.validity.tooShort) el.setCustomValidity("Girdiğiniz değer çok kısa.");
+    else el.setCustomValidity("");
+  }
+  function trInput(e: React.FormEvent<HTMLInputElement>) {
+    e.currentTarget.setCustomValidity("");
+  }
+
   // Sosyal giriş yalnızca ilgili sağlayıcı GoTrue'da etkinse gösterilir.
   // NEXT_PUBLIC_SOCIAL_LOGIN="google" veya "google,apple" (varsayılan: gizli).
   const socialFlag = (process.env.NEXT_PUBLIC_SOCIAL_LOGIN || "").toLowerCase();
@@ -270,9 +283,11 @@ function LoginForm() {
               <div className="grid grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2">
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest px-1">AD</label>
-                  <Input 
-                    required 
-                    placeholder="Ad" 
+                  <Input
+                    required
+                    onInvalid={trInvalid}
+                    onInput={trInput}
+                    placeholder="Ad"
                     value={formData.firstName}
                     onChange={e => setFormData({...formData, firstName: e.target.value})}
                     className="h-12 rounded-xl bg-slate-50 border-slate-100 font-bold placeholder:font-normal placeholder:text-slate-400"
@@ -280,9 +295,11 @@ function LoginForm() {
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest px-1">SOYAD</label>
-                  <Input 
-                    required 
-                    placeholder="Soyad" 
+                  <Input
+                    required
+                    onInvalid={trInvalid}
+                    onInput={trInput}
+                    placeholder="Soyad"
                     value={formData.lastName}
                     onChange={e => setFormData({...formData, lastName: e.target.value})}
                     className="h-12 rounded-xl bg-slate-50 border-slate-100 font-bold placeholder:font-normal placeholder:text-slate-400"
@@ -295,10 +312,12 @@ function LoginForm() {
               <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest px-1">E-POSTA</label>
               <div className="relative">
                 <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                <Input 
-                  type="email" 
-                  required 
-                  placeholder="name@example.com" 
+                <Input
+                  type="email"
+                  required
+                  onInvalid={trInvalid}
+                  onInput={trInput}
+                  placeholder="ornek@eposta.com"
                   value={formData.email}
                   onChange={e => setFormData({...formData, email: e.target.value})}
                   className="h-12 pl-12 rounded-xl bg-slate-50 border-slate-100 font-bold placeholder:font-normal placeholder:text-slate-400"
@@ -325,6 +344,8 @@ function LoginForm() {
                 <Input
                   type={showPassword ? "text" : "password"}
                   required
+                  onInvalid={trInvalid}
+                  onInput={trInput}
                   placeholder="••••••••"
                   value={formData.password}
                   onChange={e => setFormData({...formData, password: e.target.value})}
