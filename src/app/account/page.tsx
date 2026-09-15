@@ -15,7 +15,6 @@ import {
   ChevronDown,
   Plus,
   Trash2,
-  CheckCircle2,
   Clock,
   Box,
   CreditCard,
@@ -32,7 +31,6 @@ import {
   Loader2,
   MessageSquare,
   Send,
-  XCircle,
   RotateCcw,
 } from "lucide-react";
 import { useCartStore } from "@/store/useCartStore";
@@ -75,6 +73,35 @@ function parseShippingAddr(raw: any): { name?: string; phone?: string; address?:
 }
 function payMethodLabel(m?: string): string { return m === "bank_transfer" ? "Havale / EFT" : "Kart (iyzico)"; }
 function payStatusLabel(s?: string): string { return s === "paid" ? "Ödendi" : s === "failed" ? "Başarısız" : "Bekliyor"; }
+
+// Admin ile birebir aynı 3 boyutlu durum (Ödeme / Sevkiyat / Fatura) rozetleri.
+// Müşteri sipariş satırında da güncel durumu gösterir (legacy `status` yerine
+// gerçek payment_status/shipment_status/invoice_status alanlarını okur).
+const PAY_LABEL: Record<string, string> = { paid: "Ödendi", failed: "Başarısız", pending: "Bekliyor" };
+const PAY_COLOR: Record<string, string> = { paid: "bg-green-50 text-green-700", failed: "bg-red-50 text-red-600", pending: "bg-amber-50 text-amber-700" };
+const SHIP_LABEL: Record<string, string> = { waiting: "Bekliyor", preparing: "Hazırlanıyor", shipped: "Kargoya Verildi", delivered: "Teslim Edildi", cancelled: "İptal Edildi" };
+const SHIP_COLOR: Record<string, string> = { waiting: "bg-slate-100 text-slate-500", preparing: "bg-blue-50 text-blue-700", shipped: "bg-purple-50 text-purple-700", delivered: "bg-green-50 text-green-700", cancelled: "bg-red-50 text-red-600" };
+const INV_LABEL: Record<string, string> = { pending: "Bekliyor", invoiced: "Faturalandı" };
+const INV_COLOR: Record<string, string> = { pending: "bg-slate-100 text-slate-500", invoiced: "bg-teal-50 text-teal-700" };
+
+function OrderStatusChips({ order }: { order: any }) {
+  const pay = order.payment_status || "pending";
+  const ship = order.shipment_status || "waiting";
+  const inv = order.invoice_status || "pending";
+  const Chip = ({ title, label, color }: { title: string; label: string; color: string }) => (
+    <div className="flex flex-col items-start gap-1">
+      <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">{title}</span>
+      <span className={cn("inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold whitespace-nowrap", color)}>{label}</span>
+    </div>
+  );
+  return (
+    <div className="flex items-start gap-3 sm:gap-4 flex-wrap">
+      <Chip title="Ödeme" label={PAY_LABEL[pay] ?? pay} color={PAY_COLOR[pay] ?? PAY_COLOR.pending} />
+      <Chip title="Sevkiyat" label={SHIP_LABEL[ship] ?? ship} color={SHIP_COLOR[ship] ?? SHIP_COLOR.waiting} />
+      <Chip title="Fatura" label={INV_LABEL[inv] ?? inv} color={INV_COLOR[inv] ?? INV_COLOR.pending} />
+    </div>
+  );
+}
 
 // Profilim akordiyon bölümü (Profil / Adres / Güvenlik). Kapalı içerik DOM'da
 // kalır (hidden), böylece form durumları korunur.
@@ -784,20 +811,8 @@ function AccountPageInner() {
                                 </div>
                               </div>
                            </div>
-                           <div className="flex items-center gap-2">
-                              {order.status === 'completed' ? (
-                                <Badge className="bg-green-100 text-green-700 hover:bg-green-100 border-none font-bold py-1 px-3 flex gap-2">
-                                  <CheckCircle2 size={14} /> Teslim Edildi
-                                </Badge>
-                              ) : order.status === 'cancelled' ? (
-                                <Badge className="bg-red-50 text-red-600 hover:bg-red-50 border-none font-bold py-1 px-3 flex gap-2">
-                                  <XCircle size={14} /> İptal Edildi
-                                </Badge>
-                              ) : (
-                                <Badge className="bg-olive-50 text-olive-600 hover:bg-olive-50 border-olive-100 font-bold py-1 px-3 flex gap-2">
-                                  <Clock size={14} /> {order.status === 'processing' ? 'Hazırlanıyor' : order.status === 'shipped' ? 'Kargoya Verildi' : 'Onay Bekliyor'}
-                                </Badge>
-                              )}
+                           <div className="flex items-center gap-3 flex-wrap">
+                              <OrderStatusChips order={order} />
                               {order.status === 'cancelled' && order.auto_expired && (order.order_items?.length > 0) && (
                                 <Button
                                   onClick={() => reactivateOrder(order)}
