@@ -8,6 +8,7 @@ import GlobalStructuredData from "@/components/GlobalStructuredData";
 import GoogleAnalytics from "@/components/GoogleAnalytics";
 import MobileTabBar from "@/components/MobileTabBar";
 import CookieBanner from "@/components/CookieBanner";
+import FormValidationMessages from "@/components/FormValidationMessages";
 import "./globals.css";
 
 const outfit = Outfit({
@@ -113,6 +114,7 @@ export default function RootLayout({
       </head>
       <body className="font-sans bg-background text-foreground selection:bg-olive-100 selection:text-olive-800 pb-16 md:pb-0" suppressHydrationWarning>
         <TooltipProvider>
+          <FormValidationMessages />
           {children}
           <PopupBanner />
           <ScrollToTop />
