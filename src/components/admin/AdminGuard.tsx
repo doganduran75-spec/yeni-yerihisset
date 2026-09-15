@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { Loader2, WifiOff, RefreshCw } from "lucide-react";
@@ -8,9 +8,13 @@ import { Loader2, WifiOff, RefreshCw } from "lucide-react";
 export default function AdminGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [status, setStatus] = useState<"loading" | "ok" | "error">("loading");
+  // Panel bir kez "ok" olduktan sonra, sekmeye geri dönünce (TOKEN_REFRESHED /
+  // SIGNED_IN olayı) yeniden doğrulamayı SESSİZ yaparız: aksi halde status
+  // "loading"e döner, children unmount olur ve açık diyaloglar/formlar kapanır.
+  const settledRef = useRef(false);
 
-  const check = useCallback(async () => {
-    setStatus("loading");
+  const check = useCallback(async (silent = false) => {
+    if (!silent) setStatus("loading");
     try {
       // getSession, oturumu localStorage'dan okur ve gerekirse access token'ı
       // refresh token ile YENİLER — sunucuya doğrulama isteği atmaz. Sayfa
@@ -34,6 +38,7 @@ export default function AdminGuard({ children }: { children: React.ReactNode }) 
       if (profileError) throw profileError;
 
       if (profile?.role === "admin") {
+        settledRef.current = true;
         setStatus("ok");
       } else {
         // Admin değil → hiçbir detay göstermeden ana sayfaya yönlendir.
@@ -41,9 +46,10 @@ export default function AdminGuard({ children }: { children: React.ReactNode }) 
         router.replace("/");
       }
     } catch (err) {
-      // Ağ/veritabanı erişilemezliği → sonsuz spinner yerine tekrar-dene ekranı
+      // Ağ/veritabanı erişilemezliği → sonsuz spinner yerine tekrar-dene ekranı.
+      // Sessiz (arka plan) kontrolde ekranı bozma; mevcut panel açık kalsın.
       console.error("[AdminGuard] yetki kontrolü başarısız:", err);
-      setStatus("error");
+      if (!silent) setStatus("error");
     }
   }, [router]);
 
@@ -54,7 +60,9 @@ export default function AdminGuard({ children }: { children: React.ReactNode }) 
     // INITIAL_SESSION / SIGNED_IN / TOKEN_REFRESHED olaylarında yeniden kontrol et.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === "INITIAL_SESSION" || event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
-        check();
+        // Panel zaten açıldıysa sessiz doğrula (children unmount olmasın) —
+        // ilk yükleme henüz bitmediyse tam kontrol (hidrasyon race güvenliği).
+        check(settledRef.current);
       }
     });
     return () => subscription.unsubscribe();

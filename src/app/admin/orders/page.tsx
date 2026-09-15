@@ -592,6 +592,52 @@ export default function OrdersPage() {
     );
   }
 
+  // Kompakt durum seçici: yalnızca güncel durumu gösterir, tıklanınca
+  // alternatifleri açar (combobox). Seçim anında günceller.
+  function StatusCombo({
+    title, current, options, colors, fallback, onSelect,
+  }: {
+    title: string;
+    current: string;
+    options: { value: string; label: string }[];
+    colors: Record<string, string>;
+    fallback: string;
+    onSelect: (value: string) => void;
+  }) {
+    const curLabel = options.find((o) => o.value === current)?.label ?? current;
+    return (
+      <div className="border rounded-xl p-2.5 space-y-1.5">
+        <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">{title}</p>
+        <DropdownMenu>
+          <DropdownMenuTrigger render={
+            <button className="group/sc w-full flex items-center justify-between gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold ring-1 ring-inset hover:brightness-95 transition">
+              <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-semibold ${colors[current] ?? colors[fallback]}`}>
+                {curLabel}
+              </span>
+              <ChevronDown size={13} className="text-muted-foreground shrink-0" />
+            </button>
+          } />
+          <DropdownMenuContent align="start" className="min-w-[10rem]">
+            {options.map((o) => {
+              const isCur = o.value === current;
+              return (
+                <DropdownMenuItem
+                  key={o.value}
+                  disabled={isCur}
+                  onClick={() => { if (!isCur) onSelect(o.value); }}
+                  className={`gap-2 text-xs ${isCur ? "font-bold opacity-100" : ""}`}
+                >
+                  <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${isCur ? "bg-blue-500" : "bg-slate-300"}`} />
+                  {o.label}
+                </DropdownMenuItem>
+              );
+            })}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    );
+  }
+
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
@@ -951,95 +997,71 @@ export default function OrdersPage() {
                 </div>
               </div>
 
-              {/* 3 Boyutlu Durum */}
+              {/* 3 Boyutlu Durum — kompakt: güncel durum + tıklayınca combobox */}
               <div className="grid grid-cols-3 gap-3">
                 {/* Ödeme */}
-                <div className="border rounded-xl p-3 space-y-2">
-                  <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Ödeme</p>
-                  <StatusBadge
-                    label={paymentLabels[selectedOrder.payment_status || "pending"] ?? (selectedOrder.payment_status || "pending")}
-                    color={paymentColors[selectedOrder.payment_status || "pending"] ?? paymentColors.pending}
-                  />
-                  <div className="flex flex-col gap-1 pt-1">
-                    {selectedOrder.payment_status === "paid" ? (
-                      <button
-                        onClick={() => updateField(selectedOrder.id, { payment_status: "pending", status: "awaiting_payment" })}
-                        className="text-[11px] text-amber-700 hover:text-amber-900 font-medium text-left flex items-center gap-1"
-                      >
-                        <XCircle size={11} /> Ödeme Yapılmadı İşaretle
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => markPaymentPaid(selectedOrder.id)}
-                        className="text-[11px] text-green-700 hover:text-green-900 font-medium text-left flex items-center gap-1"
-                      >
-                        <CheckCircle size={11} /> Ödendi İşaretle
-                      </button>
-                    )}
-                    <button
-                      onClick={() => updateField(selectedOrder.id, { payment_status: "failed" })}
-                      className="text-[11px] text-red-600 hover:text-red-800 font-medium text-left flex items-center gap-1"
-                    >
-                      <XCircle size={11} /> Başarısız İşaretle
-                    </button>
-                  </div>
-                </div>
+                <StatusCombo
+                  title="Ödeme"
+                  current={selectedOrder.payment_status || "pending"}
+                  colors={paymentColors}
+                  fallback="pending"
+                  options={[
+                    { value: "paid", label: "Ödendi" },
+                    { value: "pending", label: "Ödeme Bekleniyor" },
+                    { value: "failed", label: "Başarısız" },
+                  ]}
+                  onSelect={(v) => {
+                    if (v === "paid") markPaymentPaid(selectedOrder.id);
+                    else if (v === "pending") updateField(selectedOrder.id, { payment_status: "pending", status: "awaiting_payment" });
+                    else updateField(selectedOrder.id, { payment_status: "failed" });
+                  }}
+                />
 
                 {/* Sevkiyat */}
-                <div className="border rounded-xl p-3 space-y-2">
-                  <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Sevkiyat</p>
-                  <StatusBadge
-                    label={shipmentLabels[selectedOrder.shipment_status || "waiting"] ?? (selectedOrder.shipment_status || "waiting")}
-                    color={shipmentColors[selectedOrder.shipment_status || "waiting"] ?? shipmentColors.waiting}
+                <div className="space-y-1.5">
+                  <StatusCombo
+                    title="Sevkiyat"
+                    current={selectedOrder.shipment_status || "waiting"}
+                    colors={shipmentColors}
+                    fallback="waiting"
+                    options={[
+                      { value: "waiting", label: "Bekleniyor" },
+                      { value: "preparing", label: "Hazırlanıyor" },
+                      { value: "shipped", label: selectedOrder.kargonomi_tracking_code ? "Kargoya Verildi" : "Kargoya Ver (Kargonomi)" },
+                      { value: "delivered", label: "Teslim Edildi" },
+                      { value: "cancelled", label: "İptal Edildi" },
+                    ]}
+                    onSelect={(v) => {
+                      if (v === "shipped" && !selectedOrder.kargonomi_tracking_code) {
+                        setIsDetailsOpen(false);
+                        openShipDialog(selectedOrder);
+                      } else {
+                        updateField(selectedOrder.id, { shipment_status: v });
+                      }
+                    }}
                   />
                   {selectedOrder.kargonomi_tracking_code && (
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1 px-1">
                       <code className="text-[10px] font-mono text-purple-700">{selectedOrder.kargonomi_tracking_code}</code>
                       <button onClick={() => navigator.clipboard.writeText(selectedOrder.kargonomi_tracking_code!)} className="text-purple-400 hover:text-purple-700">
                         <Copy size={10} />
                       </button>
                     </div>
                   )}
-                  <div className="flex flex-col gap-1 pt-1">
-                    {!selectedOrder.kargonomi_tracking_code && (
-                      <button
-                        onClick={() => { setIsDetailsOpen(false); openShipDialog(selectedOrder); }}
-                        className="text-[11px] text-purple-700 hover:text-purple-900 font-medium text-left flex items-center gap-1"
-                      >
-                        <Send size={11} /> Kargoya Ver
-                      </button>
-                    )}
-                    <button
-                      onClick={() => updateField(selectedOrder.id, { shipment_status: "delivered" })}
-                      className="text-[11px] text-green-700 hover:text-green-900 font-medium text-left flex items-center gap-1"
-                    >
-                      <CheckCircle size={11} /> Teslim Edildi
-                    </button>
-                  </div>
                 </div>
 
                 {/* Fatura */}
-                <div className="border rounded-xl p-3 space-y-2">
-                  <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Fatura</p>
-                  <StatusBadge
-                    label={invoiceLabels[selectedOrder.invoice_status || "pending"] ?? (selectedOrder.invoice_status || "pending")}
-                    color={invoiceColors[selectedOrder.invoice_status || "pending"] ?? invoiceColors.pending}
-                  />
-                  <div className="flex flex-col gap-1 pt-1">
-                    <button
-                      onClick={() => updateField(selectedOrder.id, { invoice_status: "invoiced" })}
-                      className="text-[11px] text-teal-700 hover:text-teal-900 font-medium text-left flex items-center gap-1"
-                    >
-                      <FileText size={11} /> Faturalandı İşaretle
-                    </button>
-                    <button
-                      onClick={() => updateField(selectedOrder.id, { invoice_status: "pending" })}
-                      className="text-[11px] text-slate-500 hover:text-slate-700 font-medium text-left flex items-center gap-1"
-                    >
-                      <Clock size={11} /> Bekliyor'a Al
-                    </button>
-                  </div>
-                </div>
+                <StatusCombo
+                  title="Fatura"
+                  current={selectedOrder.invoice_status || "pending"}
+                  colors={invoiceColors}
+                  fallback="pending"
+                  options={[
+                    { value: "invoiced", label: "Faturalandı" },
+                    { value: "pending", label: "Bekleniyor" },
+                  ]}
+                  onSelect={(v) => updateField(selectedOrder.id, { invoice_status: v })}
+                />
               </div>
 
               {/* iyzico İade Paneli */}

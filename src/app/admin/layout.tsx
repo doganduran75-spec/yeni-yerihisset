@@ -44,7 +44,7 @@ export default function AdminLayout({
                 </SidebarMenuItem>
                 <SidebarMenuItem>
                   <SidebarMenuButton
-                    render={<Link href="/admin/orders"><Boxes size={18} className="mr-2" /> Stok Yönetimi</Link>}
+                    render={<Link href="/admin/orders"><Boxes size={18} className="mr-2" /> Sipariş &amp; Stok Yön.</Link>}
                   />
                 </SidebarMenuItem>
                 <SidebarMenuItem>
