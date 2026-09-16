@@ -103,27 +103,44 @@ function OrderStatusChips({ order }: { order: any }) {
   );
 }
 
-// Profilim akordiyon bölümü (Profil / Adres / Güvenlik). Kapalı içerik DOM'da
-// kalır (hidden), böylece form durumları korunur.
-function AccSection({ title, isOpen, onToggle, children, className }: {
+// Hesabım akordiyon bölümü. Her bölüm kendine ait canlı bir renkle ayrışır:
+// başlık tam renkli bir blok, üzerinde beyaz çizgi ikon + beyaz kalın başlık
+// (mobilde yüksek kontrast → kolay okunur). Kapalı içerik DOM'da kalır (hidden),
+// böylece form durumları korunur.
+function AccSection({ title, isOpen, onToggle, children, className, color, icon: Icon }: {
   title: string; isOpen: boolean; onToggle: () => void; children: React.ReactNode; className?: string;
+  color: string; icon: React.ComponentType<{ size?: number; className?: string }>;
 }) {
   return (
-    <div className={cn("rounded-2xl border border-slate-100 bg-white overflow-hidden shadow-sm", className)}>
+    <div className={cn("rounded-2xl overflow-hidden shadow-sm", className)}>
       <button
         type="button"
         onClick={onToggle}
-        className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left hover:bg-slate-50/60 transition-colors"
+        className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left transition-[filter] hover:brightness-105"
+        style={{ backgroundColor: color }}
       >
-        <span className="text-lg font-black text-slate-900">{title}</span>
-        <ChevronDown size={20} className={cn("text-slate-400 transition-transform shrink-0", isOpen && "rotate-180")} />
+        <span className="flex items-center gap-3 min-w-0">
+          <Icon size={22} className="text-white shrink-0" />
+          <span className="text-base md:text-lg font-black text-white tracking-tight truncate" style={{ textShadow: "0 1px 2px rgba(0,0,0,0.18)" }}>{title}</span>
+        </span>
+        <ChevronDown size={20} className={cn("text-white/90 transition-transform shrink-0", isOpen && "rotate-180")} />
       </button>
-      <div hidden={!isOpen} className="px-5 pb-6 pt-5 border-t border-slate-100 space-y-6">
+      <div hidden={!isOpen} className="bg-white px-5 pb-6 pt-5 space-y-6">
         {children}
       </div>
     </div>
   );
 }
+
+// Bölüm renkleri — birbirinden ayrık, beyaz metinle okunaklı (koyu/doygun tonlar).
+const ACC_COLORS = {
+  orders:    "#4B7D1E", // zeytin (marka)
+  coupons:   "#B45309", // amber
+  affiliate: "#6D28D9", // mor
+  profil:    "#0E7490", // teal
+  adres:     "#BE123C", // gül kırmızısı
+  guvenlik:  "#334155", // koyu gri
+} as const;
 
 function AccountPageInner() {
   const router = useRouter();
@@ -649,7 +666,7 @@ function AccountPageInner() {
         <div className="max-w-3xl mx-auto flex flex-col gap-4">
 
             {/* ── Kuponlarım ── */}
-            <AccSection title="Kuponlarım" isOpen={openSection === "coupons"} onToggle={() => setOpenSection(openSection === "coupons" ? null : "coupons")} className="order-2">
+            <AccSection title="Kuponlarım" icon={Ticket} color={ACC_COLORS.coupons} isOpen={openSection === "coupons"} onToggle={() => setOpenSection(openSection === "coupons" ? null : "coupons")} className="order-2">
                 <p className="text-sm text-slate-500 -mt-1">Size tanımlı indirim kuponları burada görünür ve ödeme sırasında kullanılabilir.</p>
 
                 {/* Yakında sona erecek uyarıları */}
@@ -756,7 +773,7 @@ function AccountPageInner() {
                 )}
             </AccSection>
 
-            <AccSection title="Siparişlerim" isOpen={openSection === "orders"} onToggle={() => setOpenSection(openSection === "orders" ? null : "orders")} className="order-1">
+            <AccSection title="Siparişlerim" icon={Package} color={ACC_COLORS.orders} isOpen={openSection === "orders"} onToggle={() => setOpenSection(openSection === "orders" ? null : "orders")} className="order-1">
                 <div className="flex items-center justify-end -mt-1">
                    <Badge variant="secondary" className="bg-white border text-slate-500 font-bold px-3 py-1">
                      Toplam {orders.length} Sipariş
@@ -919,7 +936,7 @@ function AccountPageInner() {
                 )}
             </AccSection>
 
-              <AccSection title="Profil Bilgilerim" isOpen={openSection === "profil"} onToggle={() => setOpenSection(openSection === "profil" ? null : "profil")} className="order-4">
+              <AccSection title="Profil Bilgilerim" icon={User} color={ACC_COLORS.profil} isOpen={openSection === "profil"} onToggle={() => setOpenSection(openSection === "profil" ? null : "profil")} className="order-4">
                 <Card className="border-none shadow-sm overflow-hidden">
                    <div className="bg-slate-50 p-6 border-b">
                      <p className="text-sm font-medium text-slate-500 italic">Kişisel bilgilerinizi buradan güncelleyerek deneyiminizi özelleştirebilirsiniz.</p>
@@ -965,7 +982,7 @@ function AccountPageInner() {
               </AccSection>
 
               <div id="hesap-adres" className="scroll-mt-24 order-5">
-              <AccSection title="Adres Bilgilerim" isOpen={openSection === "adres"} onToggle={() => setOpenSection(openSection === "adres" ? null : "adres")}>
+              <AccSection title="Adres Bilgilerim" icon={MapPin} color={ACC_COLORS.adres} isOpen={openSection === "adres"} onToggle={() => setOpenSection(openSection === "adres" ? null : "adres")}>
                 <div className="flex items-center justify-end">
                    {!showAddressForm && (
                      <Button
@@ -1169,7 +1186,7 @@ function AccountPageInner() {
               </AccSection>
               </div>
 
-            <AccSection title="Satış Ortaklığı" isOpen={openSection === "affiliate"} onToggle={() => setOpenSection(openSection === "affiliate" ? null : "affiliate")} className="order-3">
+            <AccSection title="Satış Ortaklığı" icon={Link2} color={ACC_COLORS.affiliate} isOpen={openSection === "affiliate"} onToggle={() => setOpenSection(openSection === "affiliate" ? null : "affiliate")} className="order-3">
                 <div className="flex items-center justify-end -mt-1">
                   <Link href="/affiliate" className={cn(buttonVariants({ variant: "ghost" }), "text-olive-600 font-bold text-sm gap-1")}>
                     Program Hakkında <ChevronRight size={14} />
@@ -1354,7 +1371,7 @@ function AccountPageInner() {
             </AccSection>
 
               <div id="hesap-guvenlik" className="scroll-mt-24 order-6">
-              <AccSection title="Güvenlik Ayarları" isOpen={openSection === "guvenlik"} onToggle={() => setOpenSection(openSection === "guvenlik" ? null : "guvenlik")}>
+              <AccSection title="Güvenlik Ayarları" icon={ShieldCheck} color={ACC_COLORS.guvenlik} isOpen={openSection === "guvenlik"} onToggle={() => setOpenSection(openSection === "guvenlik" ? null : "guvenlik")}>
                 <Card className="border-none shadow-sm">
                    <CardContent className="p-8 space-y-8">
                       <div className="flex items-center gap-6 p-6 bg-olive-50 rounded-3xl border-2 border-olive-100 border-dashed">

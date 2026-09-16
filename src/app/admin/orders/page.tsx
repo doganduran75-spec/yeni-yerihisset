@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import AdminOpsTabs from "@/components/admin/AdminOpsTabs";
 import OrderTimeline from "@/components/admin/OrderTimeline";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -115,6 +115,7 @@ const invoiceLabels: Record<string, string> = {
 
 export default function OrdersPage() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
@@ -169,12 +170,15 @@ export default function OrdersPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [createOpen]);
 
-  // URL'den ?id=xxx gelirse ilgili siparişi otomatik aç
+  // URL'den ?id=xxx gelirse ilgili siparişi bir KEZ otomatik aç, sonra parametreyi
+  // temizle. Aksi halde ?id= URL'de kalıcı olur ve menüye her tıklayışta / sayfa
+  // yenilemede son sipariş tekrar açılırdı.
   useEffect(() => {
     const targetId = searchParams.get("id");
     if (!targetId || loading || orders.length === 0) return;
     const order = orders.find(o => o.id === targetId);
     if (order) handleViewDetails(order);
+    router.replace("/admin/orders", { scroll: false });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, loading, orders.length]);
 
