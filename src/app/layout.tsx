@@ -9,6 +9,7 @@ import GoogleAnalytics from "@/components/GoogleAnalytics";
 import MobileTabBar from "@/components/MobileTabBar";
 import CookieBanner from "@/components/CookieBanner";
 import FormValidationMessages from "@/components/FormValidationMessages";
+import AffiliateRefCapture from "@/components/AffiliateRefCapture";
 import "./globals.css";
 
 const outfit = Outfit({
@@ -115,6 +116,7 @@ export default function RootLayout({
       <body className="font-sans bg-background text-foreground selection:bg-olive-100 selection:text-olive-800 pb-16 md:pb-0" suppressHydrationWarning>
         <TooltipProvider>
           <FormValidationMessages />
+          <AffiliateRefCapture />
           {children}
           <PopupBanner />
           <ScrollToTop />

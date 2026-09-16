@@ -4,7 +4,7 @@ import { createHash } from "crypto";
 
 export async function POST(req: NextRequest) {
   try {
-    const { code, path, ip } = await req.json();
+    const { code, path } = await req.json();
 
     if (!code) return NextResponse.json({ ok: false }, { status: 400 });
 
@@ -19,6 +19,11 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (!affiliate) return NextResponse.json({ ok: false }, { status: 404 });
+
+    // Gerçek IP'yi sunucuda header'dan al (istemci kendi IP'sini bilemez /
+    // güvenilmez). Caddy/proxy x-forwarded-for veya x-real-ip set eder.
+    const fwd = req.headers.get("x-forwarded-for");
+    const ip = fwd ? fwd.split(",")[0].trim() : (req.headers.get("x-real-ip") || null);
 
     // IP hash (gizlilik için ham IP saklamıyoruz)
     const ipHash = ip
