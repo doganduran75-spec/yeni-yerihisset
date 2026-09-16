@@ -46,7 +46,7 @@ import OrderMessagesModal from "@/components/account/OrderMessagesModal";
 
 type TabType = "orders" | "addresses" | "profile" | "security" | "affiliate" | "coupons" | "messages";
 // Akordiyon bölüm anahtarları (tek akordiyon; üst menü yok)
-type SectionKey = "orders" | "coupons" | "affiliate" | "profil" | "adres" | "guvenlik";
+type SectionKey = "orders" | "coupons" | "affiliate" | "profil" | "adres";
 
 export default function AccountPage() {
   return (
@@ -107,10 +107,13 @@ function OrderStatusChips({ order }: { order: any }) {
 // başlık tam renkli bir blok, üzerinde beyaz çizgi ikon + beyaz kalın başlık
 // (mobilde yüksek kontrast → kolay okunur). Kapalı içerik DOM'da kalır (hidden),
 // böylece form durumları korunur.
-function AccSection({ title, isOpen, onToggle, children, className, color, icon: Icon }: {
+function AccSection({ title, isOpen, onToggle, children, className, color, icon: Icon, dark = false }: {
   title: string; isOpen: boolean; onToggle: () => void; children: React.ReactNode; className?: string;
   color: string; icon: React.ComponentType<{ size?: number; className?: string }>;
+  // Pastel/açık renkli başlıklarda metin okunaklı kalsın diye koyu metin modu.
+  dark?: boolean;
 }) {
+  const fg = dark ? "text-slate-800" : "text-white";
   return (
     <div className={cn("rounded-2xl overflow-hidden shadow-sm", className)}>
       <button
@@ -120,10 +123,10 @@ function AccSection({ title, isOpen, onToggle, children, className, color, icon:
         style={{ backgroundColor: color }}
       >
         <span className="flex items-center gap-3 min-w-0">
-          <Icon size={22} className="text-white shrink-0" />
-          <span className="text-base md:text-lg font-black text-white tracking-tight truncate" style={{ textShadow: "0 1px 2px rgba(0,0,0,0.18)" }}>{title}</span>
+          <Icon size={22} className={cn("shrink-0", fg)} />
+          <span className={cn("text-base md:text-lg font-black tracking-tight truncate", fg)} style={dark ? undefined : { textShadow: "0 1px 2px rgba(0,0,0,0.18)" }}>{title}</span>
         </span>
-        <ChevronDown size={20} className={cn("text-white/90 transition-transform shrink-0", isOpen && "rotate-180")} />
+        <ChevronDown size={20} className={cn("transition-transform shrink-0", dark ? "text-slate-500" : "text-white/90", isOpen && "rotate-180")} />
       </button>
       <div hidden={!isOpen} className="bg-white px-5 pb-6 pt-5 space-y-6">
         {children}
@@ -136,10 +139,9 @@ function AccSection({ title, isOpen, onToggle, children, className, color, icon:
 const ACC_COLORS = {
   orders:    "#4B7D1E", // zeytin (marka)
   coupons:   "#B45309", // amber
-  affiliate: "#6D28D9", // mor
+  affiliate: "#C4B5FD", // yumuşak pastel mor (koyu metinle okunur)
   profil:    "#0E7490", // teal
-  adres:     "#BE123C", // gül kırmızısı
-  guvenlik:  "#334155", // koyu gri
+  adres:     "#334155", // koyu gri (eski güvenlik rengi)
 } as const;
 
 function AccountPageInner() {
@@ -181,7 +183,7 @@ function AccountPageInner() {
       case "affiliate": return "affiliate";
       case "profile": return "profil";
       case "addresses": return "adres";
-      case "security": return "guvenlik";
+      case "security": return "profil"; // Güvenlik artık Profil altında
       default: return "orders";
     }
   })();
@@ -979,6 +981,61 @@ function AccountPageInner() {
                       </form>
                    </CardContent>
                 </Card>
+
+                {/* Güvenlik Ayarları — Profil altına taşındı (ayrı menü kaldırıldı) */}
+                <div id="hesap-guvenlik" className="scroll-mt-24 pt-4 mt-2 border-t border-slate-100">
+                  <div className="flex items-center gap-2 mb-4 mt-4">
+                    <ShieldCheck size={18} className="text-slate-700" />
+                    <h3 className="text-base font-black text-slate-900 uppercase tracking-tight">Güvenlik Ayarları</h3>
+                  </div>
+                  <Card className="border-none shadow-sm">
+                     <CardContent className="p-8 space-y-8">
+                        <div className="flex items-center gap-6 p-6 bg-olive-50 rounded-3xl border-2 border-olive-100 border-dashed">
+                           <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-olive-600 shadow-sm">
+                              <ShieldCheck size={32} />
+                           </div>
+                           <div className="flex-1">
+                              <h4 className="font-black text-slate-900 uppercase tracking-tight">Güvenli Şifre Yenileme</h4>
+                              <p className="text-sm text-slate-500 leading-relaxed font-medium">Hesap güvenliğiniz için şifrenizi belirli aralıklarla güncellemenizi öneririz. Yeni şifreniz güçlü ve benzersiz olmalıdır.</p>
+                           </div>
+                        </div>
+
+                        <div className="max-w-md space-y-6">
+                           <form onSubmit={handleUpdatePassword} className="space-y-6">
+                              <div className="space-y-2">
+                                 <label className="text-xs font-bold uppercase text-slate-500 px-1">Yeni Şifre</label>
+                                 <Input
+                                  type="password"
+                                  required
+                                  value={passwordForm.password}
+                                  onChange={e => setPasswordForm({...passwordForm, password: e.target.value})}
+                                  placeholder="••••••••"
+                                  className="h-12 font-bold"
+                                 />
+                              </div>
+                              <div className="space-y-2">
+                                 <label className="text-xs font-bold uppercase text-slate-500 px-1">Yeni Şifre (Tekrar)</label>
+                                 <Input
+                                  type="password"
+                                  required
+                                  value={passwordForm.confirmPassword}
+                                  onChange={e => setPasswordForm({...passwordForm, confirmPassword: e.target.value})}
+                                  placeholder="••••••••"
+                                  className="h-12 font-bold"
+                                 />
+                              </div>
+                              <Button
+                                type="submit"
+                                disabled={isUpdatingPassword}
+                                className="w-full h-14 rounded-2xl bg-slate-900 font-bold tracking-widest uppercase transition-all shadow-lg active:scale-95"
+                              >
+                                {isUpdatingPassword ? "GÜNCELLENİYOR..." : "ŞİFREYİ GÜNCELLE"}
+                              </Button>
+                           </form>
+                        </div>
+                     </CardContent>
+                  </Card>
+                </div>
               </AccSection>
 
               <div id="hesap-adres" className="scroll-mt-24 order-5">
@@ -1186,7 +1243,7 @@ function AccountPageInner() {
               </AccSection>
               </div>
 
-            <AccSection title="Satış Ortaklığı" icon={Link2} color={ACC_COLORS.affiliate} isOpen={openSection === "affiliate"} onToggle={() => setOpenSection(openSection === "affiliate" ? null : "affiliate")} className="order-3">
+            <AccSection title="Satış Ortaklığı" icon={Link2} color={ACC_COLORS.affiliate} dark isOpen={openSection === "affiliate"} onToggle={() => setOpenSection(openSection === "affiliate" ? null : "affiliate")} className="order-3">
                 <div className="flex items-center justify-end -mt-1">
                   <Link href="/affiliate" className={cn(buttonVariants({ variant: "ghost" }), "text-olive-600 font-bold text-sm gap-1")}>
                     Program Hakkında <ChevronRight size={14} />
@@ -1370,57 +1427,6 @@ function AccountPageInner() {
                 )}
             </AccSection>
 
-              <div id="hesap-guvenlik" className="scroll-mt-24 order-6">
-              <AccSection title="Güvenlik Ayarları" icon={ShieldCheck} color={ACC_COLORS.guvenlik} isOpen={openSection === "guvenlik"} onToggle={() => setOpenSection(openSection === "guvenlik" ? null : "guvenlik")}>
-                <Card className="border-none shadow-sm">
-                   <CardContent className="p-8 space-y-8">
-                      <div className="flex items-center gap-6 p-6 bg-olive-50 rounded-3xl border-2 border-olive-100 border-dashed">
-                         <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-olive-600 shadow-sm">
-                            <ShieldCheck size={32} />
-                         </div>
-                         <div className="flex-1">
-                            <h4 className="font-black text-slate-900 uppercase tracking-tight">Güvenli Şifre Yenileme</h4>
-                            <p className="text-sm text-slate-500 leading-relaxed font-medium">Hesap güvenliğiniz için şifrenizi belirli aralıklarla güncellemenizi öneririz. Yeni şifreniz güçlü ve benzersiz olmalıdır.</p>
-                         </div>
-                      </div>
-
-                      <div className="max-w-md space-y-6">
-                         <form onSubmit={handleUpdatePassword} className="space-y-6">
-                            <div className="space-y-2">
-                               <label className="text-xs font-bold uppercase text-slate-500 px-1">Yeni Şifre</label>
-                               <Input 
-                                type="password" 
-                                required
-                                value={passwordForm.password}
-                                onChange={e => setPasswordForm({...passwordForm, password: e.target.value})}
-                                placeholder="••••••••" 
-                                className="h-12 font-bold" 
-                               />
-                            </div>
-                            <div className="space-y-2">
-                               <label className="text-xs font-bold uppercase text-slate-500 px-1">Yeni Şifre (Tekrar)</label>
-                               <Input 
-                                type="password" 
-                                required
-                                value={passwordForm.confirmPassword}
-                                onChange={e => setPasswordForm({...passwordForm, confirmPassword: e.target.value})}
-                                placeholder="••••••••" 
-                                className="h-12 font-bold" 
-                               />
-                            </div>
-                            <Button 
-                              type="submit" 
-                              disabled={isUpdatingPassword}
-                              className="w-full h-14 rounded-2xl bg-slate-900 font-bold tracking-widest uppercase transition-all shadow-lg active:scale-95"
-                            >
-                              {isUpdatingPassword ? "GÜNCELLENİYOR..." : "ŞİFREYİ GÜNCELLE"}
-                            </Button>
-                         </form>
-                      </div>
-                   </CardContent>
-                </Card>
-              </AccSection>
-              </div>
           </div>
       </main>
 
