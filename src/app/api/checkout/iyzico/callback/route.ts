@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { createIyzicoClient } from "@/lib/iyzico";
+import { restoreOrderCredit } from "@/lib/store-credit";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://yerihisset.com";
 
@@ -135,7 +136,9 @@ export async function POST(req: NextRequest) {
         resolve(NextResponse.redirect(`${SITE_URL}/siparis-tamam?id=${order.id}`, 303));
       } else {
         // Ödeme başarısız / iptal → siparişi iptal et + rezerve stoğu iade et (F9)
+        // + kullanılan YeriHisset Kredisi'ni cüzdana geri yükle
         await (supabase as any).rpc("restore_order_stock", { p_order_id: order.id });
+        await restoreOrderCredit(supabase, order.id);
         await (supabase as any)
           .from("orders")
           .update({ status: "cancelled", payment_status: "failed" })

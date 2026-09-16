@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { renderEmailTemplate } from "@/lib/notifications";
+import { restoreOrderCredit } from "@/lib/store-credit";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -75,9 +76,17 @@ async function run(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  const ids: string[] = Array.isArray(data?.ids) ? data.ids : [];
+
+  // Otomatik iptal edilen siparişlerde kullanılan YeriHisset Kredisi'ni geri yükle
+  try {
+    for (const id of ids) await restoreOrderCredit(supabase, id);
+  } catch (e: any) {
+    console.error("[cron/expire-orders] kredi iade hata:", e?.message || e);
+  }
+
   // Kurtarma e-postaları (mevcut process-email-queue cron'u gönderir)
   try {
-    const ids: string[] = Array.isArray(data?.ids) ? data.ids : [];
     await queueRecoveryEmails(supabase, ids);
   } catch (e: any) {
     console.error("[cron/expire-orders] recovery mail hata:", e?.message || e);

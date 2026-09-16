@@ -28,6 +28,14 @@ export async function GET(req: NextRequest) {
     .order("created_at", { ascending: false })
     .limit(20);
 
+  // YeriHisset Kredisi hareket geçmişi (kazanç / harcama / iade)
+  const { data: ledger } = await supabase
+    .from("store_credit_ledger")
+    .select("id, type, amount, balance_after, period, note, created_at")
+    .eq("affiliate_id", affiliate.id)
+    .order("created_at", { ascending: false })
+    .limit(30);
+
   const totalEarnings = (conversions ?? [])
     .filter((c) => c.status !== "cancelled")
     .reduce((sum, c) => sum + Number(c.commission_amount), 0);
@@ -39,6 +47,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     affiliate: { ...affiliate, total_clicks: clickCount ?? 0, total_earnings: totalEarnings },
     conversions: conversions ?? [],
+    ledger: ledger ?? [],
     pendingEarnings,
   });
 }

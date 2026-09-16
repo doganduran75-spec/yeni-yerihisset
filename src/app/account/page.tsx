@@ -221,6 +221,7 @@ function AccountPageInner() {
   const [affiliate, setAffiliate] = useState<any>(null);
   const [affiliateConversions, setAffiliateConversions] = useState<any[]>([]);
   const [affiliatePending, setAffiliatePending] = useState(0);
+  const [affiliateLedger, setAffiliateLedger] = useState<any[]>([]);
   const [affiliateLoading, setAffiliateLoading] = useState(false);
   const [affiliateApplying, setAffiliateApplying] = useState(false);
   const [affiliateCopied, setAffiliateCopied] = useState(false);
@@ -459,6 +460,7 @@ function AccountPageInner() {
       setAffiliate(data.affiliate);
       setAffiliateConversions(data.conversions || []);
       setAffiliatePending(data.pendingEarnings || 0);
+      setAffiliateLedger(data.ledger || []);
     }
     setAffiliateLoading(false);
   }
@@ -1375,6 +1377,40 @@ function AccountPageInner() {
                         </Card>
                       ))}
                     </div>
+
+                    {/* YeriHisset Kredisi cüzdanı */}
+                    <Card className="border-none shadow-sm overflow-hidden">
+                      <div className="bg-gradient-to-br from-emerald-600 to-emerald-700 p-6 text-white">
+                        <p className="text-[11px] font-bold uppercase tracking-widest text-emerald-100">YeriHisset Kredisi — Bakiye</p>
+                        <p className="text-4xl font-black tracking-tight mt-1">
+                          ₺{Number(affiliate.credit_balance || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                        </p>
+                        <p className="text-[12px] text-emerald-100 mt-2 leading-relaxed">
+                          Kazandığın komisyonlar burada birikir; sepette <b>indirim olarak</b> kullanabilirsin.
+                        </p>
+                      </div>
+                      {affiliateLedger.length > 0 && (
+                        <CardContent className="p-0">
+                          <div className="divide-y">
+                            {affiliateLedger.map((l: any) => {
+                              const positive = Number(l.amount) >= 0;
+                              const label = l.type === "earning" ? `Hakediş${l.period ? ` (${l.period})` : ""}` : l.type === "refund" ? "İade" : "Sepette kullanım";
+                              return (
+                                <div key={l.id} className="flex items-center justify-between px-5 py-3">
+                                  <div className="min-w-0">
+                                    <p className="text-sm font-bold text-slate-800">{label}</p>
+                                    <p className="text-[11px] text-slate-400">{new Date(l.created_at).toLocaleDateString("tr-TR")}</p>
+                                  </div>
+                                  <p className={cn("font-black shrink-0", positive ? "text-emerald-600" : "text-slate-500")}>
+                                    {positive ? "+" : ""}₺{Number(l.amount).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                                  </p>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </CardContent>
+                      )}
+                    </Card>
 
                     {/* Nasıl Kullanılır */}
                     <Card className="border-none shadow-sm bg-slate-50">

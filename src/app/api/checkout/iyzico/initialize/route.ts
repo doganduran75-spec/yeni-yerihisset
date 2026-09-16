@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase-admin";
 import { getAuthUserFromRequest } from "@/lib/auth-from-request";
 import { createIyzicoClient, formatPrice, newConversationId } from "@/lib/iyzico";
 import { validateCartPricing } from "@/lib/order-pricing";
+import { resolveCreditApply, deductCreditForOrder, restoreOrderCredit } from "@/lib/store-credit";
 
 type CartItem = {
   product_id: string;
@@ -27,6 +28,7 @@ export async function POST(req: NextRequest) {
     affiliateCode,
     couponCode,
     identityNumber,
+    creditApply,
   } = body as {
     items: CartItem[];
     shippingAddressId: string;
@@ -35,6 +37,7 @@ export async function POST(req: NextRequest) {
     affiliateCode?: string;
     couponCode?: string;
     identityNumber: string;
+    creditApply?: number;
   };
 
   if (!items?.length || !shippingAddressId) {
@@ -137,7 +140,13 @@ export async function POST(req: NextRequest) {
   // Tutarlar (doğrulanmış fiyatlardan)
   const productTotal = pricing.productTotal;
   const shippingCost = productTotal > 500 || freeShipping ? 0 : 29.90;
-  const totalAmount = Math.max(0, productTotal + shippingCost - couponDiscount);
+  const preTotal = Math.max(0, productTotal + shippingCost - couponDiscount); // kredi öncesi
+
+  // YeriHisset Kredisi uygula (sunucuda doğrula + sınırla)
+  const { applied: creditApplied, wallet: creditWallet } =
+    await resolveCreditApply(supabase, user.id, Number(creditApply || 0), preTotal);
+  const totalAmount = Math.max(0, Math.round((preTotal - creditApplied) * 100) / 100);
+  const fullyCredited = totalAmount <= 0; // kredi tüm tutarı karşıladı → iyzico'ya gerek yok
 
   const shippingAddressJson = JSON.stringify({
     name: `${address.first_name} ${address.last_name}`,
@@ -173,21 +182,22 @@ export async function POST(req: NextRequest) {
   // conversationId → sipariş kaydından önce üret
   const conversationId = newConversationId();
 
-  // Siparişi oluştur (pending — iyzico henüz onaylamadı)
+  // Siparişi oluştur. Kredi tüm tutarı karşıladıysa (fullyCredited) iyzico'ya
+  // gerek yok → sipariş ÖDENMİŞ oluşturulur; aksi halde pending (iyzico onayı bekler).
   const { data: order, error: orderError } = await (supabase
     .from("orders")
     .insert({
       user_id: user.id,
-      status: "pending",
+      status: fullyCredited ? "processing" : "pending",
       total_amount: totalAmount,
       shipping_address: shippingAddressJson,
       billing_address: billingAddressJson,
       affiliate_id: affiliateId,
       coupon_id: couponId,
       coupon_discount: couponDiscount,
-      payment_method: "iyzico",
-      payment_status: "pending",
-      shipment_status: "waiting",
+      payment_method: fullyCredited ? "store_credit" : "iyzico",
+      payment_status: fullyCredited ? "paid" : "pending",
+      shipment_status: fullyCredited ? "preparing" : "waiting",
       invoice_status: "pending",
       iyzico_conversation_id: conversationId,
     } as any)
@@ -197,6 +207,14 @@ export async function POST(req: NextRequest) {
   if (orderError || !order) {
     console.error("[iyzico/initialize] orderError:", orderError);
     return NextResponse.json({ error: "Sipariş oluşturulamadı", detail: orderError?.message }, { status: 500 });
+  }
+
+  // YeriHisset Kredisi düşümü (sipariş oluştu). Ödeme başarısız/iptal olursa
+  // aşağıdaki hata dalları restoreOrderCredit ile geri yükler.
+  if (creditApplied > 0 && creditWallet) {
+    await deductCreditForOrder(supabase, {
+      userId: user.id, orderId: order.id, applied: creditApplied, wallet: creditWallet,
+    });
   }
 
   // Sipariş kalemlerini kaydet
@@ -231,6 +249,7 @@ export async function POST(req: NextRequest) {
     "reduce_order_stock", { p_order_id: order.id, p_strict: true }
   );
   if (reserveErr || !reserveRes?.ok) {
+    await restoreOrderCredit(supabase, order.id); // düşülen krediyi geri yükle (silmeden önce)
     await supabase.from("order_items").delete().eq("order_id", order.id);
     await supabase.from("orders").delete().eq("id", order.id);
     const soldOut = String(reserveErr?.message ?? "").includes("INSUFFICIENT_STOCK");
@@ -238,6 +257,17 @@ export async function POST(req: NextRequest) {
       { error: soldOut ? "Üzgünüz, sepetinizdeki bir ürün az önce tükendi. Lütfen sepetinizi güncelleyin." : "Stok rezervasyonu başarısız." },
       { status: 409 }
     );
+  }
+
+  // Kredi tüm tutarı karşıladı → iyzico'ya gitmeden sipariş tamamlandı.
+  // (Sipariş zaten paid/processing oluşturuldu, stok rezerve edildi, kredi düşüldü.)
+  if (fullyCredited) {
+    return NextResponse.json({
+      ok: true,
+      fullyCredited: true,
+      orderId: order.id,
+      orderNumber: order.order_number ?? null,
+    });
   }
 
   // ── iyzico CheckoutForm Initialize ────────────────────────────────────────
@@ -336,8 +366,9 @@ export async function POST(req: NextRequest) {
   return new Promise<NextResponse>((resolve) => {
     iyzipay.checkoutFormInitialize.create(checkoutRequest, async (err: any, result: any) => {
       if (err || result?.status !== "success") {
-        // Başarısız olursa siparişi iptal et + rezerve edilen stoğu iade et
+        // Başarısız olursa siparişi iptal et + rezerve edilen stoğu iade et + krediyi geri yükle
         await (supabase as any).rpc("restore_order_stock", { p_order_id: order.id });
+        await restoreOrderCredit(supabase, order.id);
         await supabase.from("orders").update({ status: "cancelled" }).eq("id", order.id);
         console.error("[iyzico/initialize] iyzico error:", err ?? result);
         resolve(NextResponse.json(

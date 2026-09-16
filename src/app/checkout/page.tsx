@@ -22,6 +22,7 @@ import {
   Landmark,
   Clock,
   IdCard,
+  Banknote,
 } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,6 +54,9 @@ export default function CheckoutPage() {
   const [couponError, setCouponError] = useState("");
   const [couponLoading, setCouponLoading] = useState(false);
   const [userCoupons, setUserCoupons] = useState<any[]>([]);
+  // YeriHisset Kredisi (mağaza kredisi) — cüzdan bakiyesi + uygulanan tutar
+  const [creditBalance, setCreditBalance] = useState(0);
+  const [creditInput, setCreditInput] = useState("");
   const [personalInfo, setPersonalInfo] = useState({
     firstName: "",
     lastName: "",
@@ -121,6 +125,17 @@ export default function CheckoutPage() {
       });
       if (profile.identity_number) setIdentityNumber(profile.identity_number);
     }
+
+    // YeriHisset Kredisi bakiyesi (varsa) — cüzdanı sepette indirim olarak kullanabilir
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        const r = await fetch("/api/affiliate/stats", { headers: { Authorization: `Bearer ${session.access_token}` } });
+        const d = await r.json();
+        const bal = Number(d?.affiliate?.credit_balance || 0);
+        if (bal > 0) setCreditBalance(bal);
+      }
+    } catch { /* kritik değil */ }
 
     const { data } = await supabase.from('user_addresses').select('*').eq('user_id', user.id);
     if (data) {
@@ -191,7 +206,9 @@ export default function CheckoutPage() {
     const totalPrice = getTotalPrice();
     const couponDiscount = couponData?.discount_amount ?? 0;
     const shippingCost = (totalPrice > 500 || couponData?.free_shipping) ? 0 : 29.90;
-    const finalTotal = Math.max(0, totalPrice + shippingCost - couponDiscount);
+    const preCreditTotal = Math.max(0, totalPrice + shippingCost - couponDiscount);
+    const creditApplied = Math.min(Math.max(0, Number(creditInput) || 0), creditBalance, preCreditTotal);
+    const finalTotal = Math.max(0, Math.round((preCreditTotal - creditApplied) * 100) / 100);
 
     const { data: { session } } = await supabase.auth.getSession();
     const authToken = session?.access_token;
@@ -220,6 +237,7 @@ export default function CheckoutPage() {
           affiliateCode,
           couponCode: couponCode || undefined,
           identityNumber: identityNumber.replace(/\D/g, ""),
+          creditApply: creditApplied,
         }),
       });
 
@@ -228,6 +246,22 @@ export default function CheckoutPage() {
 
       if (!data.ok) {
         alert(data.error || "Ödeme başlatılamadı. Lütfen tekrar deneyin.");
+        return;
+      }
+
+      // Kredi tüm tutarı karşıladıysa iyzico'ya gerek yok — sipariş tamamlandı
+      if (data.fullyCredited) {
+        trackPurchase({
+          orderId: data.orderId,
+          items: items.map((i) => ({ id: i.product_id, title: i.title, price: i.price, quantity: i.quantity, variant_name: i.variant_name })),
+          total: 0,
+          shipping: shippingCost,
+          couponCode: couponCode || undefined,
+          affiliateCode: affiliateCode || undefined,
+        });
+        clearCart();
+        setOrderSuccess(data.orderId);
+        setOrderNumber(data.orderNumber ?? null);
         return;
       }
 
@@ -259,6 +293,7 @@ export default function CheckoutPage() {
         affiliateCode,
         couponCode: couponCode || undefined,
         paymentMethod,
+        creditApply: creditApplied,
       }),
     });
 
@@ -399,7 +434,9 @@ export default function CheckoutPage() {
   const totalPrice = getTotalPrice();
   const couponDiscount = couponData?.discount_amount ?? 0;
   const shippingCost = (totalPrice > 500 || couponData?.free_shipping) ? 0 : 29.90;
-  const finalTotal = Math.max(0, totalPrice + shippingCost - couponDiscount);
+  const preCreditTotal = Math.max(0, totalPrice + shippingCost - couponDiscount);
+  const creditApplied = Math.min(Math.max(0, Number(creditInput) || 0), creditBalance, preCreditTotal);
+  const finalTotal = Math.max(0, Math.round((preCreditTotal - creditApplied) * 100) / 100);
 
   return (
     <div className="min-h-screen bg-[#F8FAFC]">
@@ -728,6 +765,12 @@ export default function CheckoutPage() {
                           <span className="text-lg">-₺{couponDiscount.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
                         </div>
                       )}
+                      {creditApplied > 0 && (
+                        <div className="flex justify-between text-emerald-600 text-sm">
+                          <span>YeriHisset Kredisi</span>
+                          <span className="text-lg">-₺{creditApplied.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
+                        </div>
+                      )}
                     </div>
 
                     {/* Kupon Alanı */}
@@ -795,8 +838,45 @@ export default function CheckoutPage() {
                       )}
                     </div>
 
+                    {/* YeriHisset Kredisi (cüzdan) — bakiyesi olan kullanıcıya */}
+                    {creditBalance > 0 && (
+                      <div className="space-y-2 rounded-2xl border-2 border-emerald-100 bg-emerald-50/40 p-4">
+                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-emerald-600 flex items-center gap-1.5">
+                          <Banknote size={12} /> YERİHİSSET KREDİSİ · BAKİYE ₺{creditBalance.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
+                        </p>
+                        <div className="flex gap-2">
+                          <Input
+                            type="text"
+                            inputMode="decimal"
+                            value={creditInput}
+                            onChange={(e) => {
+                              const v = e.target.value.replace(/[^0-9.,]/g, "").replace(",", ".");
+                              setCreditInput(v);
+                            }}
+                            placeholder="Kullanılacak tutar (₺)"
+                            className="h-10 rounded-xl font-bold text-sm"
+                          />
+                          <Button
+                            type="button" variant="outline" size="sm"
+                            className="h-10 px-4 font-bold shrink-0 rounded-xl border-emerald-200 text-emerald-700"
+                            onClick={() => setCreditInput(String(Math.min(creditBalance, preCreditTotal)))}
+                          >
+                            Tümü
+                          </Button>
+                        </div>
+                        {creditApplied > 0 ? (
+                          <p className="text-[11px] text-emerald-700 font-bold">
+                            ₺{creditApplied.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} uygulandı ·{" "}
+                            <button type="button" onClick={() => setCreditInput("")} className="underline hover:text-red-500">Kaldır</button>
+                          </p>
+                        ) : (
+                          <p className="text-[11px] text-emerald-600/80">Bakiyenin tamamını veya bir kısmını bu siparişte indirim olarak kullanabilirsin.</p>
+                        )}
+                      </div>
+                    )}
+
                     <Separator className="bg-slate-100" />
-                    
+
                     <div className="flex flex-col gap-1 p-6 bg-olive-50/50 rounded-3xl border-2 border-olive-100 relative overflow-hidden group">
                       <div className="absolute top-0 right-0 w-16 h-16 bg-olive-100 blur-3xl opacity-50 group-hover:scale-150 transition-transform duration-1000" />
                       <span className="text-[9px] font-black text-olive-400 uppercase tracking-widest leading-none">Ödenecek Tutar</span>

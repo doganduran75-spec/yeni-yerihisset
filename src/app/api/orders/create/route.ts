@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { getAuthUserFromRequest } from "@/lib/auth-from-request";
 import { validateCartPricing } from "@/lib/order-pricing";
+import { resolveCreditApply, deductCreditForOrder } from "@/lib/store-credit";
 
 type CartItem = {
   product_id: string;
@@ -20,7 +21,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { items, shippingAddressId, billingAddressId, billingSameAsShipping, affiliateCode, couponCode, paymentMethod } = body as {
+  const { items, shippingAddressId, billingAddressId, billingSameAsShipping, affiliateCode, couponCode, paymentMethod, creditApply } = body as {
     items: CartItem[];
     shippingAddressId: string;
     billingAddressId?: string | null;
@@ -28,6 +29,7 @@ export async function POST(req: NextRequest) {
     affiliateCode?: string;
     couponCode?: string;
     paymentMethod?: string;
+    creditApply?: number;
   };
 
   if (!items?.length || !shippingAddressId) {
@@ -132,7 +134,13 @@ export async function POST(req: NextRequest) {
   // Toplam tutarı hesapla (doğrulanmış fiyatlardan)
   const productTotal = pricing.productTotal;
   const shippingCost = (productTotal > 500 || freeShipping) ? 0 : 29.90;
-  const totalAmount = productTotal + shippingCost - couponDiscount;
+  const preTotal = Math.max(0, productTotal + shippingCost - couponDiscount); // kredi ÖNCESİ
+
+  // YeriHisset Kredisi uygula (sunucuda doğrula + sınırla)
+  const { applied: creditApplied, wallet: creditWallet } =
+    await resolveCreditApply(supabase, user.id, Number(creditApply || 0), preTotal);
+  const totalAmount = Math.max(0, Math.round((preTotal - creditApplied) * 100) / 100);
+  const fullyCredited = totalAmount <= 0; // kredi tüm tutarı karşıladı
 
   // Adres bilgisi (JSON olarak sakla)
   const shippingAddressJson = JSON.stringify({
@@ -165,13 +173,12 @@ export async function POST(req: NextRequest) {
   }
   const billingAddressJson = JSON.stringify(billingSnap);
 
-  // Ödeme yöntemine göre başlangıç durumları
-  const isBankTransfer = paymentMethod === "bank_transfer";
-  // Eski tek kolon (geriye dönük uyumluluk)
-  const initialStatus = isBankTransfer ? "awaiting_payment" : "pending";
-  // Yeni 3 boyutlu durum
-  const initialPaymentStatus  = isBankTransfer ? "pending" : "paid";
-  const initialShipmentStatus = isBankTransfer ? "waiting" : "preparing";
+  // Ödeme yöntemine göre başlangıç durumları.
+  // Kredi tüm tutarı karşıladıysa (fullyCredited) sipariş ÖDENMİŞ sayılır —
+  // havale beklenmez.
+  const initialStatus = fullyCredited ? "processing" : "awaiting_payment";
+  const initialPaymentStatus  = fullyCredited ? "paid" : "pending";
+  const initialShipmentStatus = fullyCredited ? "preparing" : "waiting";
   const initialInvoiceStatus  = "pending";
 
   // Siparişi oluştur
@@ -197,6 +204,13 @@ export async function POST(req: NextRequest) {
   if (orderError || !order) {
     console.error("[orders/create] orderError:", JSON.stringify(orderError));
     return NextResponse.json({ error: "Sipariş oluşturulamadı", detail: orderError?.message ?? "unknown" }, { status: 500 });
+  }
+
+  // YeriHisset Kredisi düşümü (bakiye − , ledger 'spend', orders.credit_used)
+  if (creditApplied > 0 && creditWallet) {
+    await deductCreditForOrder(supabase, {
+      userId: user.id, orderId: order.id, applied: creditApplied, wallet: creditWallet,
+    });
   }
 
   // Varyasyon SKU'larını toplu çek (sku lookup için)

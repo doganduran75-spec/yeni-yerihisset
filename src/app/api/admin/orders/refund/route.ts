@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { getAuthUserFromRequest } from "@/lib/auth-from-request";
 import { createIyzicoClient, formatPrice, newConversationId } from "@/lib/iyzico";
+import { restoreOrderCredit } from "@/lib/store-credit";
 
 export async function POST(req: NextRequest) {
   const user = await getAuthUserFromRequest(req);
@@ -104,9 +105,10 @@ export async function POST(req: NextRequest) {
     })
     .eq("id", orderId);
 
-  // Tam iade → ürünler iade edildiği için stoğu geri yükle
+  // Tam iade → ürünler iade edildiği için stoğu geri yükle + kullanılan krediyi iade et
   if (isFullRefund) {
     await (supabase as any).rpc("restore_order_stock", { p_order_id: orderId });
+    await restoreOrderCredit(supabase, orderId);
   }
 
   return NextResponse.json({
