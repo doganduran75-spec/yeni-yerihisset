@@ -17,6 +17,7 @@ type Affiliate = {
   total_orders: number;
   total_earnings: number;
   total_paid: number;
+  credit_balance: number;
   created_at: string;
   application_answers: any;
   profiles: { first_name: string | null; last_name: string | null; email: string | null } | null;
@@ -38,7 +39,53 @@ export default function AdminAffiliatesPage() {
   const [conversions, setConversions] = useState<Conversion[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [activeView, setActiveView] = useState<"affiliates" | "conversions">("affiliates");
+  const [activeView, setActiveView] = useState<"affiliates" | "conversions" | "payout">("affiliates");
+
+  // ── Hakediş (dönemsel YeriHisset Kredisi) ────────────────────────────────
+  function lastMonthPeriod(): string {
+    const d = new Date();
+    d.setDate(1);
+    d.setMonth(d.getMonth() - 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  }
+  const [period, setPeriod] = useState<string>(lastMonthPeriod());
+  const [payoutBusy, setPayoutBusy] = useState(false);
+  const [payoutPreview, setPayoutPreview] = useState<any | null>(null);
+  const [payoutMsg, setPayoutMsg] = useState<string | null>(null);
+
+  async function runPayout(mode: "preview" | "commit") {
+    setPayoutBusy(true);
+    setPayoutMsg(null);
+    if (mode === "preview") setPayoutPreview(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch("/api/admin/affiliate/payout", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify({ period, mode }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        setPayoutMsg(data.error || "İşlem başarısız.");
+        return;
+      }
+      if (mode === "preview") {
+        setPayoutPreview(data);
+        if (!data.summary?.length) setPayoutMsg("Bu dönemde işlenecek hakediş bulunamadı.");
+      } else {
+        setPayoutMsg(`✓ ${data.committed} sipariş işlendi, toplam ₺${Number(data.grandTotal).toLocaleString("tr-TR", { minimumFractionDigits: 2 })} hesaplara aktarıldı.`);
+        setPayoutPreview(null);
+        fetchData();
+      }
+    } catch {
+      setPayoutMsg("Bağlantı hatası.");
+    } finally {
+      setPayoutBusy(false);
+    }
+  }
 
   useEffect(() => {
     fetchData();
@@ -131,7 +178,7 @@ export default function AdminAffiliatesPage() {
 
       {/* Tabs */}
       <div className="flex gap-2 border-b">
-        {(["affiliates", "conversions"] as const).map((view) => (
+        {(["affiliates", "conversions", "payout"] as const).map((view) => (
           <button
             key={view}
             onClick={() => setActiveView(view)}
@@ -142,7 +189,7 @@ export default function AdminAffiliatesPage() {
                 : "border-transparent text-muted-foreground hover:text-foreground"
             )}
           >
-            {view === "affiliates" ? "Satış Ortakları" : "Komisyonlar"}
+            {view === "affiliates" ? "Satış Ortakları" : view === "conversions" ? "Komisyonlar" : "Hakediş (Dönem)"}
           </button>
         ))}
       </div>
@@ -188,6 +235,9 @@ export default function AdminAffiliatesPage() {
                             .reduce((sum, c) => sum + Number(c.commission_amount), 0)
                             .toLocaleString("tr-TR", { minimumFractionDigits: 2 })} komisyon
                         </span>
+                        <span className="font-bold text-green-700">
+                          ₺{Number(aff.credit_balance ?? 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })} YHK bakiye
+                        </span>
                       </div>
                       {aff.application_answers && (
                         <div className="text-xs text-muted-foreground mt-1">
@@ -221,6 +271,86 @@ export default function AdminAffiliatesPage() {
                 </CardContent>
               </Card>
             ))
+          )}
+        </div>
+      )}
+
+      {activeView === "payout" && (
+        <div className="space-y-5">
+          <Card className="border-none shadow-sm">
+            <CardContent className="p-5 space-y-4">
+              <div>
+                <h3 className="font-black text-slate-900">Dönemsel Hakediş Hesaplama</h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Seçilen ay içinde <b>ödeme + sevkiyat + fatura tamamlanan</b>, iade edilmemiş, atıflı
+                  (link veya affiliate kuponu) siparişlerden komisyonu hesaplar. “Hesaba İşle” ile
+                  affiliate’lerin YeriHisset Kredisi bakiyesine ekler. Aynı sipariş iki kez işlenmez.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold uppercase text-muted-foreground">Dönem (Ay)</label>
+                  <input
+                    type="month"
+                    value={period}
+                    onChange={(e) => { setPeriod(e.target.value); setPayoutPreview(null); setPayoutMsg(null); }}
+                    className="h-10 rounded-lg border border-slate-200 px-3 text-sm font-mono"
+                  />
+                </div>
+                <Button onClick={() => runPayout("preview")} disabled={payoutBusy || !period} variant="outline" className="font-bold h-10">
+                  {payoutBusy ? "Hesaplanıyor…" : "Hesapla (Önizleme)"}
+                </Button>
+                {payoutPreview?.summary?.length > 0 && (
+                  <Button
+                    onClick={() => {
+                      if (confirm(`${payoutPreview.period} dönemi için toplam ₺${Number(payoutPreview.grandTotal).toLocaleString("tr-TR", { minimumFractionDigits: 2 })} affiliate hesaplarına işlenecek. Onaylıyor musunuz?`)) runPayout("commit");
+                    }}
+                    disabled={payoutBusy}
+                    className="bg-green-600 hover:bg-green-700 font-bold h-10 gap-1.5"
+                  >
+                    <Banknote size={15} /> Hesaba İşle
+                  </Button>
+                )}
+              </div>
+              {payoutMsg && (
+                <div className={cn("text-sm font-medium rounded-lg px-3 py-2",
+                  payoutMsg.startsWith("✓") ? "bg-green-50 text-green-700 border border-green-100" : "bg-amber-50 text-amber-700 border border-amber-100")}>
+                  {payoutMsg}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {payoutPreview?.summary?.length > 0 && (
+            <Card className="border-none shadow-sm">
+              <CardContent className="p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-bold text-slate-800">{payoutPreview.period} — Önizleme</h4>
+                  <span className="text-sm font-black text-green-600">
+                    Toplam ₺{Number(payoutPreview.grandTotal).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                    <span className="text-xs font-medium text-muted-foreground"> · {payoutPreview.orderCount} sipariş</span>
+                  </span>
+                </div>
+                <div className="divide-y">
+                  {payoutPreview.summary.map((s: any) => (
+                    <div key={s.affiliate_id} className="flex items-center justify-between py-2.5">
+                      <div className="min-w-0">
+                        <p className="font-bold text-slate-900 truncate">{s.name || s.email || "—"}</p>
+                        <p className="text-xs text-muted-foreground">
+                          <span className="font-mono text-blue-600">?ref={s.code}</span> · {s.order_count} sipariş
+                        </p>
+                      </div>
+                      <p className="font-black text-green-600 shrink-0">
+                        +₺{Number(s.total_commission).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[11px] text-muted-foreground mt-3">
+                  Bu bir önizlemedir; hesaplara yansıması için “Hesaba İşle”ye basın.
+                </p>
+              </CardContent>
+            </Card>
           )}
         </div>
       )}

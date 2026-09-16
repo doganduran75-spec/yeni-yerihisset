@@ -256,18 +256,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Affiliate komisyonu kaydet
-  if (affiliateId && commissionRate > 0) {
-    const commissionAmount = (totalAmount * commissionRate) / 100;
-    await supabase.from("affiliate_conversions").insert({
-      affiliate_id: affiliateId,
-      order_id: order.id,
-      order_amount: totalAmount,
-      commission_rate: commissionRate,
-      commission_amount: commissionAmount,
-      status: "pending",
-    });
-  }
+  // NOT: Affiliate komisyonu artık sipariş anında YAZILMIYOR. Aylık hakediş
+  // raporu (/api/admin/affiliate/payout), geçen ay tamamlanan + iade edilmemiş
+  // siparişlerden hesaplar. Sipariş anında yazmak iade/değişim yüzünden yanlıştı.
+  // (affiliate_id siparişte tutulmaya devam ediyor; rapor onu kullanır.)
 
   // Kupon kullanımını kaydet
   if (couponId && validatedCoupon) {
