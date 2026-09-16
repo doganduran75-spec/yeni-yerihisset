@@ -17,6 +17,9 @@ const TABS = [
 export default function MobileTabBar() {
   const pathname = usePathname() || "/";
 
+  // Admin panelinde site alt menüsü gösterilmez (admin kendi menüsünü kullanır).
+  if (pathname.startsWith("/admin")) return null;
+
   return (
     <nav
       className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-white/95 backdrop-blur border-t border-[#E8E4DC]"

@@ -4,7 +4,7 @@ import Link from "next/link";
 export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
-import { SidebarProvider, Sidebar, SidebarHeader, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarInset, SidebarGroupLabel } from "@/components/ui/sidebar";
+import { SidebarProvider, Sidebar, SidebarHeader, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarInset, SidebarGroupLabel, SidebarTrigger } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { LayoutDashboard, Settings, Users, ExternalLink, BookOpen, Handshake, MessagesSquare, Link2, Ticket, BellRing, Send, Boxes, Inbox, BarChart3 } from "lucide-react";
@@ -143,16 +143,20 @@ export default function AdminLayout({
       </Sidebar>
 
       <SidebarInset>
-        <header className="h-16 flex shrink-0 items-center justify-between px-6 bg-background border-b transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12 shadow-sm">
-          <h1 className="font-semibold text-lg">Yönetim Paneli</h1>
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-muted-foreground">Admin User</span>
+        <header className="h-16 flex shrink-0 items-center justify-between px-4 md:px-6 bg-background border-b transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12 shadow-sm">
+          <div className="flex items-center gap-2 min-w-0">
+            {/* Mobilde sol menüyü açan hamburger — masaüstünde menü zaten sabit */}
+            <SidebarTrigger className="md:hidden -ml-1 size-9" />
+            <h1 className="font-semibold text-base md:text-lg truncate">Yönetim Paneli</h1>
+          </div>
+          <div className="flex items-center gap-3 md:gap-4 shrink-0">
+            <span className="hidden sm:inline text-sm text-muted-foreground">Admin User</span>
             <Avatar>
               <AvatarFallback>AU</AvatarFallback>
             </Avatar>
           </div>
         </header>
-        <main className="flex-1 p-6 overflow-auto bg-muted/20">
+        <main className="flex-1 p-4 md:p-6 overflow-auto bg-muted/20">
           {children}
         </main>
       </SidebarInset>
