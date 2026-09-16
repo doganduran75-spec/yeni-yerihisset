@@ -1,0 +1,2 @@
+# Kabuk scriptleri her platformda LF ile saklansın (Linux sunucuda bash çalışsın)
+*.sh text eol=lf
