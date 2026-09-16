@@ -644,7 +644,7 @@ export default function CartPage() {
               Görünüşe göre henüz sepetinize bir ürün eklememişsiniz.
             </p>
           </div>
-          <Link href="/" className={cn(buttonVariants({ size: "lg" }), "h-14 px-10 rounded-2xl bg-olive-600 hover:bg-olive-700 shadow-xl shadow-olive-100 font-bold")}>
+          <Link href="/products" className={cn(buttonVariants({ size: "lg" }), "h-14 px-10 rounded-2xl bg-olive-600 hover:bg-olive-700 shadow-xl shadow-olive-100 font-bold")}>
             Alışverişe Başla
           </Link>
         </main>
@@ -742,7 +742,7 @@ export default function CartPage() {
               ))}
             </div>
 
-            <Link href="/" className="inline-flex items-center gap-2 text-sm font-bold text-olive-600 hover:gap-3 transition-all pt-4">
+            <Link href="/products" className="inline-flex items-center gap-2 text-sm font-bold text-olive-600 hover:gap-3 transition-all pt-4">
               <ArrowLeft size={16} /> Alışverişe Devam Et
             </Link>
           </div>
