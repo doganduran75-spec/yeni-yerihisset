@@ -16,11 +16,20 @@
 import http from "k6/http";
 import { check, sleep, group } from "k6";
 import { Rate } from "k6/metrics";
+import encoding from "k6/encoding";
 
 const BASE = __ENV.BASE_URL || "https://dev.yerihisset.com";
 const PRODUCT_SLUG = __ENV.PRODUCT_SLUG || "";
 const CATEGORY_SLUG = __ENV.CATEGORY_SLUG || "";
 const PEAK = Number(__ENV.PEAK || 50);
+
+// Staging Basic Auth (Caddy realm "restricted"). Kimlik bilgileri ortam
+// değişkeninden okunur; script'e/koda GÖMÜLMEZ. Canlıda gerekmez, boş bırak.
+const BASIC_USER = __ENV.BASIC_USER || "";
+const BASIC_PASS = __ENV.BASIC_PASS || "";
+const AUTH_HEADERS = (BASIC_USER && BASIC_PASS)
+  ? { Authorization: "Basic " + encoding.b64encode(`${BASIC_USER}:${BASIC_PASS}`) }
+  : {};
 
 const errorRate = new Rate("errors");
 
@@ -41,7 +50,7 @@ export const options = {
 };
 
 function visit(path, name) {
-  const res = http.get(`${BASE}${path}`, { tags: { name } });
+  const res = http.get(`${BASE}${path}`, { tags: { name }, headers: AUTH_HEADERS });
   const ok = check(res, {
     [`${name} 200`]: (r) => r.status === 200,
   });
