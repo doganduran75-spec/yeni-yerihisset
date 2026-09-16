@@ -8,7 +8,7 @@ import Footer from "@/components/Footer";
 import { ChevronRight, Search, Star } from "lucide-react";
 import { formatPriceDisplay, getMinPrice } from "@/lib/product-price";
 
-export const revalidate = 60;
+export const revalidate = 300;
 
 function getSupabase() {
   return createClient(

@@ -7,7 +7,7 @@ import Footer from "@/components/Footer";
 import SizeFilterGrid from "@/components/SizeFilterGrid";
 import { ChevronRight } from "lucide-react";
 
-export const revalidate = 60;
+export const revalidate = 300;
 
 function getSupabase() {
   return createClient(

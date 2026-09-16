@@ -5,7 +5,7 @@ import Footer from "@/components/Footer";
 import SizeFilterGrid from "@/components/SizeFilterGrid";
 import FeedbackForm from "@/components/FeedbackForm";
 
-export const revalidate = 60;
+export const revalidate = 300;
 
 export const metadata: Metadata = {
   title: "Tüm Ürünler",
