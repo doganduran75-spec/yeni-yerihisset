@@ -336,6 +336,30 @@ export default function ProductPageClient({ product, initialSize = null }: { pro
                 ))}
               </div>
             )}
+
+            {/* Görsel ön-yükleme: galeri + varyant fotoları mount'ta ANA görselle
+                aynı boyut/sizes ile optimize edilip önbelleğe alınır → foto/varyant
+                değiştirince anlık gelir (soğuk optimizasyon beklemesi olmaz).
+                Ekranda görünmez. */}
+            <div aria-hidden className="absolute w-0 h-0 overflow-hidden opacity-0 pointer-events-none">
+              {[...new Set([
+                ...images,
+                ...activeVariants.map((v) => v.image_url).filter((u): u is string => !!u),
+              ])]
+                .filter((src) => src && src !== selectedImage)
+                .slice(0, 8) /* aşırı görselli üründe upfront yükü sınırla */
+                .map((src) => (
+                  <Image
+                    key={src}
+                    src={src}
+                    alt=""
+                    width={800}
+                    height={1000}
+                    loading="eager"
+                    sizes="(max-width: 768px) 100vw, 50vw"
+                  />
+                ))}
+            </div>
           </div>
 
           {/* Product Info */}

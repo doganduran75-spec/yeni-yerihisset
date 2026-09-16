@@ -37,4 +37,15 @@ echo "▸ pm2 başlat/yükle (cluster — ecosystem.config.js)"
 pm2 startOrReload ecosystem.config.js --update-env
 pm2 save
 
+# ISR ISITMA: ana sayfaları bir kez çağırarak önbelleği önceden üret; böylece
+# deploy sonrası İLK ziyaretçi soğuk render'ı beklemez ("aniden yükleme" biter).
+# Caddy basic-auth'u aşmak için doğrudan localhost:3000'e (pm2) gideriz.
+echo "▸ ISR ısıtma"
+for i in 1 2 3 4 5 6 7 8; do
+  curl -sf -o /dev/null "http://localhost:3000/" && break || sleep 2
+done
+for path in "/" "/products" "/firsatlar"; do
+  curl -s -o /dev/null "http://localhost:3000${path}" || true
+done
+
 echo "✓ Dağıtım tamam."
