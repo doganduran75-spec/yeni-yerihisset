@@ -16,13 +16,17 @@
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "node:fs";
 
-// .env.local'i basitçe yükle (Next dışında çalıştığımız için)
-try {
-  for (const line of readFileSync(new URL("../.env.local", import.meta.url), "utf8").split("\n")) {
-    const m = /^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/.exec(line);
-    if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^["']|["']$/g, "");
-  }
-} catch { /* env dosyası yoksa gerçek ortam değişkenlerine güven */ }
+// Env dosyalarını yükle (Next dışında çalıştığımız için). Gerçek ortam
+// değişkenleri (process.env) her zaman öncelikli; dosyalar sadece boşları doldurur.
+// Sunucuda .env / .env.production.local da olabilir → hepsini dene.
+for (const name of [".env.local", ".env", ".env.production.local", ".env.production"]) {
+  try {
+    for (const line of readFileSync(new URL(`../${name}`, import.meta.url), "utf8").split("\n")) {
+      const m = /^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/.exec(line);
+      if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^["']|["']$/g, "");
+    }
+  } catch { /* bu dosya yoksa geç */ }
+}
 
 const OLD_HOST = "ewnuurgmxhksbjixbian.supabase.co";
 const APPLY = process.argv.includes("--apply");
