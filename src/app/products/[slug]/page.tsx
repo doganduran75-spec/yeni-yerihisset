@@ -17,6 +17,10 @@ import ProductStructuredData from "@/components/products/ProductStructuredData";
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com";
 const STORE_NAME = "YeriHisset";
 
+// ISR: ürün sayfası sunucuda önbelleklenir, 5 dakikada bir tazelenir.
+// (Stok/fiyat değişimi en geç 5 dk'da yansır; sepet/checkout zaten anlık doğrular.)
+export const revalidate = 300;
+
 // Ürün verisi sunucu tarafında bir kez çekilir
 async function getProduct(slug: string) {
   const supabase = createClient<Database>(
