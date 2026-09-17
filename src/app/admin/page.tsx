@@ -246,7 +246,10 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-6 lg:grid-cols-3 items-start">
+
+      {/* SAĞ — Satışa ait rakamlar (mobilde altta) */}
+      <div className="order-2 lg:col-span-1 grid grid-cols-2 lg:grid-cols-1 gap-4 content-start">
         <Card className="border-l-4 border-l-blue-500 shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Toplam Satış</CardTitle>
@@ -288,6 +291,9 @@ export default function AdminDashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* SOL — Yapılacak işler (en kısa sürede) */}
+      <div className="order-1 lg:col-span-2 space-y-6">
 
       {/* Tamamlanmamış Siparişler (süreç kapanmamış) */}
       <Card className="shadow-sm border-l-4 border-l-amber-500">
@@ -351,7 +357,7 @@ export default function AdminDashboard() {
         </CardContent>
       </Card>
 
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid gap-6 sm:grid-cols-2">
         {/* Yeni Mesajlar */}
         <Card className="shadow-sm border-l-4 border-l-rose-500">
           <CardHeader className="flex flex-row items-center justify-between pb-3">
@@ -554,7 +560,9 @@ export default function AdminDashboard() {
           </CardContent>
         </Card>
 
-      </div>
+      </div>{/* aksiyon widget alt-grid */}
+      </div>{/* SOL kolon */}
+      </div>{/* dış 2-kolon grid */}
     </div>
   );
 }
