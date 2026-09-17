@@ -79,7 +79,21 @@ export default function AdminDashboard() {
   const [manualAlerts, setManualAlerts] = useState<{ id: string; product: string; who: string; channel: string }[]>([]);
   const [pendingMessages, setPendingMessages] = useState<PendingMessage[]>([]);
   const [pendingReviews, setPendingReviews] = useState<PendingReview[]>([]);
+  const [stockTasks, setStockTasks] = useState<any[]>([]); // pazaryeri stok görevleri (bekleyen)
   const [loading, setLoading] = useState(true);
+
+  // Pazaryeri stok görevleri (servis-rol endpoint; browser client RLS ile göremez)
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.access_token) return;
+        const res = await fetch("/api/admin/stock-sync", { headers: { Authorization: `Bearer ${session.access_token}` } });
+        const d = await res.json();
+        if (d.ok) setStockTasks(d.pending || []);
+      } catch { /* kritik değil */ }
+    })();
+  }, []);
 
   useEffect(() => {
     fetchDashboardData();
@@ -491,6 +505,47 @@ export default function AdminDashboard() {
                         <p className="text-xs text-slate-400 truncate">{a.who ? `${a.who} · ` : ""}{a.channel}</p>
                       </div>
                       <ArrowRight size={12} className="text-slate-300 group-hover:text-teal-500 transition-colors shrink-0" />
+                    </Link>
+                  ))}
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Pazaryeri Stok Görevleri — stok 0 olunca kanalları kapat */}
+        <Card className="shadow-sm border-l-4 border-l-red-500">
+          <CardHeader className="flex flex-row items-center justify-between pb-3">
+            <CardTitle className="flex items-center gap-2">
+              <PackageOpen size={18} className="text-red-500" />
+              Pazaryeri Stok Görevleri
+              {stockTasks.length > 0 && (
+                <span className="bg-red-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                  {stockTasks.length}
+                </span>
+              )}
+            </CardTitle>
+            <Link href="/admin/stock-sync" className="text-xs text-muted-foreground hover:text-red-600 flex items-center gap-1 transition-colors">
+              Tümü <ArrowRight size={12} />
+            </Link>
+          </CardHeader>
+          <CardContent className="pt-0">
+            {stockTasks.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">Stok 0 görevi yok. 🎉</p>
+            ) : (
+              <>
+                <p className="text-[11px] text-slate-400 mb-2">
+                  Stoğu 0 olan ürünlerin pazaryeri listelemelerini <b>kapat</b>. Barkod kopyala → kanala git → 0 yap.
+                </p>
+                <div className="space-y-1">
+                  {[...new Map(stockTasks.map((t: any) => [t.variant_id || t.product_id, t])).values()].slice(0, 6).map((t: any) => (
+                    <Link key={t.variant_id || t.product_id} href="/admin/stock-sync"
+                      className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-red-50 transition-colors group">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-slate-900 truncate">{t.product_title}{t.variant_label ? ` · ${t.variant_label}` : ""}</p>
+                        {t.barcode && <p className="text-xs font-mono text-slate-400 truncate">{t.barcode}</p>}
+                      </div>
+                      <ArrowRight size={12} className="text-slate-300 group-hover:text-red-500 transition-colors shrink-0" />
                     </Link>
                   ))}
                 </div>
