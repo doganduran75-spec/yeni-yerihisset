@@ -359,7 +359,7 @@ export default function AdminDashboard() {
       </div>{/* SAĞ ALT kapan */}
 
       {/* SOL %34 — Yapılacak işler, tek sıra (dikey) */}
-      <div className="lg:col-start-1 lg:col-span-1 lg:row-start-1 lg:row-span-2 space-y-6">
+      <div className="lg:col-start-1 lg:col-span-1 lg:row-start-1 lg:row-span-2 flex flex-col gap-6">
         {/* Yeni Mesajlar */}
         <Card className="shadow-sm border-l-4 border-l-rose-500">
           <CardHeader className="flex flex-row items-center justify-between pb-3">
@@ -522,7 +522,7 @@ export default function AdminDashboard() {
         </Card>
 
         {/* Pazaryeri Stok Görevleri — stok 0 olunca kanalları kapat */}
-        <Card className="shadow-sm border-l-4 border-l-red-500">
+        <Card className="order-first shadow-sm border-l-4 border-l-red-500">
           <CardHeader className="flex flex-row items-center justify-between pb-3">
             <CardTitle className="flex items-center gap-2">
               <PackageOpen size={18} className="text-red-500" />
