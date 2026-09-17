@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { CreditCard, ShoppingBag, Star, Boxes } from "lucide-react";
+import { CreditCard, ShoppingBag, Star, Boxes, Store } from "lucide-react";
 
 /**
  * "Stok Yönetimi" birleşik menüsünün sekme çubuğu. 4 işletme sayfası (Siparişler,
@@ -15,6 +15,7 @@ const TABS = [
   { key: "products", label: "Ürünler", href: "/admin/products", icon: ShoppingBag },
   { key: "reviews", label: "Yorumlar", href: "/admin/reviews", icon: Star },
   { key: "stock", label: "Stok Yönetimi", href: "/admin/stock", icon: Boxes },
+  { key: "marketplace", label: "Pazaryeri Stok", href: "/admin/stock-sync", icon: Store },
 ] as const;
 
 export type OpsTab = (typeof TABS)[number]["key"];

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { Copy, ExternalLink, Check, Loader2, PackageX, Store, ClipboardList, Save } from "lucide-react";
+import AdminOpsTabs from "@/components/admin/AdminOpsTabs";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -66,6 +67,7 @@ export default function StockSyncPage() {
 
   return (
     <div className="space-y-6">
+      <AdminOpsTabs active="marketplace" />
       <div>
         <h1 className="text-2xl font-bold flex items-center gap-2"><PackageX size={22} className="text-red-600" /> Pazaryeri Stok Görevleri</h1>
         <p className="text-muted-foreground text-sm mt-1">
