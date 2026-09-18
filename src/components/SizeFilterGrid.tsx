@@ -46,7 +46,7 @@ function ProductCard({ product, categoryName, size, outOfStock, onNotify, canQui
     <div className="group cursor-pointer">
       <div className="relative aspect-[3/4] overflow-hidden rounded-[2.5rem] bg-olive-50 mb-6 border border-slate-100 shadow-sm transition-all duration-700 hover:shadow-2xl hover:shadow-slate-200">
         <Link href={href} className="block w-full h-full relative">
-          <Image src={img} alt={product.title} fill priority={priority} sizes="(max-width: 640px) 100vw, (max-width: 768px) 50vw, 25vw" className="object-cover group-hover:scale-110 transition-transform duration-1000" />
+          <Image src={img} alt={product.title} fill priority={priority} loading={priority ? undefined : "eager"} sizes="(max-width: 640px) 100vw, (max-width: 768px) 50vw, 25vw" className="object-cover group-hover:scale-110 transition-transform duration-1000" />
         </Link>
         {outOfStock && onNotify ? (
           /* Stokta olmayan (numara filtresi) — kalıcı aksiyonlar: Haber Ver (birincil) + İncele (ikincil) */
