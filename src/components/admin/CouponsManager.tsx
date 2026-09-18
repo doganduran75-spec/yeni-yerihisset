@@ -34,6 +34,7 @@ type Coupon = {
   expires_at: string | null;
   is_active: boolean;
   campaign_slug: string | null;
+  affiliate_id: string | null; // bu kodu kullanan siparişler bu satış ortağına komisyon üretir
 };
 
 const EMPTY: Omit<Coupon, "id" | "used_count"> = {
@@ -52,6 +53,7 @@ const EMPTY: Omit<Coupon, "id" | "used_count"> = {
   expires_at: null,
   is_active: true,
   campaign_slug: null,
+  affiliate_id: null,
 };
 
 const TYPE_LABEL: Record<string, string> = {
@@ -89,8 +91,22 @@ export default function CouponsManager() {
   const [assignNotify, setAssignNotify] = useState(true);
   const [tagOptions, setTagOptions] = useState<{ id: string; label: string }[]>([]);
   const [assigning, setAssigning] = useState(false);
+  const [affiliates, setAffiliates] = useState<{ id: string; code: string; name: string }[]>([]);
 
-  useEffect(() => { fetchCoupons(); fetchTagOptions(); }, []);
+  useEffect(() => { fetchCoupons(); fetchTagOptions(); fetchAffiliates(); }, []);
+
+  async function fetchAffiliates() {
+    const { data } = await supabase
+      .from("affiliate_profiles")
+      .select("id, code, profiles(first_name, last_name)")
+      .eq("status", "active")
+      .order("created_at", { ascending: false });
+    setAffiliates(((data as any[]) || []).map((a) => ({
+      id: a.id,
+      code: a.code,
+      name: `${a.profiles?.first_name ?? ""} ${a.profiles?.last_name ?? ""}`.trim(),
+    })));
+  }
 
   async function fetchCoupons() {
     const { data } = await supabase.from("coupons").select("*").order("created_at", { ascending: false });
@@ -144,6 +160,7 @@ export default function CouponsManager() {
         per_user_limit: Number(editingCoupon.per_user_limit) || 1,
         expires_at: editingCoupon.expires_at || null,
         starts_at: editingCoupon.starts_at || new Date().toISOString(),
+        affiliate_id: editingCoupon.affiliate_id || null,
         updated_at: new Date().toISOString(),
       };
       delete (payload as any).id;
@@ -377,6 +394,23 @@ export default function CouponsManager() {
                   Paylaşılacak link: <span className="font-mono text-olive-700">/kampanya/{editingCoupon.campaign_slug}</span> — tıklayan kişi bu kodu otomatik alır, analitikte kampanya olarak ayrışır.
                 </p>
               )}
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold">Satış Ortağı (opsiyonel)</label>
+              <select
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={editingCoupon.affiliate_id || ""}
+                onChange={(e) => setEditingCoupon((p) => ({ ...p, affiliate_id: e.target.value || null }))}
+              >
+                <option value="">— Yok (kupon ortağa bağlı değil) —</option>
+                {affiliates.map((a) => (
+                  <option key={a.id} value={a.id}>{a.name || "İsimsiz"} · {a.code}</option>
+                ))}
+              </select>
+              <p className="text-[11px] text-slate-500">
+                Bir ortağa bağlarsan, bu kodu kullanan siparişler (linke gerek yok) aylık hakedişte o ortağa komisyon üretir.
+              </p>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
