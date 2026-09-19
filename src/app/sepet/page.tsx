@@ -793,7 +793,10 @@ export default function CartPage() {
                 <Separator className="bg-slate-100" />
 
                 <div className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl border border-slate-100/50">
-                  <span className="font-bold text-slate-900 uppercase tracking-tighter">Genel Toplam</span>
+                  <div className="flex flex-col">
+                    <span className="font-bold text-slate-900 uppercase tracking-tighter">Genel Toplam</span>
+                    <span className="text-[11px] font-medium text-slate-400">KDV Dahil</span>
+                  </div>
                   <span className="text-2xl font-black text-olive-600">
                     ₺{finalTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
                   </span>

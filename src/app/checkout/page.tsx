@@ -883,6 +883,7 @@ export default function CheckoutPage() {
                       <span className="text-4xl font-black text-olive-600 italic tracking-tighter pt-1">
                         ₺{finalTotal.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
                       </span>
+                      <span className="text-[11px] font-bold text-olive-600/70 tracking-tight">KDV Dahil</span>
                     </div>
 
                     <Button
