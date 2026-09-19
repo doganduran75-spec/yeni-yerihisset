@@ -190,7 +190,7 @@ function AccountPageInner() {
 
   const [openSection, setOpenSection] = useState<SectionKey | null>(initialSection);
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null); // sipariş "Detaylar"
-  const [msgOrder, setMsgOrder] = useState<{ id: string; label: string } | null>(null); // açık mesaj modalı
+  const [msgOrder, setMsgOrder] = useState<{ id: string; label: string; draft?: string } | null>(null); // açık mesaj modalı
   const [orderUnread, setOrderUnread] = useState<Record<string, number>>({}); // sipariş → okunmamış admin mesajı
 
   // Eski derin linkler (?tab=addresses/security) Profilim'e düşer; ilgili
@@ -854,6 +854,16 @@ function AccountPageInner() {
                                 )}
                               </Button>
                               <Button
+                                variant="outline" size="sm"
+                                onClick={() => {
+                                  const label = order.order_number ? `YH${order.order_number}` : `#${order.id.slice(0,8)}`;
+                                  setMsgOrder({ id: order.id, label, draft: `İade / değişim talebim var (Sipariş ${label}).\nÜrün(ler): \nSebep: \nİade mi değişim mi olacağını sizinle görüşerek belirlemek istiyorum.` });
+                                }}
+                                className="font-bold text-xs gap-1.5 rounded-xl border-slate-200 text-slate-600 hover:bg-slate-50 h-9"
+                              >
+                                <RotateCcw size={14} /> İade / Değişim
+                              </Button>
+                              <Button
                                 variant="ghost" size="sm"
                                 onClick={() => setExpandedOrder(expandedOrder === order.id ? null : order.id)}
                                 className="font-bold text-xs gap-1"
@@ -1472,6 +1482,7 @@ function AccountPageInner() {
           orderId={msgOrder.id}
           orderLabel={msgOrder.label}
           userId={user.id}
+          initialDraft={msgOrder.draft}
           onClose={() => { setMsgOrder(null); fetchOrderUnread(); }}
           onRead={() => fetchOrderUnread()}
         />

@@ -7,17 +7,18 @@ import { X, Send, Loader2, MessageSquare } from "lucide-react";
 
 // Sipariş-özel sohbet. Mobilde tam ekran sheet, masaüstünde ortada dialog.
 export default function OrderMessagesModal({
-  orderId, orderLabel, userId, onClose, onRead,
+  orderId, orderLabel, userId, onClose, onRead, initialDraft,
 }: {
   orderId: string;
   orderLabel: string; // "YH1234"
   userId: string;
   onClose: () => void;
   onRead?: () => void; // rozet güncellensin diye
+  initialDraft?: string; // ör. iade/değişim talebi ön-metni
 }) {
   const [messages, setMessages] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [text, setText] = useState("");
+  const [text, setText] = useState(initialDraft ?? "");
   const [sending, setSending] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
