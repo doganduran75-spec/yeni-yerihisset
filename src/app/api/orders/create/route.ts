@@ -4,6 +4,7 @@ import { getAuthUserFromRequest } from "@/lib/auth-from-request";
 import { validateCartPricing } from "@/lib/order-pricing";
 import { resolveCreditApply, deductCreditForOrder } from "@/lib/store-credit";
 import { resolveGuest, type GuestInput } from "@/lib/guest-checkout";
+import { resolveShipping } from "@/lib/shipping";
 
 type CartItem = {
   product_id: string;
@@ -19,7 +20,7 @@ export async function POST(req: NextRequest) {
   const authUser = await getAuthUserFromRequest(req);
 
   const body = await req.json();
-  const { items, shippingAddressId, billingAddressId, billingSameAsShipping, affiliateCode, couponCode, paymentMethod, creditApply, guest } = body as {
+  const { items, shippingAddressId, billingAddressId, billingSameAsShipping, affiliateCode, couponCode, paymentMethod, creditApply, guest, shippingMethodId } = body as {
     items: CartItem[];
     shippingAddressId?: string;
     billingAddressId?: string | null;
@@ -29,6 +30,7 @@ export async function POST(req: NextRequest) {
     paymentMethod?: string;
     creditApply?: number;
     guest?: GuestInput;
+    shippingMethodId?: string;
   };
 
   if (!items?.length) {
@@ -137,7 +139,8 @@ export async function POST(req: NextRequest) {
 
   // Toplam tutarı hesapla (doğrulanmış fiyatlardan)
   const productTotal = pricing.productTotal;
-  const shippingCost = (productTotal > 500 || freeShipping) ? 0 : 29.90;
+  const shipInfo = await resolveShipping(supabase, shippingMethodId, productTotal, freeShipping);
+  const shippingCost = shipInfo.cost;
   const preTotal = Math.max(0, productTotal + shippingCost - couponDiscount); // kredi ÖNCESİ
 
   // YeriHisset Kredisi uygula (sunucuda doğrula + sınırla)
@@ -194,6 +197,8 @@ export async function POST(req: NextRequest) {
       total_amount: Math.max(0, totalAmount),
       shipping_address: shippingAddressJson,
       billing_address: billingAddressJson,
+      shipping_method: shipInfo.name,
+      shipping_cost: shippingCost,
       affiliate_id: affiliateId,
       coupon_id: couponId,
       coupon_discount: couponDiscount,

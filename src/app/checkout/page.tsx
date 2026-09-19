@@ -33,6 +33,14 @@ import { trackBeginCheckout, trackPurchase } from "@/lib/analytics";
 import { GeoSelect } from "@/components/ui/geo-select";
 import { CITIES, DISTRICTS } from "@/lib/turkey-geo";
 
+// Seçili kargo yönteminin ücreti (kupon ücretsiz-kargo veya free_over eşiğinde 0)
+function shipFee(m: any, productTotal: number, freeCoupon: boolean): number {
+  if (!m) return 0;
+  if (freeCoupon) return 0;
+  if (m.free_over != null && productTotal >= Number(m.free_over)) return 0;
+  return Number(m.fee || 0);
+}
+
 function getCookie(name: string): string | null {
   if (typeof document === "undefined") return null;
   const match = document.cookie.match(new RegExp("(^| )" + name + "=([^;]+)"));
@@ -45,6 +53,8 @@ export default function CheckoutPage() {
   const [addresses, setAddresses] = useState<any[]>([]);
   const [isGuest, setIsGuest] = useState(false); // giriş yapmadan alışveriş
   const [guestAddr, setGuestAddr] = useState({ phone: "", city: "", district: "", addressDetail: "" });
+  const [shippingMethods, setShippingMethods] = useState<any[]>([]);
+  const [selectedShippingMethodId, setSelectedShippingMethodId] = useState<string>("");
   const [selectedShippingId, setSelectedShippingId] = useState<string>("");
   const [selectedBillingId, setSelectedBillingId] = useState<string>("");
   const [isSameAsShipping, setIsSameAsShipping] = useState(true);
@@ -77,6 +87,16 @@ export default function CheckoutPage() {
 
   useEffect(() => {
     fetchAddresses();
+  }, []);
+
+  // Aktif kargo yöntemlerini yükle (checkout'ta seçilecek)
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from("shipping_methods").select("*").eq("is_active", true).order("sort_order");
+      const list = (data as any[]) || [];
+      setShippingMethods(list);
+      setSelectedShippingMethodId((prev) => prev || (list[0]?.id ?? ""));
+    })();
   }, []);
 
   // iyzico form HTML'i gelince script'leri çalıştır
@@ -228,7 +248,8 @@ export default function CheckoutPage() {
     const affiliateCode = getCookie("affiliate_ref") || undefined;
     const totalPrice = getTotalPrice();
     const couponDiscount = couponData?.discount_amount ?? 0;
-    const shippingCost = (totalPrice > 500 || couponData?.free_shipping) ? 0 : 29.90;
+    const _selMethod = shippingMethods.find((m) => m.id === selectedShippingMethodId) || shippingMethods[0];
+    const shippingCost = shipFee(_selMethod, totalPrice, !!couponData?.free_shipping);
     const preCreditTotal = Math.max(0, totalPrice + shippingCost - couponDiscount);
     const creditApplied = Math.min(Math.max(0, Number(creditInput) || 0), creditBalance, preCreditTotal);
     const finalTotal = Math.max(0, Math.round((preCreditTotal - creditApplied) * 100) / 100);
@@ -267,6 +288,7 @@ export default function CheckoutPage() {
           })),
           shippingAddressId: isGuest ? undefined : selectedShippingId,
           guest: guestPayload,
+          shippingMethodId: selectedShippingMethodId || undefined,
           billingAddressId: isSameAsShipping ? null : (selectedBillingId || null),
           billingSameAsShipping: isSameAsShipping,
           affiliateCode,
@@ -324,6 +346,7 @@ export default function CheckoutPage() {
         })),
         shippingAddressId: isGuest ? undefined : selectedShippingId,
         guest: guestPayload,
+        shippingMethodId: selectedShippingMethodId || undefined,
         billingAddressId: isSameAsShipping ? null : (selectedBillingId || null),
         billingSameAsShipping: isSameAsShipping,
         affiliateCode,
@@ -469,7 +492,8 @@ export default function CheckoutPage() {
 
   const totalPrice = getTotalPrice();
   const couponDiscount = couponData?.discount_amount ?? 0;
-  const shippingCost = (totalPrice > 500 || couponData?.free_shipping) ? 0 : 29.90;
+  const _selMethod = shippingMethods.find((m) => m.id === selectedShippingMethodId) || shippingMethods[0];
+  const shippingCost = shipFee(_selMethod, totalPrice, !!couponData?.free_shipping);
   const preCreditTotal = Math.max(0, totalPrice + shippingCost - couponDiscount);
   const creditApplied = Math.min(Math.max(0, Number(creditInput) || 0), creditBalance, preCreditTotal);
   const finalTotal = Math.max(0, Math.round((preCreditTotal - creditApplied) * 100) / 100);
@@ -827,6 +851,40 @@ export default function CheckoutPage() {
                         </div>
                       )}
                     </div>
+
+                    {/* Kargo yöntemi seçimi (birden çok yöntem varsa) */}
+                    {shippingMethods.length > 1 && (
+                      <div className="space-y-2">
+                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-1.5">
+                          <Truck size={12} /> KARGO YÖNTEMİ
+                        </p>
+                        <div className="space-y-2">
+                          {shippingMethods.map((m) => {
+                            const fee = shipFee(m, totalPrice, !!couponData?.free_shipping);
+                            const active = (selectedShippingMethodId || shippingMethods[0]?.id) === m.id;
+                            return (
+                              <button
+                                key={m.id}
+                                type="button"
+                                onClick={() => setSelectedShippingMethodId(m.id)}
+                                className={cn(
+                                  "w-full flex items-center justify-between gap-3 rounded-2xl border-2 px-4 py-3 text-left transition-all",
+                                  active ? "border-olive-600 bg-olive-50/40 ring-2 ring-olive-50" : "border-slate-100 hover:border-slate-200"
+                                )}
+                              >
+                                <span className="min-w-0">
+                                  <span className="block text-sm font-bold text-slate-900">{m.name}</span>
+                                  {m.description && <span className="block text-[11px] text-slate-400 font-medium truncate">{m.description}</span>}
+                                </span>
+                                <span className={cn("text-sm font-black shrink-0", fee === 0 ? "text-green-600" : "text-slate-900")}>
+                                  {fee === 0 ? "ÜCRETSİZ" : `₺${fee.toLocaleString("tr-TR")}`}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
 
                     <div className="space-y-4 font-bold uppercase italic tracking-tighter italic">
                       <div className="flex justify-between text-slate-500 text-sm">

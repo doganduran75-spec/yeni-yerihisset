@@ -15,6 +15,7 @@ import CategoriesTab from "@/components/admin/settings/CategoriesTab";
 import KBCategoriesTab from "@/components/admin/settings/KBCategoriesTab";
 import MemberTagsTab from "@/components/admin/settings/MemberTagsTab";
 import PopupTab from "@/components/admin/settings/PopupTab";
+import ShippingMethodsManager from "@/components/admin/ShippingMethodsManager";
 
 type SettingsTab = "general" | "variants" | "roles" | "brands" | "categories" | "kb-categories" | "member-tags" | "popup";
 
@@ -754,6 +755,10 @@ Açıklama: Sipariş numaranızı açıklamaya yazmayı unutmayın.`}
           </Button>
         </div>
       </form>
+      )}
+
+      {activeTab === "general" && (
+        <div className="mt-6"><ShippingMethodsManager /></div>
       )}
     </div>
   );
