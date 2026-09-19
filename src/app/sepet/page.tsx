@@ -838,7 +838,51 @@ export default function CartPage() {
 
           </div>
         </div>
+
+        <CartSuggestions excludeIds={items.map((i) => i.product_id)} />
       </main>
     </div>
+  );
+}
+
+// Sepette ürün önerisi (upsell/cross-sell) — sepetteki ürünler hariç, en yeni 4 aktif ürün.
+function CartSuggestions({ excludeIds }: { excludeIds: string[] }) {
+  const [list, setList] = useState<any[]>([]);
+  const key = excludeIds.join(",");
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const { data } = await supabase
+        .from("products")
+        .select("id, title, slug, price, images, image_url")
+        .eq("is_active", true)
+        .order("created_at", { ascending: false })
+        .limit(12);
+      if (!active) return;
+      const ex = new Set(key ? key.split(",") : []);
+      setList(((data as any[]) || []).filter((p) => !ex.has(p.id)).slice(0, 4));
+    })();
+    return () => { active = false; };
+  }, [key]);
+
+  if (list.length === 0) return null;
+  return (
+    <section className="mt-12">
+      <h3 className="text-sm font-black uppercase tracking-wider text-slate-500 mb-4">Bunlar da ilgini çekebilir</h3>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {list.map((p) => {
+          const img = (p.images && p.images.length > 0) ? p.images[0] : (p.image_url || "/placeholder.png");
+          return (
+            <Link key={p.id} href={`/products/${p.slug}`} className="group block">
+              <div className="relative aspect-[3/4] rounded-2xl overflow-hidden bg-slate-50 border border-slate-100">
+                <Image src={img} alt={p.title} fill sizes="(max-width:768px) 50vw, 25vw" className="object-cover group-hover:scale-105 transition-transform duration-500" />
+              </div>
+              <p className="text-sm font-bold text-slate-800 mt-2 line-clamp-1">{p.title}</p>
+              <p className="text-sm font-black text-olive-600">₺{Number(p.price).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</p>
+            </Link>
+          );
+        })}
+      </div>
+    </section>
   );
 }
