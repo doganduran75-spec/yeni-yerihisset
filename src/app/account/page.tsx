@@ -525,6 +525,23 @@ function AccountPageInner() {
     router.push("/");
   }
 
+  const [deletingAccount, setDeletingAccount] = useState(false);
+  async function handleDeleteAccount() {
+    if (!confirm("Hesabın kapatılacak ve giriş yapamayacaksın; kişisel bilgilerin anonimleştirilecek. Geçmiş sipariş kayıtların yasal saklama gereği korunur. Bu işlem geri alınamaz. Onaylıyor musun?")) return;
+    setDeletingAccount(true);
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch("/api/account/delete", { method: "POST", headers });
+      const d = await res.json();
+      if (!res.ok || !d.ok) { alert(d.error || "Hesap kapatılamadı."); setDeletingAccount(false); return; }
+      await supabase.auth.signOut();
+      alert("Hesabın kapatıldı.");
+      router.push("/");
+    } catch {
+      alert("Bağlantı hatası."); setDeletingAccount(false);
+    }
+  }
+
   async function handleUpdateProfile(e: React.FormEvent) {
     e.preventDefault();
     if (!user) return;
@@ -1047,6 +1064,19 @@ function AccountPageInner() {
                         </div>
                      </CardContent>
                   </Card>
+
+                  {/* Tehlikeli alan — KVKK hesap kapatma */}
+                  <div className="mt-6 rounded-2xl border-2 border-red-100 bg-red-50/40 p-5">
+                    <h4 className="font-black text-red-700 uppercase tracking-tight text-sm">Hesabı Kapat</h4>
+                    <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                      Hesabın kapatılır ve giriş yapılamaz; kişisel bilgilerin (ad, telefon, adresler) anonimleştirilir.
+                      Yasal saklama gereği geçmiş sipariş kayıtların korunur. Bu işlem geri alınamaz.
+                    </p>
+                    <Button onClick={handleDeleteAccount} disabled={deletingAccount} variant="outline"
+                      className="mt-3 border-red-300 text-red-700 hover:bg-red-100 font-bold rounded-xl h-11 gap-2">
+                      {deletingAccount ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />} Hesabımı Kapat
+                    </Button>
+                  </div>
                 </div>
               </AccSection>
 
