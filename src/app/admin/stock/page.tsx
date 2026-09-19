@@ -3,6 +3,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect, useMemo, useState } from "react";
 import AdminOpsTabs from "@/components/admin/AdminOpsTabs";
+import BulkStockImport from "@/components/admin/BulkStockImport";
 import { supabase } from "@/lib/supabase";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -281,6 +282,7 @@ export default function StockPage() {
           <Button variant="outline" onClick={exportExcel} className="gap-2" title="Tüm stok listesini Excel'e aktar">
             <FileDown size={16} /> Excel'e Aktar
           </Button>
+          <BulkStockImport onDone={load} />
           {dirtyRows.length > 0 && (
             <Button onClick={saveAll} disabled={bulkSaving} className="gap-2">
               {bulkSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
