@@ -30,6 +30,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { trackBeginCheckout, trackPurchase } from "@/lib/analytics";
+import { GeoSelect } from "@/components/ui/geo-select";
+import { CITIES, DISTRICTS } from "@/lib/turkey-geo";
 
 function getCookie(name: string): string | null {
   if (typeof document === "undefined") return null;
@@ -41,6 +43,8 @@ export default function CheckoutPage() {
   const router = useRouter();
   const { items, getTotalPrice, clearCart, couponCode: storeCouponCode } = useCartStore();
   const [addresses, setAddresses] = useState<any[]>([]);
+  const [isGuest, setIsGuest] = useState(false); // giriş yapmadan alışveriş
+  const [guestAddr, setGuestAddr] = useState({ phone: "", city: "", district: "", addressDetail: "" });
   const [selectedShippingId, setSelectedShippingId] = useState<string>("");
   const [selectedBillingId, setSelectedBillingId] = useState<string>("");
   const [isSameAsShipping, setIsSameAsShipping] = useState(true);
@@ -108,11 +112,26 @@ export default function CheckoutPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  async function loadPaymentSettings() {
+    const { data: paySettings } = await (supabase
+      .from("settings")
+      .select("bank_transfer_enabled, bank_transfer_info")
+      .single() as any) as { data: { bank_transfer_enabled?: boolean; bank_transfer_info?: string } | null };
+    if (paySettings) {
+      setBankTransferEnabled(paySettings.bank_transfer_enabled ?? false);
+      setBankTransferInfo(paySettings.bank_transfer_info ?? "");
+    }
+  }
+
   async function fetchAddresses() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-       router.push("/login?redirect=/checkout");
-       return;
+      // Misafir: giriş zorunlu değil — bilgileri elle girer, sipariş sırasında
+      // şifresiz üye oluşturulur.
+      setIsGuest(true);
+      await loadPaymentSettings();
+      setLoading(false);
+      return;
     }
 
     // Fetch Profile
@@ -180,7 +199,11 @@ export default function CheckoutPage() {
       alert("Lütfen ad ve soyad bilgilerinizi tamamlayın.");
       return;
     }
-    if (!selectedShippingId) {
+    if (isGuest) {
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(personalInfo.email.trim())) { alert("Lütfen geçerli bir e-posta adresi girin."); return; }
+      if (guestAddr.phone.length !== 10) { alert("Telefon numarası 10 haneli olmalıdır."); return; }
+      if (!guestAddr.city || !guestAddr.district || !guestAddr.addressDetail.trim()) { alert("Lütfen teslimat adresi bilgilerini doldurun."); return; }
+    } else if (!selectedShippingId) {
       alert("Lütfen bir teslimat adresi seçin.");
       return;
     }
@@ -213,6 +236,17 @@ export default function CheckoutPage() {
     const { data: { session } } = await supabase.auth.getSession();
     const authToken = session?.access_token;
 
+    // Misafir bilgisi (giriş yoksa) — sunucu şifresiz üye oluşturur
+    const guestPayload = isGuest ? {
+      email: personalInfo.email.trim(),
+      firstName: personalInfo.firstName.trim(),
+      lastName: personalInfo.lastName.trim(),
+      phone: guestAddr.phone,
+      city: guestAddr.city,
+      district: guestAddr.district,
+      addressDetail: guestAddr.addressDetail.trim(),
+    } : undefined;
+
     // ── Kredi kartı → iyzico akışı ──────────────────────────────────────────
     if (paymentMethod === "credit_card") {
       const res = await fetch("/api/checkout/iyzico/initialize", {
@@ -231,7 +265,8 @@ export default function CheckoutPage() {
             quantity: item.quantity,
             is_gift: item.is_gift ?? false,
           })),
-          shippingAddressId: selectedShippingId,
+          shippingAddressId: isGuest ? undefined : selectedShippingId,
+          guest: guestPayload,
           billingAddressId: isSameAsShipping ? null : (selectedBillingId || null),
           billingSameAsShipping: isSameAsShipping,
           affiliateCode,
@@ -287,7 +322,8 @@ export default function CheckoutPage() {
           quantity: item.quantity,
           is_gift: item.is_gift ?? false,
         })),
-        shippingAddressId: selectedShippingId,
+        shippingAddressId: isGuest ? undefined : selectedShippingId,
+        guest: guestPayload,
         billingAddressId: isSameAsShipping ? null : (selectedBillingId || null),
         billingSameAsShipping: isSameAsShipping,
         affiliateCode,
@@ -484,13 +520,21 @@ export default function CheckoutPage() {
                     <div className="space-y-2">
                       <label className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em] px-1">E-POSTA ADRESİ</label>
                       <div className="relative">
-                        <Input 
+                        <Input
                           value={personalInfo.email}
-                          disabled
-                          className="h-14 rounded-2xl bg-slate-50 border-slate-100 font-bold opacity-60 cursor-not-allowed pl-4"
+                          disabled={!isGuest}
+                          onChange={isGuest ? (e) => setPersonalInfo({ ...personalInfo, email: e.target.value }) : undefined}
+                          placeholder={isGuest ? "ornek@eposta.com" : undefined}
+                          type="email"
+                          className={cn("h-14 rounded-2xl pl-4", isGuest ? "bg-white border-slate-200 font-bold focus:ring-olive-600" : "bg-slate-50 border-slate-100 font-bold opacity-60 cursor-not-allowed")}
                         />
-                        <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[9px] font-bold text-slate-400 uppercase">Sabit</div>
+                        {!isGuest && <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[9px] font-bold text-slate-400 uppercase">Sabit</div>}
                       </div>
+                      {isGuest && (
+                        <p className="text-[10px] text-slate-400 font-medium px-1">
+                          Üyeliğin var mı? <Link href="/login?redirect=/checkout" className="text-olive-600 font-bold">Giriş yap</Link> — kayıtlı adreslerinle daha hızlı.
+                        </p>
+                      )}
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
@@ -540,12 +584,46 @@ export default function CheckoutPage() {
                     <div className="w-10 h-10 bg-olive-600 text-white rounded-2xl flex items-center justify-center font-black shadow-lg shadow-olive-100 italic">02</div>
                     <h3 className="text-2xl font-black text-slate-900 uppercase italic tracking-tighter">Teslimat Adresi</h3>
                   </div>
-                  <Link href="/account?tab=addresses&returnTo=/checkout" className="text-olive-600 font-black text-xs uppercase tracking-widest flex items-center gap-2 hover:translate-x-1 transition-transform">
-                    <Plus size={16} /> ADRES EKLE
-                  </Link>
+                  {!isGuest && (
+                    <Link href="/account?tab=addresses&returnTo=/checkout" className="text-olive-600 font-black text-xs uppercase tracking-widest flex items-center gap-2 hover:translate-x-1 transition-transform">
+                      <Plus size={16} /> ADRES EKLE
+                    </Link>
+                  )}
                </div>
 
-               {addresses.length === 0 ? (
+               {isGuest ? (
+                 <div className="bento-card bg-white !p-6 md:!p-8 space-y-5">
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                     <div className="space-y-2">
+                       <label className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em] px-1">TELEFON</label>
+                       <Input
+                         type="tel" inputMode="numeric"
+                         value={guestAddr.phone}
+                         onChange={(e) => setGuestAddr({ ...guestAddr, phone: e.target.value.replace(/\D/g, "").slice(0, 10) })}
+                         placeholder="5XX XXX XX XX"
+                         className="h-12 rounded-2xl bg-white border-slate-200 font-bold tracking-wide"
+                       />
+                     </div>
+                     <div className="space-y-2">
+                       <label className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em] px-1">ŞEHİR (İL)</label>
+                       <GeoSelect options={CITIES} value={guestAddr.city} onChange={(city) => setGuestAddr({ ...guestAddr, city, district: "" })} placeholder="İl seçiniz..." />
+                     </div>
+                     <div className="space-y-2">
+                       <label className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em] px-1">İLÇE</label>
+                       <GeoSelect options={guestAddr.city ? (DISTRICTS[guestAddr.city] ?? []) : []} value={guestAddr.district} onChange={(district) => setGuestAddr({ ...guestAddr, district })} placeholder={guestAddr.city ? "İlçe seçiniz..." : "Önce il seçin"} disabled={!guestAddr.city} />
+                     </div>
+                   </div>
+                   <div className="space-y-2">
+                     <label className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em] px-1">AÇIK ADRES</label>
+                     <textarea
+                       value={guestAddr.addressDetail}
+                       onChange={(e) => setGuestAddr({ ...guestAddr, addressDetail: e.target.value })}
+                       placeholder="Mahalle, sokak, bina ve daire bilgileri..."
+                       className="flex min-h-[90px] w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-olive-600 placeholder:text-slate-400"
+                     />
+                   </div>
+                 </div>
+               ) : addresses.length === 0 ? (
                  <div 
                   className="bento-card border-2 border-dashed border-slate-200 bg-slate-50/50 flex flex-col items-center justify-center py-16 gap-4 group cursor-pointer" 
                   onClick={() => router.push("/account?tab=addresses&returnTo=/checkout")}
@@ -595,7 +673,8 @@ export default function CheckoutPage() {
                )}
             </section>
 
-            {/* Step 2: Billing Address */}
+            {/* Step 2: Billing Address — misafirde gizli (fatura = teslimat) */}
+            {!isGuest && (
             <section className="space-y-6 animate-in fade-in slide-in-from-bottom-8">
                <div className="flex items-center gap-4">
                   <div className="w-10 h-10 bg-olive-600 text-white rounded-2xl flex items-center justify-center font-black shadow-lg shadow-olive-100 italic">03</div>
@@ -642,6 +721,7 @@ export default function CheckoutPage() {
                   )}
                </div>
             </section>
+            )}
 
             {/* Step 3: Payment */}
             <section className="space-y-6 animate-in fade-in slide-in-from-bottom-10">

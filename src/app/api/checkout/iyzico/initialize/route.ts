@@ -4,6 +4,7 @@ import { getAuthUserFromRequest } from "@/lib/auth-from-request";
 import { createIyzicoClient, formatPrice, newConversationId } from "@/lib/iyzico";
 import { validateCartPricing } from "@/lib/order-pricing";
 import { resolveCreditApply, deductCreditForOrder, restoreOrderCredit } from "@/lib/store-credit";
+import { resolveGuest, type GuestInput } from "@/lib/guest-checkout";
 
 type CartItem = {
   product_id: string;
@@ -16,8 +17,7 @@ type CartItem = {
 };
 
 export async function POST(req: NextRequest) {
-  const user = await getAuthUserFromRequest(req);
-  if (!user) return NextResponse.json({ error: "Giriş gerekli" }, { status: 401 });
+  const authUser = await getAuthUserFromRequest(req);
 
   const body = await req.json();
   const {
@@ -29,18 +29,20 @@ export async function POST(req: NextRequest) {
     couponCode,
     identityNumber,
     creditApply,
+    guest,
   } = body as {
     items: CartItem[];
-    shippingAddressId: string;
+    shippingAddressId?: string;
     billingAddressId?: string | null;
     billingSameAsShipping?: boolean;
     affiliateCode?: string;
     couponCode?: string;
     identityNumber: string;
     creditApply?: number;
+    guest?: GuestInput;
   };
 
-  if (!items?.length || !shippingAddressId) {
+  if (!items?.length) {
     return NextResponse.json({ error: "Eksik bilgi" }, { status: 400 });
   }
   if (!identityNumber || identityNumber.replace(/\D/g, "").length !== 11) {
@@ -49,28 +51,34 @@ export async function POST(req: NextRequest) {
 
   const supabase = createAdminClient();
 
-  // Profil bilgilerini çek
-  const { data: profile } = await (supabase as any)
-    .from("profiles")
-    .select("first_name, last_name, email, phone, identity_number")
-    .eq("id", user.id)
-    .single() as { data: any };
+  // Kullanıcı + profil + teslimat adresi: ÜYE ise kayıtlı; MİSAFİR ise girilen
+  // bilgiden şifresiz üye oluşturulur (sipariş orphan olmaz).
+  let userId: string;
+  let profile: any;
+  let address: any;
+  if (authUser) {
+    userId = authUser.id;
+    if (!shippingAddressId) return NextResponse.json({ error: "Adres seçilmedi" }, { status: 400 });
+    const { data: prof } = await (supabase as any)
+      .from("profiles").select("first_name, last_name, email, phone, identity_number").eq("id", userId).single();
+    profile = prof || {};
+    const { data: addr } = await supabase
+      .from("user_addresses").select("*").eq("id", shippingAddressId).eq("user_id", userId).single();
+    if (!addr) return NextResponse.json({ error: "Geçersiz adres" }, { status: 400 });
+    address = addr;
+  } else {
+    const g = await resolveGuest(supabase, guest || {});
+    if (!g.ok) return NextResponse.json({ error: g.error }, { status: g.code });
+    userId = g.userId;
+    address = g.address;
+    profile = { first_name: g.address.first_name, last_name: g.address.last_name, email: g.email, phone: g.address.phone };
+  }
 
   // TC'yi profile'a kaydet
   await (supabase as any)
     .from("profiles")
     .update({ identity_number: identityNumber.replace(/\D/g, "") })
-    .eq("id", user.id);
-
-  // Teslimat adresini doğrula
-  const { data: address } = await supabase
-    .from("user_addresses")
-    .select("*")
-    .eq("id", shippingAddressId)
-    .eq("user_id", user.id)
-    .single();
-
-  if (!address) return NextResponse.json({ error: "Geçersiz adres" }, { status: 400 });
+    .eq("id", userId);
 
   // ── GÜVENLİK: Fiyatları sunucuda doğrula (tarayıcıdan gelen price yok sayılır) ──
   const pricing = await validateCartPricing(supabase, items);
@@ -89,7 +97,7 @@ export async function POST(req: NextRequest) {
       .eq("code", affiliateCode)
       .eq("status", "active")
       .single();
-    if (aff && aff.user_id !== user.id) {
+    if (aff && aff.user_id !== userId) {
       affiliateId = aff.id;
       commissionRate = Number(aff.commission_rate);
     }
@@ -112,7 +120,7 @@ export async function POST(req: NextRequest) {
       const { data: uc } = await supabase
         .from("user_coupons")
         .select("use_count, max_uses")
-        .eq("user_id", user.id)
+        .eq("user_id", userId)
         .eq("coupon_id", coupon.id)
         .maybeSingle();
       const useCount = uc?.use_count ?? 0;
@@ -144,7 +152,7 @@ export async function POST(req: NextRequest) {
 
   // YeriHisset Kredisi uygula (sunucuda doğrula + sınırla)
   const { applied: creditApplied, wallet: creditWallet } =
-    await resolveCreditApply(supabase, user.id, Number(creditApply || 0), preTotal);
+    await resolveCreditApply(supabase, userId, Number(creditApply || 0), preTotal);
   const totalAmount = Math.max(0, Math.round((preTotal - creditApplied) * 100) / 100);
   const fullyCredited = totalAmount <= 0; // kredi tüm tutarı karşıladı → iyzico'ya gerek yok
 
@@ -174,7 +182,7 @@ export async function POST(req: NextRequest) {
   let billingSnap: Record<string, unknown> = billingFrom(address, true);
   if (billingSameAsShipping === false && billingAddressId && billingAddressId !== shippingAddressId) {
     const { data: bAddr } = await supabase
-      .from("user_addresses").select("*").eq("id", billingAddressId).eq("user_id", user.id).single();
+      .from("user_addresses").select("*").eq("id", billingAddressId).eq("user_id", userId).single();
     if (bAddr) billingSnap = billingFrom(bAddr, false);
   }
   const billingAddressJson = JSON.stringify(billingSnap);
@@ -187,7 +195,7 @@ export async function POST(req: NextRequest) {
   const { data: order, error: orderError } = await (supabase
     .from("orders")
     .insert({
-      user_id: user.id,
+      user_id: userId,
       status: fullyCredited ? "processing" : "pending",
       total_amount: totalAmount,
       shipping_address: shippingAddressJson,
@@ -213,7 +221,7 @@ export async function POST(req: NextRequest) {
   // aşağıdaki hata dalları restoreOrderCredit ile geri yükler.
   if (creditApplied > 0 && creditWallet) {
     await deductCreditForOrder(supabase, {
-      userId: user.id, orderId: order.id, applied: creditApplied, wallet: creditWallet,
+      userId: userId, orderId: order.id, applied: creditApplied, wallet: creditWallet,
     });
   }
 
@@ -275,7 +283,7 @@ export async function POST(req: NextRequest) {
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://yerihisset.com";
   const buyerName  = profile?.first_name || "Ad";
   const buyerSurname = profile?.last_name || "Soyad";
-  const buyerEmail = profile?.email || user.email || "";
+  const buyerEmail = profile?.email || "";
   const buyerPhone = (profile?.phone || "05000000000").replace(/\s/g, "");
 
   // ── iyzico sepet kalemleri: toplam mutlaka `price` ile eşleşmeli ──────────
@@ -338,7 +346,7 @@ export async function POST(req: NextRequest) {
     callbackUrl: `${siteUrl}/api/checkout/iyzico/callback`,
     enabledInstallments: [1, 2, 3, 6, 9, 12],
     buyer: {
-      id: user.id,
+      id: userId,
       name: buyerName,
       surname: buyerSurname,
       email: buyerEmail,

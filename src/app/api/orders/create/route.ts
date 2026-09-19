@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase-admin";
 import { getAuthUserFromRequest } from "@/lib/auth-from-request";
 import { validateCartPricing } from "@/lib/order-pricing";
 import { resolveCreditApply, deductCreditForOrder } from "@/lib/store-credit";
+import { resolveGuest, type GuestInput } from "@/lib/guest-checkout";
 
 type CartItem = {
   product_id: string;
@@ -15,30 +16,27 @@ type CartItem = {
 };
 
 export async function POST(req: NextRequest) {
-  const user = await getAuthUserFromRequest(req);
-  if (!user) {
-    return NextResponse.json({ error: "Giriş gerekli" }, { status: 401 });
-  }
+  const authUser = await getAuthUserFromRequest(req);
 
   const body = await req.json();
-  const { items, shippingAddressId, billingAddressId, billingSameAsShipping, affiliateCode, couponCode, paymentMethod, creditApply } = body as {
+  const { items, shippingAddressId, billingAddressId, billingSameAsShipping, affiliateCode, couponCode, paymentMethod, creditApply, guest } = body as {
     items: CartItem[];
-    shippingAddressId: string;
+    shippingAddressId?: string;
     billingAddressId?: string | null;
     billingSameAsShipping?: boolean;
     affiliateCode?: string;
     couponCode?: string;
     paymentMethod?: string;
     creditApply?: number;
+    guest?: GuestInput;
   };
 
-  if (!items?.length || !shippingAddressId) {
+  if (!items?.length) {
     return NextResponse.json({ error: "Eksik bilgi" }, { status: 400 });
   }
 
   // ── GÜVENLİK: Bu uç yalnızca havale/EFT içindir. Kartlı ödeme iyzico
   // (/api/checkout/iyzico/initialize) üzerinden gerçek tahsilatla yapılır.
-  // Aksi halde ödeme yapılmadan sipariş "ödendi" işaretlenebilirdi.
   if (paymentMethod !== "bank_transfer") {
     return NextResponse.json(
       { error: "Bu ödeme yöntemi desteklenmiyor. Kartlı ödeme için iyzico akışını kullanın." },
@@ -48,16 +46,22 @@ export async function POST(req: NextRequest) {
 
   const supabase = createAdminClient();
 
-  // Teslimat adresini doğrula
-  const { data: address } = await supabase
-    .from("user_addresses")
-    .select("*")
-    .eq("id", shippingAddressId)
-    .eq("user_id", user.id)
-    .single();
-
-  if (!address) {
-    return NextResponse.json({ error: "Geçersiz adres" }, { status: 400 });
+  // Kullanıcı + teslimat adresi: ÜYE ise kayıtlı adres; MİSAFİR ise girilen
+  // bilgiden şifresiz üye oluşturulur (sipariş orphan olmaz).
+  let userId: string;
+  let address: any;
+  if (authUser) {
+    userId = authUser.id;
+    if (!shippingAddressId) return NextResponse.json({ error: "Adres seçilmedi" }, { status: 400 });
+    const { data: addr } = await supabase
+      .from("user_addresses").select("*").eq("id", shippingAddressId).eq("user_id", userId).single();
+    if (!addr) return NextResponse.json({ error: "Geçersiz adres" }, { status: 400 });
+    address = addr;
+  } else {
+    const g = await resolveGuest(supabase, guest || {});
+    if (!g.ok) return NextResponse.json({ error: g.error }, { status: g.code });
+    userId = g.userId;
+    address = g.address;
   }
 
   // ── GÜVENLİK: Fiyatları sunucuda doğrula (tarayıcıdan gelen price yok sayılır) ──
@@ -79,7 +83,7 @@ export async function POST(req: NextRequest) {
       .single();
 
     // Kullanıcı kendi linki üzerinden alışveriş yapıyorsa saymıyoruz
-    if (aff && aff.user_id !== user.id) {
+    if (aff && aff.user_id !== userId) {
       affiliateId = aff.id;
       commissionRate = Number(aff.commission_rate);
     }
@@ -104,7 +108,7 @@ export async function POST(req: NextRequest) {
       const { data: uc } = await supabase
         .from("user_coupons")
         .select("use_count, max_uses")
-        .eq("user_id", user.id)
+        .eq("user_id", userId)
         .eq("coupon_id", coupon.id)
         .maybeSingle();
       const useCount = uc?.use_count ?? 0;
@@ -138,7 +142,7 @@ export async function POST(req: NextRequest) {
 
   // YeriHisset Kredisi uygula (sunucuda doğrula + sınırla)
   const { applied: creditApplied, wallet: creditWallet } =
-    await resolveCreditApply(supabase, user.id, Number(creditApply || 0), preTotal);
+    await resolveCreditApply(supabase, userId, Number(creditApply || 0), preTotal);
   const totalAmount = Math.max(0, Math.round((preTotal - creditApplied) * 100) / 100);
   const fullyCredited = totalAmount <= 0; // kredi tüm tutarı karşıladı
 
@@ -168,7 +172,7 @@ export async function POST(req: NextRequest) {
   let billingSnap: Record<string, unknown> = billingFrom(address, true);
   if (billingSameAsShipping === false && billingAddressId && billingAddressId !== shippingAddressId) {
     const { data: bAddr } = await supabase
-      .from("user_addresses").select("*").eq("id", billingAddressId).eq("user_id", user.id).single();
+      .from("user_addresses").select("*").eq("id", billingAddressId).eq("user_id", userId).single();
     if (bAddr) billingSnap = billingFrom(bAddr, false);
   }
   const billingAddressJson = JSON.stringify(billingSnap);
@@ -185,7 +189,7 @@ export async function POST(req: NextRequest) {
   const { data: order, error: orderError } = await (supabase
     .from("orders")
     .insert({
-      user_id: user.id,
+      user_id: userId,
       status: initialStatus,
       total_amount: Math.max(0, totalAmount),
       shipping_address: shippingAddressJson,
@@ -209,7 +213,7 @@ export async function POST(req: NextRequest) {
   // YeriHisset Kredisi düşümü (bakiye − , ledger 'spend', orders.credit_used)
   if (creditApplied > 0 && creditWallet) {
     await deductCreditForOrder(supabase, {
-      userId: user.id, orderId: order.id, applied: creditApplied, wallet: creditWallet,
+      userId: userId, orderId: order.id, applied: creditApplied, wallet: creditWallet,
     });
   }
 
@@ -285,7 +289,7 @@ export async function POST(req: NextRequest) {
     // Kullanıcı-kupon kaydı: yoksa oluştur, varsa use_count'ı artır
     const { data: ucExisting } = await supabase.from("user_coupons")
       .select("id, use_count")
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .eq("coupon_id", couponId)
       .maybeSingle();
     if (ucExisting) {
@@ -296,7 +300,7 @@ export async function POST(req: NextRequest) {
       }).eq("id", ucExisting.id);
     } else {
       await supabase.from("user_coupons").insert({
-        user_id: user.id,
+        user_id: userId,
         coupon_id: couponId,
         use_count: 1,
         last_used_at: now,
@@ -307,7 +311,7 @@ export async function POST(req: NextRequest) {
 
   // İlk alışverişte Müşteri rolünü otomatik ata
   const { assignRole } = await import("@/lib/user-roles");
-  await assignRole(user.id, "musteri");
+  await assignRole(userId, "musteri");
 
   // ── Otomatik üye etiketi atama ──────────────────────────────────────────
   // Sipariş edilen ürünlerin kategori, marka ve varyasyon değerlerinden
@@ -395,7 +399,7 @@ export async function POST(req: NextRequest) {
     // 4. Kullanıcıya ata
     if (neededOptionIds.length > 0) {
       await supabase.from("user_tags").upsert(
-        neededOptionIds.map((id: string) => ({ user_id: user.id, tag_option_id: id })),
+        neededOptionIds.map((id: string) => ({ user_id: userId, tag_option_id: id })),
         { onConflict: "user_id,tag_option_id", ignoreDuplicates: true }
       );
     }
@@ -403,7 +407,7 @@ export async function POST(req: NextRequest) {
 
   // Sipariş oluşturma bildirimi gönder (non-blocking, doğrudan lib çağrısı)
   const { sendOrderNotification, sendAdminNewOrderNotification, alertOutOfStockForOrder } = await import("@/lib/notifications");
-  sendOrderNotification("order_placed", { orderId: order.id, userId: user.id }).catch(() => {});
+  sendOrderNotification("order_placed", { orderId: order.id, userId: userId }).catch(() => {});
   // Admin'e "yeni sipariş geldi" bildirimi (sonucu logla — teşhis için)
   sendAdminNewOrderNotification(order.id)
     .then((r) => { if (r.status !== "sent") console.error("[admin-order-mail]", JSON.stringify(r)); else console.log("[admin-order-mail] sent"); })
