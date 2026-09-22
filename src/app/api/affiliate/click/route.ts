@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
     // Affiliate profilini bul
     const { data: affiliate } = await supabase
       .from("affiliate_profiles")
-      .select("id")
+      .select("id, total_clicks")
       .eq("code", code)
       .eq("status", "active")
       .single();
@@ -36,6 +36,11 @@ export async function POST(req: NextRequest) {
       ip_hash: ipHash,
       path: path || null,
     });
+
+    // Admin özetinde görünsün diye kolon sayacını da artır
+    await (supabase as any).from("affiliate_profiles")
+      .update({ total_clicks: Number((affiliate as any).total_clicks || 0) + 1 })
+      .eq("id", affiliate.id);
 
     return NextResponse.json({ ok: true });
   } catch {
