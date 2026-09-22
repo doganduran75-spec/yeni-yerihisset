@@ -55,6 +55,10 @@ export default function CheckoutPage() {
   const [guestAddr, setGuestAddr] = useState({ phone: "", city: "", district: "", addressDetail: "" });
   const [shippingMethods, setShippingMethods] = useState<any[]>([]);
   const [selectedShippingMethodId, setSelectedShippingMethodId] = useState<string>("");
+  // Eksik alan doğrulaması — Sipariş Ver'e basınca ilk eksiğe kaydırır + kırmızı yapar
+  const [errors, setErrors] = useState<Record<string, boolean>>({});
+  const errCls = (k: string) => errors[k] ? " !border-red-400 ring-2 ring-red-200" : "";
+  const clearErr = (k: string) => setErrors((e) => (e[k] ? { ...e, [k]: false } : e));
   const [selectedShippingId, setSelectedShippingId] = useState<string>("");
   const [selectedBillingId, setSelectedBillingId] = useState<string>("");
   const [isSameAsShipping, setIsSameAsShipping] = useState(true);
@@ -215,24 +219,32 @@ export default function CheckoutPage() {
   }
 
   async function handlePlaceOrder() {
-    if (!personalInfo.firstName || !personalInfo.lastName) {
-      alert("Lütfen ad ve soyad bilgilerinizi tamamlayın.");
-      return;
-    }
+    // ── Eksik alan doğrulaması (yukarıdan aşağıya sırayla) ──────────────────
+    const e: Record<string, boolean> = {};
+    if (isGuest && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(personalInfo.email.trim())) e.email = true;
+    if (!personalInfo.firstName.trim()) e.firstName = true;
+    if (!personalInfo.lastName.trim()) e.lastName = true;
+    if (paymentMethod === "credit_card" && identityNumber.replace(/\D/g, "").length !== 11) e.tckn = true;
     if (isGuest) {
-      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(personalInfo.email.trim())) { alert("Lütfen geçerli bir e-posta adresi girin."); return; }
-      if (guestAddr.phone.length !== 10) { alert("Telefon numarası 10 haneli olmalıdır."); return; }
-      if (!guestAddr.city || !guestAddr.district || !guestAddr.addressDetail.trim()) { alert("Lütfen teslimat adresi bilgilerini doldurun."); return; }
+      if (guestAddr.phone.length !== 10) e.phone = true;
+      if (!guestAddr.city) e.city = true;
+      if (!guestAddr.district) e.district = true;
+      if (!guestAddr.addressDetail.trim()) e.address = true;
     } else if (!selectedShippingId) {
-      alert("Lütfen bir teslimat adresi seçin.");
-      return;
+      e.shipping = true;
     }
-    // Kredi kartı seçiliyse TC kimlik zorunlu
-    if (paymentMethod === "credit_card") {
-      if (!identityNumber || identityNumber.replace(/\D/g, "").length !== 11) {
-        alert("Lütfen 11 haneli TC Kimlik Numaranızı girin.\niyzico, yasal zorunluluk kapsamında bu bilgiyi talep etmektedir.");
-        return;
+
+    setErrors(e);
+    if (Object.keys(e).length > 0) {
+      // Sayfada yukarıdan aşağıya ilk eksik alana kaydır + odakla
+      const order = ["email", "firstName", "lastName", "tckn", "phone", "city", "district", "address", "shipping"];
+      const firstKey = order.find((k) => e[k]);
+      const el = firstKey ? document.getElementById(`f-${firstKey}`) : null;
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        setTimeout(() => (el.querySelector("input, textarea") as HTMLElement | null)?.focus?.(), 400);
       }
+      return;
     }
 
     setPlacing(true);
@@ -543,14 +555,14 @@ export default function CheckoutPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
                       <label className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em] px-1">E-POSTA ADRESİ</label>
-                      <div className="relative">
+                      <div className="relative" id="f-email">
                         <Input
                           value={personalInfo.email}
                           disabled={!isGuest}
-                          onChange={isGuest ? (e) => setPersonalInfo({ ...personalInfo, email: e.target.value }) : undefined}
+                          onChange={isGuest ? (e) => { setPersonalInfo({ ...personalInfo, email: e.target.value }); clearErr("email"); } : undefined}
                           placeholder={isGuest ? "ornek@eposta.com" : undefined}
                           type="email"
-                          className={cn("h-14 rounded-2xl pl-4", isGuest ? "bg-white border-slate-200 font-bold focus:ring-olive-600" : "bg-slate-50 border-slate-100 font-bold opacity-60 cursor-not-allowed")}
+                          className={cn("h-14 rounded-2xl pl-4", isGuest ? "bg-white border-slate-200 font-bold focus:ring-olive-600" : "bg-slate-50 border-slate-100 font-bold opacity-60 cursor-not-allowed", errCls("email"))}
                         />
                         {!isGuest && <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[9px] font-bold text-slate-400 uppercase">Sabit</div>}
                       </div>
@@ -561,37 +573,37 @@ export default function CheckoutPage() {
                       )}
                     </div>
                     <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
+                      <div className="space-y-2" id="f-firstName">
                         <label className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em] px-1">ADINIZ</label>
                         <Input
                           value={personalInfo.firstName}
-                          onChange={e => setPersonalInfo({...personalInfo, firstName: e.target.value})}
+                          onChange={e => { setPersonalInfo({...personalInfo, firstName: e.target.value}); clearErr("firstName"); }}
                           placeholder="Ad"
-                          className="h-14 rounded-2xl bg-white border-slate-200 font-bold focus:ring-olive-600"
+                          className={cn("h-14 rounded-2xl bg-white border-slate-200 font-bold focus:ring-olive-600", errCls("firstName"))}
                         />
                       </div>
-                      <div className="space-y-2">
+                      <div className="space-y-2" id="f-lastName">
                         <label className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em] px-1">SOYADINIZ</label>
                         <Input
                           value={personalInfo.lastName}
-                          onChange={e => setPersonalInfo({...personalInfo, lastName: e.target.value})}
+                          onChange={e => { setPersonalInfo({...personalInfo, lastName: e.target.value}); clearErr("lastName"); }}
                           placeholder="Soyad"
-                          className="h-14 rounded-2xl bg-white border-slate-200 font-bold focus:ring-olive-600"
+                          className={cn("h-14 rounded-2xl bg-white border-slate-200 font-bold focus:ring-olive-600", errCls("lastName"))}
                         />
                       </div>
                     </div>
 
                     {/* TC Kimlik — iyzico + yasal zorunluluk */}
-                    <div className="space-y-2">
+                    <div className="space-y-2" id="f-tckn">
                       <label className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em] px-1 flex items-center gap-1.5">
                         <IdCard size={12} /> TC KİMLİK NUMARASI
                       </label>
                       <Input
                         value={identityNumber}
-                        onChange={e => setIdentityNumber(e.target.value.replace(/\D/g, "").slice(0, 11))}
+                        onChange={e => { setIdentityNumber(e.target.value.replace(/\D/g, "").slice(0, 11)); clearErr("tckn"); }}
                         placeholder="Örn: 12345678901"
                         maxLength={11}
-                        className="h-14 rounded-2xl bg-white border-slate-200 font-bold font-mono tracking-widest focus:ring-olive-600"
+                        className={cn("h-14 rounded-2xl bg-white border-slate-200 font-bold font-mono tracking-widest focus:ring-olive-600", errCls("tckn"))}
                       />
                       <p className="text-[10px] text-slate-400 font-medium px-1 leading-relaxed">
                         <span className="text-olive-600 font-bold">Yasal zorunluluk:</span> iyzico, 6493 sayılı Ödeme Hizmetleri Kanunu gereğince kimlik doğrulaması yapmaktadır. Bilgileriniz yalnızca fatura ve ödeme işlemleri için kullanılır.
@@ -602,7 +614,7 @@ export default function CheckoutPage() {
             </section>
 
             {/* Step 1: Shipping Address */}
-            <section className="space-y-6 animate-in fade-in slide-in-from-bottom-6">
+            <section id="f-shipping" className="space-y-6 animate-in fade-in slide-in-from-bottom-6">
                <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
                     <div className="w-10 h-10 bg-olive-600 text-white rounded-2xl flex items-center justify-center font-black shadow-lg shadow-olive-100 italic">02</div>
@@ -615,35 +627,43 @@ export default function CheckoutPage() {
                   )}
                </div>
 
+               {errors.shipping && (
+                 <p className="text-sm text-red-500 font-bold px-1">⚠ Lütfen bir teslimat adresi seçin (veya yeni adres ekleyin).</p>
+               )}
+
                {isGuest ? (
                  <div className="bento-card bg-white !p-6 md:!p-8 space-y-5">
                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                     <div className="space-y-2">
+                     <div className="space-y-2" id="f-phone">
                        <label className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em] px-1">TELEFON</label>
                        <Input
                          type="tel" inputMode="numeric"
                          value={guestAddr.phone}
-                         onChange={(e) => setGuestAddr({ ...guestAddr, phone: e.target.value.replace(/\D/g, "").slice(0, 10) })}
+                         onChange={(e) => { setGuestAddr({ ...guestAddr, phone: e.target.value.replace(/\D/g, "").slice(0, 10) }); clearErr("phone"); }}
                          placeholder="5XX XXX XX XX"
-                         className="h-12 rounded-2xl bg-white border-slate-200 font-bold tracking-wide"
+                         className={cn("h-12 rounded-2xl bg-white border-slate-200 font-bold tracking-wide", errCls("phone"))}
                        />
                      </div>
-                     <div className="space-y-2">
+                     <div className="space-y-2" id="f-city">
                        <label className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em] px-1">ŞEHİR (İL)</label>
-                       <GeoSelect options={CITIES} value={guestAddr.city} onChange={(city) => setGuestAddr({ ...guestAddr, city, district: "" })} placeholder="İl seçiniz..." />
+                       <div className={cn("rounded-2xl", errors.city && "ring-2 ring-red-200")}>
+                         <GeoSelect options={CITIES} value={guestAddr.city} onChange={(city) => { setGuestAddr({ ...guestAddr, city, district: "" }); clearErr("city"); }} placeholder="İl seçiniz..." />
+                       </div>
                      </div>
-                     <div className="space-y-2">
+                     <div className="space-y-2" id="f-district">
                        <label className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em] px-1">İLÇE</label>
-                       <GeoSelect options={guestAddr.city ? (DISTRICTS[guestAddr.city] ?? []) : []} value={guestAddr.district} onChange={(district) => setGuestAddr({ ...guestAddr, district })} placeholder={guestAddr.city ? "İlçe seçiniz..." : "Önce il seçin"} disabled={!guestAddr.city} />
+                       <div className={cn("rounded-2xl", errors.district && "ring-2 ring-red-200")}>
+                         <GeoSelect options={guestAddr.city ? (DISTRICTS[guestAddr.city] ?? []) : []} value={guestAddr.district} onChange={(district) => { setGuestAddr({ ...guestAddr, district }); clearErr("district"); }} placeholder={guestAddr.city ? "İlçe seçiniz..." : "Önce il seçin"} disabled={!guestAddr.city} />
+                       </div>
                      </div>
                    </div>
-                   <div className="space-y-2">
+                   <div className="space-y-2" id="f-address">
                      <label className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em] px-1">AÇIK ADRES</label>
                      <textarea
                        value={guestAddr.addressDetail}
-                       onChange={(e) => setGuestAddr({ ...guestAddr, addressDetail: e.target.value })}
+                       onChange={(e) => { setGuestAddr({ ...guestAddr, addressDetail: e.target.value }); clearErr("address"); }}
                        placeholder="Mahalle, sokak, bina ve daire bilgileri..."
-                       className="flex min-h-[90px] w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-olive-600 placeholder:text-slate-400"
+                       className={cn("flex min-h-[90px] w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-olive-600 placeholder:text-slate-400", errCls("address"))}
                      />
                    </div>
                  </div>
@@ -665,7 +685,7 @@ export default function CheckoutPage() {
                    {addresses.map((addr) => (
                      <div 
                       key={addr.id}
-                      onClick={() => setSelectedShippingId(addr.id)}
+                      onClick={() => { setSelectedShippingId(addr.id); clearErr("shipping"); }}
                       className={cn(
                         "bento-card !p-6 cursor-pointer relative transition-all duration-300",
                         selectedShippingId === addr.id 
@@ -1026,7 +1046,7 @@ export default function CheckoutPage() {
 
                     <Button
                       onClick={handlePlaceOrder}
-                      disabled={placing || !selectedShippingId}
+                      disabled={placing}
                       className="w-full h-20 rounded-[2rem] bg-olive-600 hover:bg-olive-700 text-xl font-black shadow-2xl shadow-olive-100 uppercase tracking-tighter group mt-2 transition-all active:scale-95 disabled:opacity-50"
                     >
                       {placing ? "Hazırlanıyor..." : <>SİPARİŞİ TAMAMLA <ArrowRight size={24} className="ml-2 group-hover:translate-x-3 transition-transform duration-500" /></>}
