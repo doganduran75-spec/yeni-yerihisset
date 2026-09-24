@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { setCampaign } from "@/lib/track";
 
 // Satış ortaklığı takibinin İLK halkası: ?ref=KOD ile gelen ziyaretçiyi yakalar.
 //  1) affiliate_ref çerezini yazar (30 gün) — checkout bunu okuyup siparişi
@@ -20,6 +21,11 @@ export default function AffiliateRefCapture() {
 
       // 30 gün geçerli çerez (checkout siparişte okur)
       document.cookie = `affiliate_ref=${encodeURIComponent(code)}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax`;
+
+      // İstatistik (first-party analitik) → kaynak tablosunda "satış ortağı · KOD"
+      // satırı olarak görünsün (ziyaret/sepet/satın alma/ciro). İlk-temas kuralı:
+      // ziyaret zaten utm'li bir linkle geldiyse o korunur.
+      setCampaign("satış ortağı", code);
 
       // Tıklamayı bir kez kaydet (oturum + sekme bazında koru)
       const guardKey = `yh:affClick:${code}`;
