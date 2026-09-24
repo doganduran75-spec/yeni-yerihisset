@@ -563,7 +563,11 @@ export default function CartPage() {
       for (const it of regs) {
         map[it.id] = it.variant_id ? (vMap.get(it.variant_id) ?? 0) : (pMap.get(it.product_id) ?? 0);
       }
-      if (!cancelled) setLiveStock(map);
+      if (!cancelled) {
+        setLiveStock(map);
+        // Kalemlerdeki stok bilgisini de tazele → +/- sınırı ve "son X ürün" canlı stoğa göre
+        useCartStore.getState().syncStock(map);
+      }
     }
 
     refreshLiveStock();

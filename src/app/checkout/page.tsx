@@ -23,6 +23,7 @@ import {
   Clock,
   IdCard,
   Banknote,
+  PackageX,
 } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,6 +33,7 @@ import { cn } from "@/lib/utils";
 import { trackBeginCheckout, trackPurchase } from "@/lib/analytics";
 import { GeoSelect } from "@/components/ui/geo-select";
 import { CITIES, DISTRICTS } from "@/lib/turkey-geo";
+import { fetchLiveStocks } from "@/lib/live-stock";
 
 // Seçili kargo yönteminin ücreti (kupon ücretsiz-kargo veya free_over eşiğinde 0)
 function shipFee(m: any, productTotal: number, freeCoupon: boolean): number {
@@ -84,6 +86,10 @@ export default function CheckoutPage() {
   });
   const [identityNumber, setIdentityNumber] = useState("");
   const [emailExists, setEmailExists] = useState(false); // misafir e-postası zaten kayıtlı
+  // Site içi uyarılar (tarayıcı alert'i yerine)
+  const [stockProblems, setStockProblems] = useState<{ id: string; title: string; variant: string | null; qty: number; live: number }[] | null>(null);
+  const [orderError, setOrderError] = useState<string | null>(null);
+  const leavingRef = useRef(false);
   // Ödeme yöntemi
   const [paymentMethod, setPaymentMethod] = useState<"credit_card" | "bank_transfer">("credit_card");
   const [bankTransferEnabled, setBankTransferEnabled] = useState(false);
@@ -267,6 +273,9 @@ export default function CheckoutPage() {
 
     setPlacing(true);
 
+    // Göndermeden önce canlı stok kontrolü — tükenen varsa site içi uyarı
+    if (await showStockProblemIfAny()) { setPlacing(false); return; }
+
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
       await supabase.from('profiles').update({
@@ -332,7 +341,8 @@ export default function CheckoutPage() {
       setPlacing(false);
 
       if (!data.ok) {
-        alert(data.error || "Ödeme başlatılamadı. Lütfen tekrar deneyin.");
+        // Stok yarışı (bu arada tükendi) → ürün bazlı uyarı; değilse genel hata kutusu
+        if (!(await showStockProblemIfAny())) setOrderError(data.error || "Ödeme başlatılamadı. Lütfen tekrar deneyin.");
         return;
       }
 
@@ -410,8 +420,43 @@ export default function CheckoutPage() {
       setOrderSuccess(data.orderId);
       setOrderNumber(data.orderNumber ?? null);
     } else {
-      alert(data.error || "Sipariş oluşturulamadı. Lütfen tekrar deneyin.");
+      if (!(await showStockProblemIfAny())) setOrderError(data.error || "Sipariş oluşturulamadı. Lütfen tekrar deneyin.");
     }
+  }
+
+  // Sepetteki (hediye olmayan) kalemlerin canlı stoğunu kontrol et; yetmeyen
+  // varsa uyarı penceresini aç ve true dön.
+  async function showStockProblemIfAny(): Promise<boolean> {
+    const regs = items.filter((i) => !i.is_gift);
+    if (!regs.length) return false;
+    try {
+      const live = await fetchLiveStocks(regs.map((i) => i.product_id));
+      const problems = regs
+        .map((i) => ({
+          id: i.id, title: i.title, variant: i.variant_name ?? null, qty: i.quantity,
+          live: i.variant_id ? (live.variants.get(i.variant_id) ?? 0) : (live.products.get(i.product_id) ?? 0),
+        }))
+        .filter((p) => p.live < p.qty);
+      if (!problems.length) return false;
+      setStockProblems(problems);
+      return true;
+    } catch {
+      return false; // okunamazsa sunucu yine doğrular
+    }
+  }
+
+  // Uyarıda "Tamam": tükeneni sepetten çıkar, azalanı stoğa indir; sepet boşaldıysa
+  // Mağaza'ya, ürün kaldıysa güncel sepeti görsün diye Sepet'e dön.
+  function resolveStockProblems() {
+    leavingRef.current = true;
+    const store = useCartStore.getState();
+    for (const p of stockProblems ?? []) {
+      if (p.live <= 0) store.removeItem(p.id);
+      else { store.syncStock({ [p.id]: p.live }); store.updateQuantity(p.id, p.live); }
+    }
+    const remaining = useCartStore.getState().items.filter((i) => !i.is_gift).length;
+    setStockProblems(null);
+    router.push(remaining > 0 ? "/sepet" : "/products");
   }
 
   async function handleApplyCoupon(codeArg?: string) {
@@ -577,7 +622,8 @@ export default function CheckoutPage() {
   }
 
   if (items.length === 0) {
-    router.push("/sepet");
+    // Stok uyarısından sonra zaten Mağaza'ya gidiliyorsa Sepet'e çekme
+    if (!leavingRef.current) router.push("/sepet");
     return null;
   }
 
@@ -618,6 +664,52 @@ export default function CheckoutPage() {
       )}
 
       <Navbar variant="minimal" />
+
+      {/* Stok uyarısı — sipariş sırasında ürün tükendi/azaldı */}
+      {stockProblems && (
+        <div className="fixed inset-0 z-[100] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 sm:p-8 space-y-5">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-amber-100 flex items-center justify-center shrink-0">
+                <PackageX size={24} className="text-amber-600" />
+              </div>
+              <h3 className="text-xl font-black text-slate-900">Üzgünüz, stok değişti</h3>
+            </div>
+            <p className="text-sm text-slate-600 leading-relaxed">Sepetindeki bazı ürünler sen alışveriş yaparken tükendi ya da azaldı:</p>
+            <ul className="space-y-2">
+              {stockProblems.map((p) => (
+                <li key={p.id} className="flex items-start justify-between gap-3 rounded-xl bg-slate-50 border border-slate-100 p-3 text-sm">
+                  <span className="font-bold text-slate-800">{p.title}{p.variant ? <span className="text-olive-600"> · {p.variant}</span> : null}</span>
+                  <span className={cn("shrink-0 text-xs font-black", p.live <= 0 ? "text-red-600" : "text-amber-700")}>
+                    {p.live <= 0 ? "Tükendi — sepetten çıkarılacak" : `Stokta ${p.live} adet — adet ${p.live}'e inecek`}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            {(() => {
+              const staying = items.filter((i) => !i.is_gift && !stockProblems.some((p) => p.id === i.id && p.live <= 0)).length;
+              return (
+                <Button onClick={resolveStockProblems} className="w-full h-12 rounded-2xl bg-olive-600 hover:bg-olive-700 font-black">
+                  {staying > 0 ? "Tamam, sepetime dön" : "Tamam, mağazaya dön"}
+                </Button>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
+      {/* Genel sipariş hatası (tarayıcı alert'i yerine) */}
+      {orderError && (
+        <div className="fixed inset-0 z-[100] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 sm:p-8 space-y-5 text-center">
+            <div className="w-14 h-14 rounded-2xl bg-red-50 flex items-center justify-center mx-auto">
+              <X size={26} className="text-red-500" />
+            </div>
+            <p className="text-sm font-bold text-slate-700 leading-relaxed">{orderError}</p>
+            <Button onClick={() => setOrderError(null)} className="w-full h-12 rounded-2xl bg-olive-600 hover:bg-olive-700 font-black">Tamam</Button>
+          </div>
+        </div>
+      )}
 
       <main className="container mx-auto px-4 py-8 md:py-16">
         <div className="max-w-6xl mx-auto grid lg:grid-cols-12 gap-12">

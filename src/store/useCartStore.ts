@@ -56,6 +56,7 @@ interface CartStore {
   addItem: (item: CartItem) => void;
   removeItem: (id: string) => void;
   updateQuantity: (id: string, quantity: number) => void;
+  syncStock: (map: Record<string, number>) => void;
   clearCart: () => void;
   setCouponCode: (code: string) => void;
   getTotalItems: () => number;
@@ -86,8 +87,10 @@ export const useCartStore = create<CartStore>()(
           set({
             items: items.map((item) => {
               if (item.id !== newItem.id) return item;
-              const maxQty = item.stock > 0 ? item.stock : 9999;
-              return { ...item, quantity: Math.min(item.quantity + newItem.quantity, maxQty) };
+              // Stok bilgisini yeni eklemedekiyle tazele (sepette eski değer kalmasın)
+              const stock = newItem.stock > 0 ? newItem.stock : item.stock;
+              const maxQty = stock > 0 ? stock : 9999;
+              return { ...item, stock, quantity: Math.min(item.quantity + newItem.quantity, maxQty) };
             }),
           });
         } else {
@@ -143,6 +146,19 @@ export const useCartStore = create<CartStore>()(
         }
 
         set({ items: newItems, pendingGifts: newPending });
+      },
+
+      // Canlı stoğu sepetteki kalemlere yaz (adet sınırı / "son X ürün" doğru olsun).
+      // Adedi DEĞİŞTİRMEZ — stok aşımı sepet sayfasında ayrıca uyarılır.
+      syncStock: (map) => {
+        let changed = false;
+        const next = get().items.map((item) => {
+          const live = map[item.id];
+          if (item.is_gift || live === undefined || live === item.stock) return item;
+          changed = true;
+          return { ...item, stock: live };
+        });
+        if (changed) set({ items: next });
       },
 
       updateQuantity: (id, quantity) => {

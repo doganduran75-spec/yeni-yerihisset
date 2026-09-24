@@ -70,18 +70,28 @@ function bootstrapSession() {
   if (bootstrapped) return;
   bootstrapped = true;
   try {
+    const p = new URLSearchParams(location.search);
+    const utm = {
+      source: p.get("utm_source") || "",
+      medium: p.get("utm_medium") || "",
+      campaign: p.get("utm_campaign") || "",
+      content: p.get("utm_content") || "",
+      term: p.get("utm_term") || "",
+    };
+    const hasUtm = Object.values(utm).some(Boolean);
     if (!sessionStorage.getItem(LANDING_KEY)) {
       sessionStorage.setItem(LANDING_KEY, location.pathname + location.search);
       sessionStorage.setItem(REF_KEY, document.referrer || "");
-      const p = new URLSearchParams(location.search);
-      const utm = {
-        source: p.get("utm_source") || "",
-        medium: p.get("utm_medium") || "",
-        campaign: p.get("utm_campaign") || "",
-        content: p.get("utm_content") || "",
-        term: p.get("utm_term") || "",
-      };
-      if (Object.values(utm).some(Boolean)) {
+      if (hasUtm) {
+        // Yeni sekmede kampanya linki ama açık (kaynaksız) bir oturum var → yeni oturum
+        startNewSession();
+        sessionStorage.setItem(UTM_KEY, JSON.stringify(utm));
+      }
+    } else if (hasUtm) {
+      // Oturum ortasında FARKLI bir kampanya linkiyle gelindi → yeni oturum
+      const cur = readJSON<Record<string, string>>(UTM_KEY);
+      if (!cur || cur.source !== utm.source || cur.campaign !== utm.campaign) {
+        startNewSession();
         sessionStorage.setItem(UTM_KEY, JSON.stringify(utm));
       }
     }
@@ -176,9 +186,28 @@ export function setCampaign(source: string, campaign: string, content?: string) 
   if (typeof window === "undefined") return;
   try {
     bootstrapSession();
-    if (!sessionStorage.getItem(UTM_KEY)) {
-      sessionStorage.setItem(UTM_KEY, JSON.stringify({ source, medium: "referral", campaign, content: content || "", term: "" }));
-    }
+    const cur = readJSON<Record<string, string>>(UTM_KEY);
+    if (cur && cur.source === source && cur.campaign === campaign) return; // aynı kampanya (ör. yenileme)
+    // Farklı/yeni bir kampanya ile gelindi → (GA gibi) YENİ oturum başlat. Aksi
+    // halde açık kalan eski oturum (kaynaksız) sürer ve ziyaret bu kampanyaya
+    // hiç yazılmaz (sunucu kaynağı oturumun ilk kaydında dondurur).
+    startNewSession();
+    sessionStorage.setItem(UTM_KEY, JSON.stringify({ source, medium: "referral", campaign, content: content || "", term: "" }));
+  } catch {
+    /* yut */
+  }
+}
+
+// Yeni oturum kimliği + bu sayfayı landing olarak kaydet. Kuyruktaki event'ler
+// (bu sayfanın page_view'ı) yeni oturumla gider — kampanya ziyareti sayılsın.
+function startNewSession() {
+  const store = ls();
+  try {
+    store?.setItem(SID_KEY, uuid());
+    store?.setItem(SID_TS_KEY, String(Date.now()));
+    sessionStorage.setItem(LANDING_KEY, location.pathname + location.search);
+    sessionStorage.setItem(REF_KEY, document.referrer || "");
+    sessionStorage.removeItem(UTM_KEY);
   } catch {
     /* yut */
   }

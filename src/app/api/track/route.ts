@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
     // Oturum: ilk temasta oluştur (UTM/kaynak/IP burada dondurulur),
     // sonraki flush'larda yalnız last_seen/sayaç ve dolan kimlik güncellenir.
     const existing = await (supabase as any)
-      .from("analytics_sessions").select("session_id, user_id, contact_id").eq("session_id", sessionId).maybeSingle();
+      .from("analytics_sessions").select("session_id, user_id, contact_id, event_count").eq("session_id", sessionId).maybeSingle();
 
     const userId = body?.user_id || null;
 
