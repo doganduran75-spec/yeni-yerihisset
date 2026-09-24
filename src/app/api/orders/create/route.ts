@@ -411,8 +411,16 @@ export async function POST(req: NextRequest) {
   }
 
   // Sipariş oluşturma bildirimi gönder (non-blocking, doğrudan lib çağrısı)
-  const { sendOrderNotification, sendAdminNewOrderNotification, alertOutOfStockForOrder } = await import("@/lib/notifications");
+  const { sendOrderNotification, sendAdminNewOrderNotification, alertOutOfStockForOrder, sendGuestActivationEmail } = await import("@/lib/notifications");
   sendOrderNotification("order_placed", { orderId: order.id, userId: userId }).catch(() => {});
+  // Misafir → hesap aktivasyonu (şifre belirleme) e-postası
+  if (!authUser && guest?.email) {
+    sendGuestActivationEmail({
+      email: guest.email.trim().toLowerCase(),
+      name: address?.first_name ?? null,
+      orderLabel: (order as any).order_number ? `YH${(order as any).order_number}` : null,
+    }).catch((e) => console.error("[guest-activation]", e?.message || e));
+  }
   // Admin'e "yeni sipariş geldi" bildirimi (sonucu logla — teşhis için)
   sendAdminNewOrderNotification(order.id)
     .then((r) => { if (r.status !== "sent") console.error("[admin-order-mail]", JSON.stringify(r)); else console.log("[admin-order-mail] sent"); })
@@ -420,5 +428,10 @@ export async function POST(req: NextRequest) {
   // Satışla stoğu 0'a düşen ürün(ler) için admin'e "satış noktalarında kapat" uyarısı
   alertOutOfStockForOrder(order.id).catch((e) => console.error("[out-of-stock-alert]", e?.message || e));
 
-  return NextResponse.json({ orderId: order.id, orderNumber: (order as any).order_number ?? null });
+  return NextResponse.json({
+    orderId: order.id,
+    orderNumber: (order as any).order_number ?? null,
+    totalAmount: Number((order as any).total_amount ?? totalAmount),
+    isGuest: !authUser,
+  });
 }

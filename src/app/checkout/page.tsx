@@ -66,6 +66,8 @@ export default function CheckoutPage() {
   const [placing, setPlacing] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState<string | null>(null);
   const [orderNumber, setOrderNumber] = useState<string | null>(null);
+  const [successTotal, setSuccessTotal] = useState<number | null>(null); // başarı ekranında ödenecek tutar
+  const [activationState, setActivationState] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [couponCode, setCouponCode] = useState("");
   const [couponInput, setCouponInput] = useState("");
   const [couponData, setCouponData] = useState<{ name: string; type: string; discount_amount: number; free_shipping: boolean } | null>(null);
@@ -329,6 +331,7 @@ export default function CheckoutPage() {
           affiliateCode: affiliateCode || undefined,
         });
         clearCart();
+        setSuccessTotal(0);
         setOrderSuccess(data.orderId);
         setOrderNumber(data.orderNumber ?? null);
         return;
@@ -387,6 +390,7 @@ export default function CheckoutPage() {
         affiliateCode: affiliateCode || undefined,
       });
       clearCart();
+      setSuccessTotal(typeof data.totalAmount === "number" ? data.totalAmount : finalTotal);
       setOrderSuccess(data.orderId);
       setOrderNumber(data.orderNumber ?? null);
     } else {
@@ -447,48 +451,107 @@ export default function CheckoutPage() {
   if (loading) return <div className="min-h-screen flex items-center justify-center animate-pulse text-olive-600 font-bold">Ödeme Sayfası Hazırlanıyor...</div>;
 
   if (orderSuccess) {
-    const isBankTransfer = paymentMethod === "bank_transfer";
+    // Kredi tüm tutarı karşıladıysa ödeme beklenmez → havale ekranı gösterilmez
+    const isBankTransfer = paymentMethod === "bank_transfer" && (successTotal ?? 1) > 0;
+    const orderLabel = orderNumber ? `YH${orderNumber}` : `#${orderSuccess.slice(0, 8).toUpperCase()}`;
+    const email = personalInfo.email.trim();
+
+    async function resendActivation() {
+      setActivationState("sending");
+      try {
+        const res = await fetch("/api/orders/guest-activation", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ orderId: orderSuccess }),
+        });
+        setActivationState(res.ok ? "sent" : "error");
+      } catch { setActivationState("error"); }
+    }
+
     return (
-      <div className="min-h-screen bg-[#F9FAFB] flex items-center justify-center p-4">
-        <div className="bg-white rounded-3xl shadow-2xl p-12 max-w-md w-full text-center space-y-6">
-          <div className={cn(
-            "w-20 h-20 rounded-full flex items-center justify-center mx-auto",
-            isBankTransfer ? "bg-amber-100" : "bg-green-100"
-          )}>
-            {isBankTransfer
-              ? <Clock size={40} className="text-amber-600" />
-              : <CheckCircle2 size={40} className="text-green-600" />}
-          </div>
-          <div>
-            <h2 className="text-3xl font-black text-slate-900 mb-2">
-              {isBankTransfer ? "Siparişiniz Oluşturuldu!" : "Siparişiniz Alındı!"}
-            </h2>
-            <p className="text-slate-500 font-medium">Sipariş numaranız: <span className="font-bold text-slate-900">{orderNumber ? `YH${orderNumber}` : `#${orderSuccess.slice(0, 8)}`}</span></p>
-          </div>
-          {isBankTransfer ? (
-            <div className="space-y-4 text-left">
-              <p className="text-sm text-slate-600 font-medium leading-relaxed text-center">
-                Havaleyi gerçekleştirdiğinizde siparişinizi işleme alacağız.
-              </p>
-              {bankTransferInfo && (
-                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
-                  <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-2 flex items-center gap-1">
-                    <Landmark size={12} /> Banka Bilgileri
-                  </p>
-                  <pre className="text-xs text-slate-700 font-medium whitespace-pre-wrap leading-relaxed">{bankTransferInfo}</pre>
-                </div>
-              )}
+      <div className="min-h-screen bg-[#F9FAFB] flex items-center justify-center p-4 py-10">
+        <div className="bg-white rounded-3xl shadow-2xl p-6 sm:p-10 max-w-lg w-full space-y-6">
+          {/* ÜST — Siparişini aldık */}
+          <div className="text-center space-y-3">
+            <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center mx-auto">
+              <CheckCircle2 size={40} className="text-green-600" />
             </div>
-          ) : (
-            <p className="text-sm text-slate-500 font-medium leading-relaxed">
-              Siparişinizi hazırlamaya başladık. E-posta adresinize bildirim gönderilecektir.
+            <h2 className="text-3xl font-black text-slate-900">Siparişini aldık!</h2>
+            <p className="text-slate-500 font-medium">
+              {isBankTransfer ? "Ödemen ulaştığında siparişini hazırlayıp kargoya vereceğiz." : "Siparişini hazırlamaya başladık."}
+            </p>
+          </div>
+
+          {/* ALT — Sipariş / ödeme bilgileri */}
+          <div className="rounded-2xl border border-slate-100 bg-slate-50/60 p-4 space-y-2 text-sm">
+            <div className="flex justify-between gap-3"><span className="text-slate-500">Sipariş No</span><span className="font-black text-slate-900">{orderLabel}</span></div>
+            {successTotal !== null && (
+              <div className="flex justify-between gap-3">
+                <span className="text-slate-500">{isBankTransfer ? "Ödenecek Tutar" : "Toplam"}</span>
+                <span className="font-black text-olive-600">₺{successTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })} <span className="text-[10px] font-medium text-slate-400">KDV dahil</span></span>
+              </div>
+            )}
+          </div>
+
+          {isBankTransfer && bankTransferInfo && (
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 space-y-2">
+              <p className="text-[10px] font-black text-amber-700 uppercase tracking-widest flex items-center gap-1">
+                <Landmark size={12} /> Havale / EFT Banka Bilgileri
+              </p>
+              <pre className="text-xs text-slate-700 font-medium whitespace-pre-wrap leading-relaxed">{bankTransferInfo}</pre>
+              <p className="text-xs font-bold text-amber-800">
+                Açıklama kısmına sipariş numaranı (<span className="font-mono">{orderLabel}</span>) yazmayı unutma.
+              </p>
+            </div>
+          )}
+
+          {email && (
+            <p className="text-xs text-slate-500 text-center leading-relaxed">
+              {isBankTransfer ? "Sipariş ve ödeme bilgilerini" : "Sipariş bilgilerini"} <b className="text-slate-700">{email}</b> adresine de gönderdik.
             </p>
           )}
+
+          {/* MİSAFİR — hesap aktivasyonu */}
+          {isGuest ? (
+            <div className="rounded-2xl border-2 border-olive-100 bg-olive-50/50 p-5 space-y-3">
+              <p className="font-black text-slate-900">Siparişini takip etmek için hesabını aktifleştir</p>
+              <p className="text-sm text-slate-600 leading-relaxed">
+                Siparişinle birlikte bu e-postaya bir hesap açıldı. <b>E-postana gönderdiğimiz bağlantıdan şifreni belirlemen</b> yeterli.
+              </p>
+              <ul className="text-sm text-slate-600 space-y-1.5">
+                {[
+                  "Sipariş ve kargo takibi",
+                  "İade / değişim talebi ve bizimle yazışma",
+                  "Kayıtlı adresle hızlı alışveriş",
+                  "Favoriler ve “stok gelince haber ver”",
+                  "Satış ortaklığı ile YeriHisset Kredisi",
+                ].map((t) => (
+                  <li key={t} className="flex items-start gap-2"><CheckCircle2 size={15} className="text-olive-600 shrink-0 mt-0.5" /> {t}</li>
+                ))}
+              </ul>
+              <div className="pt-1 text-xs text-slate-500">
+                {activationState === "sent" ? (
+                  <span className="text-green-700 font-bold">✓ Bağlantıyı tekrar gönderdik.</span>
+                ) : activationState === "error" ? (
+                  <span className="text-red-600 font-bold">Gönderilemedi, biraz sonra tekrar dene.</span>
+                ) : (
+                  <>E-posta gelmedi mi? (Spam klasörüne de bak){" "}
+                    <button type="button" onClick={resendActivation} disabled={activationState === "sending"}
+                      className="font-bold text-olive-700 underline disabled:opacity-50">
+                      {activationState === "sending" ? "Gönderiliyor…" : "Tekrar gönder"}
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          ) : null}
+
           <div className="flex flex-col gap-3">
-            <Link href="/account?tab=orders" className={cn(buttonVariants({ variant: "default" }), "h-12 rounded-2xl bg-olive-600 font-bold")}>
-              Siparişlerimi Gör
-            </Link>
-            <Link href="/" className={cn(buttonVariants({ variant: "ghost" }), "h-12 rounded-2xl font-bold")}>
+            {!isGuest && (
+              <Link href="/account?tab=orders" className={cn(buttonVariants({ variant: "default" }), "h-12 rounded-2xl bg-olive-600 font-bold")}>
+                Siparişlerimi Gör
+              </Link>
+            )}
+            <Link href="/products" className={cn(buttonVariants({ variant: isGuest ? "default" : "ghost" }), "h-12 rounded-2xl font-bold", isGuest && "bg-olive-600")}>
               Alışverişe Devam Et
             </Link>
           </div>
@@ -567,8 +630,9 @@ export default function CheckoutPage() {
                         {!isGuest && <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[9px] font-bold text-slate-400 uppercase">Sabit</div>}
                       </div>
                       {isGuest && (
-                        <p className="text-[10px] text-slate-400 font-medium px-1">
+                        <p className="text-[10px] text-slate-400 font-medium px-1 leading-relaxed">
                           Üyeliğin var mı? <Link href="/login?redirect=/checkout" className="text-olive-600 font-bold">Giriş yap</Link> — kayıtlı adreslerinle daha hızlı.
+                          <br />Siparişinle birlikte bu e-postaya bir YeriHisset hesabı açılır; şifreni sonra e-postadaki bağlantıdan belirleyip siparişini takip edebilirsin.
                         </p>
                       )}
                     </div>
@@ -1049,7 +1113,7 @@ export default function CheckoutPage() {
                       disabled={placing}
                       className="w-full h-20 rounded-[2rem] bg-olive-600 hover:bg-olive-700 text-xl font-black shadow-2xl shadow-olive-100 uppercase tracking-tighter group mt-2 transition-all active:scale-95 disabled:opacity-50"
                     >
-                      {placing ? "Hazırlanıyor..." : <>SİPARİŞİ TAMAMLA <ArrowRight size={24} className="ml-2 group-hover:translate-x-3 transition-transform duration-500" /></>}
+                      {placing ? (paymentMethod === "credit_card" ? "Ödemeye yönlendiriliyor…" : "Sipariş işleniyor…") : <>SİPARİŞİ TAMAMLA <ArrowRight size={24} className="ml-2 group-hover:translate-x-3 transition-transform duration-500" /></>}
                     </Button>
 
                     <div className="grid grid-cols-2 gap-4">

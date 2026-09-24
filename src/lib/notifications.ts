@@ -1040,6 +1040,79 @@ export async function sendPasswordRecoveryEmail(params: {
 }
 
 /**
+ * MİSAFİR SİPARİŞİ → HESAP AKTİVASYONU. Misafir checkout'ta şifresiz hesap
+ * açılır; bu e-posta şifre belirleme bağlantısı (kendi domainimizde, recovery
+ * token) gönderir. Tıklayınca şifresini belirler, giriş yapmış olur ve
+ * siparişlerini takip eder. Bağlantı e-posta sahipliğini de doğrular.
+ */
+export async function sendGuestActivationEmail(params: {
+  email: string;
+  name?: string | null;
+  orderLabel?: string | null;
+}): Promise<{ status: "sent" | "failed"; error?: string }> {
+  const supabase = createAdminClient();
+  const storeUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com";
+  const { data: settings } = await (supabase as any).from("settings").select("*").limit(1).maybeSingle();
+  const storeName = settings?.store_name || "YeriHisset";
+
+  const { data: linkData, error: linkErr } = await supabase.auth.admin.generateLink({
+    type: "recovery",
+    email: params.email,
+    options: { redirectTo: `${storeUrl}/sifre-belirle` },
+  } as any);
+  const hashedToken = (linkData as any)?.properties?.hashed_token;
+  if (linkErr || !hashedToken) return { status: "failed", error: linkErr?.message || "Bağlantı üretilemedi" };
+  const actionUrl = `${storeUrl}/sifre-belirle?token_hash=${hashedToken}&type=recovery`;
+
+  const name = (params.name || "").trim() || "Merhaba";
+  const li = (t: string) => `<li style="margin:0 0 6px">${t}</li>`;
+  const bodyHtml = `
+    <h1 style="font-size:22px;font-weight:800;color:#111827;margin:0 0 12px">Siparişini takip etmek için hesabını aktifleştir</h1>
+    <p style="font-size:15px;color:#374151;line-height:1.6;margin:0 0 8px">
+      ${name === "Merhaba" ? "Merhaba" : `Merhaba ${name}`}, ${params.orderLabel ? `<b>${params.orderLabel}</b> numaralı ` : ""}siparişini aldık. Siparişinle birlikte bu e-posta adresine bir ${storeName} hesabı açıldı. Şifreni belirlemen yeterli:
+    </p>
+    <div style="text-align:center;margin:26px 0">
+      <a href="${actionUrl}" style="display:inline-block;background:#4d7c0f;color:#fff;text-decoration:none;padding:14px 36px;border-radius:14px;font-weight:800;font-size:15px">
+        Şifremi Belirle
+      </a>
+    </div>
+    <p style="font-size:14px;color:#374151;font-weight:700;margin:0 0 8px">Hesabınla neler yapabilirsin?</p>
+    <ul style="margin:0 0 16px;padding:0 0 0 18px;font-size:14px;color:#475569;line-height:1.5">
+      ${li("Siparişini ve kargo takip numaranı görebilirsin")}
+      ${li("İade / değişim talebi açıp bizimle doğrudan yazışabilirsin")}
+      ${li("Kayıtlı adresinle bir sonraki alışverişini hızlıca tamamlarsın")}
+      ${li("Favorilerini saklar, tükenen ürün için “stok gelince haber ver” diyebilirsin")}
+      ${li("Satış ortağı olup YeriHisset Kredisi kazanabilirsin")}
+    </ul>
+    <p style="font-size:12px;color:#9ca3af;line-height:1.6;margin:16px 0 0">
+      Güvenliğin için bu bağlantı kısa süre sonra geçerliliğini yitirir; süresi dolarsa giriş ekranındaki “Şifremi unuttum” ile yenisini alabilirsin. Bu siparişi sen vermediysen bu e-postayı yok sayabilirsin.
+    </p>`;
+
+  const smtpConfig = buildSmtpConfig({
+    smtp_host: settings?.smtp_host || "",
+    smtp_port: settings?.smtp_port,
+    smtp_secure: settings?.smtp_secure,
+    smtp_user: settings?.smtp_user,
+    smtp_password: settings?.smtp_password,
+  });
+  if (!smtpConfig.host || !smtpConfig.auth.user) return { status: "failed", error: "SMTP ayarları eksik" };
+
+  try {
+    const transporter = nodemailer.createTransport(smtpConfig);
+    await transporter.sendMail({
+      from: `"${settings?.smtp_from_name || storeName}" <${settings?.smtp_from_email || smtpConfig.auth.user}>`,
+      to: params.email,
+      subject: `${storeName} — Siparişini takip et: şifreni belirle`,
+      html: buildEmailDocument(bodyHtml, storeName),
+      text: htmlToText(bodyHtml),
+    });
+    return { status: "sent" };
+  } catch (err: any) {
+    return { status: "failed", error: err?.message || "Email gönderim hatası" };
+  }
+}
+
+/**
  * Stok bildirimi KAYIT ONAYI — kişi ilk kez "stok gelince haber ver" deyip
  * e-posta bırakınca ANINDA gider. Ürün fotosu + kısa barefoot tanıtımı +
  * "listemize kaydoldunuz" mesajı. (Stok gelince giden bildirimden ayrıdır.)
