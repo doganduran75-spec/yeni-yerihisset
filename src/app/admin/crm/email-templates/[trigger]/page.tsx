@@ -81,8 +81,8 @@ export default function EditTemplatePage({ params }: { params: Promise<{ trigger
     <tr><td align="center">
       <table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:12px;overflow:hidden;">
         <tr>
-          <td style="background:#1d4ed8;padding:28px 40px;text-align:center;">
-            <span style="font-size:26px;font-weight:900;color:#fff;letter-spacing:-1px;">Yeri<span style="color:#93c5fd;">Hisset</span></span>
+          <td style="background:#536430;padding:28px 40px;text-align:center;">
+            <span style="font-size:26px;font-weight:900;color:#fff;letter-spacing:-1px;">Yeri<span style="color:#c6c8b8;">Hisset</span></span>
           </td>
         </tr>
         <tr>

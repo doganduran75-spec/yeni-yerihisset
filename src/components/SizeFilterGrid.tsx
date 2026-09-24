@@ -12,6 +12,7 @@ import StockNotifyModal from "@/components/products/StockNotifyModal";
 import { useCartStore } from "@/store/useCartStore";
 import { supabase } from "@/lib/supabase";
 import { track } from "@/lib/track";
+import { fetchLiveStocks, fetchItemStock } from "@/lib/live-stock";
 
 const FALLBACK_IMG = "https://images.unsplash.com/photo-1494438639946-1ebd1d20bf85?q=80&w=400";
 
@@ -108,7 +109,36 @@ function ProductCard({ product, categoryName, size, outOfStock, onNotify, canQui
   );
 }
 
-export default function SizeFilterGrid({ products, categoryName }: { products: any[]; categoryName?: string }) {
+export default function SizeFilterGrid({ products: cachedProducts, categoryName }: { products: any[]; categoryName?: string }) {
+  // Sayfa ISR ile önbellekli → stok birkaç dk eski olabilir. Açılışta ve sekmeye
+  // dönüşte varyant stokları DB'den okunup ürünlerin üstüne yazılır; böylece numara
+  // filtresi "stokta" / "stokta değil" ayrımını güncel stokla yapar.
+  const [liveVariants, setLiveVariants] = useState<Map<string, number> | null>(null);
+  const [stockMsg, setStockMsg] = useState<string | null>(null);
+  const productIdsKey = cachedProducts.map((p) => p.id).join(",");
+  useEffect(() => {
+    let active = true;
+    const refresh = () =>
+      fetchLiveStocks(cachedProducts.map((p) => p.id))
+        .then((s) => { if (active) setLiveVariants(s.variants); })
+        .catch(() => {});
+    refresh();
+    const onShow = () => { if (!document.hidden) refresh(); };
+    document.addEventListener("visibilitychange", onShow);
+    window.addEventListener("pageshow", onShow);
+    return () => { active = false; document.removeEventListener("visibilitychange", onShow); window.removeEventListener("pageshow", onShow); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [productIdsKey]);
+  const products = useMemo(() => {
+    if (!liveVariants) return cachedProducts;
+    return cachedProducts.map((p) => ({
+      ...p,
+      product_variants: (p.product_variants ?? []).map((v: any) =>
+        liveVariants.has(v.id) ? { ...v, stock: liveVariants.get(v.id) } : v
+      ),
+    }));
+  }, [cachedProducts, liveVariants]);
+
   const [size, setSize] = useState<string | null>(null);
   const [cat, setCat] = useState<string | null>(null); // seçili kategori id'si
   // "Haber Ver" modalı hedefi (stokta olmayan kart tıklanınca)
@@ -121,6 +151,19 @@ export default function SizeFilterGrid({ products, categoryName }: { products: a
   async function quickBuy(product: any) {
     const v = (product.product_variants ?? []).find((x: any) => isSizeVariant(x) && sizeValue(x) === size && Number(x.stock ?? 0) > 0);
     if (!v) { router.push(`/products/${product.slug}?beden=${encodeURIComponent(size ?? "")}`); return; }
+    // Sepete atmadan önce güncel stok: tükendiyse kartı "stokta değil"e taşı + uyar
+    setStockMsg(null);
+    const live = await fetchItemStock(product.id, v.id);
+    const inCart = useCartStore.getState().items.find((i) => i.id === `var_${v.id}`)?.quantity ?? 0;
+    if (live !== null) {
+      setLiveVariants((prev) => new Map(prev ?? []).set(v.id, live));
+      if (live - inCart <= 0) {
+        setStockMsg(live <= 0
+          ? `${product.title} — ${sizeValue(v)} numara az önce tükendi. Stoğa girince haber verebiliriz.`
+          : `${product.title} — ${sizeValue(v)} numaranın stoktaki son ${live} adedi zaten sepetinde.`);
+        return;
+      }
+    }
     const price = Number(v.price) || getMinPrice(product) || product.price || 0;
     addItem({
       id: `var_${v.id}`,
@@ -130,7 +173,7 @@ export default function SizeFilterGrid({ products, categoryName }: { products: a
       image: product.images?.[0] ?? product.image_url ?? FALLBACK_IMG,
       price,
       quantity: 1,
-      stock: Number(v.stock ?? 0),
+      stock: live ?? Number(v.stock ?? 0),
       variant_name: sizeValue(v),
       category_id: product.categories?.id,
     });
@@ -289,6 +332,15 @@ export default function SizeFilterGrid({ products, categoryName }: { products: a
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Stok uyarısı (hızlı satın almada ürün az önce tükendiyse) */}
+      {stockMsg && (
+        <div className="fixed bottom-24 md:bottom-8 left-1/2 -translate-x-1/2 z-50 w-[92%] max-w-md flex items-start gap-3 p-4 bg-white border-2 border-red-200 rounded-2xl shadow-2xl text-sm font-bold text-red-700">
+          <PackageX size={18} className="shrink-0 mt-0.5" />
+          <span className="flex-1">{stockMsg}</span>
+          <button onClick={() => setStockMsg(null)} className="text-slate-400 hover:text-slate-700 font-black" aria-label="Kapat">✕</button>
         </div>
       )}
 

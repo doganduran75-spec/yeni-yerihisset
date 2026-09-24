@@ -412,15 +412,20 @@ export async function POST(req: NextRequest) {
 
   // Sipariş oluşturma bildirimi gönder (non-blocking, doğrudan lib çağrısı)
   const { sendOrderNotification, sendAdminNewOrderNotification, alertOutOfStockForOrder, sendGuestActivationEmail } = await import("@/lib/notifications");
-  sendOrderNotification("order_placed", { orderId: order.id, userId: userId }).catch(() => {});
-  // Misafir → hesap aktivasyonu (şifre belirleme) e-postası
-  if (!authUser && guest?.email) {
-    sendGuestActivationEmail({
-      email: guest.email.trim().toLowerCase(),
-      name: address?.first_name ?? null,
-      orderLabel: (order as any).order_number ? `YH${(order as any).order_number}` : null,
-    }).catch((e) => console.error("[guest-activation]", e?.message || e));
-  }
+  // Misafirse hesap aktivasyonu (şifre belirleme) e-postası, sipariş e-postası
+  // GİTTİKTEN SONRA gönderilir (önce sipariş/ödeme bilgisi, sonra şifre bağlantısı)
+  const guestEmail = !authUser && guest?.email ? guest.email.trim().toLowerCase() : null;
+  sendOrderNotification("order_placed", { orderId: order.id, userId: userId })
+    .catch(() => {})
+    .then(() => {
+      if (!guestEmail) return;
+      return sendGuestActivationEmail({
+        email: guestEmail,
+        name: address?.first_name ?? null,
+        orderLabel: (order as any).order_number ? `YH${(order as any).order_number}` : null,
+      }).then((r) => { if (r.status !== "sent") console.error("[guest-activation]", r.error); });
+    })
+    .catch((e) => console.error("[guest-activation]", e?.message || e));
   // Admin'e "yeni sipariş geldi" bildirimi (sonucu logla — teşhis için)
   sendAdminNewOrderNotification(order.id)
     .then((r) => { if (r.status !== "sent") console.error("[admin-order-mail]", JSON.stringify(r)); else console.log("[admin-order-mail] sent"); })

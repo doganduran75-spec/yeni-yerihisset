@@ -34,6 +34,7 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { supabase } from "@/lib/supabase";
 import { trackViewItem, trackAddToCart } from "@/lib/analytics";
+import { fetchLiveStocks, fetchItemStock } from "@/lib/live-stock";
 
 type Variant = {
   id: string;
@@ -105,6 +106,22 @@ export default function ProductPageClient({ product, initialSize = null }: { pro
   // F9: stok 0 ise geçici havale rezervasyonu mu (yakında dönebilir)?
   const [holdInfo, setHoldInfo] = useState<{ held: boolean; free_at: string | null } | null>(null);
   const { addItem, items, checkGiftRules } = useCartStore();
+  // Canlı stok (sayfa önbellekli olabilir → açılışta, sekmeye dönüşte ve sepete
+  // eklerken DB'den okunur). Yoksa sayfadaki değer kullanılır.
+  const [liveStock, setLiveStock] = useState<{ variants: Map<string, number>; products: Map<string, number> } | null>(null);
+  const [stockMsg, setStockMsg] = useState<string | null>(null);
+  const [checking, setChecking] = useState(false); // sepete eklerken stok sorgusu sürüyor
+  const vStock = (v: Variant) => liveStock?.variants.get(v.id) ?? (v.stock ?? 0);
+
+  useEffect(() => {
+    let active = true;
+    const refresh = () => fetchLiveStocks([product.id]).then((s) => { if (active) setLiveStock(s); }).catch(() => {});
+    refresh();
+    const onShow = () => { if (!document.hidden) refresh(); };
+    document.addEventListener("visibilitychange", onShow);
+    window.addEventListener("pageshow", onShow);
+    return () => { active = false; document.removeEventListener("visibilitychange", onShow); window.removeEventListener("pageshow", onShow); };
+  }, [product.id]);
 
   // GA4: view_item — ürün sayfası yüklenince
   useEffect(() => {
@@ -161,8 +178,16 @@ export default function ProductPageClient({ product, initialSize = null }: { pro
       ? (selectedVariant.compare_at_price ?? null)
       : null;
   const currentStock =
-    product.has_variants && selectedVariant ? (selectedVariant.stock ?? 0) : product.stock;
-  const isOutOfStock = currentStock === 0;
+    product.has_variants && selectedVariant ? vStock(selectedVariant) : (liveStock?.products.get(product.id) ?? product.stock);
+  const isOutOfStock = currentStock <= 0;
+  const inCartQty = items.find((i) => i.id === (product.has_variants && selectedVariant ? `var_${selectedVariant.id}` : `prod_${product.id}`))?.quantity ?? 0;
+
+  // Seçenek/stok değişince adet stoğu aşmasın; eski uyarı temizlensin
+  useEffect(() => {
+    if (currentStock > 0 && quantity > currentStock) setQuantity(currentStock);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStock]);
+  useEffect(() => { setStockMsg(null); }, [selectedVariant?.id]);
 
   // F9: stok yoksa, bunun sebebi ödenmemiş bir havale siparişi mi (yakında dönebilir)?
   useEffect(() => {
@@ -185,6 +210,28 @@ export default function ProductPageClient({ product, initialSize = null }: { pro
         ? `var_${selectedVariant.id}`
         : `prod_${product.id}`;
 
+    // Sepete eklemeden önce GÜNCEL stoğu sor (sayfa önbellekli olabilir)
+    setStockMsg(null);
+    const variantId = product.has_variants && selectedVariant ? selectedVariant.id : null;
+    const live = await fetchItemStock(product.id, variantId);
+    if (live !== null) {
+      // Ekrandaki stoğu da tazele (tükendiyse "stokta yok" bandı hemen çıksın)
+      setLiveStock((prev) => {
+        const next = { variants: new Map(prev?.variants ?? []), products: new Map(prev?.products ?? []) };
+        if (variantId) next.variants.set(variantId, live); else next.products.set(product.id, live);
+        return next;
+      });
+      const available = live - inCartQty;
+      if (live <= 0) { setStockMsg("Üzgünüz, bu seçenek az önce tükendi."); return; }
+      if (available <= 0) { setStockMsg(`Stoktaki son ${live} adet zaten sepetinde.`); return; }
+      if (quantity > available) {
+        setQuantity(available);
+        setStockMsg(`Stokta ${inCartQty > 0 ? `sepetindekilere ek olarak ` : ""}yalnızca ${available} adet kaldı; adedi güncelledik, tekrar ekleyebilirsin.`);
+        return;
+      }
+    }
+    const stockForCart = live ?? currentStock;
+
     addItem({
       id: cartId,
       product_id: product.id,
@@ -193,7 +240,7 @@ export default function ProductPageClient({ product, initialSize = null }: { pro
       image: selectedImage,
       price: currentPrice,
       quantity,
-      stock: currentStock,
+      stock: stockForCart,
       variant_name: selectedVariant?.variant_options?.value,
       category_id: product.category_id ?? undefined,
     });
@@ -410,7 +457,7 @@ export default function ProductPageClient({ product, initialSize = null }: { pro
                 </h3>
                 <div className="flex flex-wrap gap-3">
                   {activeVariants.map((v) => {
-                    const hasStock = (v.stock ?? 0) > 0;
+                    const hasStock = vStock(v) > 0;
                     const isSelected = selectedVariant?.id === v.id;
                     const isNotified = notifiedVariants.has(v.id);
                     return (
@@ -465,8 +512,9 @@ export default function ProductPageClient({ product, initialSize = null }: { pro
                     </button>
                     <span className="w-12 text-center font-bold text-lg">{quantity}</span>
                     <button
-                      onClick={() => setQuantity(quantity + 1)}
-                      className="p-3 hover:bg-white rounded-lg transition-colors"
+                      onClick={() => setQuantity(Math.min(quantity + 1, Math.max(1, currentStock)))}
+                      disabled={quantity >= currentStock}
+                      className="p-3 hover:bg-white rounded-lg transition-colors disabled:opacity-30"
                     >
                       <Plus size={18} />
                     </button>
@@ -522,8 +570,8 @@ export default function ProductPageClient({ product, initialSize = null }: { pro
                           ? "bg-green-600 hover:bg-green-700"
                           : "bg-olive-600 hover:bg-olive-700 shadow-olive-100"
                       )}
-                      disabled={isAdding}
-                      onClick={handleAddToCart}
+                      disabled={isAdding || checking}
+                      onClick={async () => { setChecking(true); try { await handleAddToCart(); } finally { setChecking(false); } }}
                     >
                       {isAdding ? <Check size={22} className="animate-in zoom-in" /> : <ShoppingBag size={22} />}
                       {isAdding ? "Sepete Eklendi!" : "Sepete Ekle"}
@@ -547,6 +595,11 @@ export default function ProductPageClient({ product, initialSize = null }: { pro
                   </Button>
                 )}
               </div>
+              {stockMsg && (
+                <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-100 rounded-xl text-sm font-bold text-red-700">
+                  <X size={16} className="shrink-0 mt-0.5" /> {stockMsg}
+                </div>
+              )}
             </div>
 
             {/* Benefits */}

@@ -130,9 +130,9 @@ function buildEmailDocument(bodyHtml: string, storeName: string): string {
 
           <!-- Header -->
           <tr>
-            <td style="background:#1d4ed8;padding:28px 40px;text-align:center;">
+            <td style="background:#536430;padding:28px 40px;text-align:center;">
               <span style="font-size:26px;font-weight:900;color:#ffffff;letter-spacing:-1px;">
-                Yeri<span style="color:#93c5fd;">Hisset</span>
+                Yeri<span style="color:#c6c8b8;">Hisset</span>
               </span>
             </td>
           </tr>
@@ -265,9 +265,9 @@ export async function sendOrderNotification(
   // 4. Değişkenler (şablon olsa da olmasa da lazım). Sipariş no: YH<sayı>.
   const shortId = (order as any).order_number ? `YH${(order as any).order_number}` : order.id.slice(0, 8).toUpperCase();
   const trackingHtml = context.trackingNumber
-    ? `<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:16px;margin:0 0 24px 0;">
-         <p style="margin:0 0 4px 0;color:#1e40af;font-size:13px;font-weight:700;">🚚 Kargo Takip No</p>
-         <p style="margin:0;color:#1d4ed8;font-size:16px;font-weight:700;">${context.trackingNumber}</p>
+    ? `<div style="background:#f4f4ef;border:1px solid #c6c8b8;border-radius:8px;padding:16px;margin:0 0 24px 0;">
+         <p style="margin:0 0 4px 0;color:#3d4a22;font-size:13px;font-weight:700;">🚚 Kargo Takip No</p>
+         <p style="margin:0;color:#536430;font-size:16px;font-weight:700;">${context.trackingNumber}</p>
        </div>`
     : "";
 
@@ -519,22 +519,22 @@ export async function sendAdminReplyNotification(
   const subject = `[${storeName}] Destek Ekibinden Yeni Mesaj`;
   const bodyHtml = `
     <div style="color: #334155;">
-      <h2 style="color: #1d4ed8; margin-bottom: 24px;">Yeni Bir Mesajınız Var</h2>
+      <h2 style="color: #536430; margin-bottom: 24px;">Yeni Bir Mesajınız Var</h2>
       <p>Merhaba <strong>${customerName}</strong>,</p>
       <p>Destek ekibimiz bir mesajınızı yanıtladı:</p>
       
-      <div style="background: #f1f5f9; padding: 20px; border-radius: 12px; margin: 24px 0; border-left: 4px solid #1d4ed8; font-style: italic;">
+      <div style="background: #f1f5f9; padding: 20px; border-radius: 12px; margin: 24px 0; border-left: 4px solid #536430; font-style: italic;">
         "${replyContent}"
       </div>
       
       <p style="margin-bottom: 32px;">Mesajın tamamını görmek ve cevap yazmak için hesabınıza giriş yapabilirsiniz.</p>
       
       <div style="text-align: center;">
-        <a href="${storeUrl}/account?tab=messages" style="display: inline-block; background: #1d4ed8; color: white; padding: 14px 28px; text-decoration: none; border-radius: 10px; font-weight: bold; font-size: 16px;">Mesajlarımı Görüntüle</a>
+        <a href="${storeUrl}/account?tab=messages" style="display: inline-block; background: #536430; color: white; padding: 14px 28px; text-decoration: none; border-radius: 10px; font-weight: bold; font-size: 16px;">Mesajlarımı Görüntüle</a>
       </div>
       
       <p style="margin-top: 40px; font-size: 13px; color: #64748b;">
-        Sorularınız için bu e-postayı yanıtlayabilir veya <a href="${storeUrl}" style="color: #1d4ed8;">sitemiz</a> üzerinden bize ulaşabilirsiniz.
+        Sorularınız için bu e-postayı yanıtlayabilir veya <a href="${storeUrl}" style="color: #536430;">sitemiz</a> üzerinden bize ulaşabilirsiniz.
       </p>
     </div>
   `;
@@ -907,7 +907,7 @@ export async function sendAdminNewOrderNotification(
     ${buildOrderItemsHtml(items)}
     ${formatAddressHtml(order.shipping_address) ? `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;margin:0 0 16px;font-size:13px;color:#475569"><b>Teslimat:</b><br>${formatAddressHtml(order.shipping_address)}</div>` : ""}
     <div style="text-align:center;margin:8px 0 0">
-      <a href="${storeUrl}/admin/orders" style="display:inline-block;background:#1d4ed8;color:#fff;text-decoration:none;padding:12px 28px;border-radius:12px;font-weight:800;font-size:14px">Siparişi Yönet</a>
+      <a href="${storeUrl}/admin/orders" style="display:inline-block;background:#536430;color:#fff;text-decoration:none;padding:12px 28px;border-radius:12px;font-weight:800;font-size:14px">Siparişi Yönet</a>
     </div>`;
 
   const smtpConfig = buildSmtpConfig({
@@ -1007,7 +1007,7 @@ export async function sendPasswordRecoveryEmail(params: {
       Merhaba ${name}, hesabın için şifre sıfırlama talebi aldık. Yeni şifreni oluşturmak için aşağıdaki butona tıklaman yeterli.
     </p>
     <div style="text-align:center;margin:28px 0">
-      <a href="${params.actionUrl}" style="display:inline-block;background:#1d4ed8;color:#fff;text-decoration:none;padding:14px 36px;border-radius:14px;font-weight:800;font-size:15px">
+      <a href="${params.actionUrl}" style="display:inline-block;background:#536430;color:#fff;text-decoration:none;padding:14px 36px;border-radius:14px;font-weight:800;font-size:15px">
         Yeni Şifre Oluştur
       </a>
     </div>

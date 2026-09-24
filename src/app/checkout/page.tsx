@@ -83,6 +83,7 @@ export default function CheckoutPage() {
     email: "",
   });
   const [identityNumber, setIdentityNumber] = useState("");
+  const [emailExists, setEmailExists] = useState(false); // misafir e-postası zaten kayıtlı
   // Ödeme yöntemi
   const [paymentMethod, setPaymentMethod] = useState<"credit_card" | "bank_transfer">("credit_card");
   const [bankTransferEnabled, setBankTransferEnabled] = useState(false);
@@ -220,10 +221,25 @@ export default function CheckoutPage() {
     setLoading(false);
   }
 
+  // Misafir e-postası zaten üye mi? (alandan çıkınca hızlı kontrol; hız sınırlı)
+  async function checkGuestEmail() {
+    const email = personalInfo.email.trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return;
+    try {
+      const res = await fetch("/api/checkout/email-check", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const d = await res.json();
+      if (d.exists === true) { setEmailExists(true); setErrors((p) => ({ ...p, email: true })); }
+      else if (d.exists === false) setEmailExists(false);
+    } catch { /* kontrol kritik değil; sipariş anında zaten yapılır */ }
+  }
+
   async function handlePlaceOrder() {
     // ── Eksik alan doğrulaması (yukarıdan aşağıya sırayla) ──────────────────
     const e: Record<string, boolean> = {};
-    if (isGuest && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(personalInfo.email.trim())) e.email = true;
+    if (isGuest && (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(personalInfo.email.trim()) || emailExists)) e.email = true;
     if (!personalInfo.firstName.trim()) e.firstName = true;
     if (!personalInfo.lastName.trim()) e.lastName = true;
     if (paymentMethod === "credit_card" && identityNumber.replace(/\D/g, "").length !== 11) e.tckn = true;
@@ -622,14 +638,26 @@ export default function CheckoutPage() {
                         <Input
                           value={personalInfo.email}
                           disabled={!isGuest}
-                          onChange={isGuest ? (e) => { setPersonalInfo({ ...personalInfo, email: e.target.value }); clearErr("email"); } : undefined}
+                          onChange={isGuest ? (e) => { setPersonalInfo({ ...personalInfo, email: e.target.value }); clearErr("email"); setEmailExists(false); } : undefined}
+                          onBlur={isGuest ? checkGuestEmail : undefined}
                           placeholder={isGuest ? "ornek@eposta.com" : undefined}
                           type="email"
                           className={cn("h-14 rounded-2xl pl-4", isGuest ? "bg-white border-slate-200 font-bold focus:ring-olive-600" : "bg-slate-50 border-slate-100 font-bold opacity-60 cursor-not-allowed", errCls("email"))}
                         />
                         {!isGuest && <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[9px] font-bold text-slate-400 uppercase">Sabit</div>}
                       </div>
-                      {isGuest && (
+                      {isGuest && emailExists && (
+                        <div className="rounded-2xl border-2 border-red-200 bg-red-50 p-4 space-y-2">
+                          <p className="text-sm font-black text-red-700">Bu e-posta ile kayıtlı bir hesabın var.</p>
+                          <p className="text-xs text-red-700/80 leading-relaxed">
+                            Siparişin hesabına bağlansın diye lütfen giriş yap. Daha önce misafir olarak sipariş verdiysen ya da şifreni hatırlamıyorsan giriş ekranındaki “Şifremi unuttum” ile şifreni belirleyebilirsin.
+                          </p>
+                          <Link href="/login?redirect=/checkout" className="inline-flex h-10 px-5 items-center rounded-xl bg-olive-600 text-white text-xs font-black uppercase tracking-widest hover:bg-olive-700">
+                            Giriş Yap
+                          </Link>
+                        </div>
+                      )}
+                      {isGuest && !emailExists && (
                         <p className="text-[10px] text-slate-400 font-medium px-1 leading-relaxed">
                           Üyeliğin var mı? <Link href="/login?redirect=/checkout" className="text-olive-600 font-bold">Giriş yap</Link> — kayıtlı adreslerinle daha hızlı.
                           <br />Siparişinle birlikte bu e-postaya bir YeriHisset hesabı açılır; şifreni sonra e-postadaki bağlantıdan belirleyip siparişini takip edebilirsin.
@@ -1115,6 +1143,9 @@ export default function CheckoutPage() {
                     >
                       {placing ? (paymentMethod === "credit_card" ? "Ödemeye yönlendiriliyor…" : "Sipariş işleniyor…") : <>SİPARİŞİ TAMAMLA <ArrowRight size={24} className="ml-2 group-hover:translate-x-3 transition-transform duration-500" /></>}
                     </Button>
+                    <p className="text-[11px] text-slate-500 font-medium leading-relaxed text-center px-2 -mt-1">
+                      “Siparişi Tamamla” butonuna basarak <Link href="/mesafeli-satis" target="_blank" className="font-bold text-olive-600 underline">Mesafeli Satış Sözleşmesi</Link>’ni ve Ön Bilgilendirme Formu’nu kabul etmiş sayılırsınız.
+                    </p>
 
                     <div className="grid grid-cols-2 gap-4">
                       <div className="flex items-center gap-3 text-[9px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 p-3 rounded-2xl">
@@ -1127,12 +1158,6 @@ export default function CheckoutPage() {
                       </div>
                     </div>
                   </div>
-               </div>
-
-               <div className="p-8 bg-olive-600/5 rounded-[2rem] border-2 border-olive-100 border-dashed text-center">
-                  <p className="text-[10px] font-black text-olive-600 uppercase tracking-widest leading-relaxed italic">
-                     "Siparişi Tamamla" butonuna basarak Mesafeli Satış Sözleşmesi'ni ve Ön Bilgilendirme Formu'nu kabul etmiş sayılırsınız.
-                  </p>
                </div>
             </div>
           </div>
