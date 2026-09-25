@@ -78,11 +78,22 @@ echo "  İmaj: $IMAGE"
 docker rm -f "$TMP_CONTAINER" >/dev/null 2>&1
 docker run -d --name "$TMP_CONTAINER" -e POSTGRES_PASSWORD="restoretest-$STAMP" "$IMAGE" >/dev/null || { warn "Geçici konteyner başlatılamadı"; exit 1; }
 echo -n "  Postgres açılıyor"
-for i in $(seq 1 60); do
-  docker exec "$TMP_CONTAINER" pg_isready -U postgres >/dev/null 2>&1 && break
+READY=0
+for i in $(seq 1 90); do
+  if docker exec "$TMP_CONTAINER" pg_isready -U postgres >/dev/null 2>&1; then READY=1; break; fi
   echo -n "."; sleep 2
 done; echo
-sleep 5
+if [ "$READY" != "1" ]; then
+  warn "Geçici veritabanı 3 dakikada açılmadı. Konteyner durumu: $(docker inspect -f '{{.State.Status}}' "$TMP_CONTAINER" 2>/dev/null)"
+  docker logs --tail 15 "$TMP_CONTAINER" 2>&1 | sed 's/^/      /'
+fi
+# Supabase imajı ilk açılışta kendi kurulum betiklerini çalıştırıp yeniden başlar →
+# kısa bekle ve hazır olduğunu TEKRAR doğrula
+sleep 8
+for i in $(seq 1 30); do
+  docker exec "$TMP_CONTAINER" pg_isready -U postgres >/dev/null 2>&1 && break
+  sleep 2
+done
 T0=$(date +%s)
 PW="restoretest-$STAMP"
 RU=postgres
@@ -95,6 +106,12 @@ else
 fi
 ERRS=$(grep -c "error:" "$OUT_DIR/restore-$STAMP.log" || true)
 echo "  Geri yükleme süresi: $(( $(date +%s) - T0 )) sn — pg_restore hata satırı: $ERRS"
+RESTORED=$( { if [ "$RU" = "supabase_admin" ]; then docker exec -e PGPASSWORD="$PW" "$TMP_CONTAINER" psql -h 127.0.0.1 -U supabase_admin -d postgres -tAc "SELECT count(*) FROM pg_tables WHERE schemaname='public'"; else docker exec "$TMP_CONTAINER" psql -U postgres -d postgres -tAc "SELECT count(*) FROM pg_tables WHERE schemaname='public'"; fi; } 2>&1 | tail -1 )
+echo "  Geçici veritabanında public tablo sayısı: $RESTORED"
+if [ "$ERRS" -gt 50 ] 2>/dev/null || ! [ "$RESTORED" -gt 0 ] 2>/dev/null; then
+  warn "Geri yükleme sorunlu görünüyor — ilk hata satırları:"
+  grep -m 8 -iE "error|fatal|could not" "$OUT_DIR/restore-$STAMP.log" | sed 's/^/      /'
+fi
 echo "  (Supabase iç şemalarında birkaç 'already exists' hatası normaldir; public tablolar önemli.)"
 
 line; echo "4) KAYIT SAYISI KARŞILAŞTIRMA (canlı ↔ geri yüklenen) — tüm tablolar"; line
