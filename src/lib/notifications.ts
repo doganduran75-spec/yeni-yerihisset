@@ -18,8 +18,32 @@ export interface NotificationContext {
 
 // --- Template rendering ---
 
-function replaceVariables(text: string, vars: Record<string, string>): string {
-  return text.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] ?? `{{${key}}}`);
+/** Kullanıcıdan gelen metni HTML'e güvenle koy (ad, adres, mesaj, varyant…). */
+export function escapeHtml(v: unknown): string {
+  return String(v ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+// Değeri zaten güvenli HTML olan (bizim ürettiğimiz) değişkenler — kaçışlanmaz.
+const HTML_VARS = new Set(["shipping_address"]);
+
+/**
+ * Şablon değişkenlerini doldurur. html=true (gövde) → değerler HTML-kaçışlanır
+ * (müşteri adına <a>/<script> yazıp bizim domainimizden giden e-postaya link
+ * enjekte edilemesin). "_html" ile biten ve HTML_VARS'taki anahtarlar hariç.
+ * Konu satırı düz metindir → html=false.
+ */
+function replaceVariables(text: string, vars: Record<string, string>, html = true): string {
+  return text.replace(/\{\{(\w+)\}\}/g, (_, key) => {
+    const v = vars[key];
+    if (v === undefined) return `{{${key}}}`;
+    if (!html || key.endsWith("_html") || HTML_VARS.has(key)) return v;
+    return escapeHtml(v);
+  });
 }
 
 /** href'lerdeki linklere UTM parametreleri ekler */
@@ -39,10 +63,10 @@ function buildOrderItemsHtml(
     .map(
       (item) => {
       const meta = [item.variantLabel, item.sku ? `Stok Kodu: ${item.sku}` : ""].filter(Boolean).join(" · ");
-      const metaHtml = meta ? `<div style="font-size:12px;color:#94a3b8;margin-top:3px;font-family:monospace">${meta}</div>` : "";
+      const metaHtml = meta ? `<div style="font-size:12px;color:#94a3b8;margin-top:3px;font-family:monospace">${escapeHtml(meta)}</div>` : "";
       return `
       <tr>
-        <td style="padding:8px 12px;font-size:14px;color:#334155;border-bottom:1px solid #e2e8f0;">${item.title}${metaHtml}</td>
+        <td style="padding:8px 12px;font-size:14px;color:#334155;border-bottom:1px solid #e2e8f0;">${escapeHtml(item.title)}${metaHtml}</td>
         <td style="padding:8px 12px;font-size:14px;color:#64748b;text-align:center;border-bottom:1px solid #e2e8f0;">${item.quantity}</td>
         <td style="padding:8px 12px;font-size:14px;color:#334155;text-align:right;border-bottom:1px solid #e2e8f0;">₺${(item.unit_price * item.quantity).toFixed(2)}</td>
       </tr>`;
@@ -204,10 +228,10 @@ function formatAddressHtml(raw: any): string { // eslint-disable-line @typescrip
   let a: any = raw;
   if (typeof raw === "string") {
     const s = raw.trim();
-    if (s.startsWith("{")) { try { a = JSON.parse(s); } catch { return s.replace(/\n/g, "<br>"); } }
-    else return s.replace(/\n/g, "<br>");
+    if (s.startsWith("{")) { try { a = JSON.parse(s); } catch { return escapeHtml(s).replace(/\n/g, "<br>"); } }
+    else return escapeHtml(s).replace(/\n/g, "<br>");
   }
-  const esc = (v: any) => String(v ?? "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const esc = escapeHtml;
   const line1 = [a.name].filter(Boolean).map(esc).join("");
   const line2 = esc(a.address);
   const line3 = [a.district, a.city].filter(Boolean).map(esc).join(" / ");
@@ -267,7 +291,7 @@ export async function sendOrderNotification(
   const trackingHtml = context.trackingNumber
     ? `<div style="background:#f4f4ef;border:1px solid #c6c8b8;border-radius:8px;padding:16px;margin:0 0 24px 0;">
          <p style="margin:0 0 4px 0;color:#3d4a22;font-size:13px;font-weight:700;">🚚 Kargo Takip No</p>
-         <p style="margin:0;color:#536430;font-size:16px;font-weight:700;">${context.trackingNumber}</p>
+         <p style="margin:0;color:#536430;font-size:16px;font-weight:700;">${escapeHtml(context.trackingNumber)}</p>
        </div>`
     : "";
 
@@ -310,7 +334,7 @@ export async function sendOrderNotification(
   let subject: string;
   let bodyHtml: string;
   if (template?.is_active) {
-    subject = replaceVariables(template.subject, vars);
+    subject = replaceVariables(template.subject, vars, false);
     bodyHtml = addUtmTracking(replaceVariables(template.body_html, vars), trigger);
   } else {
     const addrBlock = addressHtml
@@ -464,7 +488,7 @@ export async function sendCouponAssignedNotification(
     store_url: storeUrl,
   };
 
-  const subject = replaceVariables(template.subject, vars);
+  const subject = replaceVariables(template.subject, vars, false);
   let bodyHtml = replaceVariables(template.body_html, vars);
   bodyHtml = addUtmTracking(bodyHtml, "coupon_assigned");
 
@@ -512,7 +536,7 @@ export async function sendAdminReplyNotification(
   if (!profile?.email) return { status: "failed", error: "Kullanıcı e-posta adresi bulunamadı" };
 
   const storeName = settings?.store_name || "YeriHisset";
-  const customerName = profile.first_name || "Değerli Müşterimiz";
+  const customerName = escapeHtml(profile.first_name || "Değerli Müşterimiz");
   const storeUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com";
 
   // 2. Email içeriğini oluştur
@@ -524,7 +548,7 @@ export async function sendAdminReplyNotification(
       <p>Destek ekibimiz bir mesajınızı yanıtladı:</p>
       
       <div style="background: #f1f5f9; padding: 20px; border-radius: 12px; margin: 24px 0; border-left: 4px solid #536430; font-style: italic;">
-        "${replyContent}"
+        "${escapeHtml(replyContent)}"
       </div>
       
       <p style="margin-bottom: 32px;">Mesajın tamamını görmek ve cevap yazmak için hesabınıza giriş yapabilirsiniz.</p>
@@ -585,7 +609,7 @@ export async function renderEmailTemplate(
     if (!tpl?.is_active) return null;
     const storeName = vars.store_name || "YeriHisset";
     return {
-      subject: replaceVariables(tpl.subject, vars),
+      subject: replaceVariables(tpl.subject, vars, false),
       html: buildEmailDocument(replaceVariables(tpl.body_html, vars), storeName),
     };
   } catch {
@@ -617,6 +641,7 @@ export async function sendMessageNotification(
   const storeUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com";
   const orderLabel = order.order_number ? `YH${order.order_number}` : `#${order.id.slice(0, 8)}`;
   const customerName = [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") || "Müşteri";
+  const customerNameHtml = escapeHtml(customerName); // konu satırı düz metin, gövde kaçışlı
   const thread = (msgs as any[]) || [];
 
   // Yazışma balonları (rol etiketli — alıcıdan bağımsız net). Son balon vurgulu.
@@ -632,7 +657,7 @@ export async function sendMessageNotification(
     return `<tr><td style="padding:3px 0" align="${align}">
       <div style="display:inline-block;max-width:85%;text-align:left;background:${bg};${border}border-radius:12px;padding:9px 13px">
         <div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:2px">${who} · ${time}</div>
-        <div style="font-size:14px;color:#1e293b;white-space:pre-wrap">${(m.content || "").replace(/</g, "&lt;")}</div>
+        <div style="font-size:14px;color:#1e293b;white-space:pre-wrap">${escapeHtml(m.content || "")}</div>
       </div></td></tr>`;
   }).join("");
 
@@ -647,8 +672,8 @@ export async function sendMessageNotification(
     ? `💬 Yeni mesaj — ${orderLabel} · ${customerName}`
     : `${storeName} — ${orderLabel} siparişinize yanıt`;
   const intro = toAdmin
-    ? `<b>${customerName}</b>, <b>${orderLabel}</b> siparişi için yeni bir mesaj gönderdi.`
-    : `Merhaba <b>${customerName}</b>, <b>${orderLabel}</b> siparişinizle ilgili destek ekibimiz yanıt verdi.`;
+    ? `<b>${customerNameHtml}</b>, <b>${orderLabel}</b> siparişi için yeni bir mesaj gönderdi.`
+    : `Merhaba <b>${customerNameHtml}</b>, <b>${orderLabel}</b> siparişinizle ilgili destek ekibimiz yanıt verdi.`;
 
   const bodyHtml = `
     <div style="color:#334155">
@@ -696,7 +721,7 @@ export async function sendLeadMagnetWelcome(params: {
   const { data: settings } = await (supabase as any).from("settings").select("*").limit(1).maybeSingle();
   const storeName = settings?.store_name || "YeriHisset";
   const storeUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com";
-  const name = (params.name || "").trim() || "Merhaba";
+  const name = escapeHtml((params.name || "").trim() || "Merhaba");
 
   const couponBlock = params.couponCode
     ? `<div style="margin:24px 0;padding:20px;border:2px dashed #6b7f3a;border-radius:16px;text-align:center;background:#f7f9f0">
@@ -888,7 +913,7 @@ export async function sendAdminNewOrderNotification(
       .select("first_name, last_name, email, phone").eq("id", order.user_id).maybeSingle();
     profile = p ?? null;
   }
-  const customerName = [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") || "—";
+  const customerName = escapeHtml([profile?.first_name, profile?.last_name].filter(Boolean).join(" ") || "—");
 
   // Sipariş kalemleri + ürün başlığı + numara/varyant + stok kodu (ayrı sorgularla)
   const items = await fetchOrderLineItems(supabase, orderId);
@@ -899,8 +924,8 @@ export async function sendAdminNewOrderNotification(
     <h1 style="font-size:22px;font-weight:800;color:#111827;margin:0 0 12px">🛒 Yeni Sipariş — ${shortId}</h1>
     <table style="width:100%;font-size:14px;color:#374151;margin:0 0 16px">
       <tr><td style="padding:3px 0;color:#6b7280">Müşteri</td><td style="padding:3px 0;font-weight:700">${customerName}</td></tr>
-      <tr><td style="padding:3px 0;color:#6b7280">E-posta</td><td style="padding:3px 0">${profile?.email ?? "—"}</td></tr>
-      <tr><td style="padding:3px 0;color:#6b7280">Telefon</td><td style="padding:3px 0">${profile?.phone ?? "—"}</td></tr>
+      <tr><td style="padding:3px 0;color:#6b7280">E-posta</td><td style="padding:3px 0">${escapeHtml(profile?.email ?? "—")}</td></tr>
+      <tr><td style="padding:3px 0;color:#6b7280">Telefon</td><td style="padding:3px 0">${escapeHtml(profile?.phone ?? "—")}</td></tr>
       <tr><td style="padding:3px 0;color:#6b7280">Ödeme</td><td style="padding:3px 0;font-weight:700">${payLabel}</td></tr>
       <tr><td style="padding:3px 0;color:#6b7280">Tutar</td><td style="padding:3px 0;font-weight:800;color:#166534">₺${Number(order.total_amount).toFixed(2)}</td></tr>
     </table>
@@ -946,7 +971,7 @@ export async function sendEmailVerification(params: {
   const supabase = createAdminClient();
   const { data: settings } = await (supabase as any).from("settings").select("*").limit(1).maybeSingle();
   const storeName = settings?.store_name || "YeriHisset";
-  const name = (params.name || "").trim() || "Merhaba";
+  const name = escapeHtml((params.name || "").trim() || "Merhaba");
 
   const bodyHtml = `
     <h1 style="font-size:22px;font-weight:800;color:#111827;margin:0 0 12px">E-postanı Onayla</h1>
@@ -999,7 +1024,7 @@ export async function sendPasswordRecoveryEmail(params: {
   const supabase = createAdminClient();
   const { data: settings } = await (supabase as any).from("settings").select("*").limit(1).maybeSingle();
   const storeName = settings?.store_name || "YeriHisset";
-  const name = (params.name || "").trim() || "Merhaba";
+  const name = escapeHtml((params.name || "").trim() || "Merhaba");
 
   const bodyHtml = `
     <h1 style="font-size:22px;font-weight:800;color:#111827;margin:0 0 12px">Şifre Sıfırlama</h1>
@@ -1064,7 +1089,7 @@ export async function sendGuestActivationEmail(params: {
   if (linkErr || !hashedToken) return { status: "failed", error: linkErr?.message || "Bağlantı üretilemedi" };
   const actionUrl = `${storeUrl}/sifre-belirle?token_hash=${hashedToken}&type=recovery`;
 
-  const name = (params.name || "").trim() || "Merhaba";
+  const name = escapeHtml((params.name || "").trim() || "Merhaba");
   const li = (t: string) => `<li style="margin:0 0 6px">${t}</li>`;
   const bodyHtml = `
     <h1 style="font-size:22px;font-weight:800;color:#111827;margin:0 0 12px">Siparişini takip etmek için hesabını aktifleştir</h1>
@@ -1128,7 +1153,7 @@ export async function sendStockNotifySignupWelcome(params: {
   const supabase = createAdminClient();
   const { data: settings } = await (supabase as any).from("settings").select("*").limit(1).maybeSingle();
   const storeName = settings?.store_name || "YeriHisset";
-  const name = (params.name || "").trim() || "Merhaba";
+  const name = escapeHtml((params.name || "").trim() || "Merhaba");
   const forWhat = params.variantLabel
     ? `<b>${params.productTitle}</b> (${params.variantLabel})`
     : `<b>${params.productTitle}</b>`;
@@ -1199,7 +1224,7 @@ export async function sendBackInStockNotification(params: {
   const supabase = createAdminClient();
   const { data: settings } = await (supabase as any).from("settings").select("*").limit(1).maybeSingle();
   const storeName = settings?.store_name || "YeriHisset";
-  const name = (params.name || "").trim() || "Merhaba";
+  const name = escapeHtml((params.name || "").trim() || "Merhaba");
 
   const bodyHtml = `
     <h1 style="font-size:22px;font-weight:800;color:#111827;margin:0 0 12px">🎉 İyi haber! Ürün tekrar stokta</h1>
