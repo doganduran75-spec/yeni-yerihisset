@@ -87,18 +87,31 @@ fi
 # 4) Ayarlar — KLASÖR bazlı (yeni ayar dosyaları kendiliğinden dahil).
 #    Supabase kurulum klasörü: veritabanı verisi (volumes/db/data) ve görseller
 #    (ayrı arşivde) HARİÇ; .env, docker-compose, gateway ayarları, fonksiyonlar dahil.
+#    Yollar kökten GÖRELİ verilir (-C /) → --exclude kalıpları kesin eşleşir.
+#    HARİÇ: supabase/ (Supabase kaynak kodu klonu ~1,4 GB — GitHub'dan yeniden
+#    indirilir), çalışan DB'nin ham dosyaları, görseller (ayrı arşiv), .git,
+#    node_modules, loglar.
 CFG_PATHS=()
 for p in "$SUPABASE_DIR" /etc/caddy /etc/cron.d/yerihisset-backup /root/.config/rclone /root/yerihisset-supabase-secrets.txt \
          "$APP_DIR/.env" "$APP_DIR/.env.local" "$APP_DIR/.env.production" "$APP_DIR/ecosystem.config.js"; do
-  [ -e "$p" ] && CFG_PATHS+=("$p")
+  [ -e "$p" ] && CFG_PATHS+=("${p#/}")
 done
+SUPA_REL="${SUPABASE_DIR#/}"
 if [ "${#CFG_PATHS[@]}" -gt 0 ]; then
-  if tar -czf "$DIR/config.tar.gz" \
-       --exclude="$SUPABASE_DIR/volumes/db/data" --exclude="$STORAGE_DIR" --exclude='*.log' \
+  if tar -C / -czf "$DIR/config.tar.gz" \
+       --exclude="$SUPA_REL/supabase" \
+       --exclude="$SUPA_REL/volumes/db/data" \
+       --exclude="${STORAGE_DIR#/}" \
+       --exclude='.git' --exclude='node_modules' --exclude='*.log' \
        "${CFG_PATHS[@]}" 2>/dev/null; then
     log "Ayarlar: ${#CFG_PATHS[@]} konum ($(du -h "$DIR/config.tar.gz" | cut -f1))"
   else
     log "UYARI: ayarlar arşivlenirken sorun (bazı dosyalar okunamadı olabilir)"
+  fi
+  # Emniyet: ayar paketi beklenmedik büyükse (yeni büyük klasör girdi) Drive'ı doldurmasın
+  CFG_BYTES=$(stat -c %s "$DIR/config.tar.gz" 2>/dev/null || echo 0)
+  if [ "$CFG_BYTES" -gt $((100 * 1024 * 1024)) ]; then
+    fail "config.tar.gz beklenmedik büyük ($(du -h "$DIR/config.tar.gz" | cut -f1)) — hariç tutma listesini kontrol et (db-backup.sh 4. adım)"
   fi
 fi
 chmod -R go-rwx "$DIR"
