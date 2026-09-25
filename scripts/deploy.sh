@@ -16,11 +16,19 @@ set -euo pipefail
 # Script'in bulunduğu repo köküne geç (nereden çağrılırsa çağrılsın doğru dizin)
 cd "$(dirname "$0")/.."
 
+LOCK_BEFORE="$(sha1sum package-lock.json 2>/dev/null | cut -d' ' -f1)"
 echo "▸ git pull"
 git pull
+LOCK_AFTER="$(sha1sum package-lock.json 2>/dev/null | cut -d' ' -f1)"
 
 echo "▸ pm2 stop (build sırasında 502 olmasın)"
 pm2 stop yerihisset || true
+
+# Bağımlılıklar değiştiyse (package-lock.json) temiz kurulum — ör. Next sürüm yükseltmesi
+if [ "$LOCK_BEFORE" != "$LOCK_AFTER" ] || [ "${FORCE_NPM_CI:-0}" = "1" ]; then
+  echo "▸ package-lock değişti → npm ci"
+  npm ci --no-audit --no-fund
+fi
 
 echo "▸ .next çıktısı temizleniyor (cache korunuyor)"
 if [ -d .next ]; then
