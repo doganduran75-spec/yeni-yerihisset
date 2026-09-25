@@ -50,8 +50,9 @@ docker cp "$DIR/db.dump" "$DB_CONTAINER:/tmp/yh-verify.dump" >/dev/null 2>&1 || 
 TOC="$(docker exec "$DB_CONTAINER" pg_restore -l /tmp/yh-verify.dump 2>/dev/null)"
 docker exec "$DB_CONTAINER" rm -f /tmp/yh-verify.dump >/dev/null 2>&1
 [ -n "$TOC" ] || fail "yedek arşivi okunamadı (bozuk olabilir)"
-echo "$TOC" | grep -q "TABLE DATA auth users"    || fail "yedekte müşteri hesapları (auth.users) yok"
-echo "$TOC" | grep -q "TABLE DATA public orders" || fail "yedekte siparişler (public.orders) yok"
+# Not: "echo | grep -q" + pipefail yanlış negatif verir (grep erken çıkınca SIGPIPE) → here-string
+grep -q "TABLE DATA auth users"    <<< "$TOC" || fail "yedekte müşteri hesapları (auth.users) yok"
+grep -q "TABLE DATA public orders" <<< "$TOC" || fail "yedekte siparişler (public.orders) yok"
 log "Doğrulama OK (auth.users + orders içeride)"
 
 # 3) Görsel dosyaları

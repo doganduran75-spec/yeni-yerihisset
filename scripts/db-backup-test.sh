@@ -55,7 +55,8 @@ else
 fi
 # Yedekte kullanıcı hesapları (auth.users verisi) var mı?
 docker cp "$DUMP" "$DB_CONTAINER:/tmp/yh-verify.dump" >/dev/null 2>&1
-if docker exec "$DB_CONTAINER" pg_restore -l /tmp/yh-verify.dump 2>/dev/null | grep -q "TABLE DATA auth users"; then
+TOC="$(docker exec "$DB_CONTAINER" pg_restore -l /tmp/yh-verify.dump 2>/dev/null)"
+if grep -q "TABLE DATA auth users" <<< "$TOC"; then
   ok "Yedekte kullanıcı hesapları (auth.users) VAR"
 else
   warn "Yedekte auth.users verisi YOK"
