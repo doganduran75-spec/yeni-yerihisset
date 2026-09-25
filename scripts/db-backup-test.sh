@@ -54,11 +54,13 @@ else
   warn "pg_dump HATA verdi — ayrıntı: $OUT_DIR/dump-$STAMP.err"; tail -5 "$OUT_DIR/dump-$STAMP.err"; exit 1
 fi
 # Yedekte kullanıcı hesapları (auth.users verisi) var mı?
-if docker exec -i "$DB_CONTAINER" pg_restore -l < "$DUMP" 2>/dev/null | grep -q "TABLE DATA auth users"; then
+docker cp "$DUMP" "$DB_CONTAINER:/tmp/yh-verify.dump" >/dev/null 2>&1
+if docker exec "$DB_CONTAINER" pg_restore -l /tmp/yh-verify.dump 2>/dev/null | grep -q "TABLE DATA auth users"; then
   ok "Yedekte kullanıcı hesapları (auth.users) VAR"
 else
   warn "Yedekte auth.users verisi YOK"
 fi
+docker exec "$DB_CONTAINER" rm -f /tmp/yh-verify.dump >/dev/null 2>&1
 
 line; echo "3) GERİ YÜKLEME TESTİ (geçici konteyner)"; line
 IMAGE=$(docker inspect "$DB_CONTAINER" --format '{{.Config.Image}}')
