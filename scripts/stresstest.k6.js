@@ -34,9 +34,14 @@ const SPIKE = Number(__ENV.SPIKE || 400);
 
 const BASIC_USER = __ENV.BASIC_USER || "";
 const BASIC_PASS = __ENV.BASIC_PASS || "";
-const AUTH_HEADERS = (BASIC_USER && BASIC_PASS)
-  ? { Authorization: "Basic " + encoding.b64encode(`${BASIC_USER}:${BASIC_PASS}`) }
-  : {};
+// Gerçek tarayıcı gibi sıkıştırılmış yanıt iste (yoksa k6 sayfaları ~7 kat büyük,
+// ham indirir ve test makinesinin bant genişliği darboğaz olur).
+const AUTH_HEADERS = Object.assign(
+  { "Accept-Encoding": "gzip, br" },
+  (BASIC_USER && BASIC_PASS)
+    ? { Authorization: "Basic " + encoding.b64encode(`${BASIC_USER}:${BASIC_PASS}`) }
+    : {}
+);
 
 const errorRate = new Rate("errors");
 const dynamicDuration = new Trend("dinamik_sayfa_suresi", true); // DB'ye giden sayfalar
