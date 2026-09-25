@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Truck, Plus, Trash2, Loader2, Save } from "lucide-react";
+import { siteAlert, siteConfirm } from "@/components/ui/site-dialog";
 
 const EMPTY = { id: "", name: "", description: "", fee: "", free_over: "", is_active: true, sort_order: 0 };
 
@@ -38,17 +39,19 @@ export default function ShippingMethodsManager() {
     });
     const d = await res.json();
     setSavingId(null);
-    if (!res.ok || !d.ok) { alert(d.error || "Kaydedilemedi"); return; }
+    if (!res.ok || !d.ok) { siteAlert({ title: "Kaydedilemedi", message: d.error || "Kargo yöntemi kaydedilemedi.", tone: "danger" }); return; }
     if (!method.id) setDraft({ ...EMPTY });
     load();
   }
 
   async function remove(id: string) {
-    if (!confirm("Bu kargo yöntemi silinsin mi?")) return;
-    await fetch("/api/admin/shipping-methods", {
+    if (!(await siteConfirm({ title: "Kargo yöntemini sil", message: "Bu kargo yöntemi silinsin mi? Geçmiş siparişlerdeki kargo bilgisi etkilenmez.", confirmText: "Sil", tone: "danger" }))) return;
+    const res = await fetch("/api/admin/shipping-methods", {
       method: "POST", headers: { "Content-Type": "application/json", ...(await authHeaders()) },
       body: JSON.stringify({ action: "delete", id }),
     });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok || !d.ok) siteAlert({ title: "Silinemedi", message: d.error || "Kargo yöntemi silinemedi.", tone: "danger" });
     load();
   }
 

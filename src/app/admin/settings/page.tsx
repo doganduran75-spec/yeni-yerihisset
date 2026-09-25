@@ -16,6 +16,7 @@ import KBCategoriesTab from "@/components/admin/settings/KBCategoriesTab";
 import MemberTagsTab from "@/components/admin/settings/MemberTagsTab";
 import PopupTab from "@/components/admin/settings/PopupTab";
 import ShippingMethodsManager from "@/components/admin/ShippingMethodsManager";
+import { siteAlert } from "@/components/ui/site-dialog";
 
 type SettingsTab = "general" | "variants" | "roles" | "brands" | "categories" | "kb-categories" | "member-tags" | "popup";
 
@@ -104,24 +105,29 @@ function SettingsPageInner() {
   const [showKargoToken, setShowKargoToken] = useState(false);
   const [copiedFeed, setCopiedFeed] = useState(false);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchSettings();
   }, []);
 
+  async function authHeaders(): Promise<Record<string, string>> {
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
+  }
+
   async function fetchSettings() {
+    setLoadError(null);
     try {
       // Gizli alanlar (SMTP şifresi vb.) tarayıcıdan okunamaz → admin API'si
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch("/api/admin/settings", {
-        headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
-        cache: "no-store",
-      });
+      const res = await fetch("/api/admin/settings", { headers: await authHeaders(), cache: "no-store" });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "Ayarlar okunamadı");
       if (d.settings) setSettings({ ...DEFAULT_SETTINGS, ...d.settings } as Settings);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error fetching settings:", error);
+      // Yüklenemediyse kaydetmeye izin verme — boş formla mevcut ayarların üstüne yazılmasın
+      setLoadError(error?.message || "Ayarlar okunamadı");
     } finally {
       setLoading(false);
     }
@@ -133,19 +139,25 @@ function SettingsPageInner() {
 
   async function handleSaveSettings(e?: React.FormEvent) {
     e?.preventDefault();
+    if (loadError) {
+      siteAlert({ title: "Ayarlar yüklenemedi", message: "Mevcut ayarlar okunamadığı için kayıt yapılmadı (boş form mevcut ayarların üstüne yazmasın). Sayfayı yenileyip (Ctrl+Shift+R) tekrar dene.", tone: "danger" });
+      return;
+    }
     setSaving(true);
     try {
-      const payload = { ...settings, updated_at: new Date().toISOString() };
-      // Mevcut kayıt varsa güncelle, yoksa oluştur
-      const { error } = settings.id
-        ? await supabase.from("settings").update(payload as any).eq("id", settings.id)
-        : await supabase.from("settings").insert(payload as any);
-      if (error) throw error;
-      alert("Ayarlar başarıyla kaydedildi.");
+      // Kaydetme sunucuda: güncellenecek satırı sunucu bulur (istemci id'sine güvenilmez)
+      const res = await fetch("/api/admin/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+        body: JSON.stringify({ settings }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok || !d.ok) throw new Error(d.error || "Ayarlar kaydedilemedi.");
+      siteAlert({ message: "Ayarlar başarıyla kaydedildi.", tone: "success" });
       fetchSettings();
     } catch (error: any) {
       console.error("Error saving settings:", error);
-      alert("Hata: " + (error?.message || "Ayarlar kaydedilemedi."));
+      siteAlert({ title: "Kaydedilemedi", message: error?.message || "Ayarlar kaydedilemedi.", tone: "danger" });
     } finally {
       setSaving(false);
     }
@@ -202,6 +214,13 @@ function SettingsPageInner() {
       {activeTab === "kb-categories" && <KBCategoriesTab />}
       {activeTab === "variants"      && <VariantsTab />}
       {activeTab === "roles"         && <RolesTab />}
+
+      {/* Genel Ayarlar Sekmesi */}
+      {activeTab === "general" && loadError && (
+        <div className="mb-4 rounded-xl border-2 border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <b>Ayarlar yüklenemedi:</b> {loadError}. Kaydetme kapalı — sayfayı yenile (Ctrl+Shift+R). Sorun sürerse çıkış yapıp tekrar giriş yap.
+        </div>
+      )}
 
       {/* Genel Ayarlar Sekmesi */}
       {activeTab === "general" && (
