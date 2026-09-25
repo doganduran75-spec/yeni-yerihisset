@@ -20,7 +20,7 @@ OUT_DIR="${OUT_DIR:-/opt/backups/test}"
 TMP_CONTAINER="yh-restore-test"
 STAMP="$(date +%Y%m%d-%H%M%S)"
 DUMP="$OUT_DIR/yerihisset-$STAMP.dump"
-TABLES="profiles orders order_items products product_variants coupons user_coupons affiliate_profiles store_credit_ledger shipping_methods settings email_templates analytics_sessions"
+# Karşılaştırılacak tablolar: public şemasındaki TÜM tablolar (yeni tablolar kendiliğinden dahil)
 
 line() { printf '%s\n' "------------------------------------------------------------"; }
 ok()   { printf '  [OK]  %s\n' "$*"; }
@@ -40,6 +40,15 @@ echo "- Storage (ürün görselleri) klasör boyutu:"
 du -sh /opt/yerihisset-supabase/volumes/storage 2>/dev/null | sed 's/^/    /' || echo "    (bulunamadı)"
 
 line; echo "2) TAZE YEDEK (pg_dump, salt okuma)"; line
+# Canlı kayıt sayıları yedekten HEMEN ÖNCE alınır. Test sırasında siteye yeni kayıt
+# gelirse (ziyaret istatistiği vb.) geri yüklenen veride en az bu kadar olmalı.
+TABLES="$(docker exec "$DB_CONTAINER" psql -U postgres -d postgres -tAc "SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY 1" 2>/dev/null)"
+declare -A LIVE
+for t in $TABLES; do
+  LIVE[$t]=$(docker exec "$DB_CONTAINER" psql -U postgres -d postgres -tAc "SELECT count(*) FROM public.\"$t\"" 2>/dev/null || echo "yok")
+done
+LIVE[auth.users]=$(docker exec "$DB_CONTAINER" psql -U postgres -d postgres -tAc "SELECT count(*) FROM auth.users" 2>/dev/null)
+LIVE[storage.objects]=$(docker exec "$DB_CONTAINER" psql -U postgres -d postgres -tAc "SELECT count(*) FROM storage.objects" 2>/dev/null)
 mkdir -p "$OUT_DIR"
 T0=$(date +%s)
 # Supabase'te tam yetkili kullanıcı supabase_admin'dir (auth/storage şemalarının
@@ -88,9 +97,9 @@ ERRS=$(grep -c "error:" "$OUT_DIR/restore-$STAMP.log" || true)
 echo "  Geri yükleme süresi: $(( $(date +%s) - T0 )) sn — pg_restore hata satırı: $ERRS"
 echo "  (Supabase iç şemalarında birkaç 'already exists' hatası normaldir; public tablolar önemli.)"
 
-line; echo "4) SATIR SAYISI KARŞILAŞTIRMA (canlı ↔ geri yüklenen)"; line
-printf '  %-24s %10s %10s  %s\n' "TABLO" "CANLI" "YEDEK" "DURUM"
-FAIL=0
+line; echo "4) KAYIT SAYISI KARŞILAŞTIRMA (canlı ↔ geri yüklenen) — tüm tablolar"; line
+printf '  %-28s %10s %10s  %s\n' "TABLO" "CANLI" "YEDEK" "DURUM"
+FAIL=0; CHECKED=0; BAD=""
 tmpq() {
   if [ "$RU" = "supabase_admin" ]; then
     docker exec -e PGPASSWORD="$PW" "$TMP_CONTAINER" psql -h 127.0.0.1 -U supabase_admin -d postgres -tAc "$1" 2>/dev/null || echo "yok"
@@ -98,21 +107,21 @@ tmpq() {
     docker exec "$TMP_CONTAINER" psql -U postgres -d postgres -tAc "$1" 2>/dev/null || echo "yok"
   fi
 }
+compare() {  # $1 ad, $2 canlı (yedekten önce), $3 geri yüklenen
+  local s
+  if [ "$3" = "yok" ] || [ -z "$3" ]; then s="YEDEKTE YOK"; FAIL=1; BAD="$BAD $1"
+  elif [ "$2" = "$3" ]; then s="OK"
+  elif [ "$3" -gt "$2" ] 2>/dev/null; then s="OK (test sırasında yeni kayıt)"
+  else s="EKSİK"; FAIL=1; BAD="$BAD $1"; fi
+  CHECKED=$((CHECKED + 1))
+  printf '  %-28s %10s %10s  %s\n' "$1" "$2" "$3" "$s"
+}
 for t in $TABLES; do
-  a=$(docker exec "$DB_CONTAINER"  psql -U postgres -d postgres -tAc "SELECT count(*) FROM public.$t" 2>/dev/null || echo "yok")
-  b=$(tmpq "SELECT count(*) FROM public.$t")
-  if [ "$a" = "yok" ]; then s="(tablo yok)"; elif [ "$a" = "$b" ]; then s="OK"; else s="FARKLI"; FAIL=1; fi
-  printf '  %-24s %10s %10s  %s\n' "$t" "$a" "$b" "$s"
+  compare "$t" "${LIVE[$t]}" "$(tmpq "SELECT count(*) FROM public.\"$t\"")"
 done
-AU_A=$(docker exec "$DB_CONTAINER"  psql -U postgres -d postgres -tAc "SELECT count(*) FROM auth.users" 2>/dev/null)
-AU_B=$(tmpq "SELECT count(*) FROM auth.users")
-if [ "$AU_A" = "$AU_B" ]; then AU_S="OK"; else AU_S="FARKLI"; FAIL=1; fi
-printf '  %-24s %10s %10s  %s\n' "auth.users" "$AU_A" "$AU_B" "$AU_S"
-OB_A=$(docker exec "$DB_CONTAINER" psql -U postgres -d postgres -tAc "SELECT count(*) FROM storage.objects" 2>/dev/null)
-OB_B=$(tmpq "SELECT count(*) FROM storage.objects")
-if [ "$OB_A" = "$OB_B" ]; then OB_S="OK"; else OB_S="FARKLI"; FAIL=1; fi
-printf '  %-24s %10s %10s  %s\n' "storage.objects (kayıt)" "$OB_A" "$OB_B" "$OB_S"
-echo "  Not: görsel DOSYALARI veritabanında değil, disktedir (volumes/storage) — ayrıca yedeklenmeli."
+compare "auth.users (hesaplar)"   "${LIVE[auth.users]}"      "$(tmpq "SELECT count(*) FROM auth.users")"
+compare "storage.objects (görsel)" "${LIVE[storage.objects]}" "$(tmpq "SELECT count(*) FROM storage.objects")"
+echo "  Not: görsel DOSYALARI diskte durur ve gece yedeğinde storage.tar.gz olarak ayrıca alınır."
 
 line; echo "5) TEMİZLİK"; line
 docker rm -f "$TMP_CONTAINER" >/dev/null 2>&1 && ok "Geçici konteyner silindi"
@@ -120,5 +129,16 @@ echo "  Yedek dosyası saklandı: $DUMP"
 echo "  Loglar: $OUT_DIR/restore-$STAMP.log"
 
 line
-if [ "$FAIL" = "0" ]; then ok "SONUÇ: Yedek alınabiliyor ve eksiksiz geri yüklenebiliyor."; else warn "SONUÇ: Satır sayılarında fark var — restore log'unu incele."; fi
+if [ "$FAIL" = "0" ]; then
+  RES=true; MSG="$CHECKED tablo karşılaştırıldı, hepsi OK"
+  ok "SONUÇ: Yedek alınabiliyor ve eksiksiz geri yüklenebiliyor ($CHECKED tablo)."
+else
+  RES=false; MSG="Sorunlu:$BAD"
+  warn "SONUÇ: Eksik/yedekte olmayan tablo var:$BAD — restore log'unu incele."
+fi
+# Dashboard'a kaydet (tablo yoksa sessizce geç)
+printf "INSERT INTO public.backup_runs (kind, ok, backup_name, db_bytes, tables_checked, message) VALUES ('restore_test', %s, :'name', %s, %s, :'msg');\n" \
+  "$RES" "$(stat -c %s "$DUMP")" "$CHECKED" \
+| docker exec -i "$DB_CONTAINER" psql -U postgres -d postgres -q -v name="$STAMP" -v msg="$MSG" >/dev/null 2>&1 \
+  && echo "  (sonuç dashboard'a yazıldı)"
 echo "Bu çıktının TAMAMINI kopyalayıp Claude'a gönder."

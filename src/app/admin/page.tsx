@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/lib/supabase";
+import BackupStatusCard from "@/components/admin/BackupStatusCard";
 import { ShoppingBag, Users, CreditCard, TrendingUp, Loader2, MessageCircle, ArrowRight, Star, Clock, PackageOpen, BellRing } from "lucide-react";
 
 type Stats = {
@@ -520,6 +521,9 @@ export default function AdminDashboard() {
             )}
           </CardContent>
         </Card>
+
+        {/* Yedekleme durumu (gece yedeği + haftalık geri yükleme testi) */}
+        <BackupStatusCard />
 
         {/* Pazaryeri Stok Görevleri — stok 0 olunca kanalları kapat */}
         <Card className="order-first shadow-sm border-l-4 border-l-red-500">

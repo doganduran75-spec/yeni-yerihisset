@@ -8,7 +8,9 @@
 | Google Drive: `yerihisset-yedek` klasörü (şifreli) | 30 gün | Aynı dosyaların şifreli kopyası |
 
 - Yedek her gece **03:30**'da otomatik alınır. Log: `/var/log/yerihisset-backup.log`
-- Kontrol: `tail -8 /var/log/yerihisset-backup.log` → son satır `Yedek TAMAM (yerel + Drive)` olmalı.
+- Her **pazar 04:30**'da yedek, geçici bir veritabanına açılıp **tüm tablolar** canlıyla karşılaştırılır (geri yükleme testi). Log: `/var/log/yerihisset-restore-test.log`
+- **Admin dashboard → "Yedekleme" kutusu:** son başarılı yedek, Drive kopyası, son test sonucu. Yedek 26 saatten eskiyse ya da başarısızsa kutu **kırmızı** olur.
+- Elle kontrol: `tail -8 /var/log/yerihisset-backup.log` → son satır `Yedek TAMAM (yerel + Drive)` olmalı.
 - **Şifre parolaları (PAROLA1 / PAROLA2) sunucu dışında saklanmalı.** Sunucu kaybolursa Drive'daki yedeği açmanın tek yolu budur.
 
 > Geri yükleme, yedeğin alındığı ana döner. O andan **sonraki** sipariş/üye/mesaj kayıtları geri gelmez.
@@ -65,11 +67,26 @@ Yeni bir Ubuntu 24.04 sunucusunda (≥ 4 CPU, 8 GB RAM):
    ```
 8. **Siteyi aç:** `bash scripts/deploy.sh` → `systemctl reload caddy`.
 9. **DNS:** `dev.yerihisset.com` / `supabase.yerihisset.com` (ve canlıda `yerihisset.com`) A kayıtlarını yeni sunucu IP'sine çevir.
-10. **Gece yedeğini yeniden kur:** `/etc/cron.d/yerihisset-backup` satırı (bkz. sunucu kurulum notları).
+10. **Gece yedeğini + haftalık testi yeniden kur:** `/etc/cron.d/yerihisset-backup` (config.tar.gz içinde de var).
 
 Tahmini süre: 1–2 saat.
 
 ---
+
+## Siteye yeni bir şey eklerken — yedek kontrol listesi
+
+Çoğu şey **kendiliğinden** yedeğe girer; yalnız aşağıdaki durumlarda bakmak gerekir:
+
+| Eklenen | Yedekte mi? | Yapılacak |
+|---|---|---|
+| Yeni tablo / kolon / fonksiyon (migration) | ✅ Otomatik (veritabanının tamamı) | — Haftalık test yeni tabloyu da karşılaştırır |
+| Yeni görsel kovası (storage bucket) | ✅ Otomatik (depolama klasörünün tamamı) | — |
+| Yeni ortam değişkeni (`.env.local`, Supabase `.env`) | ✅ Otomatik (dosyalar klasörüyle alınır) | — |
+| **Yeni bir dış servis / sunucu klasörü** (ör. başka bir Docker servisi, sunucuda ayrı klasörde dosya tutan bir özellik) | ⚠ Hayır | `scripts/db-backup.sh` → 4. adımdaki `CFG_PATHS` listesine ekle |
+| **Veritabanı dışında dosya tutan özellik** (ör. sunucu diskine PDF/fatura yazmak) | ⚠ Hayır | O klasörü yedeğe ekle ya da dosyayı Supabase Storage'a koy |
+| **Başka bir veritabanı** (ör. ayrı Redis/MySQL) | ⚠ Hayır | Ayrı dump adımı ekle |
+
+Kural: **veri ya veritabanında ya da Supabase Storage'da tutulsun** → yedek kendiliğinden kapsar.
 
 ## Prova
 
