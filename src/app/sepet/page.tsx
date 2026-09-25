@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { trackCouponApply } from "@/lib/analytics";
+import { shipFee, amountToFreeShipping } from "@/lib/shipping-fee";
 
 // ── Varyant Seçici Modal ─────────────────────────────────────────────────────
 function GiftVariantModal({
@@ -528,8 +529,16 @@ function RewardsAndCouponPanel({
 export default function CartPage() {
   const {
     items, removeItem, updateQuantity, getTotalPrice, clearCart,
-    pendingGifts, confirmGift,
+    pendingGifts, confirmGift, shippingMethodId, setShippingMethodId,
   } = useCartStore();
+  // Kargo yöntemleri (admin → Ayarlar → Kargo Yöntemleri); seçim checkout'a taşınır
+  const [shippingMethods, setShippingMethods] = useState<any[]>([]);
+  useEffect(() => {
+    (async () => {
+      const { data } = await (supabase as any).from("shipping_methods").select("*").eq("is_active", true).order("sort_order");
+      setShippingMethods((data as any[]) || []);
+    })();
+  }, []);
   const [mounted, setMounted] = useState(false);
   const [activePending, setActivePending] = useState<string | null>(null);
   const [couponDiscount, setCouponDiscount] = useState(0);
@@ -611,7 +620,12 @@ export default function CartPage() {
   }
 
   const totalPrice = getTotalPrice();
-  const shippingCost = (totalPrice > 500 || couponFreeShip) ? 0 : 29.90;
+  const selMethod = shippingMethods.find((m) => m.id === shippingMethodId) || shippingMethods[0] || null;
+  // Yöntemler yüklenene kadar eski varsayılan (500₺ üstü ücretsiz, 29,90₺)
+  const shippingCost = selMethod
+    ? shipFee(selMethod, totalPrice, couponFreeShip)
+    : ((totalPrice > 500 || couponFreeShip) ? 0 : 29.90);
+  const toFreeShip = couponFreeShip ? null : amountToFreeShipping(selMethod, totalPrice);
   const finalTotal = Math.max(0, totalPrice + shippingCost - couponDiscount);
 
   const regularItems = items.filter((i) => !i.is_gift);
@@ -780,12 +794,48 @@ export default function CartPage() {
                       <span>Ücretsiz</span>
                     </div>
                   )}
+                  {/* Kargo yöntemi — birden fazlaysa seçim; tek ise adı */}
+                  {shippingMethods.length > 1 ? (
+                    <div className="space-y-2">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1.5">
+                        <Truck size={12} /> Kargo yöntemi
+                      </p>
+                      {shippingMethods.map((m) => {
+                        const fee = shipFee(m, totalPrice, couponFreeShip);
+                        const active = selMethod?.id === m.id;
+                        return (
+                          <button
+                            key={m.id}
+                            type="button"
+                            onClick={() => setShippingMethodId(m.id)}
+                            className={cn(
+                              "w-full flex items-center justify-between gap-3 rounded-xl border-2 px-3 py-2.5 text-left transition-all",
+                              active ? "border-olive-600 bg-olive-50/40" : "border-slate-100 hover:border-slate-200"
+                            )}
+                          >
+                            <span className="min-w-0">
+                              <span className="block text-sm font-bold text-slate-900">{m.name}</span>
+                              {m.description && <span className="block text-[11px] text-slate-400 font-medium truncate">{m.description}</span>}
+                            </span>
+                            <span className={cn("text-sm font-black shrink-0", fee === 0 ? "text-green-600" : "text-slate-900")}>
+                              {fee === 0 ? "ÜCRETSİZ" : `₺${fee.toLocaleString("tr-TR")}`}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
                   <div className="flex justify-between text-slate-500">
-                    <span>Kargo</span>
+                    <span>Kargo{shippingMethods.length === 1 && selMethod ? <span className="font-medium text-slate-400"> · {selMethod.name}</span> : null}</span>
                     <span className={cn(shippingCost === 0 ? "text-green-600" : "text-slate-900")}>
                       {shippingCost === 0 ? "ÜCRETSİZ" : `₺${shippingCost.toLocaleString("tr-TR")}`}
                     </span>
                   </div>
+                  {toFreeShip !== null && (
+                    <p className="text-[11px] font-bold text-olive-700 bg-olive-50 rounded-xl px-3 py-2">
+                      ₺{toFreeShip.toLocaleString("tr-TR", { minimumFractionDigits: 2 })} daha ekle, kargo ücretsiz olsun.
+                    </p>
+                  )}
                   {couponDiscount > 0 && (
                     <div className="flex justify-between text-green-600">
                       <span className="flex items-center gap-1"><Ticket size={12} /> İndirim</span>

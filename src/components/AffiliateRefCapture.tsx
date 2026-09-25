@@ -5,7 +5,10 @@ import { setCampaign } from "@/lib/track";
 
 // Satış ortaklığı takibinin İLK halkası: ?ref=KOD ile gelen ziyaretçiyi yakalar.
 //  1) affiliate_ref çerezini yazar (30 gün) — checkout bunu okuyup siparişi
-//     ilgili affiliate'e bağlar (komisyon).
+//     ilgili affiliate'e bağlar (komisyon). KURAL: İLK TIKLAMA KAZANIR — geçerli
+//     bir ref çerezi varken başka bir ref linkiyle gelinirse çerez DEĞİŞMEZ ve
+//     süresi de uzamaz (30 gün ilk tıklamadan sayılır). Geçersiz/pasif kod
+//     çerezde kalmaz (tıklama API'si reddederse çerez silinir).
 //  2) /api/affiliate/click çağrısıyla tıklamayı kaydeder (istatistik).
 //  3) URL'den ref'i temizler (paylaşımda kod sızmasın, adres temiz kalsın).
 // Kök layout'a bir kez mount edilir; yalnız landing'deki ilk URL'yi okur.
@@ -19,8 +22,12 @@ export default function AffiliateRefCapture() {
       const code = params.get("ref");
       if (!code) return;
 
-      // 30 gün geçerli çerez (checkout siparişte okur)
-      document.cookie = `affiliate_ref=${encodeURIComponent(code)}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax`;
+      // 30 gün geçerli çerez (checkout siparişte okur) — yalnız henüz yoksa (ilk tıklama kazanır)
+      const existing = document.cookie.match(/(?:^|; )affiliate_ref=([^;]+)/)?.[1];
+      const isNew = !existing;
+      if (isNew) {
+        document.cookie = `affiliate_ref=${encodeURIComponent(code)}; path=/; max-age=${60 * 60 * 24 * 30}; SameSite=Lax`;
+      }
 
       // İstatistik (first-party analitik) → kaynak tablosunda "satış ortağı · KOD"
       // satırı olarak görünsün (ziyaret/sepet/satın alma/ciro). İlk-temas kuralı:
@@ -39,6 +46,9 @@ export default function AffiliateRefCapture() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ code, path: window.location.pathname }),
           keepalive: true,
+        }).then((r) => {
+          // Kod geçersiz/pasif → az önce yazdığımız çerezi geri al (sonraki geçerli ref'i engellemesin)
+          if (r.status === 404 && isNew) document.cookie = "affiliate_ref=; path=/; max-age=0; SameSite=Lax";
         }).catch(() => { /* takip kritik değil */ });
       }
 

@@ -1208,7 +1208,7 @@ function AccountPageInner() {
                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2">
                                <div className="space-y-2 md:col-span-2">
                                  <label className="text-xs font-bold uppercase text-slate-500 px-1">Şirket Ünvanı</label>
-                                 <Input value={addressForm.company_name} onChange={e => setAddressForm({...addressForm, company_name: e.target.value})} placeholder="Örn: Yeri Hisset Tic. Ltd. Şti." className="h-12" />
+                                 <Input value={addressForm.company_name} onChange={e => setAddressForm({...addressForm, company_name: e.target.value})} placeholder="Örn: Şirketiniz Tic. Ltd. Şti." className="h-12" />
                                </div>
                                <div className="space-y-2">
                                  <label className="text-xs font-bold uppercase text-slate-500 px-1">Vergi Dairesi</label>

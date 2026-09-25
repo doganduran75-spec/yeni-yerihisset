@@ -52,6 +52,7 @@ interface CartStore {
   pendingGifts: PendingGift[];  // Varyant seçimi beklenen hediyeler (persist edilmez)
   dismissedRules: string[];     // Bu oturumda reddedilen kural ID'leri (persist edilmez)
   couponCode: string;           // Sepette seçilen/uygulanan kupon kodu (checkout'a taşınır)
+  shippingMethodId: string;     // Sepette seçilen kargo yöntemi (checkout'a taşınır)
 
   addItem: (item: CartItem) => void;
   removeItem: (id: string) => void;
@@ -59,6 +60,7 @@ interface CartStore {
   syncStock: (map: Record<string, number>) => void;
   clearCart: () => void;
   setCouponCode: (code: string) => void;
+  setShippingMethodId: (id: string) => void;
   getTotalItems: () => number;
   getTotalPrice: () => number;
 
@@ -77,6 +79,8 @@ export const useCartStore = create<CartStore>()(
       couponCode: '',
 
       setCouponCode: (code) => set({ couponCode: code }),
+      shippingMethodId: '',
+      setShippingMethodId: (id) => set({ shippingMethodId: id }),
 
       // ── Sepete ürün ekle ──
       addItem: (newItem) => {
@@ -376,7 +380,7 @@ export const useCartStore = create<CartStore>()(
     {
       name: 'shopping-cart',
       // Yalnızca items persist edilir; pendingGifts ve dismissedRules oturum bazlıdır
-      partialize: (state) => ({ items: state.items, couponCode: state.couponCode }),
+      partialize: (state) => ({ items: state.items, couponCode: state.couponCode, shippingMethodId: state.shippingMethodId }),
       // Merge: localStorage'dan sadece items alınır, geri kalanlar her zaman
       // başlangıç değeriyle başlar. Eski kayıtlarda eksik alan olsa da güvenli.
       merge: (persisted, current) => ({

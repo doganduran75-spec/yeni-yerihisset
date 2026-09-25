@@ -34,14 +34,7 @@ import { trackBeginCheckout, trackPurchase } from "@/lib/analytics";
 import { GeoSelect } from "@/components/ui/geo-select";
 import { CITIES, DISTRICTS } from "@/lib/turkey-geo";
 import { fetchLiveStocks } from "@/lib/live-stock";
-
-// Seçili kargo yönteminin ücreti (kupon ücretsiz-kargo veya free_over eşiğinde 0)
-function shipFee(m: any, productTotal: number, freeCoupon: boolean): number {
-  if (!m) return 0;
-  if (freeCoupon) return 0;
-  if (m.free_over != null && productTotal >= Number(m.free_over)) return 0;
-  return Number(m.fee || 0);
-}
+import { shipFee } from "@/lib/shipping-fee";
 
 function getCookie(name: string): string | null {
   if (typeof document === "undefined") return null;
@@ -108,7 +101,9 @@ export default function CheckoutPage() {
       const { data } = await supabase.from("shipping_methods").select("*").eq("is_active", true).order("sort_order");
       const list = (data as any[]) || [];
       setShippingMethods(list);
-      setSelectedShippingMethodId((prev) => prev || (list[0]?.id ?? ""));
+      // Sepette seçilen yöntem (hâlâ aktifse) önseçili gelsin
+      const fromCart = useCartStore.getState().shippingMethodId;
+      setSelectedShippingMethodId((prev) => prev || (list.some((m) => m.id === fromCart) ? fromCart : (list[0]?.id ?? "")));
     })();
   }, []);
 
@@ -1070,7 +1065,7 @@ export default function CheckoutPage() {
                               <button
                                 key={m.id}
                                 type="button"
-                                onClick={() => setSelectedShippingMethodId(m.id)}
+                                onClick={() => { setSelectedShippingMethodId(m.id); useCartStore.getState().setShippingMethodId(m.id); }}
                                 className={cn(
                                   "w-full flex items-center justify-between gap-3 rounded-2xl border-2 px-4 py-3 text-left transition-all",
                                   active ? "border-olive-600 bg-olive-50/40 ring-2 ring-olive-50" : "border-slate-100 hover:border-slate-200"
