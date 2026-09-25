@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
+import { rateLimited, clientIp } from "@/lib/rate-limit";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -8,26 +9,9 @@ import { createAdminClient } from "@/lib/supabase-admin";
 // Güvenlik: yalnız evet/hayır döner (isim vb. yok). Bu bilgi sipariş gönderiminde
 // zaten açığa çıkıyor (409), yine de toplu tarama (e-posta listesi deneme) için
 // IP başına hız sınırı var. Not: sınır pm2 instance başına bellekte tutulur.
-const WINDOW_MS = 10 * 60 * 1000;
-const MAX_PER_WINDOW = 15;
-const hits = new Map<string, { n: number; reset: number }>();
-
-function limited(ip: string): boolean {
-  const now = Date.now();
-  const h = hits.get(ip);
-  if (!h || h.reset < now) {
-    hits.set(ip, { n: 1, reset: now + WINDOW_MS });
-    if (hits.size > 5000) for (const [k, v] of hits) if (v.reset < now) hits.delete(k);
-    return false;
-  }
-  h.n++;
-  return h.n > MAX_PER_WINDOW;
-}
-
 export async function POST(req: NextRequest) {
-  const ip = (req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || req.headers.get("x-real-ip") || "unknown";
   // Sınır aşıldıysa sessizce "bilinmiyor" — form yine çalışır, kontrol siparişte yapılır
-  if (limited(ip)) return NextResponse.json({ exists: null });
+  if (rateLimited("email-check", clientIp(req), 15, 10 * 60 * 1000)) return NextResponse.json({ exists: null });
 
   const { email } = (await req.json().catch(() => ({}))) as { email?: string };
   const e = (email || "").trim().toLowerCase();

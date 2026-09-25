@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
+import { rateLimited, clientIp, TOO_MANY } from "@/lib/rate-limit";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 // Bülten kaydı — footer formundan. E-postayı contacts'a 'newsletter' kanalı
 // olarak ekler (service role; RLS admin-only). Aynı e-posta varsa tekrar eklemez.
 export async function POST(req: NextRequest) {
+  // Toplu kötüye kullanıma karşı IP başına sınır
+  if (rateLimited("newsletter", clientIp(req), 5, 3600000)) return NextResponse.json(TOO_MANY, { status: 429 });
   const body = await req.json().catch(() => ({}));
   const email = String(body.email || "").trim().toLowerCase();
   if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {

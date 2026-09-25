@@ -37,7 +37,7 @@ export default function ProductReviews({ productId }: { productId: string }) {
     let query = (supabase as any)
       .from("order_reviews")
       .select(
-        "id, comment, rating_shipping, rating_quality, rating_communication, images, created_at, profiles(first_name, last_name)"
+        "id, user_id, comment, rating_shipping, rating_quality, rating_communication, images, created_at"
       )
       .eq("is_approved", true)
       .order("created_at", { ascending: false });
@@ -46,13 +46,20 @@ export default function ProductReviews({ productId }: { productId: string }) {
 
     const { data } = await query;
 
+    // Yorumcu adı: profiller herkese kapalı (KVKK) → güvenli fonksiyon "Ad S." döner
+    const ids = [...new Set(((data as any[]) ?? []).map((r) => r.user_id).filter(Boolean))];
+    const nameById = new Map<string, string>();
+    if (ids.length) {
+      const { data: names } = await (supabase as any).rpc("review_author_names", { p_user_ids: ids });
+      for (const n of (names as any[]) ?? []) if (n.display_name) nameById.set(n.user_id, n.display_name);
+    }
+
     const formatted: Review[] = ((data as any[]) ?? []).map((r) => {
       const nums = [r.rating_shipping, r.rating_quality, r.rating_communication].filter(
         (x) => typeof x === "number"
       ) as number[];
       const avg = nums.length ? Math.round(nums.reduce((a, b) => a + b, 0) / nums.length) : 5;
-      const p = r.profiles as { first_name?: string; last_name?: string } | null;
-      const name = [p?.first_name, p?.last_name].filter(Boolean).join(" ") || "Müşteri";
+      const name = nameById.get(r.user_id) || "Müşteri";
       return {
         id: r.id,
         user_name: name,

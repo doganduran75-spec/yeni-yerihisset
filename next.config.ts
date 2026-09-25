@@ -74,16 +74,6 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        // Statik varlıklar uzun süre cache'lensin
-        source: "/_next/static/(.*)",
-        headers: [
-          {
-            key: "Cache-Control",
-            value: "public, max-age=31536000, immutable",
-          },
-        ],
-      },
-      {
         // Public klasörü görselleri 1 gün cache
         source: "/(.*\\.(?:jpg|jpeg|png|gif|webp|avif|svg|ico))",
         headers: [

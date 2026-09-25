@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
+import { rateLimited, clientIp, TOO_MANY } from "@/lib/rate-limit";
 import { sendGuestActivationEmail } from "@/lib/notifications";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -8,6 +9,8 @@ import { sendGuestActivationEmail } from "@/lib/notifications";
 // Bağlantı yalnızca siparişin KENDİ sahibinin e-postasına gider (başkasına
 // yönlendirilemez); son 30 günün siparişleriyle sınırlı.
 export async function POST(req: NextRequest) {
+  // Toplu kötüye kullanıma karşı IP başına sınır
+  if (rateLimited("guest-activation", clientIp(req), 5, 3600000)) return NextResponse.json(TOO_MANY, { status: 429 });
   const { orderId } = (await req.json().catch(() => ({}))) as { orderId?: string };
   if (!orderId) return NextResponse.json({ error: "Eksik bilgi" }, { status: 400 });
 

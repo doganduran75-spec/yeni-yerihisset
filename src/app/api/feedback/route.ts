@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
+import { rateLimited, clientIp, TOO_MANY } from "@/lib/rate-limit";
 
 /**
  * "Aradığını bulamadın mı?" geri bildirim/talep kutusu.
  * Ziyaretçi e-posta (opsiyonel) + not bırakır. Service role ile eklenir.
  */
 export async function POST(req: NextRequest) {
+  // Toplu kötüye kullanıma karşı IP başına sınır
+  if (rateLimited("feedback", clientIp(req), 10, 3600000)) return NextResponse.json(TOO_MANY, { status: 429 });
   const body = await req.json().catch(() => ({}));
   const email = String(body.email || "").trim().toLowerCase() || null;
   const message = String(body.message || "").trim();

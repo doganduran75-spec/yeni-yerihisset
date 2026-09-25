@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
+import { rateLimited, clientIp, TOO_MANY } from "@/lib/rate-limit";
 import { sendLeadMagnetWelcome } from "@/lib/notifications";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -10,10 +11,15 @@ import { sendLeadMagnetWelcome } from "@/lib/notifications";
  * markalı e-postayla şifre belirleme bağlantısı gönderilir. (F17)
  */
 export async function POST(req: NextRequest) {
+  // Toplu kötüye kullanıma karşı IP başına sınır
+  if (rateLimited("lead-magnet", clientIp(req), 5, 3600000)) return NextResponse.json(TOO_MANY, { status: 429 });
   const body = await req.json().catch(() => ({}));
   const email = String(body.email || "").trim().toLowerCase();
   const consent = body.consent === true;
-  const couponCode = body.couponCode ? String(body.couponCode).trim().toUpperCase() : null;
+  // GÜVENLİK: istemcinin gönderdiği kupon kodu KULLANILMAZ (herhangi bir aktif
+  // kuponu herhangi bir e-postaya tanımlatabiliyordu). Yalnız sunucuda tanımlı
+  // lead-magnet kuponu verilir ve o da yalnız "ücretsiz kargo" türündeyse.
+  const couponCode = (process.env.LEAD_MAGNET_COUPON || "KARGOBEDAVA").trim().toUpperCase();
 
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
     return NextResponse.json({ error: "Geçerli bir e-posta girin." }, { status: 400 });
@@ -29,7 +35,7 @@ export async function POST(req: NextRequest) {
   let coupon: any = null;
   if (couponCode) {
     const { data } = await supabase.from("coupons").select("*").eq("code", couponCode).eq("is_active", true).maybeSingle();
-    coupon = data ?? null;
+    coupon = data && (data as any).type === "free_shipping" ? data : null;
   }
   const couponValue = coupon
     ? (coupon.type === "free_shipping" ? "Ücretsiz kargo"

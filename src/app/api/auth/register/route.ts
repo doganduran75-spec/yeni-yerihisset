@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
+import { rateLimited, clientIp, TOO_MANY } from "@/lib/rate-limit";
 import { issueEmailVerification } from "@/lib/email-verify";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -11,6 +12,8 @@ import { issueEmailVerification } from "@/lib/email-verify";
  * mantık: auth e-postaları GoTrue yerine gerekince app SMTP'siyle gider.)
  */
 export async function POST(req: NextRequest) {
+  // Toplu kötüye kullanıma karşı IP başına sınır
+  if (rateLimited("register", clientIp(req), 5, 3600000)) return NextResponse.json(TOO_MANY, { status: 429 });
   const body = await req.json().catch(() => ({}));
   const email = String(body.email || "").trim().toLowerCase();
   const password = String(body.password || "");
