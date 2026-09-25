@@ -47,9 +47,13 @@ export async function POST(req: NextRequest) {
     attempts++;
   }
 
+  // Yeni ortağın oranı: admin'in belirlediği varsayılan (Satış Ortaklığı sayfası)
+  const { data: st } = await (supabase as any).from("settings").select("affiliate_default_rate").limit(1).maybeSingle();
+  const defaultRate = Number(st?.affiliate_default_rate ?? 10) || 10;
+
   const { data, error } = await supabase
     .from("affiliate_profiles")
-    .insert({ user_id: user.id, code, status: "active", commission_rate: 10.0, application_answers: answers || null })
+    .insert({ user_id: user.id, code, status: "active", commission_rate: defaultRate, application_answers: answers || null })
     .select()
     .single();
 

@@ -8,6 +8,7 @@ import { supabase } from "@/lib/supabase";
 import {
   Activity, Users, ShoppingCart, Ticket, Database, ChevronDown, ChevronRight,
   Globe, Loader2, MousePointerClick, Search, Footprints, Layers, CreditCard, Bot,
+  FileSpreadsheet, ChevronLeft,
 } from "lucide-react";
 
 // ── Yardımcılar ──────────────────────────────────────────────────────────────
@@ -23,6 +24,26 @@ function fmtTime(iso: string) {
 function fmtTRY(n: number) {
   return "₺" + Number(n || 0).toLocaleString("tr-TR", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
+
+// PostgREST tek istekte en fazla ~1000 satır döner → sayfa sayfa hepsini çek
+async function fetchAllRows(make: (from: number, to: number) => any): Promise<any[]> {
+  const out: any[] = [];
+  for (let from = 0; from < 50000; from += 1000) {
+    const { data, error } = await make(from, from + 999);
+    if (error || !data) break;
+    out.push(...data);
+    if (data.length < 1000) break;
+  }
+  return out;
+}
+
+const PERIODS = [
+  { key: "1", label: "Bugün", days: 1 },
+  { key: "7", label: "7 gün", days: 7 },
+  { key: "30", label: "30 gün", days: 30 },
+  { key: "90", label: "90 gün", days: 90 },
+] as const;
+const PAGE_SIZE = 20;
 
 // Event tipini insanca anlat
 const EVENT_LABEL: Record<string, { txt: string; icon: any }> = {
@@ -68,40 +89,55 @@ export default function AdminAnalyticsPage() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [showBots, setShowBots] = useState(false);
   const [noResultSearches, setNoResultSearches] = useState<{ term: string; count: number }[]>([]);
+  // Dönem + ziyaretçi listesi süzgeci / sayfalama
+  const [period, setPeriod] = useState<string>("7");
+  const [q, setQ] = useState("");
+  const [kind, setKind] = useState<"all" | "member" | "source" | "cart" | "purchase">("all");
+  const [page, setPage] = useState(0);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     (async () => {
       setLoading(true);
+      setExpanded(null);
+      setPage(0);
       try {
-        const [stg, ses] = await Promise.all([
+        const days = PERIODS.find((p) => p.key === period)?.days ?? 7;
+        const since = new Date();
+        since.setHours(0, 0, 0, 0);
+        since.setDate(since.getDate() - (days - 1));
+        const [stg, sess] = await Promise.all([
           (supabase as any).rpc("analytics_storage"),
-          (supabase as any).from("analytics_sessions").select("*").order("started_at", { ascending: false }).limit(200),
+          fetchAllRows((from, to) => (supabase as any).from("analytics_sessions").select("*")
+            .gte("started_at", since.toISOString()).order("started_at", { ascending: false }).range(from, to)),
         ]);
         setStorage(stg.data || null);
-        const sess = ses.data || [];
         setSessions(sess);
 
         const ids = sess.map((s: any) => s.session_id);
         const uids = [...new Set(sess.map((s: any) => s.user_id).filter(Boolean))];
-        if (ids.length) {
-          const { data: ev } = await (supabase as any)
+        const grp: Record<string, any[]> = {};
+        // Oturum kimliklerini parçalara böl (URL uzunluğu), her parçanın tüm event'lerini çek
+        for (let i = 0; i < ids.length; i += 60) {
+          const chunk = ids.slice(i, i + 60);
+          const ev = await fetchAllRows((from, to) => (supabase as any)
             .from("analytics_events").select("session_id,event_type,path,meta,created_at,user_id")
-            .in("session_id", ids).order("created_at", { ascending: true }).limit(4000);
-          const grp: Record<string, any[]> = {};
-          for (const e of ev || []) (grp[e.session_id] ??= []).push(e);
-          setEventsBySession(grp);
+            .in("session_id", chunk).order("created_at", { ascending: true }).range(from, to));
+          for (const e of ev) (grp[e.session_id] ??= []).push(e);
         }
+        setEventsBySession(grp);
         if (uids.length) {
           const { data: pr } = await (supabase as any).from("profiles").select("id,first_name,last_name,email").in("id", uids);
           const map: Record<string, any> = {};
           for (const p of pr || []) map[p.id] = p;
           setProfiles(map);
-        }
+        } else setProfiles({});
 
         // Sonuçsuz aramalar (talep sinyali) — son 500 arama event'i
         const { data: searches } = await (supabase as any)
           .from("analytics_events").select("meta")
-          .eq("event_type", "search").order("created_at", { ascending: false }).limit(500);
+          .eq("event_type", "search").gte("created_at", since.toISOString())
+          .order("created_at", { ascending: false }).limit(1000);
         const noRes: Record<string, number> = {};
         for (const e of (searches as any[]) || []) {
           if (Number(e.meta?.results_count) === 0 && e.meta?.term) {
@@ -114,7 +150,7 @@ export default function AdminAnalyticsPage() {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [period]);
 
   const humanSessions = useMemo(() => sessions.filter((s) => showBots || !s.is_bot), [sessions, showBots]);
 
@@ -150,13 +186,108 @@ export default function AdminAnalyticsPage() {
     return Object.values(map).sort((a: any, b: any) => b.sessions - a.sessions);
   }, [humanSessions, eventsBySession]);
 
+  // Ziyaretçi listesi: arama + tür süzgeci (tamamı Excel'e, ekrana sayfa sayfa)
+  const personName = (s: any) => {
+    const pr = s.user_id ? profiles[s.user_id] : null;
+    return pr ? [pr.first_name, pr.last_name].filter(Boolean).join(" ") || pr.email || "" : "";
+  };
+  const filteredSessions = useMemo(() => {
+    const needle = q.trim().toLocaleLowerCase("tr-TR");
+    return humanSessions.filter((s) => {
+      const evs = eventsBySession[s.session_id] || [];
+      if (kind === "member" && !s.user_id) return false;
+      if (kind === "source" && !s.utm_source) return false;
+      if (kind === "cart" && !evs.some((e) => e.event_type === "add_to_cart" || e.event_type === "quick_buy")) return false;
+      if (kind === "purchase" && !evs.some((e) => e.event_type === "purchase")) return false;
+      if (!needle) return true;
+      const pr = s.user_id ? profiles[s.user_id] : null;
+      const hay = [personName(s), pr?.email, s.ip, s.utm_source, s.utm_campaign, s.referrer, s.landing_path]
+        .filter(Boolean).join(" ").toLocaleLowerCase("tr-TR");
+      return hay.includes(needle);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [humanSessions, eventsBySession, profiles, q, kind]);
+  const pageCount = Math.max(1, Math.ceil(filteredSessions.length / PAGE_SIZE));
+  const pageSessions = filteredSessions.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
+  useEffect(() => { setPage(0); }, [q, kind, showBots]);
+
+  async function exportExcel() {
+    setExporting(true);
+    try {
+      const XLSX = await import("xlsx");
+      const periodLabel = PERIODS.find((p) => p.key === period)?.label ?? period;
+      const wb = XLSX.utils.book_new();
+      const sheet = (rows: any[], name: string) => XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows.length ? rows : [{ Bilgi: "Veri yok" }]), name);
+      sheet([
+        { Metrik: "Dönem", Değer: periodLabel },
+        { Metrik: "Oturum", Değer: summary.total },
+        { Metrik: "Üye girişli", Değer: summary.loggedIn },
+        { Metrik: "Sepete ekleme", Değer: summary.addToCart },
+        { Metrik: "Kupon denemesi", Değer: summary.couponApplies },
+        { Metrik: "Satın alma", Değer: summary.purchases },
+        { Metrik: "Ciro (₺)", Değer: Math.round(summary.revenue * 100) / 100 },
+      ], "Özet");
+      sheet(campaigns.map((c: any) => ({
+        Kaynak: c.src, Kampanya: c.camp, Oturum: c.sessions, Sepet: c.addToCart, Kupon: c.coupon,
+        Satış: c.purchases, "Ciro (₺)": Math.round(c.revenue * 100) / 100,
+        "Dönüşüm %": c.sessions ? Math.round((c.purchases / c.sessions) * 1000) / 10 : 0,
+      })), "Kaynak-Kampanya");
+      sheet(filteredSessions.map((s) => {
+        const evs = eventsBySession[s.session_id] || [];
+        const pr = s.user_id ? profiles[s.user_id] : null;
+        return {
+          Başlangıç: new Date(s.started_at).toLocaleString("tr-TR"),
+          Kişi: personName(s) || "anonim", "E-posta": pr?.email || "",
+          Kaynak: s.utm_source || "doğrudan", Kampanya: s.utm_campaign || "", "Gelinen site": s.referrer || "",
+          "Giriş sayfası": s.landing_path || "", Adım: evs.length,
+          "Sepete ekleme": evs.filter((e) => e.event_type === "add_to_cart" || e.event_type === "quick_buy").length,
+          "Satın alma": evs.filter((e) => e.event_type === "purchase").length,
+          "Ciro (₺)": evs.filter((e) => e.event_type === "purchase").reduce((a, e) => a + Number(e.meta?.value || 0), 0),
+          Cihaz: s.device || "", IP: s.ip || "", Bot: s.is_bot ? "evet" : "",
+        };
+      }), "Ziyaretçiler");
+      const steps: any[] = [];
+      for (const s of filteredSessions) {
+        for (const e of eventsBySession[s.session_id] || []) {
+          steps.push({
+            "Oturum başlangıcı": new Date(s.started_at).toLocaleString("tr-TR"),
+            Kişi: personName(s) || "anonim", IP: s.ip || "",
+            Zaman: new Date(e.created_at).toLocaleString("tr-TR"),
+            Adım: EVENT_LABEL[e.event_type]?.txt || e.event_type, Detay: eventDetail(e), Sayfa: e.path || "",
+          });
+        }
+      }
+      sheet(steps, "Adımlar");
+      sheet(noResultSearches.map((r) => ({ Arama: r.term, Adet: r.count })), "Sonuçsuz aramalar");
+      XLSX.writeFile(wb, `istatistik_${new Date().toISOString().slice(0, 10)}_${periodLabel.replace(/\s+/g, "")}.xlsx`);
+    } finally {
+      setExporting(false);
+    }
+  }
+
   const totalBytes = storage?.total_bytes || 0;
 
   return (
     <div className="space-y-6 p-1">
-      <div>
-        <h1 className="text-2xl font-black tracking-tight">İstatistikler — Ziyaretçi Yolculuğu</h1>
-        <p className="text-sm text-slate-500">Kendi verimiz (first-party). Google Analytics'e paralel çalışır, onun yerine geçmez.</p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-black tracking-tight">İstatistikler — Ziyaretçi Yolculuğu</h1>
+          <p className="text-sm text-slate-500">Kendi verimiz (first-party). Google Analytics'e paralel çalışır, onun yerine geçmez.</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex rounded-xl border border-slate-200 bg-white p-0.5">
+            {PERIODS.map((p) => (
+              <button key={p.key} onClick={() => setPeriod(p.key)}
+                className={`px-3 h-8 rounded-lg text-xs font-bold transition-colors ${period === p.key ? "bg-olive-600 text-white" : "text-slate-600 hover:bg-slate-50"}`}>
+                {p.label}
+              </button>
+            ))}
+          </div>
+          <button onClick={exportExcel} disabled={loading || exporting}
+            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-xl border border-olive-200 bg-olive-50 text-olive-700 text-xs font-black hover:bg-olive-100 disabled:opacity-50">
+            {exporting ? <Loader2 size={14} className="animate-spin" /> : <FileSpreadsheet size={14} />} Excel&apos;e Aktar
+          </button>
+        </div>
       </div>
 
       {loading ? (
@@ -262,7 +393,7 @@ export default function AdminAnalyticsPage() {
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle className="flex items-center gap-2 text-base"><Activity size={18} /> Son ziyaretçiler ({humanSessions.length})</CardTitle>
+                  <CardTitle className="flex items-center gap-2 text-base"><Activity size={18} /> Ziyaretçiler ({filteredSessions.length})</CardTitle>
                   <CardDescription>Bir satıra tıkla → o ziyaretçinin adım adım yolculuğu.</CardDescription>
                 </div>
                 <button onClick={() => setShowBots((v) => !v)} className="text-xs font-bold text-slate-400 hover:text-slate-700 flex items-center gap-1">
@@ -271,7 +402,21 @@ export default function AdminAnalyticsPage() {
               </div>
             </CardHeader>
             <CardContent className="space-y-1">
-              {humanSessions.map((s) => {
+              {/* Arama + tür süzgeci */}
+              <div className="flex flex-wrap items-center gap-2 pb-2">
+                <div className="relative flex-1 min-w-[200px]">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Ara: ad, e-posta, IP, kaynak, kampanya…"
+                    className="w-full h-9 pl-8 pr-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-olive-200" />
+                </div>
+                {([["all", "Tümü"], ["member", "Üye"], ["source", "Kaynaklı"], ["cart", "Sepete ekleyen"], ["purchase", "Satın alan"]] as const).map(([k, l]) => (
+                  <button key={k} onClick={() => setKind(k)}
+                    className={`px-3 h-8 rounded-lg text-xs font-bold border transition-colors ${kind === k ? "bg-olive-600 text-white border-olive-600" : "border-slate-200 text-slate-600 hover:bg-slate-50"}`}>
+                    {l}
+                  </button>
+                ))}
+              </div>
+              {pageSessions.map((s) => {
                 const evs = eventsBySession[s.session_id] || [];
                 const pr = s.user_id ? profiles[s.user_id] : null;
                 const name = pr ? [pr.first_name, pr.last_name].filter(Boolean).join(" ") || pr.email : null;
@@ -314,7 +459,19 @@ export default function AdminAnalyticsPage() {
                   </div>
                 );
               })}
-              {humanSessions.length === 0 && <p className="py-6 text-center text-slate-400">Henüz ziyaretçi verisi yok.</p>}
+              {filteredSessions.length === 0 && <p className="py-6 text-center text-slate-400">Bu süzgece uyan ziyaretçi yok.</p>}
+              {filteredSessions.length > PAGE_SIZE && (
+                <div className="flex items-center justify-between pt-3 text-xs text-slate-500">
+                  <span>{page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, filteredSessions.length)} / {filteredSessions.length}</span>
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0}
+                      className="h-8 px-2 rounded-lg border border-slate-200 disabled:opacity-40 hover:bg-slate-50 flex items-center"><ChevronLeft size={14} /> Önceki</button>
+                    <span className="px-2 font-bold">{page + 1} / {pageCount}</span>
+                    <button onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))} disabled={page >= pageCount - 1}
+                      className="h-8 px-2 rounded-lg border border-slate-200 disabled:opacity-40 hover:bg-slate-50 flex items-center">Sonraki <ChevronRight size={14} /></button>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </>

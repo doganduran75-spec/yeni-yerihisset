@@ -19,19 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-
-// Supabase/GoTrue İngilizce auth mesajlarını Türkçeleştir.
-function trAuthError(msg?: string): string {
-  const m = (msg || "").toLowerCase();
-  if (m.includes("invalid login credentials")) return "E-posta veya şifre hatalı.";
-  if (m.includes("email not confirmed")) return "E-posta adresiniz henüz onaylanmamış.";
-  if (m.includes("user already registered") || m.includes("already been registered")) return "Bu e-posta adresi zaten kayıtlı.";
-  if (m.includes("password should be at least")) return "Şifre en az 6 karakter olmalı.";
-  if (m.includes("unable to validate email") || m.includes("invalid format")) return "Geçersiz e-posta adresi.";
-  if (m.includes("rate limit") || m.includes("for security purposes") || m.includes("too many")) return "Çok fazla deneme yapıldı. Lütfen biraz sonra tekrar deneyin.";
-  if (m.includes("network") || m.includes("failed to fetch")) return "Bağlantı hatası. Lütfen tekrar deneyin.";
-  return msg || "Bir hata oluştu. Lütfen tekrar deneyin.";
-}
+import { trAuthError } from "@/lib/auth-errors";
 
 export default function LoginPage() {
   return (

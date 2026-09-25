@@ -43,6 +43,8 @@ import { GeoSelect } from "@/components/ui/geo-select";
 import { CITIES, DISTRICTS } from "@/lib/turkey-geo";
 import { cn } from "@/lib/utils";
 import OrderMessagesModal from "@/components/account/OrderMessagesModal";
+import { siteAlert, siteConfirm } from "@/components/ui/site-dialog";
+import { trAuthError } from "@/lib/auth-errors";
 
 type TabType = "orders" | "addresses" | "profile" | "security" | "affiliate" | "coupons" | "messages";
 // Akordiyon bölüm anahtarları (tek akordiyon; üst menü yok)
@@ -330,7 +332,7 @@ function AccountPageInner() {
     }).select().single();
     
     if (error) {
-      alert("Mesaj gönderilemedi.");
+      siteAlert("Mesaj gönderilemedi.");
     } else {
       setMessages([...messages, data as any]);
       setNewMessage("");
@@ -368,7 +370,7 @@ function AccountPageInner() {
   async function submitReview() {
     if (!reviewDialog || !user) return;
     if (!reviewRatings.shipping || !reviewRatings.quality || !reviewRatings.communication) {
-      alert("Lütfen tüm konular için puan verin.");
+      siteAlert("Lütfen tüm konular için puan verin.");
       return;
     }
     setReviewSubmitting(true);
@@ -405,7 +407,7 @@ function AccountPageInner() {
         code === "23505"
           ? "Bu sipariş için zaten bir yorum yaptınız."
           : "Yorum gönderilemedi: " + (e instanceof Error ? e.message : "bilinmeyen hata");
-      alert(msg);
+      siteAlert(msg);
     } finally {
       setReviewSubmitting(false);
     }
@@ -440,7 +442,7 @@ function AccountPageInner() {
       setShowClaimInput(false);
       fetchUserCoupons();
     } else {
-      alert(data.error || "Kod eklenemedi.");
+      siteAlert(data.error || "Kod eklenemedi.");
     }
   }
 
@@ -479,7 +481,7 @@ function AccountPageInner() {
     if (data.affiliate) {
       setAffiliate(data.affiliate);
     } else {
-      alert(data.error || "Başvuru sırasında hata oluştu.");
+      siteAlert(data.error || "Başvuru sırasında hata oluştu.");
     }
   }
 
@@ -527,18 +529,40 @@ function AccountPageInner() {
 
   const [deletingAccount, setDeletingAccount] = useState(false);
   async function handleDeleteAccount() {
-    if (!confirm("Hesabın kapatılacak ve giriş yapamayacaksın; kişisel bilgilerin anonimleştirilecek. Geçmiş sipariş kayıtların yasal saklama gereği korunur. Bu işlem geri alınamaz. Onaylıyor musun?")) return;
+    const ok = await siteConfirm({
+      title: "Hesabını kapatmak istediğine emin misin?",
+      message:
+        "• Hesabın kapanır, bu hesapla bir daha giriş yapamazsın.\n" +
+        "• Ad, telefon, adres ve e-posta bilgilerin silinir / anonimleştirilir.\n" +
+        "• Geçmiş siparişlerin yasal saklama gereği kayıtlarımızda kalır.\n" +
+        "• İstersen daha sonra aynı e-postayla yeniden üye olabilirsin (yeni, boş bir hesap açılır).\n\n" +
+        "Bu işlem geri alınamaz.",
+      confirmText: "Onaylıyorum, hesabımı kapat",
+      cancelText: "Vazgeç",
+      tone: "danger",
+    });
+    if (!ok) return;
     setDeletingAccount(true);
     try {
       const headers = await getAuthHeaders();
       const res = await fetch("/api/account/delete", { method: "POST", headers });
       const d = await res.json();
-      if (!res.ok || !d.ok) { alert(d.error || "Hesap kapatılamadı."); setDeletingAccount(false); return; }
+      if (!res.ok || !d.ok) {
+        setDeletingAccount(false);
+        await siteAlert({ title: "Hesap kapatılamadı", message: d.error || "Lütfen biraz sonra tekrar dene.", tone: "danger" });
+        return;
+      }
       await supabase.auth.signOut();
-      alert("Hesabın kapatıldı.");
+      await siteAlert({
+        title: "Hesabın kapatıldı",
+        message: "Bilgilerin silindi. Bugüne kadar bizimle olduğun için teşekkür ederiz — tekrar görüşmek dileğiyle.",
+        confirmText: "Ana sayfaya dön",
+        tone: "success",
+      });
       router.push("/");
     } catch {
-      alert("Bağlantı hatası."); setDeletingAccount(false);
+      setDeletingAccount(false);
+      await siteAlert({ title: "Bağlantı hatası", message: "Lütfen internet bağlantını kontrol edip tekrar dene.", tone: "danger" });
     }
   }
 
@@ -551,8 +575,8 @@ function AccountPageInner() {
       phone: profile.phone,
     }).eq('id', user.id);
     
-    if (error) alert("Hata: " + error.message);
-    else alert("Profil başarıyla güncellendi.");
+    if (error) siteAlert("Hata: " + error.message);
+    else siteAlert({ message: "Profil başarıyla güncellendi.", tone: "success" });
   }
 
   // Formu prefill ile aç: isim-soyad profilden gelir; İLK adreste varsayılan
@@ -582,14 +606,14 @@ function AccountPageInner() {
     e.preventDefault();
     if (!user) return;
 
-    if (!addressForm.city) { alert("Lütfen il seçiniz."); return; }
-    if (!addressForm.district) { alert("Lütfen ilçe seçiniz."); return; }
-    if (addressForm.phone.length !== 10) { alert("Telefon numarası 10 haneli olmalıdır."); return; }
+    if (!addressForm.city) { siteAlert("Lütfen il seçiniz."); return; }
+    if (!addressForm.district) { siteAlert("Lütfen ilçe seçiniz."); return; }
+    if (addressForm.phone.length !== 10) { siteAlert("Telefon numarası 10 haneli olmalıdır."); return; }
     if (addressForm.is_corporate) {
-      if (!addressForm.company_name.trim()) { alert("Lütfen şirket ünvanını girin."); return; }
-      if (!addressForm.tax_office.trim()) { alert("Lütfen vergi dairesini girin."); return; }
+      if (!addressForm.company_name.trim()) { siteAlert("Lütfen şirket ünvanını girin."); return; }
+      if (!addressForm.tax_office.trim()) { siteAlert("Lütfen vergi dairesini girin."); return; }
       const vkn = addressForm.tax_number.replace(/\D/g, "");
-      if (vkn.length !== 10 && vkn.length !== 11) { alert("Vergi numarası 10 (VKN) veya 11 (TCKN) haneli olmalıdır."); return; }
+      if (vkn.length !== 10 && vkn.length !== 11) { siteAlert("Vergi numarası 10 (VKN) veya 11 (TCKN) haneli olmalıdır."); return; }
     }
 
     // Kurumsal değilse şirket/vergi alanlarını boşalt (tutarlılık için)
@@ -601,7 +625,7 @@ function AccountPageInner() {
       user_id: user.id
     });
 
-    if (error) { alert("Hata: " + error.message); return; }
+    if (error) { siteAlert("Hata: " + error.message); return; }
 
     // Checkout'tan gelindiyse: kaydedince ödeme sayfasına GERİ DÖN.
     if (returnTo) { router.push(returnTo); return; }
@@ -626,7 +650,7 @@ function AccountPageInner() {
   }
 
   async function handleDeleteAddress(id: string) {
-    if (!confirm("Bu adresi silmek istediğinize emin misiniz?")) return;
+    if (!(await siteConfirm({ title: "Adresi sil", message: "Bu adresi silmek istediğine emin misin?", confirmText: "Sil", tone: "danger" }))) return;
     await supabase.from('user_addresses').delete().eq('id', id);
     fetchUserData();
   }
@@ -634,11 +658,11 @@ function AccountPageInner() {
   async function handleUpdatePassword(e: React.FormEvent) {
     e.preventDefault();
     if (passwordForm.password !== passwordForm.confirmPassword) {
-      alert("Şifreler uyuşmuyor.");
+      siteAlert("Şifreler uyuşmuyor.");
       return;
     }
     if (passwordForm.password.length < 6) {
-      alert("Şifre en az 6 karakter olmalıdır.");
+      siteAlert("Şifre en az 6 karakter olmalıdır.");
       return;
     }
     
@@ -648,9 +672,9 @@ function AccountPageInner() {
     });
     setIsUpdatingPassword(false);
     
-    if (error) alert("Hata: " + error.message);
+    if (error) siteAlert({ message: trAuthError(error.message), tone: "danger" });
     else {
-      alert("Şifreniz başarıyla güncellendi.");
+      siteAlert({ message: "Şifreniz başarıyla güncellendi.", tone: "success" });
       setPasswordForm({ password: "", confirmPassword: "" });
     }
   }

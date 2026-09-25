@@ -82,19 +82,8 @@ function bootstrapSession() {
     if (!sessionStorage.getItem(LANDING_KEY)) {
       sessionStorage.setItem(LANDING_KEY, location.pathname + location.search);
       sessionStorage.setItem(REF_KEY, document.referrer || "");
-      if (hasUtm) {
-        // Yeni sekmede kampanya linki ama açık (kaynaksız) bir oturum var → yeni oturum
-        startNewSession();
-        sessionStorage.setItem(UTM_KEY, JSON.stringify(utm));
-      }
-    } else if (hasUtm) {
-      // Oturum ortasında FARKLI bir kampanya linkiyle gelindi → yeni oturum
-      const cur = readJSON<Record<string, string>>(UTM_KEY);
-      if (!cur || cur.source !== utm.source || cur.campaign !== utm.campaign) {
-        startNewSession();
-        sessionStorage.setItem(UTM_KEY, JSON.stringify(utm));
-      }
     }
+    if (hasUtm) applyCampaign(utm);
   } catch {
     /* yut */
   }
@@ -186,16 +175,23 @@ export function setCampaign(source: string, campaign: string, content?: string) 
   if (typeof window === "undefined") return;
   try {
     bootstrapSession();
-    const cur = readJSON<Record<string, string>>(UTM_KEY);
-    if (cur && cur.source === source && cur.campaign === campaign) return; // aynı kampanya (ör. yenileme)
-    // Farklı/yeni bir kampanya ile gelindi → (GA gibi) YENİ oturum başlat. Aksi
-    // halde açık kalan eski oturum (kaynaksız) sürer ve ziyaret bu kampanyaya
-    // hiç yazılmaz (sunucu kaynağı oturumun ilk kaydında dondurur).
-    startNewSession();
-    sessionStorage.setItem(UTM_KEY, JSON.stringify({ source, medium: "referral", campaign, content: content || "", term: "" }));
+    applyCampaign({ source, medium: "referral", campaign, content: content || "", term: "" });
   } catch {
     /* yut */
   }
+}
+
+// Kampanya/ref bilgisini oturuma işle. Kural (tek kişi = tek kayıt):
+//  - Oturumun henüz kaynağı yoksa (doğrudan gezinirken ref linkiyle geldi) AYNI
+//    oturum bu kaynağı alır; sunucu da kaynaksız oturumu günceller. Sonradan
+//    giriş yaparsa aynı kayıt üye bilgisini de alır → "üye + ref" tek satır.
+//  - Bu sekmede zaten BAŞKA bir kampanya varsa (ör. Instagram → sonra ref) yeni
+//    oturum başlar; iki kampanya birbirinin ziyaretini çalmasın.
+function applyCampaign(utm: Record<string, string>) {
+  const cur = readJSON<Record<string, string>>(UTM_KEY);
+  if (cur && cur.source === utm.source && cur.campaign === utm.campaign) return; // aynı kampanya
+  if (cur && cur.source) startNewSession();
+  sessionStorage.setItem(UTM_KEY, JSON.stringify(utm));
 }
 
 // Yeni oturum kimliği + bu sayfayı landing olarak kaydet. Kuyruktaki event'ler

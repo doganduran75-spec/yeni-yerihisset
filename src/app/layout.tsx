@@ -10,6 +10,7 @@ import MobileTabBar from "@/components/MobileTabBar";
 import CookieBanner from "@/components/CookieBanner";
 import FormValidationMessages from "@/components/FormValidationMessages";
 import AffiliateRefCapture from "@/components/AffiliateRefCapture";
+import { SiteDialogHost } from "@/components/ui/site-dialog";
 import "./globals.css";
 
 const outfit = Outfit({
@@ -123,6 +124,7 @@ export default function RootLayout({
           <VisitTracker />
           <MobileTabBar />
           <CookieBanner />
+          <SiteDialogHost />
         </TooltipProvider>
       </body>
     </html>

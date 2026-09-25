@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { trAuthError } from "@/lib/auth-errors";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -84,7 +85,7 @@ export default function SetPasswordPage() {
       setDone(true);
       setTimeout(() => router.push("/account"), 1500);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Şifre güncellenemedi.");
+      setError(trAuthError(err instanceof Error ? err.message : ""));
     } finally {
       setLoading(false);
     }

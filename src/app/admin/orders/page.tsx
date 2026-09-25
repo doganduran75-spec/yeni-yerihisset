@@ -162,6 +162,16 @@ export default function OrdersPage() {
   const [refundLoading, setRefundLoading] = useState(false);
   const [refundResult, setRefundResult] = useState<{ ok: boolean; msg: string } | null>(null);
 
+  // ─── Liste: arama / süzgeç / sıralama / sayfalama ──────────────────────────
+  const [q, setQ] = useState("");
+  const [fPay, setFPay] = useState("all");
+  const [fShip, setFShip] = useState("all");
+  const [fInv, setFInv] = useState("all");
+  const [fMethod, setFMethod] = useState("all");
+  const [sortKey, setSortKey] = useState<"no" | "customer" | "date" | "amount" | "pay" | "ship" | "inv">("date");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [listPage, setListPage] = useState(0);
+
   useEffect(() => { fetchOrders(); }, []);
 
   // Yeni Sipariş diyaloğu açılınca satılabilir birimleri (stok dahil) yükle
@@ -643,6 +653,72 @@ export default function OrdersPage() {
     );
   }
 
+  // ─── Liste hesaplama ──────────────────────────────────────────────────────
+  const LIST_PAGE = 50;
+  const trNorm = (v: unknown) => String(v ?? "").toLocaleLowerCase("tr-TR");
+  const customerName = (o: Order) => {
+    const n = `${o.profiles?.first_name ?? ""} ${o.profiles?.last_name ?? ""}`.trim();
+    if (n) return n;
+    try { const a = typeof o.shipping_address === "string" ? JSON.parse(o.shipping_address as any) : (o.shipping_address as any); return a?.name || ""; } catch { return ""; }
+  };
+  const PAY_ORDER: Record<string, number> = { pending: 0, failed: 1, paid: 2 };
+  const SHIP_ORDER: Record<string, number> = { waiting: 0, preparing: 1, shipped: 2, delivered: 3, cancelled: 4 };
+  const INV_ORDER: Record<string, number> = { pending: 0, invoiced: 1 };
+  const visibleOrders = (() => {
+    const needle = trNorm(q.trim()).replace(/^#/, "");
+    const list = orders.filter((o) => {
+      if (fPay !== "all" && (o.payment_status || "pending") !== fPay) return false;
+      if (fShip !== "all" && (o.shipment_status || "waiting") !== fShip) return false;
+      if (fInv !== "all" && (o.invoice_status || "pending") !== fInv) return false;
+      if (fMethod !== "all" && (o.payment_method || "credit_card") !== fMethod) return false;
+      if (!needle) return true;
+      const hay = trNorm([
+        o.order_number ? `yh${o.order_number}` : "", o.order_number, o.id,
+        customerName(o), o.profiles?.email, o.profiles?.phone,
+      ].filter(Boolean).join(" "));
+      return needle.split(/\s+/).every((t) => hay.includes(t));
+    });
+    const val = (o: Order): number | string => {
+      switch (sortKey) {
+        case "no": return Number(o.order_number ?? 0);
+        case "customer": return trNorm(customerName(o));
+        case "amount": return Number(o.total_amount ?? 0);
+        case "pay": return PAY_ORDER[o.payment_status || "pending"] ?? 0;
+        case "ship": return SHIP_ORDER[o.shipment_status || "waiting"] ?? 0;
+        case "inv": return INV_ORDER[o.invoice_status || "pending"] ?? 0;
+        default: return new Date(o.created_at).getTime();
+      }
+    };
+    const dir = sortDir === "asc" ? 1 : -1;
+    return [...list].sort((a, b) => {
+      const va = val(a), vb = val(b);
+      if (typeof va === "string" || typeof vb === "string") return String(va).localeCompare(String(vb), "tr") * dir;
+      return (va - vb) * dir;
+    });
+  })();
+  const listPageCount = Math.max(1, Math.ceil(visibleOrders.length / LIST_PAGE));
+  const safeListPage = Math.min(listPage, listPageCount - 1);
+  const pagedOrders = visibleOrders.slice(safeListPage * LIST_PAGE, safeListPage * LIST_PAGE + LIST_PAGE);
+  const filtersActive = !!q.trim() || fPay !== "all" || fShip !== "all" || fInv !== "all" || fMethod !== "all";
+
+  function toggleSort(k: typeof sortKey) {
+    if (sortKey === k) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortKey(k); setSortDir(k === "customer" ? "asc" : "desc"); }
+    setListPage(0);
+  }
+  function SortHead({ k, children, className }: { k: typeof sortKey; children: React.ReactNode; className?: string }) {
+    const active = sortKey === k;
+    return (
+      <TableHead className={className}>
+        <button onClick={() => toggleSort(k)} className={`inline-flex items-center gap-1 hover:text-foreground ${active ? "text-foreground font-bold" : ""}`}>
+          {children}
+          <span className="text-[10px]">{active ? (sortDir === "asc" ? "▲" : "▼") : "↕"}</span>
+        </button>
+      </TableHead>
+    );
+  }
+  const selCls = "h-9 rounded-lg border border-input bg-background px-2 text-xs font-medium";
+
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
@@ -673,20 +749,75 @@ export default function OrdersPage() {
               Sistemde henüz sipariş bulunmuyor.
             </div>
           ) : (
+            <>
+            {/* Arama + süzgeçler */}
+            <div className="flex flex-wrap items-center gap-2 mb-4">
+              <div className="relative flex-1 min-w-[220px]">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  value={q}
+                  onChange={(e) => { setQ(e.target.value); setListPage(0); }}
+                  placeholder="Ara: sipariş no (YH25018), ad soyad, e-posta, telefon…"
+                  className="w-full h-9 pl-8 pr-3 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring/30"
+                />
+              </div>
+              <select value={fPay} onChange={(e) => { setFPay(e.target.value); setListPage(0); }} className={selCls}>
+                <option value="all">Ödeme: tümü</option>
+                {Object.entries(paymentLabels).map(([k, l]) => <option key={k} value={k}>Ödeme: {l}</option>)}
+              </select>
+              <select value={fShip} onChange={(e) => { setFShip(e.target.value); setListPage(0); }} className={selCls}>
+                <option value="all">Sevkiyat: tümü</option>
+                {Object.entries(shipmentLabels).map(([k, l]) => <option key={k} value={k}>Sevkiyat: {l}</option>)}
+              </select>
+              <select value={fInv} onChange={(e) => { setFInv(e.target.value); setListPage(0); }} className={selCls}>
+                <option value="all">Fatura: tümü</option>
+                {Object.entries(invoiceLabels).map(([k, l]) => <option key={k} value={k}>Fatura: {l}</option>)}
+              </select>
+              <select value={fMethod} onChange={(e) => { setFMethod(e.target.value); setListPage(0); }} className={selCls}>
+                <option value="all">Yöntem: tümü</option>
+                <option value="credit_card">Yöntem: Kart</option>
+                <option value="bank_transfer">Yöntem: Havale/EFT</option>
+                <option value="store_credit">Yöntem: YH Kredisi</option>
+              </select>
+              {filtersActive && (
+                <button
+                  onClick={() => { setQ(""); setFPay("all"); setFShip("all"); setFInv("all"); setFMethod("all"); setListPage(0); }}
+                  className="h-9 px-3 rounded-lg text-xs font-bold text-muted-foreground hover:text-foreground"
+                >
+                  Temizle
+                </button>
+              )}
+              <span className="text-xs text-muted-foreground ml-auto">{visibleOrders.length} / {orders.length} sipariş</span>
+            </div>
+            {visibleOrders.length === 0 ? (
+              <div className="py-8 text-center text-muted-foreground border border-dashed rounded-lg">
+                Aramaya / süzgeçlere uyan sipariş yok.
+              </div>
+            ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Sipariş / Müşteri</TableHead>
-                  <TableHead>Tarih</TableHead>
-                  <TableHead>Tutar</TableHead>
-                  <TableHead>Ödeme</TableHead>
-                  <TableHead>Sevkiyat</TableHead>
-                  <TableHead>Fatura</TableHead>
+                  <TableHead>
+                    <span className="inline-flex items-center gap-2">
+                      <button onClick={() => toggleSort("no")} className={`inline-flex items-center gap-1 hover:text-foreground ${sortKey === "no" ? "text-foreground font-bold" : ""}`}>
+                        Sipariş <span className="text-[10px]">{sortKey === "no" ? (sortDir === "asc" ? "▲" : "▼") : "↕"}</span>
+                      </button>
+                      /
+                      <button onClick={() => toggleSort("customer")} className={`inline-flex items-center gap-1 hover:text-foreground ${sortKey === "customer" ? "text-foreground font-bold" : ""}`}>
+                        Müşteri <span className="text-[10px]">{sortKey === "customer" ? (sortDir === "asc" ? "▲" : "▼") : "↕"}</span>
+                      </button>
+                    </span>
+                  </TableHead>
+                  <SortHead k="date">Tarih</SortHead>
+                  <SortHead k="amount">Tutar</SortHead>
+                  <SortHead k="pay">Ödeme</SortHead>
+                  <SortHead k="ship">Sevkiyat</SortHead>
+                  <SortHead k="inv">Fatura</SortHead>
                   <TableHead className="text-right">İşlemler</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {orders.map((order) => {
+                {pagedOrders.map((order) => {
                   const pStatus = order.payment_status  || "pending";
                   const sStatus = order.shipment_status || "waiting";
                   const iStatus = order.invoice_status  || "pending";
@@ -834,6 +965,18 @@ export default function OrdersPage() {
                 })}
               </TableBody>
             </Table>
+            )}
+            {visibleOrders.length > LIST_PAGE && (
+              <div className="flex items-center justify-between pt-4 text-xs text-muted-foreground">
+                <span>{safeListPage * LIST_PAGE + 1}–{Math.min((safeListPage + 1) * LIST_PAGE, visibleOrders.length)} / {visibleOrders.length}</span>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="outline" disabled={safeListPage === 0} onClick={() => setListPage(safeListPage - 1)}>Önceki</Button>
+                  <span className="font-bold">{safeListPage + 1} / {listPageCount}</span>
+                  <Button size="sm" variant="outline" disabled={safeListPage >= listPageCount - 1} onClick={() => setListPage(safeListPage + 1)}>Sonraki</Button>
+                </div>
+              </div>
+            )}
+            </>
           )}
         </CardContent>
       </Card>
