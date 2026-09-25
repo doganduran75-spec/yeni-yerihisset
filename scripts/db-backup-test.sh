@@ -42,10 +42,22 @@ du -sh /opt/yerihisset-supabase/volumes/storage 2>/dev/null | sed 's/^/    /' ||
 line; echo "2) TAZE YEDEK (pg_dump, salt okuma)"; line
 mkdir -p "$OUT_DIR"
 T0=$(date +%s)
-if docker exec "$DB_CONTAINER" pg_dump -U postgres -d postgres -Fc --no-comments > "$DUMP" 2> "$OUT_DIR/dump-$STAMP.err"; then
+# Supabase'te tam yetkili kullanıcı supabase_admin'dir (auth/storage şemalarının
+# sahibi). postgres kullanıcısı bu şemalara geri yükleme YAPAMAZ → kullanıcı
+# hesapları (auth.users) kaybolur. Mümkünse supabase_admin kullan.
+DUMP_USER=postgres
+docker exec "$DB_CONTAINER" psql -U supabase_admin -d postgres -tAc "select 1" >/dev/null 2>&1 && DUMP_USER=supabase_admin
+echo "  Yedek kullanıcısı: $DUMP_USER"
+if docker exec "$DB_CONTAINER" pg_dump -U "$DUMP_USER" -d postgres -Fc --no-comments > "$DUMP" 2> "$OUT_DIR/dump-$STAMP.err"; then
   ok "Yedek alındı: $DUMP ($(du -h "$DUMP" | cut -f1), $(( $(date +%s) - T0 )) sn)"
 else
   warn "pg_dump HATA verdi — ayrıntı: $OUT_DIR/dump-$STAMP.err"; tail -5 "$OUT_DIR/dump-$STAMP.err"; exit 1
+fi
+# Yedekte kullanıcı hesapları (auth.users verisi) var mı?
+if docker exec -i "$DB_CONTAINER" pg_restore -l < "$DUMP" 2>/dev/null | grep -q "TABLE DATA auth users"; then
+  ok "Yedekte kullanıcı hesapları (auth.users) VAR"
+else
+  warn "Yedekte auth.users verisi YOK"
 fi
 
 line; echo "3) GERİ YÜKLEME TESTİ (geçici konteyner)"; line
@@ -60,7 +72,15 @@ for i in $(seq 1 60); do
 done; echo
 sleep 5
 T0=$(date +%s)
-docker exec -i "$TMP_CONTAINER" pg_restore -U postgres -d postgres --no-owner --clean --if-exists < "$DUMP" > "$OUT_DIR/restore-$STAMP.log" 2>&1
+PW="restoretest-$STAMP"
+RU=postgres
+docker exec -e PGPASSWORD="$PW" "$TMP_CONTAINER" psql -h 127.0.0.1 -U supabase_admin -d postgres -tAc "select 1" >/dev/null 2>&1 && RU=supabase_admin
+echo "  Geri yükleme kullanıcısı: $RU"
+if [ "$RU" = "supabase_admin" ]; then
+  docker exec -i -e PGPASSWORD="$PW" "$TMP_CONTAINER" pg_restore -h 127.0.0.1 -U supabase_admin -d postgres --clean --if-exists < "$DUMP" > "$OUT_DIR/restore-$STAMP.log" 2>&1
+else
+  docker exec -i "$TMP_CONTAINER" pg_restore -U postgres -d postgres --no-owner --clean --if-exists < "$DUMP" > "$OUT_DIR/restore-$STAMP.log" 2>&1
+fi
 ERRS=$(grep -c "error:" "$OUT_DIR/restore-$STAMP.log" || true)
 echo "  Geri yükleme süresi: $(( $(date +%s) - T0 )) sn — pg_restore hata satırı: $ERRS"
 echo "  (Supabase iç şemalarında birkaç 'already exists' hatası normaldir; public tablolar önemli.)"
@@ -68,15 +88,28 @@ echo "  (Supabase iç şemalarında birkaç 'already exists' hatası normaldir; 
 line; echo "4) SATIR SAYISI KARŞILAŞTIRMA (canlı ↔ geri yüklenen)"; line
 printf '  %-24s %10s %10s  %s\n' "TABLO" "CANLI" "YEDEK" "DURUM"
 FAIL=0
+tmpq() {
+  if [ "$RU" = "supabase_admin" ]; then
+    docker exec -e PGPASSWORD="$PW" "$TMP_CONTAINER" psql -h 127.0.0.1 -U supabase_admin -d postgres -tAc "$1" 2>/dev/null || echo "yok"
+  else
+    docker exec "$TMP_CONTAINER" psql -U postgres -d postgres -tAc "$1" 2>/dev/null || echo "yok"
+  fi
+}
 for t in $TABLES; do
   a=$(docker exec "$DB_CONTAINER"  psql -U postgres -d postgres -tAc "SELECT count(*) FROM public.$t" 2>/dev/null || echo "yok")
-  b=$(docker exec "$TMP_CONTAINER" psql -U postgres -d postgres -tAc "SELECT count(*) FROM public.$t" 2>/dev/null || echo "yok")
+  b=$(tmpq "SELECT count(*) FROM public.$t")
   if [ "$a" = "yok" ]; then s="(tablo yok)"; elif [ "$a" = "$b" ]; then s="OK"; else s="FARKLI"; FAIL=1; fi
   printf '  %-24s %10s %10s  %s\n' "$t" "$a" "$b" "$s"
 done
 AU_A=$(docker exec "$DB_CONTAINER"  psql -U postgres -d postgres -tAc "SELECT count(*) FROM auth.users" 2>/dev/null)
-AU_B=$(docker exec "$TMP_CONTAINER" psql -U postgres -d postgres -tAc "SELECT count(*) FROM auth.users" 2>/dev/null)
-printf '  %-24s %10s %10s  %s\n' "auth.users" "$AU_A" "$AU_B" "$([ "$AU_A" = "$AU_B" ] && echo OK || { FAIL=1; echo FARKLI; })"
+AU_B=$(tmpq "SELECT count(*) FROM auth.users")
+if [ "$AU_A" = "$AU_B" ]; then AU_S="OK"; else AU_S="FARKLI"; FAIL=1; fi
+printf '  %-24s %10s %10s  %s\n' "auth.users" "$AU_A" "$AU_B" "$AU_S"
+OB_A=$(docker exec "$DB_CONTAINER" psql -U postgres -d postgres -tAc "SELECT count(*) FROM storage.objects" 2>/dev/null)
+OB_B=$(tmpq "SELECT count(*) FROM storage.objects")
+if [ "$OB_A" = "$OB_B" ]; then OB_S="OK"; else OB_S="FARKLI"; FAIL=1; fi
+printf '  %-24s %10s %10s  %s\n' "storage.objects (kayıt)" "$OB_A" "$OB_B" "$OB_S"
+echo "  Not: görsel DOSYALARI veritabanında değil, disktedir (volumes/storage) — ayrıca yedeklenmeli."
 
 line; echo "5) TEMİZLİK"; line
 docker rm -f "$TMP_CONTAINER" >/dev/null 2>&1 && ok "Geçici konteyner silindi"
