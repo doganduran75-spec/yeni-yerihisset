@@ -88,7 +88,8 @@ log "Yerel yedek TAMAM — $COUNT yedek, toplam $TOTAL"
 #    Başarısız olursa yerel yedek yine geçerli; log'a UYARI yazılır, çıkış kodu 2.
 OFFSITE_REMOTE="${OFFSITE_REMOTE:-gdrive-crypt}"
 OFFSITE_KEEP_DAYS="${OFFSITE_KEEP_DAYS:-30}"
-if command -v rclone >/dev/null 2>&1 && rclone listremotes 2>/dev/null | grep -qx "${OFFSITE_REMOTE}:"; then
+REMOTES="$(rclone listremotes 2>/dev/null || true)"
+if command -v rclone >/dev/null 2>&1 && grep -qx "${OFFSITE_REMOTE}:" <<< "$REMOTES"; then
   if rclone copy "$DIR" "$OFFSITE_REMOTE:daily/$STAMP" --retries 3 --low-level-retries 10 >/dev/null 2>"$BASE_DIR/.offsite.err"; then
     N=$(rclone ls "$OFFSITE_REMOTE:daily/$STAMP" 2>/dev/null | wc -l)
     log "Drive kopyası OK ($N dosya → $OFFSITE_REMOTE:daily/$STAMP)"
