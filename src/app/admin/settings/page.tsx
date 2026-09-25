@@ -111,9 +111,15 @@ function SettingsPageInner() {
 
   async function fetchSettings() {
     try {
-      const { data, error } = await supabase.from("settings").select("*").order("updated_at", { ascending: true }).limit(1);
-      if (error) throw error;
-      if (data && data.length > 0) setSettings({ ...DEFAULT_SETTINGS, ...data[0] } as Settings);
+      // Gizli alanlar (SMTP şifresi vb.) tarayıcıdan okunamaz → admin API'si
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch("/api/admin/settings", {
+        headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+        cache: "no-store",
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || "Ayarlar okunamadı");
+      if (d.settings) setSettings({ ...DEFAULT_SETTINGS, ...d.settings } as Settings);
     } catch (error) {
       console.error("Error fetching settings:", error);
     } finally {

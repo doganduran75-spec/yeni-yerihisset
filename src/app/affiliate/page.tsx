@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { createClient } from "@supabase/supabase-js";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -12,12 +13,27 @@ import {
 } from "lucide-react";
 
 export const metadata = {
-  title: "Affiliate Programı",
+  title: "Satış Ortaklığı Programı",
   description:
-    "YeriHisset affiliate programına katıl, paylaşımlarından kazanç elde et.",
+    "YeriHisset satış ortaklığı programına katıl, paylaşımlarından YeriHisset Kredisi kazan.",
 };
 
-const steps = [
+// Oran admin'den değişebilir → sayfa 5 dk'da bir tazelenir
+export const revalidate = 300;
+
+async function getDefaultRate(): Promise<number> {
+  try {
+    const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+    const { data } = await (sb as any).from("settings").select("affiliate_default_rate").limit(1).maybeSingle();
+    return Number(data?.affiliate_default_rate ?? 10) || 10;
+  } catch {
+    return 10;
+  }
+}
+
+const SITE = (process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com").replace(/^https?:\/\//, "");
+
+const getSteps = (rate: number) => [
   {
     num: "01",
     title: "Başvur",
@@ -26,23 +42,26 @@ const steps = [
   {
     num: "02",
     title: "Linki Paylaş",
-    desc: "İstediğin herhangi bir ürün URL'sinin sonuna ?ref=KODUN ekle. Örn: /products/vazo?ref=ahmet12",
+    desc: `En kolayı ana sayfa linkin: ${SITE}/?ref=KODUN. İstersen mağaza, kategori ya da bir ürün linkinin sonuna da ?ref=KODUN ekleyebilirsin.`,
   },
   {
     num: "03",
     title: "Kazanç Elde Et",
-    desc: "Linkinle gelen ziyaretçi 30 gün içinde alışveriş yaparsa %10 komisyon hesabına yansır.",
+    desc: `Linkinle gelen ziyaretçi 30 gün içinde alışveriş yaparsa, siparişin %${rate}'i YeriHisset Kredisi olarak hesabına eklenir.`,
   },
 ];
 
-const benefits = [
-  { icon: Banknote, title: "%10 Komisyon", desc: "Her başarılı satıştan net komisyon kazan." },
-  { icon: Link2, title: "Hazır Link", desc: "Ayrı bir link oluşturmana gerek yok. İstediğin ürüne ref parametresi ekle." },
+const getBenefits = (rate: number) => [
+  { icon: Banknote, title: `%${rate} Kazanç`, desc: "Tamamlanan her satıştan YeriHisset Kredisi kazan; sitede alışverişte indirim olarak kullan." },
+  { icon: Link2, title: "Hazır Link", desc: "Ayrı bir link oluşturmana gerek yok. Ana sayfa ya da istediğin sayfanın linkine ?ref=KODUN ekle." },
   { icon: TrendingUp, title: "Gerçek Zamanlı İstatistik", desc: "Tıklama ve satış verilerini hesabından anlık izle." },
   { icon: Users, title: "30 Gün Çerez", desc: "Ziyaretçi 30 gün içinde alışveriş yaparsa komisyon sana ait." },
 ];
 
-export default function AffiliateLandingPage() {
+export default async function AffiliateLandingPage() {
+  const rate = await getDefaultRate();
+  const steps = getSteps(rate);
+  const benefits = getBenefits(rate);
   return (
     <div className="min-h-screen bg-white">
       {/* Header */}
@@ -76,15 +95,15 @@ export default function AffiliateLandingPage() {
         </div>
         <div className="container mx-auto px-4 text-center relative">
           <div className="inline-flex items-center gap-2 bg-white/20 rounded-full px-4 py-2 text-sm font-bold mb-6 backdrop-blur-sm">
-            <Star size={14} fill="currentColor" /> Affiliate Programı
+            <Star size={14} fill="currentColor" /> Satış Ortaklığı
           </div>
           <h1 className="text-5xl md:text-7xl font-black tracking-tighter mb-6 leading-tight">
             Paylaş,<br />
             <span className="text-olive-200">Kazan.</span>
           </h1>
           <p className="text-xl text-olive-100 max-w-2xl mx-auto mb-10 font-medium leading-relaxed">
-            YeriHisset ürünlerini paylaş, her satıştan %10 komisyon kazan.
-            Bağlantı oluşturmana gerek yok — sadece URL'ye <code className="bg-white/20 px-2 py-0.5 rounded font-mono">?ref=KODUN</code> ekle.
+            YeriHisset&apos;i paylaş, her satıştan %{rate} YeriHisset Kredisi kazan.
+            Bağlantı oluşturmana gerek yok — ana sayfa linkinin sonuna <code className="bg-white/20 px-2 py-0.5 rounded font-mono">?ref=KODUN</code> eklemen yeter.
           </p>
           <Link
             href="/account?tab=affiliate"
@@ -104,7 +123,7 @@ export default function AffiliateLandingPage() {
           <div className="text-center mb-16">
             <h2 className="text-4xl font-black text-slate-900 mb-4">Nasıl Çalışır?</h2>
             <p className="text-slate-500 font-medium max-w-xl mx-auto">
-              3 adımda affiliate kazancına başla.
+              3 adımda satış ortaklığı kazancına başla.
             </p>
           </div>
           <div className="grid md:grid-cols-3 gap-8 max-w-4xl mx-auto">
@@ -149,15 +168,15 @@ export default function AffiliateLandingPage() {
             {[
               {
                 q: "Başvuru ücreti var mı?",
-                a: "Hayır, affiliate programına katılmak tamamen ücretsizdir.",
+                a: "Hayır, satış ortaklığı programına katılmak tamamen ücretsizdir.",
               },
               {
-                q: "Komisyon ne zaman ödenir?",
-                a: "Sipariş teslim edildikten ve iade süresi (14 gün) dolduktan sonra komisyon onaylanır ve ödeme yapılır.",
+                q: "Kazancım ne zaman ve nasıl hesabıma geçer?",
+                a: "Kazanç nakit ödenmez; YeriHisset Kredisi olarak hesabına eklenir. Her ay, bir önceki ay teslim edilip tamamlanan (iade edilmemiş) siparişler üzerinden hesaplanır. Krediyi sepette indirim olarak kullanırsın.",
               },
               {
                 q: "Linki nasıl kullanırım?",
-                a: "Herhangi bir ürün sayfasının URL'sine ?ref=KODUN eklemen yeterli. Örneğin: yerihisset.com/products/dekoratif-vazo?ref=ahmet12",
+                a: `En basiti ana sayfa linkini paylaşmak: ${SITE}/?ref=KODUN. Belirli bir ürünü öneriyorsan o ürünün linkine de ekleyebilirsin: ${SITE}/products/urun-adi?ref=KODUN. Hangi sayfadan gelirse gelsin, 30 gün içindeki alışveriş sana yazılır.`,
               },
               {
                 q: "Çerez süresi nedir?",
@@ -193,7 +212,7 @@ export default function AffiliateLandingPage() {
                 "h-14 px-10 text-lg font-black rounded-2xl text-olive-700"
               )}
             >
-              Affiliate Ol
+              Satış Ortağı Ol
             </Link>
             <Link
               href="/login"

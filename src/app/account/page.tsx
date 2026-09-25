@@ -290,6 +290,8 @@ function AccountPageInner() {
   useEffect(() => {
     if (openSection === "affiliate" && !affiliate && !affiliateLoading) {
       fetchAffiliateData();
+      (supabase as any).from("settings").select("affiliate_default_rate").limit(1).maybeSingle()
+        .then(({ data }: any) => { if (data?.affiliate_default_rate != null) setAffDefaultRate(Number(data.affiliate_default_rate)); });
     }
     if (openSection === "coupons") {
       fetchUserCoupons();
@@ -485,12 +487,15 @@ function AccountPageInner() {
     }
   }
 
-  function copyAffiliateCode(code: string) {
-    const siteUrl =
-      process.env.NEXT_PUBLIC_SITE_URL || window.location.origin;
-    navigator.clipboard.writeText(`${siteUrl}?ref=${code}`).then(() => {
-      setAffiliateCopied(true);
-      setTimeout(() => setAffiliateCopied(false), 2000);
+  const [affDefaultRate, setAffDefaultRate] = useState<number | null>(null);
+  const [copiedLinkKey, setCopiedLinkKey] = useState<string | null>(null);
+  const affSiteUrl = () => (process.env.NEXT_PUBLIC_SITE_URL || (typeof window !== "undefined" ? window.location.origin : "https://yerihisset.com")).replace(/\/$/, "");
+
+  function copyAffiliateCode(code: string, path = "/", key = "home") {
+    navigator.clipboard.writeText(`${affSiteUrl()}${path}?ref=${code}`).then(() => {
+      setAffiliateCopied(key === "home");
+      setCopiedLinkKey(key);
+      setTimeout(() => { setAffiliateCopied(false); setCopiedLinkKey(null); }, 2000);
     });
   }
 
@@ -1326,7 +1331,7 @@ function AccountPageInner() {
                     <div className="bg-gradient-to-r from-olive-600 to-olive-700 p-8 text-white">
                       <h3 className="text-2xl font-black mb-2">Satış Ortağı Ol, Kazan</h3>
                       <p className="text-olive-100 font-medium">
-                        Her satıştan %10 komisyon kazan. Aşağıdaki soruları yanıtla ve hemen başla.
+                        Linkinle gelen her satıştan %{affDefaultRate ?? 10} YeriHisset Kredisi kazan. Aşağıdaki soruları yanıtla ve hemen başla.
                       </p>
                     </div>
                     <CardContent className="p-8">
@@ -1410,8 +1415,9 @@ function AccountPageInner() {
                             {affiliateCopied ? "Kopyalandı!" : "Ortaklık Linkini Kopyala"}
                           </button>
                         </div>
-                        <p className="text-slate-400 text-sm mt-3 font-medium">
-                          Herhangi bir ürün URL'sine <code className="bg-white/10 px-1.5 py-0.5 rounded font-mono text-white">?ref={affiliate.code}</code> ekleyin
+                        <p className="text-slate-300 text-sm mt-3 font-medium">
+                          Komisyon oranın: <b className="text-white">%{affiliate.commission_rate}</b> · Kopyalanan link ana sayfa linkindir:{" "}
+                          <code className="bg-white/10 px-1.5 py-0.5 rounded font-mono text-white break-all">{affSiteUrl()}/?ref={affiliate.code}</code>
                         </p>
                       </div>
                     </Card>
@@ -1478,14 +1484,42 @@ function AccountPageInner() {
 
                     {/* Nasıl Kullanılır */}
                     <Card className="border-none shadow-sm bg-slate-50">
-                      <CardContent className="p-6">
-                        <h4 className="font-bold text-slate-900 mb-3">Link Nasıl Kullanılır?</h4>
-                        <p className="text-sm text-slate-600 font-medium leading-relaxed">
-                          İstediğiniz herhangi bir ürün URL'sinin sonuna <code className="bg-white border rounded px-1.5 py-0.5 font-mono text-olive-600 text-xs">?ref={affiliate.code}</code> ekleyin.
-                        </p>
-                        <div className="mt-3 bg-white border rounded-xl p-3 font-mono text-xs text-slate-500 break-all">
-                          {`${typeof window !== "undefined" ? window.location.origin : "https://yerihisset.com"}/products/ornek-urun?ref=${affiliate.code}`}
+                      <CardContent className="p-6 space-y-4">
+                        <div>
+                          <h4 className="font-bold text-slate-900 mb-1">Linkini nasıl paylaşırsın?</h4>
+                          <p className="text-sm text-slate-600 font-medium leading-relaxed">
+                            En kolayı <b>ana sayfa linkini</b> paylaşmak — ürün seçmene gerek yok. Linkinle gelen kişi siteyi dilediği gibi gezer;
+                            <b> 30 gün içinde</b> hangi ürünü alırsa alsın satış sana yazılır. Belirli bir ürünü öneriyorsan o sayfanın linkini de
+                            kullanabilirsin: herhangi bir sayfa adresinin sonuna <code className="bg-white border rounded px-1.5 py-0.5 font-mono text-olive-600 text-xs">?ref={affiliate.code}</code> eklemen yeterli.
+                          </p>
                         </div>
+                        <div className="space-y-2">
+                          {[
+                            { key: "home", label: "Ana sayfa (önerilen)", path: "/" },
+                            { key: "store", label: "Mağaza (tüm ürünler)", path: "/products" },
+                            { key: "deals", label: "Fırsatlar", path: "/firsatlar" },
+                          ].map((l) => (
+                            <div key={l.key} className="flex items-center gap-2 bg-white border rounded-xl p-2 pl-3">
+                              <div className="min-w-0 flex-1">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{l.label}</p>
+                                <p className="font-mono text-xs text-slate-600 break-all">{affSiteUrl()}{l.path}?ref={affiliate.code}</p>
+                              </div>
+                              <button
+                                onClick={() => copyAffiliateCode(affiliate.code, l.path, l.key)}
+                                className="shrink-0 flex items-center gap-1 h-8 px-3 rounded-lg bg-olive-600 text-white text-xs font-bold hover:bg-olive-700"
+                              >
+                                <Copy size={12} /> {copiedLinkKey === l.key ? "Kopyalandı" : "Kopyala"}
+                              </button>
+                            </div>
+                          ))}
+                          <p className="text-[11px] text-slate-400 px-1">
+                            Ürün linki örneği: <span className="font-mono">{affSiteUrl()}/products/urun-adi?ref={affiliate.code}</span>
+                          </p>
+                        </div>
+                        <p className="text-xs text-slate-500 leading-relaxed">
+                          Kazancın nakit değil, <b>YeriHisset Kredisi</b> olarak hesabına eklenir: her ay, bir önceki ay teslim edilip tamamlanan
+                          siparişler üzerinden hesaplanır ve sepette indirim olarak kullanılır.
+                        </p>
                       </CardContent>
                     </Card>
 
