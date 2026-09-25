@@ -16,8 +16,8 @@
 # Otomatik (cron):   /etc/cron.d/yerihisset-backup  (kurulum komutu README/rehberde)
 # Log:               /var/log/yerihisset-backup.log
 #
-# NOT: Bu yedekler AYNI sunucuda durur → disk/sunucu kaybında işe yaramaz.
-# Bir sonraki adım: sunucu DIŞINA şifreli kopya (offsite).
+# Sunucu dışı kopya: Google Drive (rclone "gdrive-crypt", şifreli, 30 gün).
+# Şifre parolaları sunucu DIŞINDA saklanmalı (sunucu kaybında tek anahtar).
 
 set -uo pipefail
 
@@ -81,4 +81,26 @@ log "Temizlik: $DELETED eski yedek silindi (saklama: $KEEP_DAYS gün)"
 
 TOTAL=$(du -sh "$BASE_DIR" | cut -f1)
 COUNT=$(find "$BASE_DIR" -mindepth 1 -maxdepth 1 -type d | wc -l)
-log "Yedek TAMAM — $COUNT yedek, toplam $TOTAL"
+log "Yerel yedek TAMAM — $COUNT yedek, toplam $TOTAL"
+
+# 6) Sunucu DIŞI kopya: Google Drive (rclone "gdrive-crypt" = şifreli katman).
+#    Dosyalar Drive'a gitmeden önce şifrelenir; parolalar sunucu dışında saklanmalı.
+#    Başarısız olursa yerel yedek yine geçerli; log'a UYARI yazılır, çıkış kodu 2.
+OFFSITE_REMOTE="${OFFSITE_REMOTE:-gdrive-crypt}"
+OFFSITE_KEEP_DAYS="${OFFSITE_KEEP_DAYS:-30}"
+if command -v rclone >/dev/null 2>&1 && rclone listremotes 2>/dev/null | grep -qx "${OFFSITE_REMOTE}:"; then
+  if rclone copy "$DIR" "$OFFSITE_REMOTE:daily/$STAMP" --retries 3 --low-level-retries 10 >/dev/null 2>"$BASE_DIR/.offsite.err"; then
+    N=$(rclone ls "$OFFSITE_REMOTE:daily/$STAMP" 2>/dev/null | wc -l)
+    log "Drive kopyası OK ($N dosya → $OFFSITE_REMOTE:daily/$STAMP)"
+    rclone delete "$OFFSITE_REMOTE:daily" --min-age "${OFFSITE_KEEP_DAYS}d" >/dev/null 2>&1
+    rclone rmdirs "$OFFSITE_REMOTE:daily" --leave-root >/dev/null 2>&1
+    rm -f "$BASE_DIR/.offsite.err"
+  else
+    log "UYARI: Drive kopyası BAŞARISIZ — $(tail -2 "$BASE_DIR/.offsite.err" | tr '\n' ' ')"
+    exit 2
+  fi
+else
+  log "UYARI: Drive kopyası atlandı (rclone ya da '$OFFSITE_REMOTE' ayarı yok)"
+  exit 2
+fi
+log "Yedek TAMAM (yerel + Drive)"
