@@ -10,7 +10,7 @@ import { Mail, Smartphone, CheckCircle, XCircle, MinusCircle, ArrowRight, Loader
 
 type LogEntry = {
   id: string;
-  created_at: string;
+  created_at: string | null;
   trigger: string | null;
   channel: string | null;
   status: string | null;
@@ -145,7 +145,7 @@ export default function CrmPage() {
                   {logs.map((log) => (
                     <tr key={log.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
                       <td className="py-2.5 px-3 text-xs text-muted-foreground whitespace-nowrap">
-                        {new Date(log.created_at).toLocaleString("tr-TR")}
+                        {log.created_at ? new Date(log.created_at).toLocaleString("tr-TR") : "—"}
                       </td>
                       <td className="py-2.5 px-3 text-xs">
                         {triggerLabels[log.trigger ?? ""] || log.trigger || "-"}

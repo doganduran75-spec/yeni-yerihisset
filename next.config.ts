@@ -35,10 +35,11 @@ const nextConfig: NextConfig = {
   // Bunu bundle'a dahil etmeyip çalışma anında Node ile yükletiyoruz.
   serverExternalPackages: ["iyzipay"],
 
-  // ─── Build: mevcut tip borçları derlemeyi durdurmasın ────────────────────
-  // Not: Geçici. Stale database.types.ts yüzünden; tipler tazelenince kaldırılmalı.
-  // (Next 16 artık build'de ESLint çalıştırmıyor; eski `eslint` anahtarı kaldırıldı.)
-  typescript: { ignoreBuildErrors: true },
+  // ─── Build: tip hataları derlemeyi DURDURUR ─────────────────────────────
+  // (ignoreBuildErrors kaldırıldı; src/lib/database.types.ts self-host şemasından
+  // üretildi). Migration ile tablo/kolon eklenince tipleri yenile:
+  //   sunucu:  docker exec supabase-meta node -e "fetch('http://localhost:8080/generators/typescript?included_schemas=public').then(r=>r.text()).then(t=>process.stdout.write(t))" > /tmp/database.types.ts
+  //   laptop:  scp root@SUNUCU:/tmp/database.types.ts src/lib/database.types.ts
 
   // ─── Görsel Optimizasyonu ────────────────────────────────────────────────
   // next/image bileşeni bu domain'lerden gelen görselleri optimize eder

@@ -23,7 +23,7 @@ type VariantGroup = {
 
 type VariantOption = {
   id: string;
-  group_id: string;
+  group_id?: string;
   value: string;
 };
 
@@ -70,6 +70,7 @@ export default function VariantsTab() {
           .insert({ name: groupName })
           .select()
           .single();
+        if (!data) throw new Error("Grup oluşturulamadı");
         gId = data.id;
       }
       if (optionsText && gId) {

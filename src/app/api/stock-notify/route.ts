@@ -151,7 +151,7 @@ export async function POST(req: NextRequest) {
 
     const { error: insertError } = await supabase
       .from("stock_notifications")
-      .insert(row);
+      .insert(row as any); // row alanları yukarıda doğrulanarak kuruldu
 
     if (insertError) {
       console.error("stock_notify insert error:", insertError);

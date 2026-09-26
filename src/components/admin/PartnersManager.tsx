@@ -18,9 +18,9 @@ import { Plus, Edit, Trash2, Loader2, Handshake, Globe, Phone, User } from "luci
 type Partner = {
   id: string;
   company_name: string;
-  contact_person: string;
-  phone: string;
-  website: string;
+  contact_person: string | null;
+  phone: string | null;
+  website: string | null;
 };
 
 export default function PartnersPage() {

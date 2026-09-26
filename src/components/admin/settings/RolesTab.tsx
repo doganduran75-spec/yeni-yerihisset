@@ -20,7 +20,7 @@ type Role = {
   id: string;
   name: string;
   slug: string;
-  created_at: string;
+  created_at: string | null;
 };
 
 export default function RolesTab() {
@@ -171,7 +171,7 @@ export default function RolesTab() {
                       {role.slug}
                     </TableCell>
                     <TableCell className="text-sm">
-                      {new Date(role.created_at).toLocaleDateString("tr-TR")}
+                      {role.created_at ? new Date(role.created_at).toLocaleDateString("tr-TR") : "—"}
                     </TableCell>
                     <TableCell className="text-right">
                       {role.slug !== "admin" && role.slug !== "customer" && (

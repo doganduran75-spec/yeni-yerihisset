@@ -47,7 +47,7 @@ export default function EditTemplatePage({ params }: { params: Promise<{ trigger
       .single();
 
     if (data) {
-      setForm({ subject: data.subject, body_html: data.body_html, is_active: data.is_active });
+      setForm({ subject: data.subject, body_html: data.body_html, is_active: data.is_active ?? false });
     }
     setLoading(false);
   }

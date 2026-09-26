@@ -103,7 +103,7 @@ export async function POST(req: NextRequest) {
     const patch: Record<string, any> = {};
     if (body.manage_url !== undefined) patch.manage_url = body.manage_url;
     if (body.is_active !== undefined) patch.is_active = body.is_active;
-    const { error } = await supabase.from("marketplace_channels").update(patch).eq("id", body.channelId);
+    const { error } = await supabase.from("marketplace_channels").update(patch as any).eq("id", body.channelId); // patch alanları yukarıda beyaz listeden
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ ok: true });
   }

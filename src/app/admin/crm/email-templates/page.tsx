@@ -11,8 +11,8 @@ type Template = {
   id: string;
   trigger: string;
   subject: string;
-  is_active: boolean;
-  updated_at: string;
+  is_active: boolean | null;
+  updated_at: string | null;
 };
 
 const TRIGGERS = [
@@ -102,7 +102,7 @@ export default function EmailTemplatesPage() {
 
                   <div className="flex items-center gap-2 shrink-0">
                     <button
-                      onClick={() => tpl && toggleActive(key, tpl.is_active)}
+                      onClick={() => tpl && toggleActive(key, !!tpl.is_active)}
                       disabled={!tpl || toggling === key}
                       className="text-muted-foreground hover:text-slate-800 transition-colors disabled:opacity-40"
                       title={tpl?.is_active ? "Devre Dışı Bırak" : "Etkinleştir"}

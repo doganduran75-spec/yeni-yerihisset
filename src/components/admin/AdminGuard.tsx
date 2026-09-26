@@ -86,7 +86,7 @@ export default function AdminGuard({ children }: { children: React.ReactNode }) 
           Lütfen birkaç saniye sonra tekrar deneyin.
         </p>
         <button
-          onClick={check}
+          onClick={() => check()}
           className="mt-2 inline-flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-xl font-bold text-sm"
         >
           <RefreshCw size={16} /> Tekrar Dene

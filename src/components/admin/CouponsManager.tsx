@@ -110,7 +110,7 @@ export default function CouponsManager() {
 
   async function fetchCoupons() {
     const { data } = await supabase.from("coupons").select("*").order("created_at", { ascending: false });
-    setCoupons(data || []);
+    setCoupons((data || []) as Coupon[]); // type: DB CHECK ile percentage|fixed|free_shipping
     setLoading(false);
   }
 
@@ -170,7 +170,7 @@ export default function CouponsManager() {
         const { error } = await supabase.from("coupons").update(payload).eq("id", editingCoupon.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("coupons").insert(payload);
+        const { error } = await supabase.from("coupons").insert(payload as any);
         if (error) throw error;
       }
       setDialogOpen(false);

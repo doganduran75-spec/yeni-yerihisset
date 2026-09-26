@@ -11,7 +11,7 @@ import { siteAlert, siteConfirm } from "@/components/ui/site-dialog";
 
 const EMPTY = { id: "", name: "", description: "", fee: "", free_over: "", is_active: true, sort_order: 0 };
 
-async function authHeaders() {
+async function authHeaders(): Promise<Record<string, string>> {
   const { data: { session } } = await supabase.auth.getSession();
   return session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
 }

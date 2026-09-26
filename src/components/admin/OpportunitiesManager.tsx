@@ -96,7 +96,7 @@ export default function OpportunitiesPage() {
   function toggleRoleSlug(slug: string) {
     const current = form.allowed_role_slugs || [];
     const updated = current.includes(slug)
-      ? current.filter((s) => s !== slug)
+      ? current.filter((s: string) => s !== slug)
       : [...current, slug];
     setForm({ ...form, allowed_role_slugs: updated });
   }
