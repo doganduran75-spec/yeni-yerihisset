@@ -24,7 +24,21 @@ function getSupabase() {
 function extractFirstImage(html: string): string | null {
   if (!html) return null;
   const m = html.match(/<img[^>]+src=["']([^"']+)["']/i);
-  return m ? m[1] : null;
+  return m && isOptimizable(m[1]) ? m[1] : null;
+}
+
+// next/image yalnız next.config.ts'teki alan adlarını optimize eder; başka bir
+// adresten (ör. eski WordPress) gelen görsel 400 verir → kapakta kullanma.
+function isOptimizable(src: string): boolean {
+  if (src.startsWith("/")) return true;
+  try {
+    const u = new URL(src);
+    return u.protocol === "https:" && (
+      (/^supabase\.yerihisset\.com$|^ewnuurgmxhksbjixbian\.supabase\.co$/.test(u.hostname) &&
+        u.pathname.startsWith("/storage/v1/object/public/")) ||
+      u.hostname === "images.unsplash.com" || u.hostname === "img.youtube.com"
+    );
+  } catch { return false; }
 }
 
 // YouTube URL'sinden thumbnail al

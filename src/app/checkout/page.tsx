@@ -24,6 +24,7 @@ import {
   IdCard,
   Banknote,
   PackageX,
+  Pencil,
 } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -966,9 +967,14 @@ export default function CheckoutPage() {
             {/* Step 2: Billing Address — misafirde gizli (fatura = teslimat) */}
             {!isGuest && (
             <section className="space-y-6 animate-in fade-in slide-in-from-bottom-8">
-               <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 bg-olive-600 text-white rounded-2xl flex items-center justify-center font-black shadow-lg shadow-olive-100 italic">04</div>
-                  <h3 className="text-2xl font-black text-slate-900 uppercase italic tracking-tighter">Fatura Bilgileri</h3>
+               <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 bg-olive-600 text-white rounded-2xl flex items-center justify-center font-black shadow-lg shadow-olive-100 italic">04</div>
+                    <h3 className="text-2xl font-black text-slate-900 uppercase italic tracking-tighter">Fatura Bilgileri</h3>
+                  </div>
+                  <Link href="/account?tab=addresses&returnTo=/checkout" className="text-olive-600 font-black text-xs uppercase tracking-widest flex items-center gap-2 hover:translate-x-1 transition-transform">
+                    <Plus size={16} /> ADRES EKLE
+                  </Link>
                </div>
                
                <div className="bento-card bg-white !p-0 overflow-hidden">
@@ -1005,8 +1011,25 @@ export default function CheckoutPage() {
                               <p className="text-[11px] text-blue-700 font-bold mt-1 line-clamp-1">🏢 {addr.company_name} · VKN {addr.tax_number}</p>
                             )}
                             <p className="text-xs text-slate-500 mt-2 font-medium line-clamp-1">{addr.address_detail}</p>
+                            {/* Adresi düzenle → Hesabım > Adreslerim (kaydedince checkout'a döner) */}
+                            <Link
+                              href="/account?tab=addresses&returnTo=/checkout"
+                              onClick={(e) => e.stopPropagation()}
+                              className="inline-flex items-center gap-1.5 mt-3 text-[11px] font-black uppercase tracking-widest text-olive-600 hover:underline"
+                            >
+                              <Pencil size={12} /> Düzenle
+                            </Link>
                          </div>
                        ))}
+                       {/* Yeni fatura adresi (ör. kurumsal) — tek tıkla Adreslerim'e */}
+                       <Link
+                         href="/account?tab=addresses&returnTo=/checkout"
+                         className="bento-card !p-6 border-2 border-dashed border-slate-200 bg-slate-50/50 flex flex-col items-center justify-center gap-2 text-slate-400 hover:text-olive-600 hover:border-olive-300 transition-colors min-h-[140px]"
+                       >
+                         <Plus size={24} />
+                         <span className="text-xs font-black uppercase tracking-widest">Yeni fatura adresi ekle</span>
+                         <span className="text-[11px] font-medium text-slate-400">Kurumsal fatura için de buradan</span>
+                       </Link>
                     </div>
                   )}
                </div>
