@@ -50,6 +50,7 @@ export default function CheckoutPage() {
   const [guestAddr, setGuestAddr] = useState({ phone: "", city: "", district: "", addressDetail: "" });
   const [shippingMethods, setShippingMethods] = useState<any[]>([]);
   const [selectedShippingMethodId, setSelectedShippingMethodId] = useState<string>("");
+  const [shippingLoaded, setShippingLoaded] = useState(false);
   // Eksik alan doğrulaması — Sipariş Ver'e basınca ilk eksiğe kaydırır + kırmızı yapar
   const [errors, setErrors] = useState<Record<string, boolean>>({});
   const errCls = (k: string) => errors[k] ? " !border-red-400 ring-2 ring-red-200" : "";
@@ -101,6 +102,7 @@ export default function CheckoutPage() {
       const { data } = await supabase.from("shipping_methods").select("*").eq("is_active", true).order("sort_order");
       const list = (data as any[]) || [];
       setShippingMethods(list);
+      setShippingLoaded(true);
       // Sepette seçilen yöntem (hâlâ aktifse) önseçili gelsin
       const fromCart = useCartStore.getState().shippingMethodId;
       setSelectedShippingMethodId((prev) => prev || (list.some((m) => m.id === fromCart) ? fromCart : (list[0]?.id ?? "")));
@@ -625,6 +627,7 @@ export default function CheckoutPage() {
   const totalPrice = getTotalPrice();
   const couponDiscount = couponData?.discount_amount ?? 0;
   const _selMethod = shippingMethods.find((m) => m.id === selectedShippingMethodId) || shippingMethods[0];
+  const _selMethodSummary = _selMethod;
   const shippingCost = shipFee(_selMethod, totalPrice, !!couponData?.free_shipping);
   const preCreditTotal = Math.max(0, totalPrice + shippingCost - couponDiscount);
   const creditApplied = Math.min(Math.max(0, Number(creditInput) || 0), creditBalance, preCreditTotal);
@@ -896,11 +899,58 @@ export default function CheckoutPage() {
                )}
             </section>
 
+            {/* Kargo yöntemi — teslimat adresinden sonra, kendi kutusunda */}
+            <section className="space-y-6 animate-in fade-in slide-in-from-bottom-8">
+               <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 bg-olive-600 text-white rounded-2xl flex items-center justify-center font-black shadow-lg shadow-olive-100 italic">03</div>
+                  <h3 className="text-2xl font-black text-slate-900 uppercase italic tracking-tighter">Kargo Yöntemi</h3>
+               </div>
+               <div className="bento-card bg-white !p-6 space-y-3">
+                 {shippingMethods.length === 0 ? (
+                   <p className="text-sm text-slate-400">
+                     {shippingLoaded ? "Kargo seçenekleri şu an yüklenemedi. Sayfayı yenileyip tekrar dene." : "Kargo seçenekleri yükleniyor…"}
+                   </p>
+                 ) : shippingMethods.map((m) => {
+                   const fee = shipFee(m, totalPrice, !!couponData?.free_shipping);
+                   const active = (selectedShippingMethodId || shippingMethods[0]?.id) === m.id;
+                   const rest = !couponData?.free_shipping && m.free_over != null && Number(m.fee || 0) > 0 && totalPrice < Number(m.free_over)
+                     ? Number(m.free_over) - totalPrice : null;
+                   return (
+                     <button
+                       key={m.id}
+                       type="button"
+                       onClick={() => { setSelectedShippingMethodId(m.id); useCartStore.getState().setShippingMethodId(m.id); }}
+                       className={cn(
+                         "w-full flex items-center justify-between gap-4 rounded-2xl border-2 px-5 py-4 text-left transition-all",
+                         active ? "border-olive-600 bg-olive-50/40 ring-4 ring-olive-50" : "border-slate-100 hover:border-slate-200"
+                       )}
+                     >
+                       <span className="flex items-center gap-3 min-w-0">
+                         <span className={cn("w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0", active ? "border-olive-600" : "border-slate-300")}>
+                           {active && <span className="w-2.5 h-2.5 rounded-full bg-olive-600" />}
+                         </span>
+                         <span className="min-w-0">
+                           <span className="block text-sm font-black text-slate-900">{m.name}</span>
+                           {m.description && <span className="block text-xs text-slate-500 font-medium">{m.description}</span>}
+                           {rest !== null && (
+                             <span className="block text-[11px] font-bold text-olive-700 mt-0.5">₺{rest.toLocaleString("tr-TR", { minimumFractionDigits: 2 })} daha ekle, ücretsiz olsun</span>
+                           )}
+                         </span>
+                       </span>
+                       <span className={cn("text-base font-black shrink-0", fee === 0 ? "text-green-600" : "text-slate-900")}>
+                         {fee === 0 ? "ÜCRETSİZ" : `₺${fee.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`}
+                       </span>
+                     </button>
+                   );
+                 })}
+               </div>
+            </section>
+
             {/* Step 2: Billing Address — misafirde gizli (fatura = teslimat) */}
             {!isGuest && (
             <section className="space-y-6 animate-in fade-in slide-in-from-bottom-8">
                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 bg-olive-600 text-white rounded-2xl flex items-center justify-center font-black shadow-lg shadow-olive-100 italic">03</div>
+                  <div className="w-10 h-10 bg-olive-600 text-white rounded-2xl flex items-center justify-center font-black shadow-lg shadow-olive-100 italic">04</div>
                   <h3 className="text-2xl font-black text-slate-900 uppercase italic tracking-tighter">Fatura Bilgileri</h3>
                </div>
                
@@ -949,7 +999,7 @@ export default function CheckoutPage() {
             {/* Step 3: Payment */}
             <section className="space-y-6 animate-in fade-in slide-in-from-bottom-10">
                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 bg-olive-600 text-white rounded-2xl flex items-center justify-center font-black shadow-lg shadow-olive-100 italic">04</div>
+                  <div className="w-10 h-10 bg-olive-600 text-white rounded-2xl flex items-center justify-center font-black shadow-lg shadow-olive-100 italic">{isGuest ? "04" : "05"}</div>
                   <h3 className="text-2xl font-black text-slate-900 uppercase italic tracking-tighter">Ödeme Yöntemi</h3>
                </div>
                <div className={cn("grid gap-6", bankTransferEnabled ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1")}>
@@ -1051,49 +1101,18 @@ export default function CheckoutPage() {
                       )}
                     </div>
 
-                    {/* Kargo yöntemi seçimi (birden çok yöntem varsa) */}
-                    {shippingMethods.length > 1 && (
-                      <div className="space-y-2">
-                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-1.5">
-                          <Truck size={12} /> KARGO YÖNTEMİ
-                        </p>
-                        <div className="space-y-2">
-                          {shippingMethods.map((m) => {
-                            const fee = shipFee(m, totalPrice, !!couponData?.free_shipping);
-                            const active = (selectedShippingMethodId || shippingMethods[0]?.id) === m.id;
-                            return (
-                              <button
-                                key={m.id}
-                                type="button"
-                                onClick={() => { setSelectedShippingMethodId(m.id); useCartStore.getState().setShippingMethodId(m.id); }}
-                                className={cn(
-                                  "w-full flex items-center justify-between gap-3 rounded-2xl border-2 px-4 py-3 text-left transition-all",
-                                  active ? "border-olive-600 bg-olive-50/40 ring-2 ring-olive-50" : "border-slate-100 hover:border-slate-200"
-                                )}
-                              >
-                                <span className="min-w-0">
-                                  <span className="block text-sm font-bold text-slate-900">{m.name}</span>
-                                  {m.description && <span className="block text-[11px] text-slate-400 font-medium truncate">{m.description}</span>}
-                                </span>
-                                <span className={cn("text-sm font-black shrink-0", fee === 0 ? "text-green-600" : "text-slate-900")}>
-                                  {fee === 0 ? "ÜCRETSİZ" : `₺${fee.toLocaleString("tr-TR")}`}
-                                </span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-
                     <div className="space-y-4 font-bold uppercase italic tracking-tighter italic">
                       <div className="flex justify-between text-slate-500 text-sm">
                         <span>Ürün Toplamı</span>
                         <span className="text-slate-900 text-lg">₺{totalPrice.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
                       </div>
                       <div className="flex justify-between text-slate-500 text-sm">
-                        <span>Kargo Ücreti</span>
+                        <span className="flex flex-col">
+                          <span>Kargo Ücreti</span>
+                          {_selMethodSummary?.name && <span className="text-[10px] font-medium normal-case not-italic tracking-normal text-slate-400">{_selMethodSummary.name}</span>}
+                        </span>
                         <span className={cn(shippingCost === 0 ? "text-green-600" : "text-slate-900", "text-lg")}>
-                          {shippingCost === 0 ? "ÜCRETSİZ" : `₺${shippingCost.toLocaleString('tr-TR')}`}
+                          {shippingCost === 0 ? "ÜCRETSİZ" : `₺${shippingCost.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`}
                         </span>
                       </div>
                       {couponDiscount > 0 && (

@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { trackCouponApply } from "@/lib/analytics";
-import { shipFee, amountToFreeShipping } from "@/lib/shipping-fee";
+import { amountToFreeShipping } from "@/lib/shipping-fee";
 
 // ── Varyant Seçici Modal ─────────────────────────────────────────────────────
 function GiftVariantModal({
@@ -529,7 +529,7 @@ function RewardsAndCouponPanel({
 export default function CartPage() {
   const {
     items, removeItem, updateQuantity, getTotalPrice, clearCart,
-    pendingGifts, confirmGift, shippingMethodId, setShippingMethodId,
+    pendingGifts, confirmGift,
   } = useCartStore();
   // Kargo yöntemleri (admin → Ayarlar → Kargo Yöntemleri); seçim checkout'a taşınır
   const [shippingMethods, setShippingMethods] = useState<any[]>([]);
@@ -620,13 +620,13 @@ export default function CartPage() {
   }
 
   const totalPrice = getTotalPrice();
-  const selMethod = shippingMethods.find((m) => m.id === shippingMethodId) || shippingMethods[0] || null;
-  // Yöntemler yüklenene kadar eski varsayılan (500₺ üstü ücretsiz, 29,90₺)
-  const shippingCost = selMethod
-    ? shipFee(selMethod, totalPrice, couponFreeShip)
-    : ((totalPrice > 500 || couponFreeShip) ? 0 : 29.90);
-  const toFreeShip = couponFreeShip ? null : amountToFreeShipping(selMethod, totalPrice);
-  const finalTotal = Math.max(0, totalPrice + shippingCost - couponDiscount);
+  // Kargo yöntemi ve ücreti ödeme adımında (adres girildikten sonra) seçilir.
+  // Sepette yalnız standart yönteme (ilk sıradaki) göre "ücretsiz kargoya kalan" ipucu.
+  const baseMethod = shippingMethods[0] || null;
+  const toFreeShip = couponFreeShip ? null : amountToFreeShipping(baseMethod, totalPrice);
+  const baseFree = !couponFreeShip && !!baseMethod && Number(baseMethod.fee || 0) > 0 && toFreeShip === null
+    && baseMethod.free_over != null;
+  const finalTotal = Math.max(0, totalPrice - couponDiscount); // kargo hariç
 
   const regularItems = items.filter((i) => !i.is_gift);
   const safePending = pendingGifts ?? [];
@@ -794,46 +794,20 @@ export default function CartPage() {
                       <span>Ücretsiz</span>
                     </div>
                   )}
-                  {/* Kargo yöntemi — birden fazlaysa seçim; tek ise adı */}
-                  {shippingMethods.length > 1 ? (
-                    <div className="space-y-2">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1.5">
-                        <Truck size={12} /> Kargo yöntemi
-                      </p>
-                      {shippingMethods.map((m) => {
-                        const fee = shipFee(m, totalPrice, couponFreeShip);
-                        const active = selMethod?.id === m.id;
-                        return (
-                          <button
-                            key={m.id}
-                            type="button"
-                            onClick={() => setShippingMethodId(m.id)}
-                            className={cn(
-                              "w-full flex items-center justify-between gap-3 rounded-xl border-2 px-3 py-2.5 text-left transition-all",
-                              active ? "border-olive-600 bg-olive-50/40" : "border-slate-100 hover:border-slate-200"
-                            )}
-                          >
-                            <span className="min-w-0">
-                              <span className="block text-sm font-bold text-slate-900">{m.name}</span>
-                              {m.description && <span className="block text-[11px] text-slate-400 font-medium truncate">{m.description}</span>}
-                            </span>
-                            <span className={cn("text-sm font-black shrink-0", fee === 0 ? "text-green-600" : "text-slate-900")}>
-                              {fee === 0 ? "ÜCRETSİZ" : `₺${fee.toLocaleString("tr-TR")}`}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ) : null}
                   <div className="flex justify-between text-slate-500">
-                    <span>Kargo{shippingMethods.length === 1 && selMethod ? <span className="font-medium text-slate-400"> · {selMethod.name}</span> : null}</span>
-                    <span className={cn(shippingCost === 0 ? "text-green-600" : "text-slate-900")}>
-                      {shippingCost === 0 ? "ÜCRETSİZ" : `₺${shippingCost.toLocaleString("tr-TR")}`}
-                    </span>
+                    <span>Kargo</span>
+                    {couponFreeShip
+                      ? <span className="text-green-600">ÜCRETSİZ</span>
+                      : <span className="text-xs font-medium text-slate-400">Ödeme adımında seçilir</span>}
                   </div>
                   {toFreeShip !== null && (
                     <p className="text-[11px] font-bold text-olive-700 bg-olive-50 rounded-xl px-3 py-2">
-                      ₺{toFreeShip.toLocaleString("tr-TR", { minimumFractionDigits: 2 })} daha ekle, kargo ücretsiz olsun.
+                      ₺{toFreeShip.toLocaleString("tr-TR", { minimumFractionDigits: 2 })} daha ekle, {baseMethod?.name ? baseMethod.name.toLocaleLowerCase("tr-TR") : "kargo"} ücretsiz olsun.
+                    </p>
+                  )}
+                  {baseFree && (
+                    <p className="text-[11px] font-bold text-green-700 bg-green-50 rounded-xl px-3 py-2">
+                      ✓ {baseMethod?.name || "Kargo"} ücretsiz
                     </p>
                   )}
                   {couponDiscount > 0 && (
@@ -848,8 +822,8 @@ export default function CartPage() {
 
                 <div className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl border border-slate-100/50">
                   <div className="flex flex-col">
-                    <span className="font-bold text-slate-900 uppercase tracking-tighter">Genel Toplam</span>
-                    <span className="text-[11px] font-medium text-slate-400">KDV Dahil</span>
+                    <span className="font-bold text-slate-900 uppercase tracking-tighter">Toplam</span>
+                    <span className="text-[11px] font-medium text-slate-400">KDV dahil · kargo hariç</span>
                   </div>
                   <span className="text-2xl font-black text-olive-600">
                     ₺{finalTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
