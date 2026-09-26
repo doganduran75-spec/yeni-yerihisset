@@ -86,16 +86,19 @@ const SHIP_COLOR: Record<string, string> = { waiting: "bg-slate-100 text-slate-5
 const INV_LABEL: Record<string, string> = { pending: "Bekliyor", invoiced: "Faturalandı" };
 const INV_COLOR: Record<string, string> = { pending: "bg-slate-100 text-slate-500", invoiced: "bg-teal-50 text-teal-700" };
 
-function OrderStatusChips({ order }: { order: any }) {
-  const pay = order.payment_status || "pending";
-  const ship = order.shipment_status || "waiting";
-  const inv = order.invoice_status || "pending";
-  const Chip = ({ title, label, color }: { title: string; label: string; color: string }) => (
+function Chip({ title, label, color }: { title: string; label: string; color: string }) {
+  return (
     <div className="flex flex-col items-start gap-1">
       <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">{title}</span>
       <span className={cn("inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold whitespace-nowrap", color)}>{label}</span>
     </div>
   );
+}
+
+function OrderStatusChips({ order }: { order: any }) {
+  const pay = order.payment_status || "pending";
+  const ship = order.shipment_status || "waiting";
+  const inv = order.invoice_status || "pending";
   return (
     <div className="flex items-start gap-3 sm:gap-4 flex-wrap">
       <Chip title="Ödeme" label={PAY_LABEL[pay] ?? pay} color={PAY_COLOR[pay] ?? PAY_COLOR.pending} />
