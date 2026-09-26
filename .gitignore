@@ -40,3 +40,5 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 stress-sonuc.json
+zap-rapor.html
+zap-rapor.json

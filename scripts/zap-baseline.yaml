@@ -1,0 +1,64 @@
+# YeriHisset — OWASP ZAP PASİF güvenlik taraması (baseline)
+#
+# Ne yapar: Siteyi bir ziyaretçi gibi gezer (spider), gelen yanıtları, başlıkları,
+# çerezleri ve sayfa içeriğini güvenlik açısından inceler (pasif tarama).
+# SALDIRI DENEMESİ YAPMAZ ve FORM GÖNDERMEZ → sahte kayıt / e-posta oluşmaz.
+#
+# Çalıştırma (Windows PowerShell, ZAP kuruluyken):
+#   $env:ZAP_AUTH = "Basic " + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("KULLANICI:SIFRE"))
+#   & "C:\Program Files\ZAP\Zed Attack Proxy\zap.bat" -cmd -autorun "D:\dev\yeni-yerihisset\scripts\zap-baseline.yaml"
+#
+# Rapor: D:\dev\yeni-yerihisset\zap-rapor.html (+ .json) — git'e girmez.
+
+env:
+  contexts:
+    - name: yerihisset
+      urls:
+        - https://dev.yerihisset.com
+      includePaths:
+        - "https://dev\\.yerihisset\\.com.*"
+      excludePaths:
+        - ".*logout.*"
+        - ".*cikis.*"
+  parameters:
+    failOnError: false
+    failOnWarning: false
+    progressToStdout: true
+
+jobs:
+  # Staging şifre kapısı (Caddy Basic Auth): her isteğe Authorization başlığı ekle
+  - type: replacer
+    rules:
+      - description: staging-basic-auth
+        matchType: req_header
+        matchString: Authorization
+        matchRegex: false
+        replacementString: "${ZAP_AUTH}"
+
+  # Siteyi gez — form doldurma/gönderme KAPALI
+  - type: spider
+    parameters:
+      context: yerihisset
+      maxDuration: 6
+      maxDepth: 6
+      maxChildren: 40
+      processForm: false
+      postForm: false
+
+  # Pasif incelemenin bitmesini bekle
+  - type: passiveScan-wait
+    parameters:
+      maxDuration: 6
+
+  - type: report
+    parameters:
+      template: traditional-html
+      reportDir: "D:/dev/yeni-yerihisset"
+      reportFile: zap-rapor
+      reportTitle: "YeriHisset — ZAP pasif tarama"
+
+  - type: report
+    parameters:
+      template: traditional-json
+      reportDir: "D:/dev/yeni-yerihisset"
+      reportFile: zap-rapor
