@@ -5,7 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import {
   ShoppingBag, Trash2, Plus, Minus, ArrowLeft, ChevronRight,
-  ShieldCheck, CreditCard, Truck, User, Gift, X, Check, Ticket, Loader2,
+  ShieldCheck, CreditCard, User, Gift, X, Check, Ticket, Loader2,
 } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -859,10 +859,6 @@ export default function CartPage() {
                   <div className="flex items-center gap-3 text-[11px] font-bold text-slate-500">
                     <CreditCard size={18} className="text-olive-600" />
                     <span>TÜM KARTLARA TAKSİT İMKANI</span>
-                  </div>
-                  <div className="flex items-center gap-3 text-[11px] font-bold text-slate-500">
-                    <Truck size={18} className="text-purple-500" />
-                    <span>AYNI GÜN ÜCRETSİZ KARGO</span>
                   </div>
                 </div>
               </CardContent>
