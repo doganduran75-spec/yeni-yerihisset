@@ -737,8 +737,10 @@ export default function CheckoutPage() {
       )}
 
       <main className="container mx-auto px-4 py-8 md:py-12">
-        <div className="max-w-6xl mx-auto mb-8 md:mb-10">
-          <CheckoutStepper current={step} onGoTeslimat={goToTeslimat} />
+        <div className="sticky top-20 z-30 -mx-4 px-4 py-3 mb-6 md:mb-8 bg-[#F8FAFC]/90 backdrop-blur-md">
+          <div className="max-w-6xl mx-auto">
+            <CheckoutStepper current={step} onGoTeslimat={goToTeslimat} />
+          </div>
         </div>
         <div className="max-w-6xl mx-auto grid lg:grid-cols-12 gap-12">
           {/* MAIN FLOW */}
@@ -1203,7 +1205,7 @@ export default function CheckoutPage() {
 
           {/* SIDEBAR SUMMARY */}
           <div className="lg:col-span-4 relative">
-            <div className="sticky top-32 space-y-8 animate-in fade-in slide-in-from-right duration-1000">
+            <div className="sticky top-40 space-y-8 animate-in fade-in slide-in-from-right duration-1000">
                <div className="bento-card !p-0 bg-white shadow-2xl shadow-slate-200/50">
                   <div className="bg-slate-900 p-8 text-white relative overflow-hidden">
                      <div className="absolute top-0 right-0 w-32 h-32 bg-olive-600 blur-[80px] opacity-30 -mr-16 -mt-16" />
@@ -1212,20 +1214,6 @@ export default function CheckoutPage() {
                   </div>
                   
                   <div className="p-8 space-y-8">
-                    {/* Item Thumbnails (Juicy version) */}
-                    <div className="flex -space-x-5 overflow-hidden py-2">
-                      {items.slice(0, 5).map((item, idx) => (
-                        <div key={idx} className="inline-block h-16 w-16 rounded-2xl ring-4 ring-white shadow-xl overflow-hidden bg-slate-100 transform hover:-translate-y-2 transition-transform duration-500">
-                          <Image src={item.image} alt="" width={64} height={64} className="h-full w-full object-cover" />
-                        </div>
-                      ))}
-                      {items.length > 5 && (
-                        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100 ring-4 ring-white text-sm font-black text-slate-500 shadow-xl italic">
-                          +{items.length - 5}
-                        </div>
-                      )}
-                    </div>
-
                     <div className="space-y-4 font-bold uppercase italic tracking-tighter italic">
                       <div className="flex justify-between text-slate-500 text-sm">
                         <span>Ürün Toplamı</span>
@@ -1312,7 +1300,8 @@ export default function CheckoutPage() {
           </div>
         </div>
       </main>
-      <Footer />
+      {/* Ödeme akışında mobilde alt bilgi gösterilmez (dikkat dağıtmasın) */}
+      <div className="hidden md:block"><Footer /></div>
     </div>
   );
 }

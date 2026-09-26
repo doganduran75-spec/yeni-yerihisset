@@ -712,7 +712,7 @@ export default function CartPage() {
       </header>
 
       <main className="container mx-auto px-4 py-8 md:py-12">
-        <div className="mb-8">
+        <div className="sticky top-16 z-30 -mx-4 px-4 py-3 mb-6 bg-[#fafbfc]/90 backdrop-blur-md">
           <CheckoutStepper current="sepet" />
         </div>
         <div className="grid lg:grid-cols-3 gap-8">
