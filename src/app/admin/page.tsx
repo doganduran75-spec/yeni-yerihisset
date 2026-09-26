@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/lib/supabase";
 import BackupStatusCard from "@/components/admin/BackupStatusCard";
+import DashboardSummary from "@/components/admin/DashboardSummary";
 import { ShoppingBag, Users, CreditCard, TrendingUp, Loader2, MessageCircle, ArrowRight, Star, Clock, PackageOpen, BellRing } from "lucide-react";
 
 type Stats = {
@@ -246,6 +247,9 @@ export default function AdminDashboard() {
           <p className="text-muted-foreground">Mağazanızın anlık performans özeti.</p>
         </div>
       </div>
+
+      {/* Üst özet: satış (yıl / ay / geçen ay) + rollere göre kişiler */}
+      <DashboardSummary />
 
       <div className="grid gap-6 lg:grid-cols-3 items-start">
 
