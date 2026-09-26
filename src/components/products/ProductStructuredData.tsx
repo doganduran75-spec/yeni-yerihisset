@@ -4,6 +4,9 @@
  * Google, Googlebot ile bu veriyi okuyarak Shopping'de ürünü gösterir.
  */
 
+// JSON-LD güvenli yazım: "<" kaçışlanır → veri içindeki "</script>" bloğu kapatamaz
+const safeJsonLd = (v: unknown) => JSON.stringify(v).replace(/</g, "\\u003c");
+
 interface ProductStructuredDataProps {
   product: {
     id: string;
@@ -116,11 +119,11 @@ export default function ProductStructuredData({
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: safeJsonLd(jsonLd) }}
       />
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumb) }}
+        dangerouslySetInnerHTML={{ __html: safeJsonLd(breadcrumb) }}
       />
     </>
   );

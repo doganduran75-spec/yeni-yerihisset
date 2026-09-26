@@ -4,6 +4,9 @@
  * Root layout'a eklenir — tüm sayfalarda <head>'e inject edilir.
  */
 
+// JSON-LD güvenli yazım: "<" kaçışlanır → veri içindeki "</script>" bloğu kapatamaz
+const safeJsonLd = (v: unknown) => JSON.stringify(v).replace(/</g, "\\u003c");
+
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com";
 
 export default function GlobalStructuredData() {
@@ -57,11 +60,11 @@ export default function GlobalStructuredData() {
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(organization) }}
+        dangerouslySetInnerHTML={{ __html: safeJsonLd(organization) }}
       />
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(website) }}
+        dangerouslySetInnerHTML={{ __html: safeJsonLd(website) }}
       />
     </>
   );

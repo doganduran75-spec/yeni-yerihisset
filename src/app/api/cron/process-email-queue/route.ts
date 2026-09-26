@@ -20,7 +20,7 @@ function delay(ms: number) { return new Promise((r) => setTimeout(r, ms)); }
 
 async function run(req: NextRequest) {
   const secret = process.env.CRON_SECRET;
-  const provided = req.headers.get("x-cron-secret") || new URL(req.url).searchParams.get("secret");
+  const provided = req.headers.get("x-cron-secret") // yalnız başlık: adres satırındaki anahtar erişim loglarına düşer;
   if (!secret || provided !== secret) return NextResponse.json({ error: "Yetkisiz" }, { status: 401 });
 
   const supabase = createAdminClient();

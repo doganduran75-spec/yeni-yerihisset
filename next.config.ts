@@ -1,5 +1,34 @@
 import type { NextConfig } from "next";
 
+// ─── Content-Security-Policy ───────────────────────────────────────────────
+// Tarayıcıya "bu site yalnız şu kaynaklardan script/bağlantı/görsel yükler"
+// der. Bir XSS açığı çıksa bile saldırganın kendi sunucusundan script
+// çekmesini ve çalınan oturumu kendi sunucusuna GÖNDERMESİNİ (connect-src,
+// img-src) engeller — oturum localStorage'da tutulduğu için önemli.
+// Not: Next.js'in kendi satır içi script'leri için 'unsafe-inline' gerekir
+// (nonce'lu CSP statik/ISR sayfaları dinamikleştirir). Yeni bir dış servis
+// eklenirse (ör. harita, chat) buraya eklenmeli; yoksa tarayıcı engeller.
+const SUPABASE_ORIGIN = (() => {
+  try { return new URL(process.env.NEXT_PUBLIC_SUPABASE_URL || "").origin; } catch { return ""; }
+})();
+const SUPABASE_WS = SUPABASE_ORIGIN.replace(/^https:/, "wss:");
+const IYZICO = "https://*.iyzipay.com";
+const CSP = [
+  "default-src 'self'",
+  `script-src 'self' 'unsafe-inline' https://www.googletagmanager.com ${IYZICO}`,
+  `style-src 'self' 'unsafe-inline' ${IYZICO}`,
+  `img-src 'self' data: blob: ${SUPABASE_ORIGIN} https://ewnuurgmxhksbjixbian.supabase.co https://images.unsplash.com https://img.youtube.com https://*.google-analytics.com https://www.googletagmanager.com ${IYZICO}`,
+  `font-src 'self' data: ${IYZICO}`,
+  `connect-src 'self' ${SUPABASE_ORIGIN} ${SUPABASE_WS} https://*.google-analytics.com https://*.analytics.google.com https://www.googletagmanager.com ${IYZICO}`,
+  `media-src 'self' blob: ${SUPABASE_ORIGIN}`,
+  `frame-src 'self' ${IYZICO} https://www.youtube.com https://www.youtube-nocookie.com`,
+  "frame-ancestors 'self'",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self' https:",
+  "upgrade-insecure-requests",
+].join("; ");
+
 const nextConfig: NextConfig = {
   // ─── Sunucu-harici paketler ──────────────────────────────────────────────
   // iyzipay dinamik require() kullanıyor; Turbopack derleyemiyor.
@@ -62,6 +91,10 @@ const nextConfig: NextConfig = {
         headers: [
           // Clickjacking koruması
           { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          // Kaynak kısıtlaması (bkz. CSP açıklaması yukarıda)
+          { key: "Content-Security-Policy", value: CSP },
+          // Tarayıcı bu siteye 1 yıl boyunca YALNIZ HTTPS ile bağlansın
+          { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" },
           // XSS koruması (modern tarayıcılar)
           { key: "X-Content-Type-Options", value: "nosniff" },
           // Referrer bilgisi kontrolü

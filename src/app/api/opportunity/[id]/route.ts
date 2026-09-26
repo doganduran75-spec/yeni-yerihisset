@@ -1,5 +1,8 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from "next/server";
+import { createHash } from "crypto";
 import { createClient } from "@supabase/supabase-js";
+import { createAdminClient } from "@/lib/supabase-admin";
 
 /**
  * GET /api/opportunity/[id]
@@ -30,24 +33,25 @@ export async function GET(
     );
   }
 
-  // IP hash (KVKK uyumu — anonim)
-  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "";
+  // IP hash (KVKK: ham IP saklanmaz, geri çözülemez tek yönlü özet)
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || "";
   const ipHash = ip
-    ? Buffer.from(ip).toString("base64url").slice(0, 16)
+    ? createHash("sha256").update(`${ip}|opp|${id}`).digest("hex").slice(0, 16)
     : null;
 
-  // Tıklama kaydı — fire and forget, yönlendirmeyi bekletme
-  void supabase.from("opportunity_clicks").insert({
-    opportunity_id: id,
-    ip_hash: ipHash,
-    referrer: req.headers.get("referer") || null,
-  });
-
-  // Click count artır
-  void supabase
-    .from("partner_opportunities")
-    .update({ click_count: (opp.click_count || 0) + 1 })
-    .eq("id", id);
+  // Tıklama kaydı + sayaç. Sunucu yetkisiyle yazılır (anon RLS'e takılıyordu) ve
+  // BEKLENİR — Supabase sorgusu await edilmezse hiç gönderilmez.
+  const admin = createAdminClient();
+  await Promise.all([
+    admin.from("opportunity_clicks").insert({
+      opportunity_id: id,
+      ip_hash: ipHash,
+      referrer: req.headers.get("referer") || null,
+    } as any),
+    (admin as any).from("partner_opportunities")
+      .update({ click_count: (opp.click_count || 0) + 1 })
+      .eq("id", id),
+  ]).catch(() => { /* takip kritik değil, yönlendirme devam etsin */ });
 
   return NextResponse.redirect(opp.url);
 }
