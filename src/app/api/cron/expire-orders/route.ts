@@ -13,7 +13,7 @@ import { restoreOrderCredit } from "@/lib/store-credit";
 function recoveryHtml(storeName: string, storeUrl: string, name: string, orderNo: string) {
   return `<div style="font-family:system-ui,Arial,sans-serif;max-width:560px;margin:0 auto;padding:8px">
     <h1 style="font-size:22px;font-weight:800;color:#3f6212;margin:0 0 12px">İşlemin yarıda mı kaldı? 🛒</h1>
-    <p style="font-size:15px;color:#374151;line-height:1.6;margin:0 0 14px">Merhaba ${name}, <b>${orderNo}</b> numaralı siparişinin ödemesi tamamlanmadı ve sipariş iptal edildi — ama seçtiğin ürünleri hesabından <b>tek tıkla tekrar oluşturabilirsin</b>. Numaran tükenmeden tamamlamak ister misin?</p>
+    <p style="font-size:15px;color:#374151;line-height:1.6;margin:0 0 14px">Merhaba ${name}, <b>${orderNo}</b> numaralı siparişinin ödemesi tamamlanmadı ve sipariş iptal edildi — ama seçtiğin ürünleri hesabından <b>tek tıkla tekrar oluşturabilirsin</b>. Stoklar tükenmeden tamamlamak ister misin?</p>
     <div style="text-align:center;margin:10px 0 4px">
       <a href="${storeUrl}/account?tab=orders" style="display:inline-block;background:#4d7c0f;color:#fff;text-decoration:none;padding:13px 30px;border-radius:12px;font-weight:800;font-size:14px">Siparişimi Tamamla</a>
     </div>

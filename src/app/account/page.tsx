@@ -32,6 +32,7 @@ import {
   MessageSquare,
   Send,
   RotateCcw,
+  CheckCircle2,
 } from "lucide-react";
 import { useCartStore } from "@/store/useCartStore";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -43,6 +44,7 @@ import { GeoSelect } from "@/components/ui/geo-select";
 import { CITIES, DISTRICTS } from "@/lib/turkey-geo";
 import { cn } from "@/lib/utils";
 import OrderMessagesModal from "@/components/account/OrderMessagesModal";
+import ReturnRequestModal, { RETURN_MARK } from "@/components/account/ReturnRequestModal";
 import { siteAlert, siteConfirm } from "@/components/ui/site-dialog";
 import { trAuthError } from "@/lib/auth-errors";
 
@@ -197,6 +199,8 @@ function AccountPageInner() {
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null); // sipariş "Detaylar"
   const [msgOrder, setMsgOrder] = useState<{ id: string; label: string; draft?: string } | null>(null); // açık mesaj modalı
   const [orderUnread, setOrderUnread] = useState<Record<string, number>>({}); // sipariş → okunmamış admin mesajı
+  const [returnRequested, setReturnRequested] = useState<Set<string>>(new Set()); // iade/değişim talebi gönderilmiş siparişler
+  const [returnOrder, setReturnOrder] = useState<any | null>(null); // açık talep formu
 
   // Eski derin linkler (?tab=addresses/security) Profilim'e düşer; ilgili
   // alt bölüme yumuşak kaydır.
@@ -311,6 +315,11 @@ function AccountPageInner() {
     const map: Record<string, number> = {};
     for (const m of (data as any[]) || []) if (m.order_id) map[m.order_id] = (map[m.order_id] || 0) + 1;
     setOrderUnread(map);
+
+    // İade/değişim talebi gönderilmiş siparişler (talep formu ikinci kez açılmasın)
+    const { data: mine } = await (supabase as any)
+      .from("messages").select("order_id, content").eq("user_id", id).eq("sender_role", "user").not("order_id", "is", null);
+    setReturnRequested(new Set(((mine as any[]) || []).filter((m) => RETURN_MARK.test(m.content || "")).map((m) => m.order_id)));
   }
 
   async function fetchMessages() {
@@ -902,16 +911,26 @@ function AccountPageInner() {
                                   <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center">{orderUnread[order.id]}</span>
                                 )}
                               </Button>
-                              <Button
-                                variant="outline" size="sm"
-                                onClick={() => {
-                                  const label = order.order_number ? `YH${order.order_number}` : `#${order.id.slice(0,8)}`;
-                                  setMsgOrder({ id: order.id, label, draft: `İade / değişim talebim var (Sipariş ${label}).\nÜrün(ler): \nSebep: \nİade mi değişim mi olacağını sizinle görüşerek belirlemek istiyorum.` });
-                                }}
-                                className="font-bold text-xs gap-1.5 rounded-xl border-slate-200 text-slate-600 hover:bg-slate-50 h-9"
-                              >
-                                <RotateCcw size={14} /> İade / Değişim
-                              </Button>
+                              {/* İade / Değişim — yalnız ödemesi alınmış siparişte; talep gönderildiyse yazışmayı açar */}
+                              {order.payment_status === "paid" && order.status !== "cancelled" && (
+                                returnRequested.has(order.id) ? (
+                                  <Button
+                                    variant="outline" size="sm"
+                                    onClick={() => setMsgOrder({ id: order.id, label: order.order_number ? `YH${order.order_number}` : `#${order.id.slice(0,8)}` })}
+                                    className="font-bold text-xs gap-1.5 rounded-xl border-green-200 text-green-700 bg-green-50 hover:bg-green-100 h-9"
+                                  >
+                                    <CheckCircle2 size={14} /> Talebin alındı
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    variant="outline" size="sm"
+                                    onClick={() => setReturnOrder(order)}
+                                    className="font-bold text-xs gap-1.5 rounded-xl border-slate-200 text-slate-600 hover:bg-slate-50 h-9"
+                                  >
+                                    <RotateCcw size={14} /> İade / Değişim
+                                  </Button>
+                                )
+                              )}
                               <Button
                                 variant="ghost" size="sm"
                                 onClick={() => setExpandedOrder(expandedOrder === order.id ? null : order.id)}
@@ -1567,6 +1586,21 @@ function AccountPageInner() {
           </div>
       </main>
 
+      {/* ─── İade / Değişim talep formu ─────────────────────────────────────── */}
+      {returnOrder && user && (
+        <ReturnRequestModal
+          order={returnOrder}
+          orderLabel={returnOrder.order_number ? `YH${returnOrder.order_number}` : `#${returnOrder.id.slice(0, 8)}`}
+          userId={user.id}
+          onClose={() => setReturnOrder(null)}
+          onSent={() => {
+            const o = returnOrder;
+            setReturnOrder(null);
+            setReturnRequested((prev) => new Set(prev).add(o.id));
+            siteAlert({ title: "Talebin alındı", message: "İade / değişim talebin siparişinin mesajlarına iletildi. Ekibimiz en kısa sürede sana buradan dönüş yapacak.", tone: "success" });
+          }}
+        />
+      )}
       {/* ─── Sipariş Mesaj Modalı ───────────────────────────────────────────── */}
       {msgOrder && user && (
         <OrderMessagesModal

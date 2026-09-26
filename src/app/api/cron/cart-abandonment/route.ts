@@ -16,7 +16,7 @@ const HTML = (storeName: string, storeUrl: string, name: string, items: { name: 
   ).join("");
   return `<div style="font-family:system-ui,Arial,sans-serif;max-width:560px;margin:0 auto;padding:8px">
     <h1 style="font-size:22px;font-weight:800;color:#3f6212;margin:0 0 12px">Sepetinde seni bekleyen ürünler var 👟</h1>
-    <p style="font-size:15px;color:#374151;line-height:1.6;margin:0 0 14px">Merhaba ${name}, göz attığın ürünleri senin için ayırdık. Numaran tükenmeden tamamlamak ister misin?</p>
+    <p style="font-size:15px;color:#374151;line-height:1.6;margin:0 0 14px">Merhaba ${name}, göz attığın ürünleri senin için ayırdık. Stoklar tükenmeden tamamlamak ister misin?</p>
     <ul style="margin:0 0 20px;padding:0 0 0 18px">${rows}</ul>
     <div style="text-align:center;margin:8px 0 4px">
       <a href="${storeUrl}/sepet" style="display:inline-block;background:#4d7c0f;color:#fff;text-decoration:none;padding:13px 30px;border-radius:12px;font-weight:800;font-size:14px">Sepete Dön</a>
