@@ -11,7 +11,7 @@ import { createAdminClient } from "@/lib/supabase-admin";
 const ALLOWED = new Set([
   "page_view", "hero_click", "category_click", "brand_click", "size_filter",
   "view_item", "add_to_cart", "quick_buy", "remove_from_cart", "search",
-  "coupon_apply", "begin_checkout", "purchase", "opportunity_click", "campaign_landing",
+  "coupon_apply", "begin_checkout", "checkout_step", "purchase", "opportunity_click", "campaign_landing",
 ]);
 
 const BOT_RE = /bot|crawl|spider|slurp|bingpreview|facebookexternalhit|whatsapp|telegram|headless|python-requests|curl|wget|axios|node-fetch|lighthouse|pingdom|uptime/i;

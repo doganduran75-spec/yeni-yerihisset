@@ -16,6 +16,7 @@ import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { trackCouponApply } from "@/lib/analytics";
 import { amountToFreeShipping } from "@/lib/shipping-fee";
+import CheckoutStepper from "@/components/CheckoutStepper";
 
 // ── Varyant Seçici Modal ─────────────────────────────────────────────────────
 function GiftVariantModal({
@@ -711,6 +712,9 @@ export default function CartPage() {
       </header>
 
       <main className="container mx-auto px-4 py-8 md:py-12">
+        <div className="mb-8">
+          <CheckoutStepper current="sepet" />
+        </div>
         <div className="grid lg:grid-cols-3 gap-8">
 
           {/* Sepet listesi */}
@@ -842,7 +846,7 @@ export default function CartPage() {
                 ) : (
                   <Link href="/checkout" className="block w-full">
                     <Button className="w-full h-16 rounded-2xl bg-olive-600 hover:bg-olive-700 text-lg font-bold shadow-xl shadow-olive-100 uppercase tracking-wide group">
-                      Ödemeye Geç <ChevronRight size={20} className="ml-2 group-hover:translate-x-1 transition-transform" />
+                      Teslimat bilgilerine geç <ChevronRight size={20} className="ml-2 group-hover:translate-x-1 transition-transform" />
                     </Button>
                   </Link>
                 )}

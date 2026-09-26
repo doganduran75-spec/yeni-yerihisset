@@ -35,6 +35,8 @@ import { GeoSelect } from "@/components/ui/geo-select";
 import { CITIES, DISTRICTS } from "@/lib/turkey-geo";
 import { fetchLiveStocks } from "@/lib/live-stock";
 import { shipFee } from "@/lib/shipping-fee";
+import CheckoutStepper from "@/components/CheckoutStepper";
+import { track } from "@/lib/track";
 
 function getCookie(name: string): string | null {
   if (typeof document === "undefined") return null;
@@ -65,11 +67,9 @@ export default function CheckoutPage() {
   const [successTotal, setSuccessTotal] = useState<number | null>(null); // başarı ekranında ödenecek tutar
   const [activationState, setActivationState] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [couponCode, setCouponCode] = useState("");
-  const [couponInput, setCouponInput] = useState("");
   const [couponData, setCouponData] = useState<{ name: string; type: string; discount_amount: number; free_shipping: boolean } | null>(null);
   const [couponError, setCouponError] = useState("");
   const [couponLoading, setCouponLoading] = useState(false);
-  const [userCoupons, setUserCoupons] = useState<any[]>([]);
   // YeriHisset Kredisi (mağaza kredisi) — cüzdan bakiyesi + uygulanan tutar
   const [creditBalance, setCreditBalance] = useState(0);
   const [creditInput, setCreditInput] = useState("");
@@ -91,6 +91,23 @@ export default function CheckoutPage() {
   // iyzico form içeriği (ödeme widgetı)
   const [iyzicoFormHtml, setIyzicoFormHtml] = useState<string | null>(null);
   const iyzicoContainerRef = useRef<HTMLDivElement>(null);
+  // Akış: Sepet › TESLİMAT (bilgi + adres + kargo) › ÖDEME (özet + ödeme + onay)
+  const [step, setStep] = useState<"teslimat" | "odeme">("teslimat");
+  const DELIVERY_KEYS = ["email", "firstName", "lastName", "phone", "city", "district", "address", "shipping"];
+
+  // Tarayıcı geri tuşu: ödemeden teslimata dön
+  useEffect(() => {
+    const onPop = () => {
+      const onPay = new URLSearchParams(window.location.search).get("adim") === "odeme";
+      setStep(onPay ? "odeme" : "teslimat");
+    };
+    window.addEventListener("popstate", onPop);
+    // Ödeme adımında sayfa yenilenirse bilgiler kaybolur → teslimattan başla
+    if (new URLSearchParams(window.location.search).get("adim") === "odeme") {
+      window.history.replaceState(null, "", "/checkout");
+    }
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
 
   useEffect(() => {
     fetchAddresses();
@@ -205,22 +222,6 @@ export default function CheckoutPage() {
       setBankTransferInfo(paySettings.bank_transfer_info ?? "");
     }
 
-    // Kullanıcının kuponlarını yükle
-    const { data: uCoupons } = await supabase
-      .from("user_coupons")
-      .select("*, coupons(*)")
-      .eq("user_id", user.id);
-    const now = new Date();
-    setUserCoupons(
-      (uCoupons || []).filter((uc: any) => {
-        const c = uc.coupons;
-        if (!c || !c.is_active) return false;
-        if (c.expires_at && new Date(c.expires_at) < now) return false;
-        if (uc.use_count >= c.per_user_limit) return false;
-        return true;
-      })
-    );
-
     setLoading(false);
   }
 
@@ -239,13 +240,12 @@ export default function CheckoutPage() {
     } catch { /* kontrol kritik değil; sipariş anında zaten yapılır */ }
   }
 
-  async function handlePlaceOrder() {
-    // ── Eksik alan doğrulaması (yukarıdan aşağıya sırayla) ──────────────────
+  // Teslimat adımı eksikleri (iletişim + adres)
+  function deliveryErrors(): Record<string, boolean> {
     const e: Record<string, boolean> = {};
     if (isGuest && (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(personalInfo.email.trim()) || emailExists)) e.email = true;
     if (!personalInfo.firstName.trim()) e.firstName = true;
     if (!personalInfo.lastName.trim()) e.lastName = true;
-    if (paymentMethod === "credit_card" && identityNumber.replace(/\D/g, "").length !== 11) e.tckn = true;
     if (isGuest) {
       if (guestAddr.phone.length !== 10) e.phone = true;
       if (!guestAddr.city) e.city = true;
@@ -254,16 +254,50 @@ export default function CheckoutPage() {
     } else if (!selectedShippingId) {
       e.shipping = true;
     }
+    return e;
+  }
+
+  // İlk eksik alana kaydır + odakla
+  function focusFirstError(e: Record<string, boolean>) {
+    const order = ["email", "firstName", "lastName", "phone", "city", "district", "address", "shipping", "tckn"];
+    const firstKey = order.find((k) => e[k]);
+    const el = firstKey ? document.getElementById(`f-${firstKey}`) : null;
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      setTimeout(() => (el.querySelector("input, textarea") as HTMLElement | null)?.focus?.(), 400);
+    }
+  }
+
+  function goToTeslimat() {
+    setStep("teslimat");
+    if (new URLSearchParams(window.location.search).get("adim") === "odeme") window.history.back();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  // "Ödeme adımına geç" — teslimat bilgileri tamamsa ödeme adımına
+  function goToOdeme() {
+    const e = deliveryErrors();
+    setErrors(e);
+    if (Object.keys(e).length > 0) { focusFirstError(e); return; }
+    setStep("odeme");
+    window.history.pushState(null, "", "/checkout?adim=odeme");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    track("checkout_step", { step: "odeme" });
+  }
+
+  async function handlePlaceOrder() {
+    // ── Eksik alan doğrulaması ─────────────────────────────────────────────
+    const e: Record<string, boolean> = deliveryErrors();
+    if (paymentMethod === "credit_card" && identityNumber.replace(/\D/g, "").length !== 11) e.tckn = true;
 
     setErrors(e);
     if (Object.keys(e).length > 0) {
-      // Sayfada yukarıdan aşağıya ilk eksik alana kaydır + odakla
-      const order = ["email", "firstName", "lastName", "tckn", "phone", "city", "district", "address", "shipping"];
-      const firstKey = order.find((k) => e[k]);
-      const el = firstKey ? document.getElementById(`f-${firstKey}`) : null;
-      if (el) {
-        el.scrollIntoView({ behavior: "smooth", block: "center" });
-        setTimeout(() => (el.querySelector("input, textarea") as HTMLElement | null)?.focus?.(), 400);
+      // Teslimat bilgisi eksikse o adıma dön
+      if (Object.keys(e).some((k) => DELIVERY_KEYS.includes(k)) && step !== "teslimat") {
+        goToTeslimat();
+        setTimeout(() => focusFirstError(e), 350);
+      } else {
+        focusFirstError(e);
       }
       return;
     }
@@ -456,8 +490,9 @@ export default function CheckoutPage() {
     router.push(remaining > 0 ? "/sepet" : "/products");
   }
 
-  async function handleApplyCoupon(codeArg?: string) {
-    const code = (codeArg ?? couponInput).trim().toUpperCase();
+  // Kupon YALNIZ sepette girilir; burada sepetteki kod doğrulanıp tutarı hesaplanır.
+  async function handleApplyCoupon(codeArg: string) {
+    const code = codeArg.trim().toUpperCase();
     if (!code) return;
     setCouponError("");
     setCouponLoading(true);
@@ -490,18 +525,10 @@ export default function CheckoutPage() {
   // Sepette seçilen kupon varsa checkout'ta otomatik uygula
   useEffect(() => {
     if (storeCouponCode && !couponData) {
-      setCouponInput(storeCouponCode);
       handleApplyCoupon(storeCouponCode);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storeCouponCode]);
-
-  function removeCoupon() {
-    setCouponCode("");
-    setCouponInput("");
-    setCouponData(null);
-    setCouponError("");
-  }
 
   // URL'den hata parametresini oku (iyzico başarısız callback)
   const paymentFailed = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("hatali") === "1";
@@ -709,16 +736,20 @@ export default function CheckoutPage() {
         </div>
       )}
 
-      <main className="container mx-auto px-4 py-8 md:py-16">
+      <main className="container mx-auto px-4 py-8 md:py-12">
+        <div className="max-w-6xl mx-auto mb-8 md:mb-10">
+          <CheckoutStepper current={step} onGoTeslimat={goToTeslimat} />
+        </div>
         <div className="max-w-6xl mx-auto grid lg:grid-cols-12 gap-12">
           {/* MAIN FLOW */}
           <div className="lg:col-span-8 space-y-12">
             
+            {step === "teslimat" && (<>
             {/* Step 0: Personal Info */}
             <section className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
                <div className="flex items-center gap-4">
                   <div className="w-10 h-10 bg-olive-600 text-white rounded-2xl flex items-center justify-center font-black shadow-lg shadow-olive-100 italic">01</div>
-                  <h3 className="text-2xl font-black text-slate-900 uppercase italic tracking-tighter">Müşteri Bilgileri</h3>
+                  <h3 className="text-2xl font-black text-slate-900 uppercase italic tracking-tighter">İletişim Bilgileri</h3>
                </div>
                <div className="bento-card bg-white !p-8">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -775,22 +806,6 @@ export default function CheckoutPage() {
                       </div>
                     </div>
 
-                    {/* TC Kimlik — iyzico + yasal zorunluluk */}
-                    <div className="space-y-2" id="f-tckn">
-                      <label className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em] px-1 flex items-center gap-1.5">
-                        <IdCard size={12} /> TC KİMLİK NUMARASI
-                      </label>
-                      <Input
-                        value={identityNumber}
-                        onChange={e => { setIdentityNumber(e.target.value.replace(/\D/g, "").slice(0, 11)); clearErr("tckn"); }}
-                        placeholder="Örn: 12345678901"
-                        maxLength={11}
-                        className={cn("h-14 rounded-2xl bg-white border-slate-200 font-bold font-mono tracking-widest focus:ring-olive-600", errCls("tckn"))}
-                      />
-                      <p className="text-[10px] text-slate-400 font-medium px-1 leading-relaxed">
-                        <span className="text-olive-600 font-bold">Yasal zorunluluk:</span> iyzico, 6493 sayılı Ödeme Hizmetleri Kanunu gereğince kimlik doğrulaması yapmaktadır. Bilgileriniz yalnızca fatura ve ödeme işlemleri için kullanılır.
-                      </p>
-                    </div>
                   </div>
                </div>
             </section>
@@ -996,10 +1011,97 @@ export default function CheckoutPage() {
             </section>
             )}
 
+            </>)}
+
+            {step === "odeme" && (<>
+            {/* Teslimat özeti — değiştirmek için teslimat adımına dön */}
+            <section className="space-y-4 animate-in fade-in">
+               <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 bg-olive-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-olive-100"><Truck size={18} /></div>
+                    <h3 className="text-2xl font-black text-slate-900 uppercase italic tracking-tighter">Teslimat</h3>
+                  </div>
+                  <button type="button" onClick={goToTeslimat} className="text-olive-600 font-black text-xs uppercase tracking-widest hover:underline">Düzenle</button>
+               </div>
+               {(() => {
+                 const addr = isGuest ? null : addresses.find((a) => a.id === selectedShippingId);
+                 const bill = !isGuest && !isSameAsShipping ? addresses.find((a) => a.id === selectedBillingId) : null;
+                 return (
+                   <div className="bento-card bg-white !p-6 grid grid-cols-1 md:grid-cols-3 gap-5 text-sm">
+                     <div>
+                       <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">İletişim</p>
+                       <p className="font-bold text-slate-900">{personalInfo.firstName} {personalInfo.lastName}</p>
+                       <p className="text-slate-500 break-all">{personalInfo.email}</p>
+                       {isGuest && guestAddr.phone && <p className="text-slate-500">{guestAddr.phone}</p>}
+                     </div>
+                     <div>
+                       <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Adres</p>
+                       {isGuest ? (
+                         <p className="text-slate-700">{guestAddr.addressDetail}<br /><b>{guestAddr.district} / {guestAddr.city}</b></p>
+                       ) : addr ? (
+                         <p className="text-slate-700">{addr.address_detail}<br /><b>{addr.district} / {addr.city}</b></p>
+                       ) : <p className="text-slate-400">—</p>}
+                       <p className="text-xs text-slate-400 mt-1">Fatura: {isGuest || isSameAsShipping ? "teslimat adresiyle aynı" : (bill?.is_corporate ? `${bill.company_name}` : bill?.address_name || "—")}</p>
+                     </div>
+                     <div>
+                       <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Kargo</p>
+                       <p className="font-bold text-slate-900">{_selMethodSummary?.name || "Kargo"}</p>
+                       <p className={cn("font-bold", shippingCost === 0 ? "text-green-600" : "text-slate-700")}>
+                         {shippingCost === 0 ? "Ücretsiz" : `₺${shippingCost.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`}
+                       </p>
+                     </div>
+                   </div>
+                 );
+               })()}
+            </section>
+
+            {creditBalance > 0 && (
+            <section className="space-y-4">
+               <div className="bento-card bg-white !p-6">
+                    {/* YeriHisset Kredisi (cüzdan) — bakiyesi olan kullanıcıya */}
+                    {(
+                      <div className="space-y-2 rounded-2xl border-2 border-emerald-100 bg-emerald-50/40 p-4">
+                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-emerald-600 flex items-center gap-1.5">
+                          <Banknote size={12} /> YERİHİSSET KREDİSİ · BAKİYE ₺{creditBalance.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
+                        </p>
+                        <div className="flex gap-2">
+                          <Input
+                            type="text"
+                            inputMode="decimal"
+                            value={creditInput}
+                            onChange={(e) => {
+                              const v = e.target.value.replace(/[^0-9.,]/g, "").replace(",", ".");
+                              setCreditInput(v);
+                            }}
+                            placeholder="Kullanılacak tutar (₺)"
+                            className="h-10 rounded-xl font-bold text-sm"
+                          />
+                          <Button
+                            type="button" variant="outline" size="sm"
+                            className="h-10 px-4 font-bold shrink-0 rounded-xl border-emerald-200 text-emerald-700"
+                            onClick={() => setCreditInput(String(Math.min(creditBalance, preCreditTotal)))}
+                          >
+                            Tümü
+                          </Button>
+                        </div>
+                        {creditApplied > 0 ? (
+                          <p className="text-[11px] text-emerald-700 font-bold">
+                            ₺{creditApplied.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} uygulandı ·{" "}
+                            <button type="button" onClick={() => setCreditInput("")} className="underline hover:text-red-500">Kaldır</button>
+                          </p>
+                        ) : (
+                          <p className="text-[11px] text-emerald-600/80">Bakiyenin tamamını veya bir kısmını bu siparişte indirim olarak kullanabilirsin.</p>
+                        )}
+                      </div>
+                    )}
+               </div>
+            </section>
+            )}
+
             {/* Step 3: Payment */}
             <section className="space-y-6 animate-in fade-in slide-in-from-bottom-10">
                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 bg-olive-600 text-white rounded-2xl flex items-center justify-center font-black shadow-lg shadow-olive-100 italic">{isGuest ? "04" : "05"}</div>
+                  <div className="w-10 h-10 bg-olive-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-olive-100"><CreditCard size={18} /></div>
                   <h3 className="text-2xl font-black text-slate-900 uppercase italic tracking-tighter">Ödeme Yöntemi</h3>
                </div>
                <div className={cn("grid gap-6", bankTransferEnabled ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1")}>
@@ -1060,6 +1162,28 @@ export default function CheckoutPage() {
                   )}
                </div>
 
+
+               {paymentMethod === "credit_card" && (
+                 <div className="bento-card bg-white !p-6 animate-in fade-in slide-in-from-top-4">
+                    {/* TC Kimlik — iyzico + yasal zorunluluk */}
+                   <div className="space-y-2" id="f-tckn">
+                     <label className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em] px-1 flex items-center gap-1.5">
+                       <IdCard size={12} /> TC KİMLİK NUMARASI
+                     </label>
+                     <Input
+                       value={identityNumber}
+                       onChange={e => { setIdentityNumber(e.target.value.replace(/\D/g, "").slice(0, 11)); clearErr("tckn"); }}
+                       placeholder="Örn: 12345678901"
+                       maxLength={11}
+                       className={cn("h-14 rounded-2xl bg-white border-slate-200 font-bold font-mono tracking-widest focus:ring-olive-600", errCls("tckn"))}
+                     />
+                     <p className="text-[10px] text-slate-400 font-medium px-1 leading-relaxed">
+                       <span className="text-olive-600 font-bold">Yasal zorunluluk:</span> iyzico, 6493 sayılı Ödeme Hizmetleri Kanunu gereğince kimlik doğrulaması yapmaktadır. Bilgileriniz yalnızca fatura ve ödeme işlemleri için kullanılır.
+                     </p>
+                   </div>
+                 </div>
+               )}
+
                {/* Banka bilgileri — Havale seçilince göster */}
                {paymentMethod === "bank_transfer" && bankTransferInfo && (
                  <div className="bento-card bg-amber-50 border-amber-200 !p-6 space-y-3 animate-in fade-in slide-in-from-top-4">
@@ -1074,6 +1198,7 @@ export default function CheckoutPage() {
                  </div>
                )}
             </section>
+            </>)}
           </div>
 
           {/* SIDEBAR SUMMARY */}
@@ -1083,7 +1208,7 @@ export default function CheckoutPage() {
                   <div className="bg-slate-900 p-8 text-white relative overflow-hidden">
                      <div className="absolute top-0 right-0 w-32 h-32 bg-olive-600 blur-[80px] opacity-30 -mr-16 -mt-16" />
                      <h2 className="text-2xl font-black uppercase tracking-tighter italic relative z-10">Sipariş Özeti</h2>
-                     <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] relative z-10 mt-1">Ödeme Öncesi Son Kontrol</p>
+                     <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] relative z-10 mt-1">{step === "odeme" ? "Ödeme öncesi son kontrol" : "Teslimat bilgilerini tamamla"}</p>
                   </div>
                   
                   <div className="p-8 space-y-8">
@@ -1115,10 +1240,15 @@ export default function CheckoutPage() {
                           {shippingCost === 0 ? "ÜCRETSİZ" : `₺${shippingCost.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`}
                         </span>
                       </div>
-                      {couponDiscount > 0 && (
+                      {couponData && (
                         <div className="flex justify-between text-green-600 text-sm">
-                          <span>Kupon İndirimi</span>
-                          <span className="text-lg">-₺{couponDiscount.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
+                          <span className="flex flex-col">
+                            <span>Kupon İndirimi</span>
+                            <span className="text-[10px] font-medium normal-case not-italic tracking-normal text-slate-400">
+                              {couponCode} · <Link href="/sepet" className="underline hover:text-olive-600">Sepette değiştir</Link>
+                            </span>
+                          </span>
+                          <span className="text-lg">{couponData.free_shipping && couponDiscount === 0 ? "Ücretsiz kargo" : `-₺${couponDiscount.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}`}</span>
                         </div>
                       )}
                       {creditApplied > 0 && (
@@ -1129,108 +1259,12 @@ export default function CheckoutPage() {
                       )}
                     </div>
 
-                    {/* Kupon Alanı */}
-                    <div className="space-y-3">
-                      <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-1.5">
-                        <Ticket size={12} /> KUPON / İNDİRİM KODU
+                    {/* Kupon — yalnız sepette girilir; burada salt okunur */}
+                    {couponError && storeCouponCode && !couponData && (
+                      <p className="text-xs font-bold text-amber-700 bg-amber-50 rounded-xl px-3 py-2">
+                        Sepetteki kupon ({storeCouponCode}) uygulanamadı: {couponError} · <Link href="/sepet" className="underline">Sepette değiştir</Link>
                       </p>
-
-                      {couponData ? (
-                        /* Kupon uygulandı */
-                        <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-2xl px-4 py-3">
-                          <div>
-                            <p className="text-xs font-black text-green-800">{couponData.name}</p>
-                            <p className="text-[10px] text-green-600 font-mono font-bold">{couponCode}</p>
-                          </div>
-                          <button onClick={removeCoupon} className="text-green-500 hover:text-red-500 transition-colors p-1">
-                            <X size={14} />
-                          </button>
-                        </div>
-                      ) : (
-                        /* Kupon giriş alanı */
-                        <div className="space-y-2">
-                          {/* Kullanılabilir kuponlar seçici */}
-                          {userCoupons.length > 0 && (
-                            <select
-                              className="flex h-10 w-full rounded-xl border border-input bg-slate-50/50 px-3 py-2 text-xs font-bold"
-                              value=""
-                              onChange={(e) => {
-                                if (e.target.value) {
-                                  setCouponInput(e.target.value);
-                                }
-                              }}
-                            >
-                              <option value="">— Kayıtlı kupon seç —</option>
-                              {userCoupons.map((uc) => (
-                                <option key={uc.id} value={uc.coupons?.code}>
-                                  {uc.coupons?.code} — {uc.coupons?.name}
-                                </option>
-                              ))}
-                            </select>
-                          )}
-                          <div className="flex gap-2">
-                            <Input
-                              value={couponInput}
-                              onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
-                              placeholder="KUPON KODU"
-                              className="h-10 rounded-xl font-mono font-bold text-sm tracking-widest"
-                              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleApplyCoupon(); } }}
-                            />
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="h-10 px-4 font-bold shrink-0 rounded-xl"
-                              onClick={handleApplyCoupon}
-                              disabled={couponLoading || !couponInput.trim()}
-                            >
-                              {couponLoading ? <Loader2 size={14} className="animate-spin" /> : "Uygula"}
-                            </Button>
-                          </div>
-                          {couponError && (
-                            <p className="text-xs text-red-500 font-medium">{couponError}</p>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* YeriHisset Kredisi (cüzdan) — bakiyesi olan kullanıcıya */}
-                    {creditBalance > 0 && (
-                      <div className="space-y-2 rounded-2xl border-2 border-emerald-100 bg-emerald-50/40 p-4">
-                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-emerald-600 flex items-center gap-1.5">
-                          <Banknote size={12} /> YERİHİSSET KREDİSİ · BAKİYE ₺{creditBalance.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
-                        </p>
-                        <div className="flex gap-2">
-                          <Input
-                            type="text"
-                            inputMode="decimal"
-                            value={creditInput}
-                            onChange={(e) => {
-                              const v = e.target.value.replace(/[^0-9.,]/g, "").replace(",", ".");
-                              setCreditInput(v);
-                            }}
-                            placeholder="Kullanılacak tutar (₺)"
-                            className="h-10 rounded-xl font-bold text-sm"
-                          />
-                          <Button
-                            type="button" variant="outline" size="sm"
-                            className="h-10 px-4 font-bold shrink-0 rounded-xl border-emerald-200 text-emerald-700"
-                            onClick={() => setCreditInput(String(Math.min(creditBalance, preCreditTotal)))}
-                          >
-                            Tümü
-                          </Button>
-                        </div>
-                        {creditApplied > 0 ? (
-                          <p className="text-[11px] text-emerald-700 font-bold">
-                            ₺{creditApplied.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} uygulandı ·{" "}
-                            <button type="button" onClick={() => setCreditInput("")} className="underline hover:text-red-500">Kaldır</button>
-                          </p>
-                        ) : (
-                          <p className="text-[11px] text-emerald-600/80">Bakiyenin tamamını veya bir kısmını bu siparişte indirim olarak kullanabilirsin.</p>
-                        )}
-                      </div>
                     )}
-
                     <Separator className="bg-slate-100" />
 
                     <div className="flex flex-col gap-1 p-6 bg-olive-50/50 rounded-3xl border-2 border-olive-100 relative overflow-hidden group">
@@ -1242,6 +1276,14 @@ export default function CheckoutPage() {
                       <span className="text-[11px] font-bold text-olive-600/70 tracking-tight">KDV Dahil</span>
                     </div>
 
+                    {step === "teslimat" ? (
+                    <Button
+                      onClick={goToOdeme}
+                      className="w-full h-16 rounded-[2rem] bg-olive-600 hover:bg-olive-700 text-lg font-black shadow-2xl shadow-olive-100 uppercase tracking-tighter group mt-2 transition-all active:scale-95"
+                    >
+                      Ödeme adımına geç <ArrowRight size={22} className="ml-2 group-hover:translate-x-2 transition-transform" />
+                    </Button>
+                    ) : (<>
                     <Button
                       onClick={handlePlaceOrder}
                       disabled={placing}
@@ -1252,6 +1294,7 @@ export default function CheckoutPage() {
                     <p className="text-[11px] text-slate-500 font-medium leading-relaxed text-center px-2 -mt-1">
                       “Siparişi Tamamla” butonuna basarak <Link href="/mesafeli-satis" target="_blank" className="font-bold text-olive-600 underline">Mesafeli Satış Sözleşmesi</Link>’ni ve Ön Bilgilendirme Formu’nu kabul etmiş sayılırsınız.
                     </p>
+                    </>)}
 
                     <div className="grid grid-cols-2 gap-4">
                       <div className="flex items-center gap-3 text-[9px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 p-3 rounded-2xl">
