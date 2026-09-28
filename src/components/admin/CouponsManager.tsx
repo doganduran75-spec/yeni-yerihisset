@@ -92,8 +92,32 @@ export default function CouponsManager() {
   const [tagOptions, setTagOptions] = useState<{ id: string; label: string }[]>([]);
   const [assigning, setAssigning] = useState(false);
   const [affiliates, setAffiliates] = useState<{ id: string; code: string; name: string }[]>([]);
+  // Kupon → atanmış üyeler (user_coupons) — tabloda "Kişi" kolonu
+  const [assignees, setAssignees] = useState<Record<string, { name: string; email: string }[]>>({});
 
-  useEffect(() => { fetchCoupons(); fetchTagOptions(); fetchAffiliates(); }, []);
+  useEffect(() => { fetchCoupons(); fetchTagOptions(); fetchAffiliates(); fetchAssignees(); }, []);
+
+  async function fetchAssignees() {
+    const rows: { coupon_id: string; user_id: string }[] = [];
+    for (let from = 0; from < 20000; from += 1000) {
+      const { data, error } = await (supabase as any)
+        .from("user_coupons").select("coupon_id, user_id").range(from, from + 999);
+      if (error || !data) break;
+      rows.push(...data);
+      if (data.length < 1000) break;
+    }
+    const ids = [...new Set(rows.map((r) => r.user_id))];
+    const people = new Map<string, { name: string; email: string }>();
+    for (let i = 0; i < ids.length; i += 200) {
+      const { data } = await supabase.from("profiles").select("id, first_name, last_name, email").in("id", ids.slice(i, i + 200));
+      for (const p of (data as any[]) || []) {
+        people.set(p.id, { name: `${p.first_name ?? ""} ${p.last_name ?? ""}`.trim(), email: p.email ?? "" });
+      }
+    }
+    const map: Record<string, { name: string; email: string }[]> = {};
+    for (const r of rows) (map[r.coupon_id] ||= []).push(people.get(r.user_id) ?? { name: "", email: "" });
+    setAssignees(map);
+  }
 
   async function fetchAffiliates() {
     const { data } = await supabase
@@ -215,6 +239,7 @@ export default function CouponsManager() {
       if (!res.ok) throw new Error(d.error || "Atama başarısız");
       alert(`Atandı: ${d.atanan}/${d.hedef} üye.` + (assignNotify ? ` E-posta: ${d.epostaGonderilen}.` : ""));
       setAssignOpen(false);
+      fetchAssignees();
       setAssignEmail("");
       setAssignTagOptionId("");
     } catch (err: any) {
@@ -262,6 +287,7 @@ export default function CouponsManager() {
               <TableRow>
                 <TableHead>Kod</TableHead>
                 <TableHead>Kupon Adı</TableHead>
+                <TableHead>Kişi</TableHead>
                 <TableHead>Tip</TableHead>
                 <TableHead>İndirim</TableHead>
                 <TableHead>Kullanım</TableHead>
@@ -272,7 +298,7 @@ export default function CouponsManager() {
             </TableHeader>
             <TableBody>
               {coupons.length === 0 && (
-                <TableRow><TableCell colSpan={8} className="text-center py-12 text-muted-foreground">Henüz kupon eklenmemiş</TableCell></TableRow>
+                <TableRow><TableCell colSpan={9} className="text-center py-12 text-muted-foreground">Henüz kupon eklenmemiş</TableCell></TableRow>
               )}
               {coupons.map((c) => {
                 const expired = c.expires_at && new Date(c.expires_at) < new Date();
@@ -289,6 +315,37 @@ export default function CouponsManager() {
                         <p className="font-semibold text-sm">{c.name}</p>
                         {c.is_personal && <span className="text-[10px] text-purple-600 font-bold bg-purple-50 px-1.5 rounded">KİŞİYE ÖZEL</span>}
                       </div>
+                    </TableCell>
+                    {/* Kişi: satış ortağının kodu / atanmış üye(ler) / herkese açık */}
+                    <TableCell className="text-sm max-w-[200px]">
+                      {(() => {
+                        const aff = c.affiliate_id ? affiliates.find((a) => a.id === c.affiliate_id) : null;
+                        const list = assignees[c.id] || [];
+                        return (
+                          <div className="space-y-1">
+                            {c.affiliate_id && (
+                              <div>
+                                <span className="text-[10px] font-bold text-olive-700 bg-olive-50 px-1.5 rounded">SATIŞ ORTAĞI</span>
+                                <p className="font-semibold truncate">{aff ? (aff.name || aff.code) : "—"}</p>
+                              </div>
+                            )}
+                            {list.length === 1 && (
+                              <div className="min-w-0">
+                                <p className="font-semibold truncate">{list[0].name || list[0].email || "Üye"}</p>
+                                {list[0].name && list[0].email && <p className="text-[11px] text-muted-foreground truncate">{list[0].email}</p>}
+                              </div>
+                            )}
+                            {list.length > 1 && (
+                              <p className="font-semibold text-purple-700" title={list.slice(0, 15).map((u) => u.name || u.email).join(", ") + (list.length > 15 ? " …" : "")}>
+                                {list.length} üye
+                              </p>
+                            )}
+                            {!c.affiliate_id && list.length === 0 && (
+                              <span className="text-xs text-muted-foreground">{c.is_personal ? "Henüz atanmadı" : "Herkese açık"}</span>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell>
                       <span className={cn(

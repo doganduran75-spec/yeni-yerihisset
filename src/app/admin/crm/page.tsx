@@ -88,7 +88,7 @@ export default function CrmPage() {
           <h2 className="text-3xl font-bold tracking-tight">Müşteri İletişim</h2>
           <p className="text-muted-foreground">Bildirim şablonları ve gönderim geçmişi.</p>
         </div>
-        <Link href="/admin/crm/email-templates" className={buttonVariants({ variant: "default" }) + " gap-2"}>
+        <Link href="/admin/settings?tab=email-templates" className={buttonVariants({ variant: "default" }) + " gap-2"}>
           <Mail size={16} /> Email Şablonları <ArrowRight size={16} />
         </Link>
       </div>

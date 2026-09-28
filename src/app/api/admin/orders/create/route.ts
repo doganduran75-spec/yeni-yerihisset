@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { getAuthUserFromRequest } from "@/lib/auth-from-request";
+import { resolveShipping } from "@/lib/shipping";
 
 type NewOrderItem = {
   product_id: string;
@@ -36,6 +37,8 @@ export async function POST(req: NextRequest) {
     payment_method = "credit_card",
     admin_note = "",
     coupon_discount = 0,
+    shipping_method_id = null,
+    free_shipping = false,
   } = body as {
     customer_id: string;
     shipping_address_id: string;
@@ -43,6 +46,8 @@ export async function POST(req: NextRequest) {
     payment_method?: string;
     admin_note?: string;
     coupon_discount?: number;
+    shipping_method_id?: string | null;
+    free_shipping?: boolean;
   };
 
   if (!customer_id || !shipping_address_id || !items?.length) {
@@ -61,7 +66,9 @@ export async function POST(req: NextRequest) {
   }
 
   const productTotal = items.reduce((s, i) => s + i.quantity * i.unit_price, 0);
-  const shippingCost = productTotal >= 500 ? 0 : 29.90;
+  // Kargo: sitedeki kargo yöntemi kuralıyla (checkout ile aynı; free_over eşiği dahil)
+  const shipInfo = await resolveShipping(supabase, shipping_method_id, productTotal, !!free_shipping);
+  const shippingCost = shipInfo.cost;
   const totalAmount = Math.max(0, productTotal + shippingCost - coupon_discount);
 
   const shippingAddressJson = JSON.stringify({
@@ -81,6 +88,8 @@ export async function POST(req: NextRequest) {
       status: isBankTransfer ? "awaiting_payment" : "processing",
       total_amount: totalAmount,
       shipping_address: shippingAddressJson,
+      shipping_method: shipInfo.name,
+      shipping_cost: shippingCost,
       payment_method,
       payment_status: isBankTransfer ? "pending" : "paid",
       shipment_status: "preparing",

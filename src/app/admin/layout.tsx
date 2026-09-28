@@ -90,11 +90,6 @@ export default function AdminLayout({
                 </SidebarMenuItem>
                 <SidebarMenuItem>
                   <SidebarMenuButton
-                    render={<Link href="/admin/crm/email-templates"><BookOpen size={18} className="mr-2" /> Email Şablonları</Link>}
-                  />
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton
                     render={<Link href="/admin/affiliates"><Link2 size={18} className="mr-2" /> Satış Ortaklığı</Link>}
                   />
                 </SidebarMenuItem>

@@ -23,6 +23,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { supabase } from "@/lib/supabase";
+import { shipFee } from "@/lib/shipping-fee";
 import {
   Eye, MoreVertical, Loader2, Package, Truck, CheckCircle, XCircle,
   Clock, MapPin, Phone, Mail, ShoppingBag, Copy, ExternalLink,
@@ -154,6 +155,10 @@ export default function OrdersPage() {
     { sku: "", productId: "", variantId: "", variantName: "", title: "", quantity: 1, unitPrice: 0, stock: 0, query: "", skuError: "", skuLoading: false },
   ]);
   const [newPaymentMethod, setNewPaymentMethod] = useState("credit_card");
+  // Kargo: sitedeki aktif kargo yöntemleri (checkout ile aynı kural; ücret sunucuda hesaplanır)
+  const [shipMethods, setShipMethods] = useState<any[]>([]);
+  const [newShipMethodId, setNewShipMethodId] = useState("");
+  const [newFreeShipping, setNewFreeShipping] = useState(false); // admin kargo ücretini almayabilir
   const [newAdminNote, setNewAdminNote] = useState("");
   const [creatingOrder, setCreatingOrder] = useState(false);
   const [createError, setCreateError] = useState("");
@@ -423,6 +428,17 @@ export default function OrdersPage() {
     } : item));
   }
 
+  // Yeni sipariş penceresi açılınca aktif kargo yöntemlerini yükle
+  useEffect(() => {
+    if (!createOpen) return;
+    (async () => {
+      const { data } = await (supabase as any).from("shipping_methods").select("*").eq("is_active", true).order("sort_order");
+      const list = (data as any[]) || [];
+      setShipMethods(list);
+      setNewShipMethodId((prev) => (prev && list.some((m) => m.id === prev)) ? prev : (list[0]?.id ?? ""));
+    })();
+  }, [createOpen]);
+
   async function submitNewOrder() {
     if (!selectedCustomer) { setCreateError("Müşteri seçin"); return; }
     if (!selectedAddressId) { setCreateError("Adres seçin"); return; }
@@ -452,6 +468,8 @@ export default function OrdersPage() {
             unit_price: i.unitPrice,
           })),
           payment_method: newPaymentMethod,
+          shipping_method_id: newShipMethodId || null,
+          free_shipping: newFreeShipping,
           admin_note: newAdminNote,
         }),
       });
@@ -460,7 +478,7 @@ export default function OrdersPage() {
       setCreateOpen(false);
       setCustomerQuery(""); setSelectedCustomer(null); setCustomerAddresses([]); setSelectedAddressId("");
       setNewItems([{ ...EMPTY_ITEM }]);
-      setNewAdminNote(""); setNewPaymentMethod("credit_card");
+      setNewAdminNote(""); setNewPaymentMethod("credit_card"); setNewFreeShipping(false);
       await fetchOrders();
     } catch {
       setCreateError("Bağlantı hatası");
@@ -1656,15 +1674,45 @@ export default function OrdersPage() {
               {/* Özet */}
               {newItems.some(i => i.unitPrice > 0) && (() => {
                 const subtotal = newItems.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
-                const ship = subtotal >= 500 ? 0 : 29.90;
+                const m = shipMethods.find((x) => x.id === newShipMethodId);
+                const ship = shipFee(m, subtotal, newFreeShipping);
                 return (
                   <div className="bg-slate-100 rounded-lg px-3 py-2 text-xs space-y-1">
                     <div className="flex justify-between text-slate-500"><span>Ara toplam</span><span>₺{subtotal.toFixed(2)}</span></div>
-                    <div className="flex justify-between text-slate-500"><span>Kargo</span><span>{ship === 0 ? "Ücretsiz" : `₺${ship.toFixed(2)}`}</span></div>
+                    <div className="flex justify-between text-slate-500"><span>Kargo{m ? ` · ${m.name}` : ""}</span><span>{ship === 0 ? "Ücretsiz" : `₺${ship.toFixed(2)}`}</span></div>
                     <div className="flex justify-between font-bold text-slate-800 border-t pt-1"><span>Toplam</span><span>₺{(subtotal + ship).toFixed(2)}</span></div>
                   </div>
                 );
               })()}
+            </div>
+
+            {/* Kargo yöntemi — sitedeki aktif yöntemler */}
+            <div className="space-y-1.5">
+              <label className="text-sm font-semibold">Kargo Yöntemi</label>
+              {shipMethods.length === 0 ? (
+                <p className="text-xs text-muted-foreground">Aktif kargo yöntemi yok (Ayarlar › Genel › Kargo Yöntemleri).</p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {shipMethods.map((m) => {
+                    const subtotal = newItems.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
+                    const fee = shipFee(m, subtotal, newFreeShipping);
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => setNewShipMethodId(m.id)}
+                        className={`flex-1 min-w-[120px] py-2 px-2 text-xs font-semibold rounded-lg border transition ${newShipMethodId === m.id ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"}`}
+                      >
+                        {m.name} · {fee === 0 ? "Ücretsiz" : `₺${fee.toFixed(2)}`}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              <label className="flex items-center gap-2 text-xs text-slate-600">
+                <input type="checkbox" checked={newFreeShipping} onChange={(e) => setNewFreeShipping(e.target.checked)} className="h-3.5 w-3.5" />
+                Kargo ücreti alma (ücretsiz gönder)
+              </label>
             </div>
 
             {/* Ödeme yöntemi */}

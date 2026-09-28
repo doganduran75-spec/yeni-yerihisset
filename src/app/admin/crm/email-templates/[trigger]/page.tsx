@@ -68,7 +68,7 @@ export default function EditTemplatePage({ params }: { params: Promise<{ trigger
     if (error) {
       alert("Kayıt sırasında bir hata oluştu: " + error.message);
     } else {
-      router.push("/admin/crm/email-templates");
+      router.push("/admin/settings?tab=email-templates");
     }
   }
 
@@ -122,7 +122,7 @@ export default function EditTemplatePage({ params }: { params: Promise<{ trigger
   return (
     <div className="space-y-6 max-w-4xl">
       <div className="flex items-center gap-3">
-        <Link href="/admin/crm/email-templates" className={buttonVariants({ variant: "ghost", size: "icon" }) + " shrink-0"}>
+        <Link href="/admin/settings?tab=email-templates" className={buttonVariants({ variant: "ghost", size: "icon" }) + " shrink-0"}>
           <ArrowLeft size={18} />
         </Link>
         <div>
@@ -207,7 +207,7 @@ export default function EditTemplatePage({ params }: { params: Promise<{ trigger
         </Card>
 
         <div className="flex justify-end gap-3">
-          <Button type="button" variant="outline" onClick={() => router.push("/admin/crm/email-templates")}>
+          <Button type="button" variant="outline" onClick={() => router.push("/admin/settings?tab=email-templates")}>
             Vazgeç
           </Button>
           <Button type="submit" disabled={saving} className="gap-2 px-8">

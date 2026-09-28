@@ -141,6 +141,7 @@ export default function SizeFilterGrid({ products: cachedProducts, categoryName 
 
   const [size, setSize] = useState<string | null>(null);
   const [cat, setCat] = useState<string | null>(null); // seçili kategori id'si
+  const [brand, setBrand] = useState<string | null>(null); // seçili marka slug'ı
   // "Haber Ver" modalı hedefi (stokta olmayan kart tıklanınca)
   const [notifyTarget, setNotifyTarget] = useState<{ productId: string; productTitle: string; variantId?: string; variantName?: string } | null>(null);
 
@@ -206,6 +207,25 @@ export default function SizeFilterGrid({ products: cachedProducts, categoryName 
     if (match?.categories?.id) setCat(match.categories.id);
   }, [products]);
 
+  // ?marka=<slug> varsa o marka önseçili açılır (kategori ile aynı mantık)
+  useEffect(() => {
+    const slug = new URLSearchParams(window.location.search).get("marka");
+    if (slug && products.some((p: any) => p.brands?.slug === slug)) setBrand(slug);
+  }, [products]);
+
+  // Mevcut markalar (ürünlerden). Tek marka varsa filtre o marka SEÇİLİ görünür
+  // (bilgi amaçlı; süzme yapılmaz, markasız ürünler de listede kalır).
+  const brands = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const p of products) {
+      const b = p.brands;
+      if (b?.slug && b?.name) m.set(b.slug, b.name);
+    }
+    return [...m.entries()].map(([slug, name]) => ({ slug, name })).sort((a, b) => a.name.localeCompare(b.name, "tr"));
+  }, [products]);
+  const singleBrand = brands.length === 1;
+  const activeBrand = singleBrand ? brands[0].slug : brand;
+
   // Mevcut kategoriler (yalnızca kategorisi olan ürünlerden). ≥2 ise filtre gösterilir.
   const cats = useMemo(() => {
     const m = new Map<string, string>();
@@ -217,10 +237,12 @@ export default function SizeFilterGrid({ products: cachedProducts, categoryName 
   }, [products]);
   const showCatFilter = cats.length >= 2;
 
-  // Kategori süzgeci (numaradan bağımsız). Kategori seçiliyse önce ona indir.
+  // Marka + kategori süzgeci (numaradan bağımsız). Seçiliyse önce onlara indir.
   const base = useMemo(
-    () => (cat ? products.filter((p) => p.categories?.id === cat) : products),
-    [products, cat]
+    () => products.filter((p) =>
+      (!brand || singleBrand || p.brands?.slug === brand) &&
+      (!cat || p.categories?.id === cat)),
+    [products, cat, brand, singleBrand]
   );
 
   // Mevcut numaralar (kategori süzgecinden sonra)
@@ -252,6 +274,34 @@ export default function SizeFilterGrid({ products: cachedProducts, categoryName 
 
   return (
     <div className="space-y-8">
+      {/* Marka filtresi (en üstte) — tek marka varsa o seçili gelir */}
+      {brands.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-black uppercase tracking-widest text-slate-400 mr-1">Marka:</span>
+          {!singleBrand && (
+            <button
+              onClick={() => setBrand(null)}
+              className={`px-4 h-9 rounded-xl text-sm font-bold border-2 transition-all ${activeBrand === null ? "border-olive-600 bg-olive-600 text-white" : "border-slate-200 text-slate-600 hover:border-olive-300"}`}
+            >
+              Hepsi
+            </button>
+          )}
+          {brands.map((b) => (
+            <button
+              key={b.slug}
+              onClick={() => {
+                if (singleBrand) return;
+                setBrand((prev) => (prev === b.slug ? null : b.slug));
+                track("brand_click", { brand: b.slug, source: "filter" });
+              }}
+              className={`px-4 h-9 rounded-xl text-sm font-bold border-2 transition-all ${activeBrand === b.slug ? "border-olive-600 bg-olive-600 text-white" : "border-slate-200 text-slate-700 hover:border-olive-300"} ${singleBrand ? "cursor-default" : ""}`}
+            >
+              {b.name}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Kategori filtresi (numaranın üstünde) */}
       {showCatFilter && (
         <div className="flex flex-wrap items-center gap-2">

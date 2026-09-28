@@ -15,10 +15,11 @@ import CategoriesTab from "@/components/admin/settings/CategoriesTab";
 import KBCategoriesTab from "@/components/admin/settings/KBCategoriesTab";
 import MemberTagsTab from "@/components/admin/settings/MemberTagsTab";
 import PopupTab from "@/components/admin/settings/PopupTab";
+import EmailTemplatesTab from "@/components/admin/settings/EmailTemplatesTab";
 import ShippingMethodsManager from "@/components/admin/ShippingMethodsManager";
 import { siteAlert } from "@/components/ui/site-dialog";
 
-type SettingsTab = "general" | "variants" | "roles" | "brands" | "categories" | "kb-categories" | "member-tags" | "popup";
+type SettingsTab = "general" | "variants" | "roles" | "brands" | "categories" | "kb-categories" | "member-tags" | "popup" | "email-templates";
 
 type Settings = {
   id: string;
@@ -173,6 +174,7 @@ function SettingsPageInner() {
 
   const tabs: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
     { id: "general",       label: "Genel Ayarlar",           icon: <Store size={16} /> },
+    { id: "email-templates", label: "E-posta Şablonları",    icon: <Mail size={16} /> },
     { id: "popup",         label: "Popup",                   icon: <Megaphone size={16} /> },
     { id: "brands",        label: "Markalar",                icon: <Tag size={16} /> },
     { id: "categories",    label: "Kategoriler",             icon: <Bookmark size={16} /> },
@@ -190,13 +192,13 @@ function SettingsPageInner() {
       </div>
 
       {/* Sekme Navigasyonu */}
-      <div className="flex gap-1 border-b">
+      <div className="flex gap-1 border-b overflow-x-auto">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => router.replace(`/admin/settings?tab=${tab.id}`)}
             className={[
-              "flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors",
+              "flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap shrink-0",
               activeTab === tab.id
                 ? "border-blue-600 text-blue-600"
                 : "border-transparent text-muted-foreground hover:text-foreground hover:border-slate-300",
@@ -207,6 +209,7 @@ function SettingsPageInner() {
         ))}
       </div>
 
+      {activeTab === "email-templates" && <EmailTemplatesTab />}
       {activeTab === "popup"          && <PopupTab />}
       {activeTab === "member-tags"   && <MemberTagsTab />}
       {activeTab === "brands"        && <BrandsTab />}

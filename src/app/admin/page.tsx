@@ -6,14 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/lib/supabase";
 import BackupStatusCard from "@/components/admin/BackupStatusCard";
 import DashboardSummary from "@/components/admin/DashboardSummary";
-import { ShoppingBag, Users, CreditCard, TrendingUp, Loader2, MessageCircle, ArrowRight, Star, Clock, PackageOpen, BellRing } from "lucide-react";
-
-type Stats = {
-  totalSales: number;
-  activeOrders: number;
-  totalProducts: number;
-  totalMembers: number;
-};
+import { Loader2, MessageCircle, ArrowRight, Star, Clock, PackageOpen, BellRing } from "lucide-react";
 
 const orderStatusMap: Record<string, { label: string; color: string }> = {
   pending:          { label: "Beklemede",         color: "bg-amber-50 text-amber-700 ring-amber-500/20" },
@@ -75,7 +68,6 @@ type OpenOrder = {
 };
 
 export default function AdminDashboard() {
-  const [stats, setStats] = useState<Stats>({ totalSales: 0, activeOrders: 0, totalProducts: 0, totalMembers: 0 });
   const [openOrders, setOpenOrders] = useState<OpenOrder[]>([]);
   const [openEventMap, setOpenEventMap] = useState<Record<string, string>>({});
   const [manualAlerts, setManualAlerts] = useState<{ id: string; product: string; who: string; channel: string }[]>([]);
@@ -103,22 +95,6 @@ export default function AdminDashboard() {
 
   async function fetchDashboardData() {
     try {
-      const [productsCount, ordersCount, membersCount] = await Promise.all([
-        supabase.from('products').select('*', { count: 'exact', head: true }),
-        supabase.from('orders').select('*', { count: 'exact', head: true }),
-        supabase.from('profiles').select('*', { count: 'exact', head: true }),
-      ]);
-
-      const { data: salesData } = await supabase.from('orders').select('total_amount');
-      const totalSales = salesData?.reduce((acc, curr) => acc + (curr.total_amount || 0), 0) || 0;
-
-      setStats({
-        totalSales,
-        activeOrders: ordersCount.count || 0,
-        totalProducts: productsCount.count || 0,
-        totalMembers: membersCount.count || 0,
-      });
-
       // Tamamlanmamış (kapanmamış) siparişler — süreç takibi
       const { data: openData } = await (supabase as any)
         .from('orders')
@@ -248,57 +224,16 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* Üst özet: satış (yıl / ay / geçen ay) + rollere göre kişiler */}
-      <DashboardSummary />
+      {/* Üst satır: Satış özeti %50 · Kişiler %25 · Yedekleme %25 */}
+      <DashboardSummary>
+        {/* Yedekleme durumu (gece yedeği + haftalık geri yükleme testi) */}
+        <BackupStatusCard />
+      </DashboardSummary>
 
       <div className="grid gap-6 lg:grid-cols-3 items-start">
 
-      {/* SAĞ ÜST — finansal bilgiler, tek satır 4 widget */}
-      <div className="lg:col-start-2 lg:col-span-2 lg:row-start-1 grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card className="border-l-4 border-l-blue-500 shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Toplam Satış</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">₺{stats.totalSales.toFixed(2)}</div>
-            <p className="text-xs text-muted-foreground">Toplam gerçekleşen ciro</p>
-          </CardContent>
-        </Card>
-        <Card className="border-l-4 border-l-orange-500 shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Toplam Sipariş</CardTitle>
-            <CreditCard className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.activeOrders}</div>
-            <p className="text-xs text-muted-foreground">Üyeler tarafından verilen sipariş</p>
-          </CardContent>
-        </Card>
-        <Card className="border-l-4 border-l-green-500 shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Toplam Ürün</CardTitle>
-            <ShoppingBag className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.totalProducts}</div>
-            <p className="text-xs text-muted-foreground">Envanterdeki aktif ürünler</p>
-          </CardContent>
-        </Card>
-        <Card className="border-l-4 border-l-purple-500 shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Toplam Üye</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.totalMembers}</div>
-            <p className="text-xs text-muted-foreground">Sisteme kayıtlı kullanıcılar</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* SAĞ ALT — Tamamlanmamış Siparişler (finansalın altında) */}
-      <div className="lg:col-start-2 lg:col-span-2 lg:row-start-2">
+      {/* SAĞ — Tamamlanmamış Siparişler (üste dayalı) */}
+      <div className="lg:col-start-2 lg:col-span-2 lg:row-start-1">
 
       {/* Tamamlanmamış Siparişler (süreç kapanmamış) */}
       <Card className="shadow-sm border-l-4 border-l-amber-500">
@@ -361,10 +296,10 @@ export default function AdminDashboard() {
           )}
         </CardContent>
       </Card>
-      </div>{/* SAĞ ALT kapan */}
+      </div>{/* SAĞ kapan */}
 
       {/* SOL %34 — Yapılacak işler, tek sıra (dikey) */}
-      <div className="lg:col-start-1 lg:col-span-1 lg:row-start-1 lg:row-span-2 flex flex-col gap-6">
+      <div className="lg:col-start-1 lg:col-span-1 lg:row-start-1 flex flex-col gap-6">
         {/* Yeni Mesajlar */}
         <Card className="shadow-sm border-l-4 border-l-rose-500">
           <CardHeader className="flex flex-row items-center justify-between pb-3">
@@ -525,9 +460,6 @@ export default function AdminDashboard() {
             )}
           </CardContent>
         </Card>
-
-        {/* Yedekleme durumu (gece yedeği + haftalık geri yükleme testi) */}
-        <BackupStatusCard />
 
         {/* Pazaryeri Stok Görevleri — stok 0 olunca kanalları kapat */}
         <Card className="order-first shadow-sm border-l-4 border-l-red-500">

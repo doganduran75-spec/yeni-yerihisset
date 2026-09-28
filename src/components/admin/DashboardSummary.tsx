@@ -3,7 +3,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // Dashboard üst özeti: satış (bu yıl / bu ay / geçen ay) + rollere göre kişi
 // sayıları (toplam + son 30 gün). Veri: /api/admin/dashboard-summary.
-import { useEffect, useState } from "react";
+// Geniş ekranda tek satır: Satış %50 · Kişiler %25 · children (%25, ör. Yedekleme).
+import { useEffect, useState, type ReactNode } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/lib/supabase";
 import { BarChart3, Users, Loader2 } from "lucide-react";
@@ -11,7 +12,7 @@ import { BarChart3, Users, Loader2 } from "lucide-react";
 const tl = (n: number) => "₺" + Number(n || 0).toLocaleString("tr-TR", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 const num = (n: number) => Number(n || 0).toLocaleString("tr-TR");
 
-export default function DashboardSummary() {
+export default function DashboardSummary({ children }: { children?: ReactNode }) {
   const [d, setD] = useState<any>(null);
   const [err, setErr] = useState<string | null>(null);
 
@@ -30,11 +31,15 @@ export default function DashboardSummary() {
     })();
   }, []);
 
-  if (err) return <p className="text-sm text-red-600">Özet yüklenemedi: {err}</p>;
-  if (!d) {
+  if (err || !d) {
     return (
-      <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
-        <Loader2 size={16} className="animate-spin" /> Özet yükleniyor…
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 items-start">
+        <div className="lg:col-span-3 text-sm py-4">
+          {err
+            ? <p className="text-red-600">Özet yüklenemedi: {err}</p>
+            : <p className="flex items-center gap-2 text-muted-foreground"><Loader2 size={16} className="animate-spin" /> Özet yükleniyor…</p>}
+        </div>
+        {children}
       </div>
     );
   }
@@ -51,7 +56,7 @@ export default function DashboardSummary() {
   ];
 
   return (
-    <div className="grid gap-4 md:grid-cols-3">
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 items-start">
       {/* Satış özeti */}
       <Card className="md:col-span-2 shadow-sm border-l-4 border-l-olive-600">
         <CardHeader className="pb-2">
@@ -119,6 +124,8 @@ export default function DashboardSummary() {
           </table>
         </CardContent>
       </Card>
+
+      {children}
     </div>
   );
 }
