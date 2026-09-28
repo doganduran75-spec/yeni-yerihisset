@@ -30,9 +30,13 @@ export default function AffiliateRefCapture() {
       }
 
       // İstatistik (first-party analitik) → kaynak tablosunda "satış ortağı · KOD"
-      // satırı olarak görünsün (ziyaret/sepet/satın alma/ciro). İlk-temas kuralı:
-      // ziyaret zaten utm'li bir linkle geldiyse o korunur.
-      setCampaign("satış ortağı", code);
+      // satırı olarak görünsün (ziyaret/sepet/satın alma/ciro). Ziyaret, komisyonu
+      // alacak KAZANAN ref'e yazılır (çerezdeki ilk kod) — sonradan başka ref
+      // linkiyle gelinse de ayrı bir "satış ortağı" ziyareti açılıp satış ona
+      // görünmesin; istatistik ile komisyon aynı ortağı göstersin.
+      let winner = code;
+      if (existing) { try { winner = decodeURIComponent(existing); } catch { winner = existing; } }
+      setCampaign("satış ortağı", winner);
 
       // Tıklamayı bir kez kaydet (oturum + sekme bazında koru)
       const guardKey = `yh:affClick:${code}`;

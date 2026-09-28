@@ -60,6 +60,11 @@ type Order = {
   iyzico_payment_id?: string | null;
   refund_status?: string | null;
   refunded_amount?: number | null;
+  shipping_method?: string | null;
+  shipping_cost?: number | null;
+  coupon_discount?: number | null;
+  credit_used?: number | null;
+  affiliate_profiles?: { code: string } | null;
   profiles: {
     first_name: string;
     last_name: string;
@@ -197,7 +202,7 @@ export default function OrdersPage() {
       setLoading(true);
       const { data, error } = await supabase
         .from("orders")
-        .select(`*, profiles(first_name, last_name, email, phone, email_verified)`)
+        .select(`*, profiles(first_name, last_name, email, phone, email_verified), affiliate_profiles(code)`)
         .order("created_at", { ascending: false });
 
       if (error) {
@@ -1402,10 +1407,41 @@ export default function OrdersPage() {
                       })}
                     </TableBody>
                   </Table>
-                  <div className="bg-muted/50 p-3 flex justify-between items-center border-t">
-                    <span className="text-sm font-bold">Genel Toplam</span>
-                    <span className="text-lg font-black text-blue-600">₺{selectedOrder.total_amount.toFixed(2)}</span>
-                  </div>
+                  {/* Tutar dökümü: ürünler + kargo − kupon − kredi = genel toplam */}
+                  {(() => {
+                    const o = selectedOrder;
+                    const itemsTotal = (o.order_items || []).reduce((s, i) => s + Number(i.unit_price) * Number(i.quantity), 0);
+                    const ship = Number(o.shipping_cost || 0);
+                    const coupon = Number(o.coupon_discount || 0);
+                    const credit = Number(o.credit_used || 0);
+                    const refunded = Number(o.refunded_amount || 0);
+                    const fmt = (n: number) => `₺${n.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                    return (
+                      <div className="border-t text-sm">
+                        <div className="px-3 pt-3 space-y-1.5 text-slate-600">
+                          <div className="flex justify-between"><span>Ürün toplamı</span><span>{fmt(itemsTotal)}</span></div>
+                          <div className="flex justify-between">
+                            <span>Kargo{o.shipping_method ? <span className="text-muted-foreground"> · {o.shipping_method}</span> : null}</span>
+                            <span className={ship === 0 ? "text-green-600 font-semibold" : ""}>{ship === 0 ? "Ücretsiz" : fmt(ship)}</span>
+                          </div>
+                          {coupon > 0 && <div className="flex justify-between"><span>Kupon indirimi</span><span className="text-red-600">−{fmt(coupon)}</span></div>}
+                          {credit > 0 && <div className="flex justify-between"><span>YeriHisset Kredisi</span><span className="text-red-600">−{fmt(credit)}</span></div>}
+                          {o.affiliate_profiles?.code && (
+                            <div className="flex justify-between text-xs pt-1"><span>Satış ortağı (komisyon)</span><span className="font-mono font-semibold text-olive-700">{o.affiliate_profiles.code}</span></div>
+                          )}
+                        </div>
+                        <div className="bg-muted/50 mt-3 p-3 flex justify-between items-center border-t">
+                          <span className="text-sm font-bold">Genel Toplam</span>
+                          <span className="text-lg font-black text-blue-600">{fmt(Number(o.total_amount))}</span>
+                        </div>
+                        {refunded > 0 && (
+                          <div className="px-3 py-2 flex justify-between text-xs text-orange-700 bg-orange-50 border-t">
+                            <span>İade edilen</span><span>−{fmt(refunded)}</span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
                 <p className="text-[11px] text-muted-foreground">
                   {selectedOrder.invoice_status === "invoiced"
