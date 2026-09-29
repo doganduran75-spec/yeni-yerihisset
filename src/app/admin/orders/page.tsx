@@ -24,10 +24,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { supabase } from "@/lib/supabase";
 import { shipFee } from "@/lib/shipping-fee";
+import { GeoSelect } from "@/components/ui/geo-select";
+import { CITIES, DISTRICTS } from "@/lib/turkey-geo";
 import {
   Eye, MoreVertical, Loader2, Package, Truck, CheckCircle, XCircle,
   Clock, MapPin, Phone, Mail, ShoppingBag, Copy, ExternalLink,
-  Landmark, FileText, ChevronDown, AlertCircle, Send, Search, Fingerprint, Building2,
+  Landmark, FileText, ChevronDown, AlertCircle, Send, Search, Fingerprint, Building2, UserPlus,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -159,6 +161,15 @@ export default function OrdersPage() {
   const [shipMethods, setShipMethods] = useState<any[]>([]);
   const [newShipMethodId, setNewShipMethodId] = useState("");
   const [newFreeShipping, setNewFreeShipping] = useState(false); // admin kargo ücretini almayabilir
+  // Hızlı müşteri ekleme (aramada bulunamazsa) — şifresiz üye + teslimat adresi
+  const EMPTY_NEW_CUSTOMER = { firstName: "", lastName: "", email: "", phone: "", city: "", district: "", addressDetail: "" };
+  const [newCustomerOpen, setNewCustomerOpen] = useState(false);
+  const [newCustomer, setNewCustomer] = useState(EMPTY_NEW_CUSTOMER);
+  const [newCustomerSaving, setNewCustomerSaving] = useState(false);
+  const [newCustomerError, setNewCustomerError] = useState("");
+  const [createdCustomerId, setCreatedCustomerId] = useState<string | null>(null); // bu pencerede eklenen
+  const [sendActivation, setSendActivation] = useState(true);
+  const [customerSearched, setCustomerSearched] = useState(""); // son aranan (sonuç yok mesajı için)
   const [newAdminNote, setNewAdminNote] = useState("");
   const [creatingOrder, setCreatingOrder] = useState(false);
   const [createError, setCreateError] = useState("");
@@ -352,19 +363,71 @@ export default function OrdersPage() {
   // ─── Yeni Sipariş fonksiyonları ───────────────────────────────────────────
 
   async function searchCustomers(q: string) {
-    if (q.length < 2) { setCustomerResults([]); return; }
+    // PostgREST or() söz dizimini bozacak karakterleri at
+    const term = q.replace(/[,()*%\\]/g, " ").trim();
+    if (term.length < 2) { setCustomerResults([]); setCustomerSearched(""); return; }
+    const digits = term.replace(/\D/g, "");
+    const parts = [`first_name.ilike.%${term}%`, `last_name.ilike.%${term}%`, `email.ilike.%${term}%`];
+    if (digits.length >= 4) parts.push(`phone.ilike.%${digits}%`);
+    // "Ad Soyad" yazıldıysa ad + soyad birlikte
+    const [f, ...rest] = term.split(/\s+/);
+    if (rest.length) parts.push(`and(first_name.ilike.%${f}%,last_name.ilike.%${rest.join(" ")}%)`);
     const { data } = await supabase
       .from("profiles")
       .select("id, first_name, last_name, email, phone")
-      .or(`first_name.ilike.%${q}%,last_name.ilike.%${q}%,email.ilike.%${q}%`)
+      .or(parts.join(","))
+      .is("deleted_at", null)
       .limit(8);
     setCustomerResults(data ?? []);
+    setCustomerSearched(term);
+  }
+
+  // Aramada bulunamayan müşteriyi pencereden çıkmadan ekle ve seç
+  function openNewCustomer() {
+    const term = customerQuery.trim();
+    const isEmail = term.includes("@");
+    const digits = term.replace(/\D/g, "");
+    const isPhone = !isEmail && digits.length >= 4;
+    const [f, ...rest] = isEmail || isPhone ? [""] : term.split(/\s+/);
+    setNewCustomer({
+      ...EMPTY_NEW_CUSTOMER,
+      firstName: f ?? "", lastName: rest.join(" "),
+      email: isEmail ? term : "", phone: isPhone ? digits.slice(-10) : "",
+    });
+    setNewCustomerError("");
+    setCustomerResults([]);
+    setNewCustomerOpen(true);
+  }
+
+  async function saveNewCustomer() {
+    setNewCustomerSaving(true);
+    setNewCustomerError("");
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch("/api/admin/customers/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
+        body: JSON.stringify(newCustomer),
+      });
+      const j = await res.json();
+      if (!res.ok) { setNewCustomerError(j.error || "Müşteri eklenemedi"); return; }
+      setNewCustomerOpen(false);
+      setNewCustomer(EMPTY_NEW_CUSTOMER);
+      setCreatedCustomerId(j.customer.id);
+      setSendActivation(true);
+      await selectCustomer(j.customer);
+    } catch {
+      setNewCustomerError("Bağlantı hatası");
+    } finally {
+      setNewCustomerSaving(false);
+    }
   }
 
   async function selectCustomer(customer: any) {
     setSelectedCustomer(customer);
     setCustomerQuery(`${customer.first_name} ${customer.last_name}`);
     setCustomerResults([]);
+    setCustomerSearched("");
     const { data: addrs } = await supabase
       .from("user_addresses")
       .select("*")
@@ -470,6 +533,7 @@ export default function OrdersPage() {
           payment_method: newPaymentMethod,
           shipping_method_id: newShipMethodId || null,
           free_shipping: newFreeShipping,
+          send_activation: !!createdCustomerId && createdCustomerId === selectedCustomer.id && sendActivation,
           admin_note: newAdminNote,
         }),
       });
@@ -479,6 +543,7 @@ export default function OrdersPage() {
       setCustomerQuery(""); setSelectedCustomer(null); setCustomerAddresses([]); setSelectedAddressId("");
       setNewItems([{ ...EMPTY_ITEM }]);
       setNewAdminNote(""); setNewPaymentMethod("credit_card"); setNewFreeShipping(false);
+      setCreatedCustomerId(null); setNewCustomerOpen(false);
       await fetchOrders();
     } catch {
       setCreateError("Bağlantı hatası");
@@ -1518,7 +1583,7 @@ export default function OrdersPage() {
               <label className="text-sm font-semibold">Müşteri</label>
               <div className="relative">
                 <Input
-                  placeholder="İsim veya e-posta ile ara…"
+                  placeholder="İsim, e-posta veya telefon ile ara…"
                   value={customerQuery}
                   onChange={(e) => {
                     setCustomerQuery(e.target.value);
@@ -1535,17 +1600,71 @@ export default function OrdersPage() {
                         onClick={() => selectCustomer(c)}
                       >
                         <span className="font-medium">{c.first_name} {c.last_name}</span>
-                        <span className="text-xs text-muted-foreground">{c.email}</span>
+                        <span className="text-xs text-muted-foreground">{c.email}{c.phone ? ` · ${c.phone}` : ""}</span>
                       </button>
                     ))}
+                    <button
+                      className="w-full text-left px-3 py-2 text-sm font-semibold text-blue-600 hover:bg-blue-50 flex items-center gap-1.5"
+                      onClick={openNewCustomer}
+                    >
+                      <UserPlus size={14} /> Aradığın yok mu? Yeni müşteri ekle
+                    </button>
                   </div>
                 )}
               </div>
+              {!selectedCustomer && !newCustomerOpen && customerSearched && customerResults.length === 0 && (
+                <div className="flex items-center justify-between gap-3 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800">
+                  <span>“{customerSearched}” ile kayıtlı müşteri bulunamadı.</span>
+                  <Button size="sm" className="h-7 gap-1.5 text-xs" onClick={openNewCustomer}>
+                    <UserPlus size={13} /> Yeni müşteri ekle
+                  </Button>
+                </div>
+              )}
+
+              {/* Hızlı yeni müşteri formu */}
+              {newCustomerOpen && !selectedCustomer && (
+                <div className="border-2 border-blue-100 bg-blue-50/40 rounded-xl p-3 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-bold text-slate-800 flex items-center gap-1.5"><UserPlus size={15} /> Yeni müşteri</p>
+                    <button className="text-xs text-muted-foreground hover:text-slate-800" onClick={() => setNewCustomerOpen(false)}>Vazgeç</button>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <Input className="h-9 text-sm bg-white" placeholder="Ad" value={newCustomer.firstName} onChange={(e) => setNewCustomer({ ...newCustomer, firstName: e.target.value })} />
+                    <Input className="h-9 text-sm bg-white" placeholder="Soyad" value={newCustomer.lastName} onChange={(e) => setNewCustomer({ ...newCustomer, lastName: e.target.value })} />
+                    <Input className="h-9 text-sm bg-white" type="email" placeholder="E-posta" value={newCustomer.email} onChange={(e) => setNewCustomer({ ...newCustomer, email: e.target.value })} />
+                    <Input className="h-9 text-sm bg-white" inputMode="numeric" placeholder="Telefon (5XX XXX XX XX)" value={newCustomer.phone} onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value.replace(/\D/g, "").slice(0, 10) })} />
+                    <GeoSelect options={CITIES} value={newCustomer.city} onChange={(city) => setNewCustomer({ ...newCustomer, city, district: "" })} placeholder="İl seçin…" />
+                    <GeoSelect options={newCustomer.city ? (DISTRICTS[newCustomer.city] ?? []) : []} value={newCustomer.district} onChange={(district) => setNewCustomer({ ...newCustomer, district })} placeholder={newCustomer.city ? "İlçe seçin…" : "Önce il seçin"} disabled={!newCustomer.city} />
+                  </div>
+                  <textarea
+                    className="w-full text-sm border rounded-lg px-3 py-2 resize-none bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    rows={2}
+                    placeholder="Açık adres (mahalle, sokak, bina, daire)"
+                    value={newCustomer.addressDetail}
+                    onChange={(e) => setNewCustomer({ ...newCustomer, addressDetail: e.target.value })}
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Şifresiz bir üyelik açılır ve bu adres kaydedilir. Sipariş ve kargo bildirimleri e-postaya gider.
+                  </p>
+                  {newCustomerError && <p className="text-xs font-semibold text-red-600">{newCustomerError}</p>}
+                  <div className="flex justify-end">
+                    <Button size="sm" className="gap-1.5" onClick={saveNewCustomer} disabled={newCustomerSaving}>
+                      {newCustomerSaving ? <Loader2 size={13} className="animate-spin" /> : <UserPlus size={13} />} Müşteriyi Ekle ve Seç
+                    </Button>
+                  </div>
+                </div>
+              )}
               {selectedCustomer && (
                 <div className="bg-slate-50 border rounded-lg px-3 py-2 text-xs text-muted-foreground flex gap-4">
                   <span className="flex items-center gap-1"><Mail size={11} /> {selectedCustomer.email}</span>
                   {selectedCustomer.phone && <span className="flex items-center gap-1"><Phone size={11} /> {selectedCustomer.phone}</span>}
                 </div>
+              )}
+              {selectedCustomer && createdCustomerId === selectedCustomer.id && (
+                <label className="flex items-center gap-2 text-xs text-slate-600">
+                  <input type="checkbox" checked={sendActivation} onChange={(e) => setSendActivation(e.target.checked)} className="h-3.5 w-3.5" />
+                  Yeni müşteriye hesap açma (şifre belirleme) e-postası gönder — sipariş e-postasından sonra gider
+                </label>
               )}
             </div>
 

@@ -8,7 +8,7 @@ import { Home, Store, Search, Gift, User } from "lucide-react";
 // DESIGN.md yeşili (#588E28) + Plus Jakarta Sans etiketler.
 const TABS = [
   { href: "/", label: "Ana Sayfa", icon: Home, match: (p: string) => p === "/" },
-  { href: "/products", label: "Mağaza", icon: Store, match: (p: string) => p.startsWith("/products") || p.startsWith("/kategori") || p.startsWith("/marka") },
+  { href: "/magaza", label: "Mağaza", icon: Store, match: (p: string) => p.startsWith("/magaza") || p.startsWith("/products") || p.startsWith("/kategori") || p.startsWith("/marka") },
   { href: "/ara", label: "Arama", icon: Search, match: (p: string) => p.startsWith("/ara") },
   { href: "/firsatlar", label: "Fırsatlar", icon: Gift, match: (p: string) => p.startsWith("/firsatlar") },
   { href: "/account", label: "Profil", icon: User, match: (p: string) => p.startsWith("/account") },

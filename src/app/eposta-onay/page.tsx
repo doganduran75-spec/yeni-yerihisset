@@ -43,7 +43,7 @@ function VerifyInner() {
             <CheckCircle2 className="text-green-500 mx-auto" size={48} />
             <h1 className="text-xl font-black text-slate-900">E-postan onaylandı 🎉</h1>
             <p className="text-sm text-slate-500">Teşekkürler! Artık tüm bildirimleri doğru adresine iletebiliriz.</p>
-            <Link href="/products" className="inline-block bg-olive-600 hover:bg-olive-700 text-white font-bold rounded-xl px-6 py-3 text-sm transition-colors">
+            <Link href="/magaza" className="inline-block bg-olive-600 hover:bg-olive-700 text-white font-bold rounded-xl px-6 py-3 text-sm transition-colors">
               Alışverişe Devam Et
             </Link>
           </div>

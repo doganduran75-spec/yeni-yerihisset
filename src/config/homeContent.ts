@@ -39,7 +39,7 @@ export const homeContent = {
       titleMobile: "Doğrudan Mağazaya Geç",
       body: "Dodura deri ayakkabılar, Attipas ilk adım modelleri ve denge barlarını hemen inceleyin.",
       cta: "Koleksiyonları Gör",
-      href: "/products",
+      href: "/magaza",
     },
   },
 
@@ -61,7 +61,7 @@ export const homeContent = {
     titleMobile: "Popüler Modeller",
     seeAll: "Tümünü Gör",
     seeAllMobile: "Tümü",
-    href: "/products",
+    href: "/magaza",
     limitDesktop: 4,
     limitMobile: 8,
   },
@@ -72,7 +72,7 @@ export const homeContent = {
     title: "VADE FARKSIZ 3 TAKSİT",
     subtitle: "Tüm Dodura & Attipas ayakkabılarda peşin fiyatına taksit avantajı",
     cta: "Alışverişe Başla",
-    href: "/products",
+    href: "/magaza",
   },
 
   // ── "Doğru Numarayı Bul" bandı (yalnız mobil) ─────────────────────────────
@@ -80,7 +80,7 @@ export const homeContent = {
     enabled: true,
     title: "Doğru Numarayı Bul",
     body: "Ayak tabanı ölçünü gir, sıfır yanılma payıyla barefoot bedenini belirleyelim.",
-    href: "/products",
+    href: "/magaza",
   },
 
   // ── Footer (masaüstü ana sayfaya özel) ────────────────────────────────────
@@ -91,10 +91,10 @@ export const homeContent = {
       {
         title: "Koleksiyonlar",
         links: [
-          { label: "Tüm Barefoot Modelleri", href: "/products" },
+          { label: "Tüm Barefoot Modelleri", href: "/magaza" },
           { label: "Dodura Yetişkin Serisi", href: "/marka/dodura" },
           { label: "Attipas İlk Adım", href: "/marka/attipas" },
-          { label: "Doğal Taban Çoraplar", href: "/products" },
+          { label: "Doğal Taban Çoraplar", href: "/magaza" },
         ],
       },
       {

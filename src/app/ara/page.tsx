@@ -96,7 +96,7 @@ export default async function SearchPage({
           ) : list.length === 0 ? (
             <div className="text-center py-20 text-slate-400 space-y-3">
               <p>“{query}” için ürün bulunamadı.</p>
-              <Link href="/products" className="inline-block text-olive-600 font-bold hover:underline">
+              <Link href="/magaza" className="inline-block text-olive-600 font-bold hover:underline">
                 Tüm ürünlere göz at →
               </Link>
             </div>

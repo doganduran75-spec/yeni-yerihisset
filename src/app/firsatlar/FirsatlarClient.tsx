@@ -107,7 +107,7 @@ export default function FirsatlarClient({ opps, allRoles }: Props) {
   // Bir seviyeyi açmak için CTA
   function unlockCta(slug: string): { label: string; href: string } {
     if (slug === "uye") return { label: "Üye Ol", href: "/account?tab=register" };
-    if (slug === "musteri") return { label: "İlk Siparişini Ver", href: "/products" };
+    if (slug === "musteri") return { label: "İlk Siparişini Ver", href: "/magaza" };
     return { label: "Nasıl açılır?", href: "/account" };
   }
 

@@ -10,7 +10,7 @@ export const revalidate = 300;
 export const metadata: Metadata = {
   title: "Tüm Ürünler",
   description: "Tüm barefoot ayakkabı modellerini keşfedin — geniş burun, sıfır topuk farkı, esnek taban.",
-  alternates: { canonical: `${process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com"}/products` },
+  alternates: { canonical: `${process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com"}/magaza` },
 };
 
 function getSupabase() {

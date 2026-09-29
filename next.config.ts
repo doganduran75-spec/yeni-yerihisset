@@ -80,6 +80,9 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [
       { source: "/cart", destination: "/sepet", permanent: true },
+      // Mağaza /magaza'ya taşındı (eski WordPress'in Google'da dizinli adresi de /magaza/).
+      // Yalnız liste sayfası; ürün detayları /products/<slug> olarak kalır.
+      { source: "/products", destination: "/magaza", permanent: true },
     ];
   },
 

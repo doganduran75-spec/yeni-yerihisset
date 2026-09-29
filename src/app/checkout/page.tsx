@@ -488,7 +488,7 @@ export default function CheckoutPage() {
     }
     const remaining = useCartStore.getState().items.filter((i) => !i.is_gift).length;
     setStockProblems(null);
-    router.push(remaining > 0 ? "/sepet" : "/products");
+    router.push(remaining > 0 ? "/sepet" : "/magaza");
   }
 
   // Kupon YALNIZ sepette girilir; burada sepetteki kod doğrulanıp tutarı hesaplanır.
@@ -637,7 +637,7 @@ export default function CheckoutPage() {
                 Siparişlerimi Gör
               </Link>
             )}
-            <Link href="/products" className={cn(buttonVariants({ variant: isGuest ? "default" : "ghost" }), "h-12 rounded-2xl font-bold", isGuest && "bg-olive-600")}>
+            <Link href="/magaza" className={cn(buttonVariants({ variant: isGuest ? "default" : "ghost" }), "h-12 rounded-2xl font-bold", isGuest && "bg-olive-600")}>
               Alışverişe Devam Et
             </Link>
           </div>

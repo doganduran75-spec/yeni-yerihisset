@@ -191,17 +191,17 @@ function SettingsPageInner() {
         <p className="text-muted-foreground">Mağaza yapılandırması, varyasyon grupları ve kullanıcı rolleri.</p>
       </div>
 
-      {/* Sekme Navigasyonu */}
-      <div className="flex gap-1 border-b overflow-x-auto">
+      {/* Sekme Navigasyonu — sığmayan sekmeler alt satıra iner (yatay kaydırma yok) */}
+      <div className="flex flex-wrap gap-1.5 rounded-xl border bg-muted/40 p-1.5">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => router.replace(`/admin/settings?tab=${tab.id}`)}
             className={[
-              "flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap shrink-0",
+              "flex items-center gap-2 px-3.5 py-2 text-sm font-medium rounded-lg transition-colors whitespace-nowrap",
               activeTab === tab.id
-                ? "border-blue-600 text-blue-600"
-                : "border-transparent text-muted-foreground hover:text-foreground hover:border-slate-300",
+                ? "bg-white text-blue-600 shadow-sm ring-1 ring-slate-200"
+                : "text-muted-foreground hover:text-foreground hover:bg-white/60",
             ].join(" ")}
           >
             {tab.icon} {tab.label}

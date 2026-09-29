@@ -72,7 +72,7 @@ export default function BarefootNedirPage() {
             <h2 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight italic mb-3">Hazır mısın?</h2>
             <p className="text-slate-500 mb-7">Numaranı seç, stoktaki modellere göz at — tek tıkla sipariş ver.</p>
             <Link
-              href="/products"
+              href="/magaza"
               className="inline-flex items-center gap-2 h-14 px-8 rounded-2xl bg-olive-600 hover:bg-olive-700 text-white font-black text-sm uppercase tracking-widest transition-all active:scale-95"
             >
               Mağazaya Git <ArrowRight size={18} />

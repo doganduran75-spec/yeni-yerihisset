@@ -77,7 +77,7 @@ export default function CampaignClient({ slug, coupon }: { slug: string; coupon:
             <p className="text-xs text-white/60 mb-8">Kod sepetine tanımlandı — ödemede otomatik uygulanır.</p>
 
             <button
-              onClick={() => { track("hero_click", { side: "kampanya", to: "/products" }); router.push("/products"); }}
+              onClick={() => { track("hero_click", { side: "kampanya", to: "/magaza" }); router.push("/magaza"); }}
               className="inline-flex items-center gap-2 h-14 px-8 rounded-2xl bg-white text-olive-800 font-black text-sm uppercase tracking-widest hover:gap-3 transition-all active:scale-95"
             >
               <ShoppingBag size={18} /> Modelleri Gör <ArrowRight size={18} />
@@ -88,7 +88,7 @@ export default function CampaignClient({ slug, coupon }: { slug: string; coupon:
             <h1 className="text-3xl md:text-4xl font-black tracking-tight italic mb-3">Kampanya bulunamadı</h1>
             <p className="text-white/80 mb-8">Bu kampanya süresi dolmuş ya da kaldırılmış olabilir. Yine de mağazamıza göz atabilirsin.</p>
             <Link
-              href="/products"
+              href="/magaza"
               className="inline-flex items-center gap-2 h-14 px-8 rounded-2xl bg-white text-olive-800 font-black text-sm uppercase tracking-widest hover:gap-3 transition-all active:scale-95"
             >
               <ShoppingBag size={18} /> Mağazaya Git <ArrowRight size={18} />

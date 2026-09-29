@@ -39,6 +39,7 @@ export async function POST(req: NextRequest) {
     coupon_discount = 0,
     shipping_method_id = null,
     free_shipping = false,
+    send_activation = false,
   } = body as {
     customer_id: string;
     shipping_address_id: string;
@@ -48,6 +49,7 @@ export async function POST(req: NextRequest) {
     coupon_discount?: number;
     shipping_method_id?: string | null;
     free_shipping?: boolean;
+    send_activation?: boolean; // müşteri bu pencerede yeni eklendiyse: şifre belirleme e-postası
   };
 
   if (!customer_id || !shipping_address_id || !items?.length) {
@@ -189,10 +191,24 @@ export async function POST(req: NextRequest) {
     console.error("[admin/orders/create] etiket atama:", e);
   }
 
-  // 4) Sipariş bildirimi (online akıştaki gibi)
+  // 4) Sipariş bildirimi (online akıştaki gibi). Yeni eklenen müşteriye, sipariş
+  // e-postasından SONRA hesap aktivasyonu (şifre belirleme) e-postası gider.
   try {
-    const { sendOrderNotification } = await import("@/lib/notifications");
-    sendOrderNotification("order_placed", { orderId: order.id, userId: customer_id }).catch(() => {});
+    const { sendOrderNotification, sendGuestActivationEmail } = await import("@/lib/notifications");
+    const { data: cust } = send_activation
+      ? await supabase.from("profiles").select("email, first_name").eq("id", customer_id).maybeSingle()
+      : { data: null };
+    sendOrderNotification("order_placed", { orderId: order.id, userId: customer_id })
+      .catch(() => {})
+      .then(() => {
+        if (!cust?.email) return;
+        return sendGuestActivationEmail({
+          email: cust.email,
+          name: cust.first_name ?? null,
+          orderLabel: order.order_number ? `YH${order.order_number}` : null,
+        }).then((r) => { if (r.status !== "sent") console.error("[admin-order activation]", r.error); });
+      })
+      .catch((e) => console.error("[admin-order activation]", e?.message || e));
   } catch { /* yoksay */ }
 
   return NextResponse.json({ orderId: order.id, orderNumber: order.order_number });

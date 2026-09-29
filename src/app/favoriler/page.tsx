@@ -26,7 +26,7 @@ export default function FavorilerPage() {
             Şimdilik mağazadan keşfetmeye devam et.
           </p>
           <Link
-            href="/products"
+            href="/magaza"
             className="inline-flex items-center gap-2 h-13 px-7 py-3.5 rounded-2xl bg-olive-600 hover:bg-olive-700 text-white font-black text-sm uppercase tracking-widest transition-all active:scale-95"
           >
             Mağazaya Git <ArrowRight size={18} />

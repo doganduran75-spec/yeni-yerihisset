@@ -39,7 +39,7 @@ export default function AdminAffiliatesPage() {
   const [conversions, setConversions] = useState<Conversion[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [activeView, setActiveView] = useState<"affiliates" | "conversions" | "payout">("affiliates");
+  const [activeView, setActiveView] = useState<"affiliates" | "conversions" | "payout" | "rates">("affiliates");
 
   // ── Hakediş (dönemsel YeriHisset Kredisi) ────────────────────────────────
   function lastMonthPeriod(): string {
@@ -218,7 +218,7 @@ export default function AdminAffiliatesPage() {
 
       {/* Tabs */}
       <div className="flex gap-2 border-b">
-        {(["affiliates", "conversions", "payout"] as const).map((view) => (
+        {(["affiliates", "conversions", "payout", "rates"] as const).map((view) => (
           <button
             key={view}
             onClick={() => setActiveView(view)}
@@ -229,33 +229,89 @@ export default function AdminAffiliatesPage() {
                 : "border-transparent text-muted-foreground hover:text-foreground"
             )}
           >
-            {view === "affiliates" ? "Satış Ortakları" : view === "conversions" ? "Komisyonlar" : "Hakediş (Dönem)"}
+            {view === "affiliates" ? "Satış Ortakları" : view === "conversions" ? "Komisyonlar" : view === "payout" ? "Hakediş (Dönem)" : "Komisyon Ayarları"}
           </button>
         ))}
       </div>
 
-      {activeView === "affiliates" && (
-        <div className="space-y-3">
-          {/* Oran ayarları */}
+      {/* Komisyon Ayarları: varsayılan oran + ortak bazlı oranlara genel bakış */}
+      {activeView === "rates" && (
+        <div className="space-y-4">
           <Card className="border-none shadow-sm">
-            <CardContent className="p-4 flex flex-wrap items-center gap-3 text-sm">
-              <span className="font-bold text-slate-800">Yeni ortaklar için varsayılan oran:</span>
-              <span className="inline-flex items-center gap-1">
-                %<input
-                  value={defaultRate}
-                  onChange={(e) => setDefaultRate(e.target.value)}
-                  className="w-16 h-8 rounded-md border px-2"
-                  inputMode="decimal"
-                />
-              </span>
-              <Button size="sm" onClick={saveDefaultRate}>{defaultSaved ? "✓ Kaydedildi" : "Kaydet"}</Button>
-              <span className="text-xs text-muted-foreground basis-full">
-                Her ortağın oranını satırındaki “%… komisyon” yazısına tıklayarak ayrıca değiştirebilirsin.
-                Hakediş, “Hesaba İşle” anındaki orana göre hesaplanır — ay ortasında değiştirirsen o ayın tamamına yeni oran uygulanır.
-              </span>
-              {rateMsg && <span className="text-xs font-bold text-red-600 basis-full">{rateMsg}</span>}
+            <CardContent className="p-5 space-y-3 text-sm">
+              <p className="font-bold text-slate-800">Varsayılan komisyon oranı</p>
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="inline-flex items-center gap-1">
+                  %<input
+                    value={defaultRate}
+                    onChange={(e) => setDefaultRate(e.target.value)}
+                    className="w-20 h-9 rounded-md border px-2"
+                    inputMode="decimal"
+                  />
+                </span>
+                <Button size="sm" onClick={saveDefaultRate}>{defaultSaved ? "✓ Kaydedildi" : "Kaydet"}</Button>
+              </div>
+              <ul className="text-xs text-muted-foreground list-disc pl-4 space-y-1">
+                <li>Yeni onaylanan ortaklara bu oran verilir; /affiliate tanıtım sayfasında da bu oran yazar.</li>
+                <li>Mevcut ortakların oranı değişmez — aşağıdan ya da Satış Ortakları listesinde “%… komisyon” yazısına tıklayarak tek tek değiştirilir.</li>
+                <li>Hakediş, “Hesaba İşle” anındaki orana göre hesaplanır — ay ortasında değiştirirsen o ayın tamamına yeni oran uygulanır.</li>
+              </ul>
+              {rateMsg && <p className="text-xs font-bold text-red-600">{rateMsg}</p>}
             </CardContent>
           </Card>
+
+          <Card className="border-none shadow-sm">
+            <CardContent className="p-5">
+              <p className="font-bold text-slate-800 text-sm mb-3">Ortak bazlı oranlar</p>
+              {affiliates.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Henüz satış ortağı yok.</p>
+              ) : (
+                <div className="divide-y">
+                  {affiliates.map((aff) => {
+                    const differs = Number(aff.commission_rate) !== Number(String(defaultRate).replace(",", "."));
+                    return (
+                      <div key={aff.id} className="flex flex-wrap items-center gap-3 py-2.5 text-sm">
+                        <span className="font-semibold text-slate-900 min-w-[160px]">{aff.profiles?.first_name} {aff.profiles?.last_name}</span>
+                        <span className="font-mono text-xs text-blue-600">{aff.code}</span>
+                        {aff.status !== "active" && <Badge variant="secondary" className="text-[10px]">Askıda</Badge>}
+                        <span className="ml-auto inline-flex items-center gap-2">
+                          {differs && <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">Özel oran</span>}
+                          {rateEdit?.id === aff.id ? (
+                            <span className="inline-flex items-center gap-1">
+                              %<input
+                                autoFocus
+                                value={rateEdit.value}
+                                onChange={(e) => setRateEdit({ id: aff.id, value: e.target.value })}
+                                onKeyDown={(e) => { if (e.key === "Enter") saveRate(); if (e.key === "Escape") setRateEdit(null); }}
+                                className="w-16 h-7 rounded-md border px-2 text-sm"
+                                inputMode="decimal"
+                              />
+                              <Button size="sm" className="h-7 px-2 text-xs" onClick={saveRate}>Kaydet</Button>
+                              <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setRateEdit(null)}>Vazgeç</Button>
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => { setRateEdit({ id: aff.id, value: String(aff.commission_rate) }); setRateMsg(null); }}
+                              className="inline-flex items-center gap-1 rounded-md px-2 py-1 hover:bg-slate-100 font-bold text-slate-800"
+                              title="Oranı değiştir"
+                            >
+                              %{aff.commission_rate} <Pencil size={12} />
+                            </button>
+                          )}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {activeView === "affiliates" && (
+        <div className="space-y-3">
+          {rateMsg && <p className="text-xs font-bold text-red-600">{rateMsg}</p>}
           {affiliates.length === 0 ? (
             <Card className="border-none shadow-sm">
               <CardContent className="p-12 text-center text-muted-foreground">

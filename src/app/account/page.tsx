@@ -1518,7 +1518,7 @@ function AccountPageInner() {
                         <div className="space-y-2">
                           {[
                             { key: "home", label: "Ana sayfa (önerilen)", path: "/" },
-                            { key: "store", label: "Mağaza (tüm ürünler)", path: "/products" },
+                            { key: "store", label: "Mağaza (tüm ürünler)", path: "/magaza" },
                             { key: "deals", label: "Fırsatlar", path: "/firsatlar" },
                           ].map((l) => (
                             <div key={l.key} className="flex items-center gap-2 bg-white border rounded-xl p-2 pl-3">

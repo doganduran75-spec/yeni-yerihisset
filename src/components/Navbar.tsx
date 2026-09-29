@@ -14,7 +14,7 @@ interface NavbarProps {
 // Menü linkleri (masaüstü + mobil paylaşır). "Mağaza" eskiden ayrı olan
 // "Yeni Gelenler" + "Kategoriler"i tek satırda birleştirir (ikisi de /products).
 const NAV_LINKS = [
-  { label: "Mağaza", href: "/products" },
+  { label: "Mağaza", href: "/magaza" },
   { label: "Fırsatlar", href: "/firsatlar" },
   { label: "Bilgi Bankası", href: "/bilgi-bankasi" },
 ];
