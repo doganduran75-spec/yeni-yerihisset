@@ -1,14 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { getAuthUserFromRequest } from "@/lib/auth-from-request";
-import { getTrendyolConfig, hasCredentials, testConnection } from "@/lib/marketplace/trendyol";
-import { processMarketplaceStock, kickMarketplaceSync } from "@/lib/marketplace/sync";
+import { processChannel, kickMarketplaceSync, testChannel, isChannel, type Channel } from "@/lib/marketplace/sync";
+import { getTrendyolConfig, hasCredentials } from "@/lib/marketplace/trendyol";
+import { getHepsiburadaConfig, hbHasCredentials } from "@/lib/marketplace/hepsiburada";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-// Ayarlar › Entegrasyonlar › Trendyol paneli (yalnız admin, servis-rol).
-// GET: durum özeti (kuyruk sayıları, son gönderim, hatalar, barkodsuz varyantlar)
-// POST {action}: test | sync (bekleyenleri şimdi gönder) | full (tüm stokları gönder) | retry (hatalıları tekrar dene)
+// Ayarlar › Entegrasyonlar › <kanal> paneli (trendyol | hepsiburada). Yalnız admin, servis-rol.
+// GET: durum özeti (kuyruk sayıları, son gönderim/doğrulama, sorunlu kayıtlar, eşleşme kapsamı)
+// POST {action}: test | kick (arka planda işle) | sync (bekleyenleri şimdi gönder) | full (tümünü gönder) | retry
+
+type Ctx = { params: Promise<{ channel: string }> };
 
 async function requireAdmin(req: NextRequest) {
   const user = await getAuthUserFromRequest(req);
@@ -17,6 +20,15 @@ async function requireAdmin(req: NextRequest) {
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
   if ((profile as any)?.role !== "admin") return { error: NextResponse.json({ error: "Yetkisiz" }, { status: 403 }) };
   return { supabase };
+}
+
+async function loadConfig(sb: any, channel: Channel) {
+  if (channel === "trendyol") {
+    const c = await getTrendyolConfig(sb);
+    return { enabled: c.enabled, hasCredentials: hasCredentials(c), stage: c.stage, matchField: "barcode" as const };
+  }
+  const c = await getHepsiburadaConfig(sb);
+  return { enabled: c.enabled, hasCredentials: hbHasCredentials(c), stage: c.stage, matchField: c.matchField };
 }
 
 async function variantInfo(sb: any, variantIds: string[]) {
@@ -34,88 +46,92 @@ async function variantInfo(sb: any, variantIds: string[]) {
   return out;
 }
 
-export async function GET(req: NextRequest) {
+export async function GET(req: NextRequest, { params }: Ctx) {
+  const { channel } = await params;
+  if (!isChannel(channel)) return NextResponse.json({ error: "Bilinmeyen kanal" }, { status: 404 });
   const auth = await requireAdmin(req);
   if ("error" in auth) return auth.error;
   const sb = auth.supabase as any;
 
-  const cfg = await getTrendyolConfig(auth.supabase);
+  const cfg = await loadConfig(sb, channel);
   const statuses = ["pending", "sending", "sent", "ok", "failed"] as const;
   const counts: Record<string, number> = {};
   await Promise.all(statuses.map(async (s) => {
     const { count } = await sb.from("marketplace_stock_sync").select("id", { count: "exact", head: true })
-      .eq("channel", "trendyol").eq("status", s);
+      .eq("channel", channel).eq("status", s);
     counts[s] = count ?? 0;
   }));
 
-  const [{ data: lastSent }, { data: lastOk }, { data: failures }, { count: noBarcode }, { count: withBarcode }] = await Promise.all([
-    sb.from("marketplace_stock_sync").select("sent_at").eq("channel", "trendyol").not("sent_at", "is", null)
+  // Eşleşme kapsamı: bu kanalın anahtar alanı (barkod / SKU) dolu olan ve olmayan varyant sayısı
+  const field = cfg.matchField === "sku" ? "sku" : "barcode";
+  const [{ data: lastSent }, { data: lastOk }, { data: failures }, { count: missing }, { count: withKey }] = await Promise.all([
+    sb.from("marketplace_stock_sync").select("sent_at").eq("channel", channel).not("sent_at", "is", null)
       .order("sent_at", { ascending: false }).limit(1).maybeSingle(),
-    sb.from("marketplace_stock_sync").select("confirmed_at").eq("channel", "trendyol").not("confirmed_at", "is", null)
+    sb.from("marketplace_stock_sync").select("confirmed_at").eq("channel", channel).not("confirmed_at", "is", null)
       .order("confirmed_at", { ascending: false }).limit(1).maybeSingle(),
     sb.from("marketplace_stock_sync").select("id, variant_id, barcode, desired_qty, error, attempts, next_attempt_at, updated_at, status")
-      .eq("channel", "trendyol").or("status.eq.failed,and(status.eq.pending,attempts.gt.0)")
+      .eq("channel", channel).or("status.eq.failed,and(status.eq.pending,attempts.gt.0)")
       .order("updated_at", { ascending: false }).limit(50),
-    sb.from("product_variants").select("id", { count: "exact", head: true }).or("barcode.is.null,barcode.eq."),
-    sb.from("product_variants").select("id", { count: "exact", head: true }).not("barcode", "is", null).neq("barcode", ""),
+    sb.from("product_variants").select("id", { count: "exact", head: true }).or(`${field}.is.null,${field}.eq.`),
+    sb.from("product_variants").select("id", { count: "exact", head: true }).not(field, "is", null).neq(field, ""),
   ]);
 
   const info = await variantInfo(sb, ((failures as any[]) || []).map((f) => f.variant_id));
   return NextResponse.json({
     ok: true,
-    config: { enabled: cfg.enabled, hasCredentials: hasCredentials(cfg), stage: cfg.stage },
+    config: cfg,
     counts,
     lastSentAt: lastSent?.sent_at ?? null,
     lastConfirmedAt: lastOk?.confirmed_at ?? null,
     failures: ((failures as any[]) || []).map((f) => ({ ...f, ...(info[f.variant_id] || { title: "—", label: "" }) })),
-    variants: { withBarcode: withBarcode ?? 0, withoutBarcode: noBarcode ?? 0 },
+    variants: { withKey: withKey ?? 0, withoutKey: missing ?? 0, keyField: field },
   });
 }
 
-export async function POST(req: NextRequest) {
+export async function POST(req: NextRequest, { params }: Ctx) {
+  const { channel } = await params;
+  if (!isChannel(channel)) return NextResponse.json({ error: "Bilinmeyen kanal" }, { status: 404 });
   const auth = await requireAdmin(req);
   if ("error" in auth) return auth.error;
   const sb = auth.supabase as any;
   const { action } = (await req.json().catch(() => ({}))) as { action?: string };
-  const cfg = await getTrendyolConfig(auth.supabase);
 
   if (action === "test") {
-    if (!hasCredentials(cfg)) return NextResponse.json({ error: "Önce Satıcı ID, API Key ve API Secret'ı girip kaydet." }, { status: 400 });
     try {
-      const r = await testConnection(cfg);
+      const r = await testChannel(channel, auth.supabase);
       return NextResponse.json({ ok: true, ...r });
     } catch (e: any) {
       return NextResponse.json({ error: e?.message || "Bağlantı başarısız" }, { status: 400 });
     }
   }
 
+  if (action === "kick") {
+    // Ürün kaydından sonra: TÜM kanalların kuyruğunu arka planda işle, yanıtı bekletme
+    kickMarketplaceSync(500);
+    return NextResponse.json({ ok: true });
+  }
+
   if (action === "full") {
-    const { data, error } = await sb.rpc("enqueue_all_marketplace_stock", { p_channel: "trendyol" });
+    const { data, error } = await sb.rpc("enqueue_all_marketplace_stock", { p_channel: channel });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    const report = await processMarketplaceStock(auth.supabase);
+    const report = await processChannel(channel, auth.supabase);
     return NextResponse.json({ ok: true, queued: data ?? 0, ...report });
   }
 
   if (action === "retry") {
     await sb.from("marketplace_stock_sync")
       .update({ status: "pending", attempts: 0, next_attempt_at: new Date().toISOString(), error: null, updated_at: new Date().toISOString() })
-      .eq("channel", "trendyol").eq("status", "failed");
-    const report = await processMarketplaceStock(auth.supabase);
+      .eq("channel", channel).eq("status", "failed");
+    const report = await processChannel(channel, auth.supabase);
     return NextResponse.json({ ok: true, ...report });
-  }
-
-  if (action === "kick") {
-    // Ürün kaydından sonra: kuyruğu arka planda işle, yanıtı bekletme
-    kickMarketplaceSync(500);
-    return NextResponse.json({ ok: true });
   }
 
   if (action === "sync") {
     // Bekleyen (geri sayımdaki dahil) satırları hemen gönder
     await sb.from("marketplace_stock_sync")
       .update({ next_attempt_at: new Date().toISOString() })
-      .eq("channel", "trendyol").eq("status", "pending");
-    const report = await processMarketplaceStock(auth.supabase);
+      .eq("channel", channel).eq("status", "pending");
+    const report = await processChannel(channel, auth.supabase);
     return NextResponse.json({ ok: true, ...report });
   }
 

@@ -150,8 +150,8 @@ function SettingsPageInner() {
       const res = await fetch("/api/admin/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...(await authHeaders()) },
-        // Entegrasyon alanları (Trendyol/Kargonomi) Entegrasyonlar sekmesinde kaydedilir → burada gönderme
-        body: JSON.stringify({ settings: Object.fromEntries(Object.entries(settings).filter(([k]) => !/^(trendyol_|kargonomi_)/.test(k))) }),
+        // Entegrasyon alanları (Trendyol/Hepsiburada/Kargonomi) Entegrasyonlar sekmesinde kaydedilir → burada gönderme
+        body: JSON.stringify({ settings: Object.fromEntries(Object.entries(settings).filter(([k]) => !/^(trendyol_|hepsiburada_|kargonomi_)/.test(k))) }),
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok || !d.ok) throw new Error(d.error || "Ayarlar kaydedilemedi.");

@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { Copy, ExternalLink, Check, Loader2, PackageX, Store, ClipboardList, Save } from "lucide-react";
 import AdminOpsTabs from "@/components/admin/AdminOpsTabs";
+import MarketplaceSyncLog from "@/components/admin/MarketplaceSyncLog";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -21,7 +22,13 @@ export default function StockSyncPage() {
   const [channels, setChannels] = useState<any[]>([]);
   const [pending, setPending] = useState<any[]>([]);
   const [done, setDone] = useState<any[]>([]);
-  const [tab, setTab] = useState<"tasks" | "channels" | "log">("tasks");
+  const [tab, setTab] = useState<"tasks" | "sync" | "channels" | "log">("tasks");
+  const [syncChannel, setSyncChannel] = useState("");
+  // ?tab=sync&channel=trendyol ile doğrudan "Otomatik Senkron" sekmesi (Dashboard / Entegrasyonlar bağlantısı)
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    if (sp.get("tab") === "sync") { setTab("sync"); setSyncChannel(sp.get("channel") || ""); }
+  }, []);
   const [busy, setBusy] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
 
@@ -77,7 +84,7 @@ export default function StockSyncPage() {
       </div>
 
       <div className="flex gap-2 border-b">
-        {([["tasks", `Görevler (${pending.length})`], ["channels", "Kanallar"], ["log", "Log"]] as const).map(([k, lbl]) => (
+        {([["tasks", `Görevler (${pending.length})`], ["sync", "Otomatik Senkron"], ["channels", "Kanallar"], ["log", "Kapatılanlar"]] as const).map(([k, lbl]) => (
           <button key={k} onClick={() => setTab(k as any)}
             className={cn("px-4 py-2 text-sm font-bold border-b-2 -mb-px transition-colors",
               tab === k ? "border-blue-600 text-blue-600" : "border-transparent text-muted-foreground hover:text-foreground")}>
@@ -85,6 +92,8 @@ export default function StockSyncPage() {
           </button>
         ))}
       </div>
+
+      {tab === "sync" && <MarketplaceSyncLog key={syncChannel} initialChannel={syncChannel} />}
 
       {tab === "tasks" && (
         <div className="space-y-4">

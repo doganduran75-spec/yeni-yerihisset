@@ -1,22 +1,97 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// Pazaryeri stok kuyruğu işleyicisi (şimdilik Trendyol).
-// Kuyruğu veritabanı tetikleyicisi doldurur (migration 20261003000001):
-// varyant stoğu/barkodu nereden değişirse değişsin satır 'pending' olur.
-// Bu işleyici:
-//   1) 'pending' satırları kilitleyerek alır, barkod+stok olarak Trendyol'a yollar
-//      (1000'lik paketler), kabul edilince 'sent' + batchRequestId yazar;
-//   2) 'sent' paketlerin sonucunu Trendyol'dan sorar → 'ok' ya da 'failed' (+sebep);
-//   3) stok 0 başarıyla gittiyse eski manuel "Pazaryeri Stok Görevi"ni (Trendyol) kapatır.
+// Pazaryeri stok kuyruğu işleyicisi — Trendyol + Hepsiburada.
+// Kuyruğu veritabanı tetikleyicisi doldurur (migration 20261003000001 + 20261004000001):
+// varyant stoğu/barkodu/SKU'su nereden değişirse değişsin, her kanal için satır 'pending' olur.
+// Kanal başına bu işleyici:
+//   1) 'pending' satırları kilitleyerek alır, kanala paket halinde yollar
+//      (kabul edilince 'sent' + yükleme id'si + paket içi sıra yazar);
+//   2) 'sent' paketlerin sonucunu kanaldan sorar → 'ok' / 'failed' (+sebep) ve
+//      her kesin sonucu SENKRON GEÇMİŞİ'ne (marketplace_stock_log) yazar;
+//   3) stok 0 başarıyla gittiyse o kanalın manuel "Pazaryeri Stok Görevi"ni kapatır.
 // Çağıranlar: ürün kaydı / sipariş / iptal (kickMarketplaceSync, anlık) ve
 // dakikalık cron (/api/cron/marketplace-sync, yedek).
 
 import { createAdminClient } from "@/lib/supabase-admin";
-import { getTrendyolConfig, hasCredentials, updateStocks, getBatchResult, TrendyolError } from "@/lib/marketplace/trendyol";
+import { getTrendyolConfig, hasCredentials, updateStocks, getBatchResult, testConnection, TrendyolError } from "@/lib/marketplace/trendyol";
+import { getHepsiburadaConfig, hbHasCredentials, hbUpdateStocks, hbGetUploadResult, hbTestConnection, HepsiburadaError } from "@/lib/marketplace/hepsiburada";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
-const CHANNEL = "trendyol";
+export type Channel = "trendyol" | "hepsiburada";
+export const CHANNELS: Channel[] = ["trendyol", "hepsiburada"];
+
+type SentRow = { id: string; variant_id: string; product_id: string | null; barcode: string; last_sent_qty: number; batch_pos: number | null; sent_at: string };
+
+type Adapter = {
+  channel: Channel;
+  label: string;          // marketplace_channels.name ile aynı
+  maxBatch: number;
+  maxInFlight: number;    // aynı anda bekleyen (sonucu gelmemiş) yükleme sınırı
+  load(sb: AdminClient): Promise<{ enabled: boolean; ready: boolean; cfg: any }>;
+  send(cfg: any, items: { key: string; qty: number }[]): Promise<string>;
+  /** Sonuç: done=false → henüz işleniyor. failures: satır id → sebep */
+  result(cfg: any, batchId: string, rows: SentRow[]): Promise<{ done: boolean; failures: Map<string, string> }>;
+  test(cfg: any): Promise<{ totalProducts: number | null }>;
+  isFatal(e: unknown): boolean; // bu hatada kalan paketleri gönderme
+};
+
+const trendyol: Adapter = {
+  channel: "trendyol",
+  label: "Trendyol",
+  maxBatch: 1000,
+  maxInFlight: 50,
+  async load(sb) { const cfg = await getTrendyolConfig(sb); return { enabled: cfg.enabled, ready: hasCredentials(cfg), cfg }; },
+  send: (cfg, items) => updateStocks(cfg, items.map((i) => ({ barcode: i.key, quantity: i.qty }))),
+  async result(cfg, batchId, rows) {
+    const r = await getBatchResult(cfg, batchId);
+    const failures = new Map<string, string>();
+    if (!r.done) return { done: false, failures };
+    const byKey = new Map(r.items.map((i) => [i.barcode, i]));
+    for (const row of rows) {
+      const it = byKey.get(row.barcode);
+      if (it && !it.ok) failures.set(row.id, it.reason || "Trendyol reddetti");
+    }
+    return { done: true, failures };
+  },
+  test: (cfg) => testConnection(cfg),
+  isFatal: (e) => e instanceof TrendyolError && [0, 401, 403, 429].includes(e.status),
+};
+
+const hepsiburada: Adapter = {
+  channel: "hepsiburada",
+  label: "Hepsiburada",
+  maxBatch: 4000,
+  maxInFlight: 4, // Hepsiburada: aynı anda en çok 5 bekleyen yükleme
+  async load(sb) { const cfg = await getHepsiburadaConfig(sb); return { enabled: cfg.enabled, ready: hbHasCredentials(cfg), cfg }; },
+  send: (cfg, items) => hbUpdateStocks(cfg, items),
+  async result(cfg, batchId, rows) {
+    const r = await hbGetUploadResult(cfg, batchId);
+    const failures = new Map<string, string>();
+    if (!r.done) return { done: false, failures };
+    if (r.failedAll) { for (const row of rows) failures.set(row.id, r.failedAll); return { done: true, failures }; }
+    for (const e of r.errors) {
+      for (const row of rows) {
+        if ((e.pos != null && row.batch_pos === e.pos) || (e.key && row.barcode === e.key)) failures.set(row.id, e.reason);
+      }
+    }
+    return { done: true, failures };
+  },
+  test: (cfg) => hbTestConnection(cfg),
+  isFatal: (e) => e instanceof HepsiburadaError && [0, 401, 403, 429].includes(e.status),
+};
+
+const ADAPTERS: Record<Channel, Adapter> = { trendyol, hepsiburada };
+export const channelLabel = (c: Channel) => ADAPTERS[c].label;
+export const isChannel = (c: string): c is Channel => (CHANNELS as string[]).includes(c);
+
+export async function testChannel(channel: Channel, sb: AdminClient = createAdminClient()) {
+  const a = ADAPTERS[channel];
+  const { ready, cfg } = await a.load(sb);
+  if (!ready) throw new Error("Önce bağlantı bilgilerini girip kaydet.");
+  return a.test(cfg);
+}
 
 export type SyncReport = {
+  channel: Channel;
   skipped?: "disabled" | "no_credentials";
   sent: number;
   batches: number;
@@ -25,107 +100,138 @@ export type SyncReport = {
   errors: string[];
 };
 
-export async function processMarketplaceStock(supabase: AdminClient = createAdminClient()): Promise<SyncReport> {
-  const report: SyncReport = { sent: 0, batches: 0, confirmed: 0, failed: 0, errors: [] };
-  const cfg = await getTrendyolConfig(supabase);
-  if (!cfg.enabled) return { ...report, skipped: "disabled" };
-  if (!hasCredentials(cfg)) return { ...report, skipped: "no_credentials" };
+async function writeLog(sb: any, channel: Channel, rows: any[], ok: boolean, reasonOf: (r: any) => string | null, batchId: string | null) {
+  if (!rows.length) return;
+  await sb.from("marketplace_stock_log").insert(rows.map((r) => ({
+    channel, variant_id: r.variant_id, product_id: r.product_id ?? null, listing_key: r.barcode,
+    qty: Number(r.last_sent_qty ?? r.desired_qty ?? 0), ok, message: reasonOf(r), batch_request_id: batchId,
+  })));
+}
+
+export async function processChannel(channel: Channel, supabase: AdminClient = createAdminClient()): Promise<SyncReport> {
+  const a = ADAPTERS[channel];
+  const report: SyncReport = { channel, sent: 0, batches: 0, confirmed: 0, failed: 0, errors: [] };
+  const { enabled, ready, cfg } = await a.load(supabase);
+  if (!enabled) return { ...report, skipped: "disabled" };
+  if (!ready) return { ...report, skipped: "no_credentials" };
   const sb = supabase as any;
 
   // ── 1) Gönder ──
   for (let round = 0; round < 5; round++) {
-    const { data: rows, error } = await sb.rpc("claim_marketplace_stock", { p_channel: CHANNEL, p_limit: 1000 });
+    const { data: inflight } = await sb.from("marketplace_stock_sync").select("batch_request_id")
+      .eq("channel", channel).eq("status", "sent").not("batch_request_id", "is", null).limit(5000);
+    if (new Set(((inflight as any[]) || []).map((r) => r.batch_request_id)).size >= a.maxInFlight) break;
+
+    const { data: rows, error } = await sb.rpc("claim_marketplace_stock", { p_channel: channel, p_limit: a.maxBatch });
     if (error) { report.errors.push(error.message); break; }
     const list = (rows as any[]) || [];
     if (!list.length) break;
 
-    // Aynı barkod iki varyantta olursa tek satır gönder (sonuncusu)
-    const byBarcode = new Map<string, number>();
-    for (const r of list) byBarcode.set(r.barcode, Number(r.sending_qty ?? r.desired_qty ?? 0));
-    const items = [...byBarcode.entries()].map(([barcode, quantity]) => ({ barcode, quantity }));
+    // Aynı anahtar iki varyantta olursa tek kalem (sonuncusu); sıra = kalem no
+    const qtyByKey = new Map<string, number>();
+    for (const r of list) qtyByKey.set(r.barcode, Number(r.sending_qty ?? r.desired_qty ?? 0));
+    const keys = [...qtyByKey.keys()];
+    const posByKey = new Map(keys.map((k, i) => [k, i + 1]));
+    const items = keys.map((key) => ({ key, qty: qtyByKey.get(key)! }));
     const ids = list.map((r) => r.id);
 
     try {
-      const batchId = await updateStocks(cfg, items);
-      await sb.rpc("mark_marketplace_stock_sent", { p_ids: ids, p_batch: batchId });
+      const batchId = await a.send(cfg, items);
+      await sb.rpc("mark_marketplace_stock_sent", { p_ids: ids, p_batch: batchId, p_pos: list.map((r) => posByKey.get(r.barcode)) });
       report.sent += items.length;
       report.batches += 1;
     } catch (e: any) {
       const msg = e?.message || String(e);
       await sb.rpc("mark_marketplace_stock_retry", { p_ids: ids, p_error: msg });
       report.errors.push(msg);
-      // Yetki/istek sınırı hatasında diğer paketleri de deneme
-      if (e instanceof TrendyolError && [0, 401, 403, 429].includes(e.status)) break;
+      // 8 denemede kalıcı hataya düşenleri geçmişe yaz
+      const { data: dead } = await sb.from("marketplace_stock_sync")
+        .select("variant_id, product_id, barcode, desired_qty, error").in("id", ids).eq("status", "failed");
+      await writeLog(sb, channel, (dead as any[]) || [], false, (r) => `Gönderilemedi (8 deneme): ${r.error || msg}`, null);
+      if (a.isFatal(e)) break;
     }
   }
 
-  // ── 2) Sonuçları doğrula (Trendyol birkaç saniyede işler) ──
+  // ── 2) Sonuçları doğrula ──
   const { data: sentRows } = await sb
     .from("marketplace_stock_sync")
-    .select("id, variant_id, barcode, last_sent_qty, batch_request_id, sent_at")
-    .eq("channel", CHANNEL)
+    .select("id, variant_id, product_id, barcode, last_sent_qty, batch_pos, batch_request_id, sent_at")
+    .eq("channel", channel)
     .eq("status", "sent")
     .lt("sent_at", new Date(Date.now() - 5000).toISOString())
     .order("sent_at", { ascending: true })
-    .limit(3000);
-  const byBatch = new Map<string, any[]>();
+    .limit(5000);
+  const byBatch = new Map<string, SentRow[]>();
   for (const r of (sentRows as any[]) || []) {
     if (!r.batch_request_id) continue;
-    (byBatch.get(r.batch_request_id) || byBatch.set(r.batch_request_id, []).get(r.batch_request_id)!).push(r);
+    if (!byBatch.has(r.batch_request_id)) byBatch.set(r.batch_request_id, []);
+    byBatch.get(r.batch_request_id)!.push(r);
   }
 
   const zeroOkVariants: string[] = [];
   for (const [batchId, rows] of [...byBatch.entries()].slice(0, 20)) {
     const oldest = Math.min(...rows.map((r) => new Date(r.sent_at).getTime()));
-    let result: Awaited<ReturnType<typeof getBatchResult>> | null = null;
+    let res: { done: boolean; failures: Map<string, string> };
     try {
-      result = await getBatchResult(cfg, batchId);
+      res = await a.result(cfg, batchId, rows);
     } catch (e: any) {
-      // Sonuç 4 saat saklanır; daha eskiyse doğrulanamadı kabul et (gönderim kabul edilmişti)
+      // Sonuç kanalda 4 saatten eskiyse doğrulanamaz; gönderim kabul edilmişti → başarılı say
       if (Date.now() - oldest > 4 * 3600_000) {
+        const note = "Sonuç doğrulanamadı (gönderim kabul edilmişti)";
         await sb.from("marketplace_stock_sync")
-          .update({ status: "ok", confirmed_at: new Date().toISOString(), error: "Sonuç doğrulanamadı (gönderim kabul edilmişti)" })
+          .update({ status: "ok", confirmed_at: new Date().toISOString(), error: note })
           .in("id", rows.map((r) => r.id)).eq("status", "sent").eq("batch_request_id", batchId);
+        await writeLog(sb, channel, rows, true, () => note, batchId);
       } else {
         report.errors.push(e?.message || String(e));
       }
       continue;
     }
-    if (!result.done) continue;
+    if (!res.done) continue;
 
-    const resByBarcode = new Map(result.items.map((i) => [i.barcode, i]));
-    const okIds: string[] = [];
-    for (const r of rows) {
-      const it = resByBarcode.get(r.barcode);
-      if (!it || it.ok) {
-        okIds.push(r.id);
-        if (Number(r.last_sent_qty) === 0) zeroOkVariants.push(r.variant_id);
-      } else {
-        await sb.from("marketplace_stock_sync")
-          .update({ status: "failed", error: it.reason || "Trendyol reddetti", updated_at: new Date().toISOString() })
-          .eq("id", r.id).eq("status", "sent").eq("batch_request_id", batchId);
-        report.failed += 1;
-      }
+    const okRows = rows.filter((r) => !res.failures.has(r.id));
+    const badRows = rows.filter((r) => res.failures.has(r.id));
+    for (const r of badRows) {
+      await sb.from("marketplace_stock_sync")
+        .update({ status: "failed", error: res.failures.get(r.id), updated_at: new Date().toISOString() })
+        .eq("id", r.id).eq("status", "sent").eq("batch_request_id", batchId);
     }
-    if (okIds.length) {
+    if (okRows.length) {
       await sb.from("marketplace_stock_sync")
         .update({ status: "ok", confirmed_at: new Date().toISOString(), error: null })
-        .in("id", okIds).eq("status", "sent").eq("batch_request_id", batchId);
-      report.confirmed += okIds.length;
+        .in("id", okRows.map((r) => r.id)).eq("status", "sent").eq("batch_request_id", batchId);
+      for (const r of okRows) if (Number(r.last_sent_qty) === 0) zeroOkVariants.push(r.variant_id);
     }
+    await writeLog(sb, channel, okRows, true, () => null, batchId);
+    await writeLog(sb, channel, badRows, false, (r) => res.failures.get(r.id) || null, batchId);
+    report.confirmed += okRows.length;
+    report.failed += badRows.length;
   }
 
-  // ── 3) Stok 0 Trendyol'a işlendiyse manuel görevi otomatik kapat ──
+  // ── 3) Stok 0 kanala işlendiyse o kanalın manuel görevini otomatik kapat ──
   if (zeroOkVariants.length) {
-    const { data: ch } = await sb.from("marketplace_channels").select("id").ilike("name", "trendyol").maybeSingle();
+    const { data: ch } = await sb.from("marketplace_channels").select("id").ilike("name", a.label).maybeSingle();
     if (ch?.id) {
       await sb.from("stock_sync_tasks")
-        .update({ status: "done", method: "api", done_at: new Date().toISOString(), note: "Trendyol API ile otomatik" })
+        .update({ status: "done", method: "api", done_at: new Date().toISOString(), note: `${a.label} API ile otomatik` })
         .eq("channel_id", ch.id).eq("status", "pending").in("variant_id", zeroOkVariants);
     }
   }
 
   return report;
+}
+
+/** Tüm kanallar (cron + anlık tetik). */
+export async function processMarketplaceStock(supabase: AdminClient = createAdminClient()): Promise<SyncReport[]> {
+  const out: SyncReport[] = [];
+  for (const c of CHANNELS) {
+    try {
+      out.push(await processChannel(c, supabase));
+    } catch (e: any) {
+      out.push({ channel: c, sent: 0, batches: 0, confirmed: 0, failed: 0, errors: [e?.message || String(e)] });
+    }
+  }
+  return out;
 }
 
 // ── Anlık tetik ──
@@ -141,9 +247,11 @@ export function kickMarketplaceSync(delayMs = 1500) {
       let sentBatches = 0;
       do {
         again = false;
-        const r = await processMarketplaceStock();
-        sentBatches += r.batches;
-        if (r.errors.length) console.error("[marketplace-sync]", r.errors.join(" | "));
+        const reports = await processMarketplaceStock();
+        for (const r of reports) {
+          sentBatches += r.batches;
+          if (r.errors.length) console.error(`[marketplace-sync:${r.channel}]`, r.errors.join(" | "));
+        }
       } while (again);
       // Gönderim olduysa birkaç saniye sonra sonucu doğrula (cron'u beklemeden)
       if (sentBatches > 0) setTimeout(() => kickMarketplaceSync(0), 8000);
