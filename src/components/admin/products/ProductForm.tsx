@@ -343,6 +343,20 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
         }
       }
 
+      // Stok değiştiyse pazaryerlerine (Trendyol) hemen gönderilsin — kuyruğu
+      // veritabanı tetikleyicisi doldurdu; burada yalnız işleyiciyi dürtüyoruz.
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) {
+          fetch("/api/admin/integrations/trendyol", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+            body: JSON.stringify({ action: "kick" }),
+            keepalive: true,
+          }).catch(() => {});
+        }
+      } catch { /* kritik değil: dakikalık cron zaten gönderir */ }
+
       router.push("/admin/products");
       router.refresh();
     } catch (error: any) {

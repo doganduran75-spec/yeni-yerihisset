@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { kickMarketplaceSync } from "@/lib/marketplace/sync";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { renderEmailTemplate } from "@/lib/notifications";
 import { restoreOrderCredit } from "@/lib/store-credit";
@@ -75,6 +76,7 @@ async function run(req: NextRequest) {
     console.error("[cron/expire-orders]", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+  kickMarketplaceSync(); // stok değişti → pazaryerlerine (Trendyol) gönder
 
   const ids: string[] = Array.isArray(data?.ids) ? data.ids : [];
 

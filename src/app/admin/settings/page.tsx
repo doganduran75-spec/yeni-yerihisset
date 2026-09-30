@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/lib/supabase";
-import { Loader2, Save, Store, Globe, Mail, Server, BarChart3, Eye, EyeOff, ShoppingCart, Copy, Check, Layers, ShieldCheck, Tag, Bookmark, FolderSearch, Tags, Megaphone, Truck, CreditCard, Landmark, MessageSquare } from "lucide-react";
+import { Loader2, Save, Store, Globe, Mail, Server, BarChart3, Eye, EyeOff, ShoppingCart, Copy, Check, Layers, ShieldCheck, Tag, Bookmark, FolderSearch, Tags, Megaphone, Truck, CreditCard, Landmark, MessageSquare, Plug } from "lucide-react";
 import VariantsTab from "@/components/admin/settings/VariantsTab";
 import RolesTab from "@/components/admin/settings/RolesTab";
 import BrandsTab from "@/components/admin/settings/BrandsTab";
@@ -16,10 +16,11 @@ import KBCategoriesTab from "@/components/admin/settings/KBCategoriesTab";
 import MemberTagsTab from "@/components/admin/settings/MemberTagsTab";
 import PopupTab from "@/components/admin/settings/PopupTab";
 import EmailTemplatesTab from "@/components/admin/settings/EmailTemplatesTab";
+import IntegrationsTab from "@/components/admin/settings/IntegrationsTab";
 import ShippingMethodsManager from "@/components/admin/ShippingMethodsManager";
 import { siteAlert } from "@/components/ui/site-dialog";
 
-type SettingsTab = "general" | "variants" | "roles" | "brands" | "categories" | "kb-categories" | "member-tags" | "popup" | "email-templates";
+type SettingsTab = "general" | "variants" | "roles" | "brands" | "categories" | "kb-categories" | "member-tags" | "popup" | "email-templates" | "integrations";
 
 type Settings = {
   id: string;
@@ -103,7 +104,6 @@ function SettingsPageInner() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showSmtpPass, setShowSmtpPass] = useState(false);
-  const [showKargoToken, setShowKargoToken] = useState(false);
   const [copiedFeed, setCopiedFeed] = useState(false);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -150,7 +150,8 @@ function SettingsPageInner() {
       const res = await fetch("/api/admin/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...(await authHeaders()) },
-        body: JSON.stringify({ settings }),
+        // Entegrasyon alanları (Trendyol/Kargonomi) Entegrasyonlar sekmesinde kaydedilir → burada gönderme
+        body: JSON.stringify({ settings: Object.fromEntries(Object.entries(settings).filter(([k]) => !/^(trendyol_|kargonomi_)/.test(k))) }),
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok || !d.ok) throw new Error(d.error || "Ayarlar kaydedilemedi.");
@@ -174,6 +175,7 @@ function SettingsPageInner() {
 
   const tabs: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
     { id: "general",       label: "Genel Ayarlar",           icon: <Store size={16} /> },
+    { id: "integrations",  label: "Entegrasyonlar",          icon: <Plug size={16} /> },
     { id: "email-templates", label: "E-posta Şablonları",    icon: <Mail size={16} /> },
     { id: "popup",         label: "Popup",                   icon: <Megaphone size={16} /> },
     { id: "brands",        label: "Markalar",                icon: <Tag size={16} /> },
@@ -209,6 +211,7 @@ function SettingsPageInner() {
         ))}
       </div>
 
+      {activeTab === "integrations"   && <IntegrationsTab />}
       {activeTab === "email-templates" && <EmailTemplatesTab />}
       {activeTab === "popup"          && <PopupTab />}
       {activeTab === "member-tags"   && <MemberTagsTab />}
@@ -698,81 +701,6 @@ Açıklama: Sipariş numaranızı açıklamaya yazmayı unutmayın.`}
               </div>
             </div>
 
-          </CardContent>
-        </Card>
-
-        {/* ─── Kargonomi Entegrasyonu ─── */}
-        <Card className="shadow-sm border-muted">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Truck size={20} className="text-blue-600" /> Kargonomi Entegrasyonu
-            </CardTitle>
-            <CardDescription>
-              "Kargoya Ver" butonu için Kargonomi API bağlantı bilgileri.
-              Token ve Depo ID bilgilerini Kargonomi panelinden alabilirsiniz.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">API Token (Bearer)</label>
-                <div className="relative">
-                  <Input
-                    type={showKargoToken ? "text" : "password"}
-                    value={settings.kargonomi_api_token}
-                    onChange={(e) => set({ kargonomi_api_token: e.target.value })}
-                    placeholder="••••••••••••••••••••"
-                    className="pr-10"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowKargoToken(!showKargoToken)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-slate-700"
-                  >
-                    {showKargoToken ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Kargonomi Panel → Entegrasyonlar → API Anahtarları
-                </p>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Depo ID (Warehouse ID)</label>
-                <Input
-                  value={settings.kargonomi_warehouse_id}
-                  onChange={(e) => set({ kargonomi_warehouse_id: e.target.value })}
-                  placeholder="Örn: 123"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Kargonomi Panel → Depolar bölümündeki depo numarası
-                </p>
-              </div>
-            </div>
-
-            <div className="p-4 rounded-xl bg-orange-50 border border-orange-100 text-sm text-orange-800 space-y-2">
-              <p className="font-semibold flex items-center gap-2">
-                <Truck size={15} /> Kargonomi Bağlantı Adımları
-              </p>
-              <ol className="list-decimal list-inside space-y-1 text-xs text-orange-700">
-                <li>
-                  <a href="https://app.kargonomi.com.tr" target="_blank" rel="noopener noreferrer" className="underline font-medium">
-                    app.kargonomi.com.tr
-                  </a>{" "}
-                  adresine giriş yapın.
-                </li>
-                <li>Sağ üst menüden <strong>Entegrasyonlar → API Anahtarları</strong> bölümüne gidin.</li>
-                <li>Yeni bir API anahtarı oluşturun ve yukarıdaki <strong>API Token</strong> alanına yapıştırın.</li>
-                <li><strong>Depolar</strong> bölümünden sevkiyatın yapılacağı deponun ID numarasını alın.</li>
-                <li>Bu sayfayı kaydedin. Siparişler ekranındaki <strong>Kargoya Ver</strong> butonu artık çalışır.</li>
-              </ol>
-            </div>
-
-            {settings.kargonomi_api_token && settings.kargonomi_warehouse_id && (
-              <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-4 py-3 text-sm text-green-700 font-medium">
-                <Check size={16} className="shrink-0 text-green-600" />
-                Kargonomi entegrasyonu yapılandırılmış. Siparişler ekranından kargo oluşturabilirsiniz.
-              </div>
-            )}
           </CardContent>
         </Card>
 

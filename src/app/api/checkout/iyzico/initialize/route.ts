@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { kickMarketplaceSync } from "@/lib/marketplace/sync";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { getAuthUserFromRequest } from "@/lib/auth-from-request";
 import { createIyzicoClient, formatPrice, newConversationId } from "@/lib/iyzico";
@@ -262,6 +263,7 @@ export async function POST(req: NextRequest) {
   const { data: reserveRes, error: reserveErr } = await (supabase as any).rpc(
     "reduce_order_stock", { p_order_id: order.id, p_strict: true }
   );
+  kickMarketplaceSync(); // stok değişti → pazaryerlerine (Trendyol) gönder
   if (reserveErr || !reserveRes?.ok) {
     await restoreOrderCredit(supabase, order.id); // düşülen krediyi geri yükle (silmeden önce)
     await supabase.from("order_items").delete().eq("order_id", order.id);
@@ -382,6 +384,7 @@ export async function POST(req: NextRequest) {
       if (err || result?.status !== "success") {
         // Başarısız olursa siparişi iptal et + rezerve edilen stoğu iade et + krediyi geri yükle
         await (supabase as any).rpc("restore_order_stock", { p_order_id: order.id });
+        kickMarketplaceSync(); // stok değişti → pazaryerlerine (Trendyol) gönder
         await restoreOrderCredit(supabase, order.id);
         await supabase.from("orders").update({ status: "cancelled" }).eq("id", order.id);
         console.error("[iyzico/initialize] iyzico error:", err ?? result);

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { kickMarketplaceSync } from "@/lib/marketplace/sync";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { getAuthUserFromRequest } from "@/lib/auth-from-request";
 import { createIyzicoClient, formatPrice, newConversationId } from "@/lib/iyzico";
@@ -108,6 +109,7 @@ export async function POST(req: NextRequest) {
   // Tam iade → ürünler iade edildiği için stoğu geri yükle + kullanılan krediyi iade et
   if (isFullRefund) {
     await (supabase as any).rpc("restore_order_stock", { p_order_id: orderId });
+    kickMarketplaceSync(); // stok değişti → pazaryerlerine (Trendyol) gönder
     await restoreOrderCredit(supabase, orderId);
   }
 

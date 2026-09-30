@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { kickMarketplaceSync } from "@/lib/marketplace/sync";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { createIyzicoClient } from "@/lib/iyzico";
 import { restoreOrderCredit } from "@/lib/store-credit";
@@ -75,6 +76,7 @@ export async function POST(req: NextRequest) {
             "reduce_order_stock",
             { p_order_id: order.id, p_strict: false }
           );
+          kickMarketplaceSync(); // stok değişti → pazaryerlerine (Trendyol) gönder
           const shortages = reduceRes?.shortages;
           if (Array.isArray(shortages) && shortages.length > 0) {
             console.error("[iyzico/callback] STOK EKSİĞİ order", order.id, shortages);
@@ -138,6 +140,7 @@ export async function POST(req: NextRequest) {
         // Ödeme başarısız / iptal → siparişi iptal et + rezerve stoğu iade et (F9)
         // + kullanılan YeriHisset Kredisi'ni cüzdana geri yükle
         await (supabase as any).rpc("restore_order_stock", { p_order_id: order.id });
+        kickMarketplaceSync(); // stok değişti → pazaryerlerine (Trendyol) gönder
         await restoreOrderCredit(supabase, order.id);
         await (supabase as any)
           .from("orders")

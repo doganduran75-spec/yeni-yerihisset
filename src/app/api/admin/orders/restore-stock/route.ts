@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { kickMarketplaceSync } from "@/lib/marketplace/sync";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { getAuthUserFromRequest } from "@/lib/auth-from-request";
 import { restoreOrderCredit } from "@/lib/store-credit";
@@ -24,6 +25,7 @@ export async function POST(req: NextRequest) {
     console.error("[restore-stock] hata:", error);
     return NextResponse.json({ error: "Stok geri yüklenemedi" }, { status: 500 });
   }
+  kickMarketplaceSync(); // stok değişti → pazaryerlerine (Trendyol) gönder
 
   // İptalde kullanılan YeriHisset Kredisi'ni cüzdana geri yükle (idempotent)
   await restoreOrderCredit(supabase, orderId);

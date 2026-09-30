@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { getAuthUserFromRequest } from "@/lib/auth-from-request";
+import { kickMarketplaceSync } from "@/lib/marketplace/sync";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -35,5 +36,6 @@ export async function POST(req: NextRequest) {
     updated += data.length;
   }
 
+  if (updated > 0) kickMarketplaceSync(); // stok değişti → pazaryerlerine (Trendyol) gönder
   return NextResponse.json({ ok: true, updated, notFound, errors: errors.slice(0, 10) });
 }

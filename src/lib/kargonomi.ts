@@ -12,7 +12,7 @@ const BASE_URL = "https://app.kargonomi.com.tr/api/v1";
  */
 function resolveToken(tokenOverride?: string): string {
   const token = tokenOverride ?? process.env.KARGONOMI_API_TOKEN ?? "";
-  if (!token) throw new Error("Kargonomi API token ayarlanmamış. Admin > Ayarlar > Kargonomi bölümünden girin.");
+  if (!token) throw new Error("Kargonomi API token ayarlanmamış. Admin > Ayarlar > Entegrasyonlar bölümünden girin.");
   return token;
 }
 
@@ -166,7 +166,7 @@ export async function createShipment(
   token?: string
 ): Promise<KargonomiShipmentResult> {
   const warehouseId = payload.warehouse_id ?? process.env.KARGONOMI_WAREHOUSE_ID;
-  if (!warehouseId) throw new Error("Kargonomi Depo ID ayarlanmamış. Admin > Ayarlar > Kargonomi bölümünden girin.");
+  if (!warehouseId) throw new Error("Kargonomi Depo ID ayarlanmamış. Admin > Ayarlar > Entegrasyonlar bölümünden girin.");
 
   const body = {
     shipment: {

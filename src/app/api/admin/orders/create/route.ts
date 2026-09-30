@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { kickMarketplaceSync } from "@/lib/marketplace/sync";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { getAuthUserFromRequest } from "@/lib/auth-from-request";
 import { resolveShipping } from "@/lib/shipping";
@@ -132,6 +133,7 @@ export async function POST(req: NextRequest) {
     const { data: reduceRes } = await (supabase as any).rpc("reduce_order_stock", {
       p_order_id: order.id, p_strict: false,
     });
+    kickMarketplaceSync(); // stok değişti → pazaryerlerine (Trendyol) gönder
     const shortages = reduceRes?.shortages;
     if (Array.isArray(shortages) && shortages.length > 0) {
       const note = (admin_note ? admin_note + "\n" : "") + "⚠ STOK EKSİĞİ: " + shortages

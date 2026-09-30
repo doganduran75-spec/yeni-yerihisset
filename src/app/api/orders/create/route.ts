@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { kickMarketplaceSync } from "@/lib/marketplace/sync";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { getAuthUserFromRequest } from "@/lib/auth-from-request";
 import { validateCartPricing } from "@/lib/order-pricing";
@@ -262,6 +263,7 @@ export async function POST(req: NextRequest) {
     "reduce_order_stock",
     { p_order_id: order.id, p_strict: true }
   );
+  kickMarketplaceSync(); // stok değişti → pazaryerlerine (Trendyol) gönder
   if (reduceErr || !reduceRes?.ok) {
     // Rollback: kalemleri ve siparişi sil (kupon/etiket henüz işlenmedi)
     await supabase.from("order_items").delete().eq("order_id", order.id);

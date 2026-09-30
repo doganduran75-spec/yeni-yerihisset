@@ -107,24 +107,31 @@ export async function POST(req: NextRequest) {
   // Kargonomi credentials — settings tablosundan oku, env'e fallback yap
   const { data: settingsRow } = await (supabase
     .from("settings")
-    .select("kargonomi_api_token, kargonomi_warehouse_id")
+    .select("kargonomi_api_token, kargonomi_warehouse_id, kargonomi_enabled")
     .limit(1)
     .single() as any) as {
-      data: { kargonomi_api_token?: string; kargonomi_warehouse_id?: string } | null
+      data: { kargonomi_api_token?: string; kargonomi_warehouse_id?: string; kargonomi_enabled?: boolean } | null
     };
+
+  if (settingsRow && settingsRow.kargonomi_enabled === false) {
+    return NextResponse.json(
+      { error: "Kargonomi entegrasyonu kapalı. Admin > Ayarlar > Entegrasyonlar bölümünden açabilirsiniz." },
+      { status: 400 }
+    );
+  }
 
   const kargonomiToken = settingsRow?.kargonomi_api_token || process.env.KARGONOMI_API_TOKEN || "";
   const kargonomiWarehouseId = settingsRow?.kargonomi_warehouse_id || process.env.KARGONOMI_WAREHOUSE_ID || "";
 
   if (!kargonomiToken) {
     return NextResponse.json(
-      { error: "Kargonomi API Token ayarlanmamış. Admin > Ayarlar > Kargonomi bölümünden girin." },
+      { error: "Kargonomi API Token ayarlanmamış. Admin > Ayarlar > Entegrasyonlar bölümünden girin." },
       { status: 500 }
     );
   }
   if (!kargonomiWarehouseId) {
     return NextResponse.json(
-      { error: "Kargonomi Depo ID ayarlanmamış. Admin > Ayarlar > Kargonomi bölümünden girin." },
+      { error: "Kargonomi Depo ID ayarlanmamış. Admin > Ayarlar > Entegrasyonlar bölümünden girin." },
       { status: 500 }
     );
   }
