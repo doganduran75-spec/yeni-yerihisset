@@ -84,6 +84,43 @@ async function call(c: HepsiburadaConfig, method: "GET" | "POST", path: string, 
   return json;
 }
 
+// ── Test (SIT) ortamı: Hepsiburada'nın canlıya geçiş için istediği adımlar ──
+// HER ZAMAN "-sit" adreslerine gider (canlı sisteme dokunamaz). Hata da olsa
+// ham yanıtı döner — Test Merkezi ekranında gösterilir, Hepsiburada'ya iletilir.
+const SIT_HOSTS = {
+  listing: "https://listing-external-sit.hepsiburada.com",
+  mpop: "https://mpop-sit.hepsiburada.com",
+  oms: "https://oms-external-sit.hepsiburada.com",
+  omsStub: "https://oms-stub-external-sit.hepsiburada.com",
+} as const;
+export type SitService = keyof typeof SIT_HOSTS;
+
+export async function hbSitRequest(
+  c: HepsiburadaConfig, service: SitService, method: "GET" | "POST", path: string, body?: unknown,
+): Promise<{ status: number; ok: boolean; url: string; json: any; text: string }> {
+  const url = SIT_HOSTS[service] + path;
+  try {
+    const res = await fetch(url, {
+      method,
+      headers: {
+        Authorization: "Basic " + Buffer.from(`${c.merchantId}:${c.serviceKey}`).toString("base64"),
+        "User-Agent": c.username,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: AbortSignal.timeout(25000),
+      cache: "no-store",
+    });
+    const text = await res.text();
+    let json: any = null;
+    try { json = text ? JSON.parse(text) : null; } catch { /* düz metin */ }
+    return { status: res.status, ok: res.ok, url, json, text: text.slice(0, 20000) };
+  } catch (e: any) {
+    return { status: 0, ok: false, url, json: null, text: `Bağlanılamadı: ${e?.message || e}` };
+  }
+}
+
 /** Bağlantı testi: ilk listing sayfası (toplam listing sayısı). */
 export async function hbTestConnection(c: HepsiburadaConfig): Promise<{ totalProducts: number | null }> {
   const j = await call(c, "GET", `/listings/merchantid/${encodeURIComponent(c.merchantId)}?offset=0&limit=1`);

@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/lib/supabase";
 import { siteAlert, siteConfirm } from "@/components/ui/site-dialog";
+import HepsiburadaTestCenter from "@/components/admin/settings/HepsiburadaTestCenter";
 import {
   Loader2, Save, Eye, EyeOff, Truck, Store, RefreshCw, Send, PlugZap, AlertTriangle, CheckCircle2, Info, RotateCcw, History,
 } from "lucide-react";
@@ -431,6 +432,7 @@ export default function IntegrationsTab() {
             {saveBtn("hepsiburada", "Hepsiburada")}
             <SyncPanel channel="hepsiburada" enabled={s.hepsiburada_enabled} />
           </div>
+          <HepsiburadaTestCenter />
         </CardContent>
       </Card>
 
