@@ -14,7 +14,68 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { supabase } from "@/lib/supabase";
-import { Plus, Trash2, Loader2, ShieldCheck } from "lucide-react";
+import { Plus, Trash2, Loader2, ShieldCheck, RefreshCw } from "lucide-react";
+import { siteAlert } from "@/components/ui/site-dialog";
+
+async function authHeaders(): Promise<Record<string, string>> {
+  const { data: { session } } = await supabase.auth.getSession();
+  return session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
+}
+
+// Otomatik roller: Müşteri (ödenmiş ilk sipariş) + Müdavim (en az N ödenmiş sipariş).
+// Kural veritabanında (refresh_member_auto_tags); eşik settings.mudavim_min_orders.
+function AutoRolesCard() {
+  const [min, setMin] = useState<number | "">("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    (async () => {
+      const r = await fetch("/api/admin/settings", { headers: await authHeaders(), cache: "no-store" });
+      const j = await r.json().catch(() => ({}));
+      setMin(Number(j?.settings?.mudavim_min_orders) || 2);
+    })();
+  }, []);
+  async function saveAndApply() {
+    const n = Number(min);
+    if (!Number.isInteger(n) || n < 2 || n > 100) { siteAlert({ message: "Eşik 2 ile 100 arasında bir tam sayı olmalı.", tone: "danger" }); return; }
+    setBusy(true);
+    try {
+      const s = await fetch("/api/admin/settings", {
+        method: "POST", headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+        body: JSON.stringify({ settings: { mudavim_min_orders: n } }),
+      });
+      if (!s.ok) throw new Error((await s.json().catch(() => ({}))).error || "Kaydedilemedi");
+      const r = await fetch("/api/admin/members/refresh-roles", { method: "POST", headers: await authHeaders() });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.ok) throw new Error(j.error || "Uygulanamadı");
+      siteAlert({ message: `Kaydedildi ve uygulandı: ${j.roles_added ?? 0} yeni Müşteri, ${j.mudavim_added ?? 0} yeni Müdavim, ${j.tags_added ?? 0} yeni etiket.`, tone: "success" });
+    } catch (e: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
+      siteAlert({ title: "Hata", message: e.message, tone: "danger" });
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Card className="shadow-sm border-muted">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base">Otomatik Roller</CardTitle>
+        <CardDescription>
+          Sipariş ödendiğinde kendiliğinden atanır (her kanal: site, eski site, pazaryeri). İptal edilen siparişler sayılmaz; roller geri alınmaz.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3 text-sm">
+        <p><b>Müşteri:</b> ödemesi alınmış ilk sipariş.</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <b>Müdavim:</b> en az
+          <Input type="number" min={2} max={100} value={min} onChange={(e) => setMin(e.target.value === "" ? "" : Number(e.target.value))} className="h-8 w-20" />
+          ödenmiş sipariş
+          <Button size="sm" onClick={saveAndApply} disabled={busy || min === ""} className="gap-1.5 ml-2">
+            {busy ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />} Kaydet ve tüm üyelere uygula
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 type Role = {
   id: string;
@@ -133,6 +194,8 @@ export default function RolesTab() {
           </DialogContent>
         </Dialog>
       </div>
+
+      <AutoRolesCard />
 
       <Card className="shadow-sm border-muted">
         <CardHeader className="pb-3">
