@@ -129,7 +129,15 @@ function SyncPanel({ channel, enabled }: { channel: Channel; enabled: boolean })
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(j.error || "İşlem başarısız");
       if (action === "test") {
-        siteAlert({ title: "Bağlantı başarılı", message: `${name} hesabına bağlanıldı${j.totalProducts != null ? ` — ${name}'da ${j.totalProducts} ürün görünüyor` : ""}.`, tone: "success" });
+        const svc: { name: string; ok: boolean; detail: string }[] = j.services ?? [];
+        const anyFail = svc.some((x) => !x.ok);
+        siteAlert({
+          title: anyFail ? "Bağlantı kısmen başarılı" : "Bağlantı başarılı",
+          message: svc.length
+            ? svc.map((x) => `${x.ok ? "✓" : "✗"} ${x.name}: ${x.detail}`).join("\n")
+            : `${name} hesabına bağlanıldı${j.totalProducts != null ? ` — ${name}'da ${j.totalProducts} ürün görünüyor` : ""}.`,
+          tone: anyFail ? "danger" : "success",
+        });
       } else if (j.skipped === "disabled") {
         siteAlert({ message: `${name} senkronu kapalı — önce açın.`, tone: "danger" });
       } else if (j.skipped === "no_credentials") {

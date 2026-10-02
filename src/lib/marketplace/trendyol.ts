@@ -85,9 +85,22 @@ async function call(c: TrendyolConfig, method: "GET" | "POST", path: string, bod
 }
 
 /** Bağlantı testi: ürün listesinin ilk sayfası. Trendyol'daki toplam ürün sayısını döner. */
-export async function testConnection(c: TrendyolConfig): Promise<{ totalProducts: number | null }> {
+export async function testConnection(c: TrendyolConfig): Promise<{ totalProducts: number | null; services: { name: string; ok: boolean; detail: string }[] }> {
   const j = await call(c, "GET", `/integration/product/sellers/${encodeURIComponent(c.sellerId)}/products?page=0&size=1`);
-  return { totalProducts: typeof j?.totalElements === "number" ? j.totalElements : null };
+  const totalProducts = typeof j?.totalElements === "number" ? j.totalElements : null;
+  // Servis bazında tanı: aynı anahtar ürün servisinde çalışıp sipariş servisinde reddedilebiliyor
+  // (hesap/anahtar yetkisi). Sonuç Trendyol desteğine iletilebilecek netlikte gösterilir.
+  const services: { name: string; ok: boolean; detail: string }[] = [
+    { name: "Ürün / stok servisi", ok: true, detail: `${totalProducts ?? "?"} ürün` },
+  ];
+  const now = Date.now();
+  try {
+    const o = await call(c, "GET", `/integration/order/sellers/${encodeURIComponent(c.sellerId)}/v2/orders?startDate=${now - 86400_000}&endDate=${now}&page=0&size=1`);
+    services.push({ name: "Sipariş servisi (Order V2)", ok: true, detail: `son 24 saatte ${o?.totalElements ?? 0} paket` });
+  } catch (e: any) {
+    services.push({ name: "Sipariş servisi (Order V2)", ok: false, detail: e?.message || String(e) });
+  }
+  return { totalProducts, services };
 }
 
 /** Stok gönder (yalnız stok; fiyat gönderilmez). batchRequestId döner. */
