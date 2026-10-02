@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// Pazaryeri SİPARİŞLERİNİ sitenin siparişlerine aktarır (şimdilik Trendyol).
+// Pazaryeri SİPARİŞLERİNİ sitenin siparişlerine aktarır (Trendyol burada; Hepsiburada: hb-orders.ts).
 // Akış (dakikalık cron + "Şimdi çek"): pazaryerinden son değişen paketleri al →
 //   yeni paket: sipariş + kalemler oluştur (ürünü barkod / stok koduyla eşleştir) →
 //     iptal olmayan kalemlerin stoğunu düş (mp_apply_item_stock, tek seferlik)
@@ -11,6 +11,7 @@
 import { createAdminClient } from "@/lib/supabase-admin";
 import { getTrendyolConfig, hasCredentials, type TrendyolConfig } from "@/lib/marketplace/trendyol";
 import { kickMarketplaceSync } from "@/lib/marketplace/sync";
+import { importHepsiburadaOrders } from "@/lib/marketplace/hb-orders";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 export type OrderChannel = "trendyol" | "hepsiburada";
@@ -289,10 +290,12 @@ async function upsertTrendyolPackage(sb: any, pkg: any, since: number, match: Ma
 /** Tüm kanalların sipariş aktarımı (cron). */
 export async function importMarketplaceOrders(supabase: AdminClient = createAdminClient()): Promise<OrderImportReport[]> {
   const out: OrderImportReport[] = [];
-  try {
-    out.push(await importTrendyolOrders(supabase));
-  } catch (e: any) {
-    out.push({ channel: "trendyol", fetched: 0, imported: 0, updated: 0, stockChanges: 0, warnings: [], errors: [e?.message || String(e)] });
+  for (const [channel, fn] of [["trendyol", importTrendyolOrders], ["hepsiburada", importHepsiburadaOrders]] as const) {
+    try {
+      out.push(await fn(supabase));
+    } catch (e: any) {
+      out.push({ channel, fetched: 0, imported: 0, updated: 0, stockChanges: 0, warnings: [], errors: [e?.message || String(e)] });
+    }
   }
   return out;
 }

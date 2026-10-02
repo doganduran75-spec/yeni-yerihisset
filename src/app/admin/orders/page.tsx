@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { supabase } from "@/lib/supabase";
 import { shipFee } from "@/lib/shipping-fee";
+import { siteConfirm } from "@/components/ui/site-dialog";
 import { GeoSelect } from "@/components/ui/geo-select";
 import { CITIES, DISTRICTS } from "@/lib/turkey-geo";
 import {
@@ -2061,13 +2062,24 @@ function MarketplaceOrderPanel({ order, onChange, onRestocked }: {
         </div>
       )}
 
-      {returned && (
+      {returned ? (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 space-y-2">
           <p>Bu sipariş pazaryerinde <b>iade</b> durumunda. Ürün depoya döndü ve satılabilir durumdaysa stoğa ekle; yeni stok tüm pazaryerlerine gönderilir.</p>
           <Button size="sm" className="h-7 text-xs gap-1.5" disabled={busy} onClick={restock}>
             {busy ? <Loader2 size={12} className="animate-spin" /> : <Package size={12} />} İadeyi stoğa ekle
           </Button>
         </div>
+      ) : order.status !== "cancelled" && (
+        // Hepsiburada iade bilgisi otomatik gelmiyor → ürün geri geldiyse elle
+        <button
+          className="text-[11px] text-slate-500 hover:text-slate-800 underline"
+          disabled={busy}
+          onClick={async () => {
+            if (await siteConfirm({ title: "İade geldi mi?", message: "Bu siparişin ürünleri depoya döndüyse ve satılabilir durumdaysa stoğa eklenir; yeni stok tüm pazaryerlerine gönderilir.", confirmText: "Stoğa ekle" })) restock();
+          }}
+        >
+          İade geldi, ürünleri stoğa ekle
+        </button>
       )}
       {msg && <p className="text-xs font-semibold text-slate-700">{msg}</p>}
     </div>

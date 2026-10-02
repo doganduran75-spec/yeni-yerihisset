@@ -5,6 +5,7 @@ import { processChannel, kickMarketplaceSync, testChannel, isChannel, type Chann
 import { getTrendyolConfig, hasCredentials } from "@/lib/marketplace/trendyol";
 import { getHepsiburadaConfig, hbHasCredentials } from "@/lib/marketplace/hepsiburada";
 import { importTrendyolOrders } from "@/lib/marketplace/orders";
+import { importHepsiburadaOrders } from "@/lib/marketplace/hb-orders";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -88,7 +89,7 @@ export async function GET(req: NextRequest, { params }: Ctx) {
     sb.from("orders").select("id", { count: "exact", head: true }).eq("channel", channel).not("mp_warning", "is", null).eq("mp_warning_ack", false),
   ]);
   const orders = {
-    supported: channel === "trendyol",
+    supported: true,
     enabled: !!ost?.[`${channel}_orders_enabled`],
     since: ost?.[`${channel}_orders_since`] ?? null,
     lastRunAt: osync?.last_run_at ?? null,
@@ -129,20 +130,19 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   }
 
   if (action === "orders_toggle") {
-    if (channel !== "trendyol") return NextResponse.json({ error: "Bu kanal için sipariş aktarımı henüz hazır değil." }, { status: 400 });
     const on = !!body.on;
-    const { data: cur } = await sb.from("settings").select("id, trendyol_orders_since").order("id").limit(1).maybeSingle();
-    const patch: Record<string, unknown> = { trendyol_orders_enabled: on };
+    const sinceCol = `${channel}_orders_since`;
+    const { data: cur } = await sb.from("settings").select(`id, ${sinceCol}`).order("id").limit(1).maybeSingle();
+    const patch: Record<string, unknown> = { [`${channel}_orders_enabled`]: on };
     // İlk açılışta başlangıç anı: bu andan ÖNCEKİ siparişler aktarılmaz (stoğu zaten elle düşülmüştü)
-    if (on && !cur?.trendyol_orders_since) patch.trendyol_orders_since = new Date().toISOString();
+    if (on && !cur?.[sinceCol]) patch[sinceCol] = new Date().toISOString();
     const { error } = await sb.from("settings").update(patch).not("id", "is", null);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json({ ok: true, since: patch.trendyol_orders_since ?? cur?.trendyol_orders_since ?? null });
+    return NextResponse.json({ ok: true, since: patch[sinceCol] ?? cur?.[sinceCol] ?? null });
   }
 
   if (action === "orders_pull") {
-    if (channel !== "trendyol") return NextResponse.json({ error: "Bu kanal için sipariş aktarımı henüz hazır değil." }, { status: 400 });
-    const r = await importTrendyolOrders(auth.supabase);
+    const r = channel === "trendyol" ? await importTrendyolOrders(auth.supabase) : await importHepsiburadaOrders(auth.supabase);
     return NextResponse.json({ ok: true, ...r });
   }
 
