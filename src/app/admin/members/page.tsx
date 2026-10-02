@@ -15,17 +15,9 @@ import { cn } from "@/lib/utils";
 import MemberJourney from "@/components/admin/MemberJourney";
 import Link from "next/link";
 
-// Sunucu tek seferde en fazla 1000 satır verir → üye/rol/etiket listelerini sayfa sayfa al
-async function pageAll(build: (from: number, to: number) => any): Promise<{ data: any[] }> {
-  const out: any[] = [];
-  for (let from = 0; ; from += 1000) {
-    const { data, error } = await build(from, from + 999);
-    if (error) break;
-    out.push(...(data || []));
-    if (!data || data.length < 1000) break;
-  }
-  return { data: out };
-}
+// Sayfa TÜM üyeleri çekmez (aktarımla ~900+): boş açılır; arama/filtre ile sunucudan
+// 50'şer satır gelir (admin_search_members). Kişiler (henüz üye olmayan) ayrı sekmede.
+const PAGE = 50;
 
 /* -- Tipler ------------------------------------------- */
 type Role = { id: string; name: string; slug: string };
@@ -56,6 +48,8 @@ type Member = {
   created_at: string;
   email_verified: boolean | null;
   last_active_at: string | null;
+  import_source?: string | null;
+  order_count?: number;
   roleIds: string[];
   tagOptionIds: string[];
 };
@@ -99,9 +93,17 @@ export default function MembersPage() {
   const [contacts, setContacts]   = useState<Contact[]>([]);
   const [allRoles, setAllRoles]   = useState<Role[]>([]);
   const [tagGroups, setTagGroups] = useState<TagGroup[]>([]);
-  const [loading, setLoading]     = useState(true);
+  const [loading, setLoading]     = useState(false);
   const [search, setSearch]       = useState("");
-  const [kind, setKind]           = useState<"all" | "member" | "contact">("all");
+  const [kind, setKind]           = useState<"member" | "contact">("member");
+  // Sunucu tarafı arama: boş açılır, "Listele" / Enter / filtre değişince gelir
+  const [roleFilter, setRoleFilter]     = useState("");
+  const [tagFilter, setTagFilter]       = useState("");
+  const [sourceFilter, setSourceFilter] = useState("");
+  const [page, setPage]                 = useState(0);
+  const [total, setTotal]               = useState(0);
+  const [searched, setSearched]         = useState(false);
+  const [counts, setCounts]             = useState<{ members: number; contacts: number } | null>(null);
 
   // Üye rol/etiket dialog
   const [editing, setEditing]   = useState<Member | null>(null);
@@ -118,37 +120,66 @@ export default function MembersPage() {
   const [contactMatch, setContactMatch] = useState<{ id: string; name: string } | null>(null); // eşleşen üye
   const [merging, setMerging]         = useState(false);
 
-  useEffect(() => { fetchAll(); }, []);
+  useEffect(() => { loadMeta(); }, []);
 
-  async function fetchAll() {
-    setLoading(true);
-    const [profilesRes, rolesRes, tagGroupsRes, userRolesRes, userTagsRes, contactsRes] = await Promise.all([
-      pageAll((f, t) => supabase.from("profiles").select("id, email, first_name, last_name, phone, city, created_at, email_verified, last_active_at").order("created_at", { ascending: false }).range(f, t)),
+  // Roller, etiket grupları ve toplam sayılar (küçük sorgular) — liste değil
+  async function loadMeta() {
+    const [rolesRes, tagGroupsRes, memberCount, contactCount] = await Promise.all([
       supabase.from("roles").select("id, name, slug").order("name"),
       supabase.from("member_tag_groups").select("id, name, member_tag_options(id, group_id, value)").order("created_at"),
-      pageAll((f, t) => supabase.from("user_roles").select("user_id, role_id").range(f, t)),
-      pageAll((f, t) => supabase.from("user_tags").select("user_id, tag_option_id").range(f, t)),
-      pageAll((f, t) => (supabase as any).from("contacts").select("*").is("linked_user_id", null).order("created_at", { ascending: false }).range(f, t)),
+      supabase.from("profiles").select("id", { count: "exact", head: true }),
+      (supabase as any).from("contacts").select("id", { count: "exact", head: true }).is("linked_user_id", null),
     ]);
+    setAllRoles((rolesRes.data as Role[]) || []);
+    setTagGroups(((tagGroupsRes.data as any[]) || []).map((g: any) => ({ id: g.id, name: g.name, options: g.member_tag_options || [] })));
+    setCounts({ members: memberCount.count ?? 0, contacts: contactCount.count ?? 0 });
+  }
 
-    const profiles  = profilesRes.data  || [];
-    const roles     = rolesRes.data     || [];
-    const rawGroups = tagGroupsRes.data || [];
-    const userRoles = userRolesRes.data || [];
-    const userTags  = userTagsRes.data  || [];
+  // Arama + filtre → sunucudan bir sayfa
+  async function runSearch(p = 0, k: "member" | "contact" = kind) {
+    setLoading(true);
+    setSearched(true);
+    setPage(p);
+    try {
+      if (k === "member") {
+        const { data, error } = await (supabase as any).rpc("admin_search_members", {
+          p_q: search.trim() || null, p_role: roleFilter || null, p_tag: tagFilter || null,
+          p_source: sourceFilter || null, p_limit: PAGE, p_offset: p * PAGE,
+        });
+        if (error) throw error;
+        const rows = (data as any[]) || [];
+        const ids = rows.map((r) => r.id);
+        const [ur, ut] = ids.length ? await Promise.all([
+          supabase.from("user_roles").select("user_id, role_id").in("user_id", ids),
+          supabase.from("user_tags").select("user_id, tag_option_id").in("user_id", ids),
+        ]) : [{ data: [] }, { data: [] }];
+        const roleMap = new Map<string, string[]>();
+        const tagMap  = new Map<string, string[]>();
+        ((ur.data as any[]) || []).forEach((r) => roleMap.set(r.user_id, [...(roleMap.get(r.user_id) || []), r.role_id]));
+        ((ut.data as any[]) || []).forEach((t) => tagMap.set(t.user_id, [...(tagMap.get(t.user_id) || []), t.tag_option_id]));
+        setMembers(rows.map((r) => ({ ...r, order_count: Number(r.order_count), roleIds: roleMap.get(r.id) || [], tagOptionIds: tagMap.get(r.id) || [] })));
+        setTotal(rows.length ? Number(rows[0].total) : 0);
+      } else {
+        let qy = (supabase as any).from("contacts").select("*", { count: "exact" }).is("linked_user_id", null)
+          .order("created_at", { ascending: false }).range(p * PAGE, p * PAGE + PAGE - 1);
+        const term = search.trim().replace(/[,()*%\\]/g, " ").trim();
+        if (term) qy = qy.or(["full_name", "email", "phone", "instagram_handle"].map((c) => `${c}.ilike.%${term}%`).join(","));
+        const { data, count, error } = await qy;
+        if (error) throw error;
+        setContacts((data as Contact[]) || []);
+        setTotal(count ?? 0);
+      }
+    } catch (e: any) {
+      alert("Liste alınamadı: " + (e?.message ?? "hata"));
+    } finally {
+      setLoading(false);
+    }
+  }
 
-    const roleMap = new Map<string, string[]>();
-    const tagMap  = new Map<string, string[]>();
-    userRoles.forEach((r: any) => roleMap.set(r.user_id, [...(roleMap.get(r.user_id) || []), r.role_id]));
-    userTags.forEach((t: any) => tagMap.set(t.user_id, [...(tagMap.get(t.user_id) || []), t.tag_option_id]));
-
-    setMembers(profiles.map((p: any) => ({
-      ...p, roleIds: roleMap.get(p.id) || [], tagOptionIds: tagMap.get(p.id) || [],
-    })));
-    setAllRoles(roles as Role[]);
-    setTagGroups(rawGroups.map((g: any) => ({ id: g.id, name: g.name, options: g.member_tag_options || [] })));
-    setContacts((contactsRes.data as Contact[]) || []);
-    setLoading(false);
+  // Kayıt/düzenleme sonrası: sayıları ve (liste açıksa) aynı sayfayı yenile
+  function fetchAll() {
+    loadMeta();
+    if (searched) runSearch(page);
   }
 
   /* -- Üye rol/etiket dialog --------------------------- */
@@ -303,32 +334,14 @@ export default function MembersPage() {
     | { kind: "member"; created_at: string; member: Member }
     | { kind: "contact"; created_at: string; contact: Contact };
 
-  const rows: Row[] = useMemo(() => {
-    const r: Row[] = [];
-    if (kind !== "contact") members.forEach(m => r.push({ kind: "member", created_at: m.created_at, member: m }));
-    if (kind !== "member") contacts.forEach(c => r.push({ kind: "contact", created_at: c.created_at, contact: c }));
-    r.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
-    return r;
-  }, [members, contacts, kind]);
-
-  const filtered = useMemo(() => {
-    const q = search.trim().toLocaleLowerCase("tr-TR");
-    if (!q) return rows;
-    return rows.filter(row => {
-      if (row.kind === "member") {
-        const m = row.member;
-        return `${m.first_name ?? ""} ${m.last_name ?? ""}`.toLocaleLowerCase("tr-TR").includes(q)
-          || (m.email ?? "").toLowerCase().includes(q)
-          || (m.phone ?? "").includes(q);
-      } else {
-        const c = row.contact;
-        return (c.full_name ?? "").toLocaleLowerCase("tr-TR").includes(q)
-          || (c.email ?? "").toLowerCase().includes(q)
-          || (c.phone ?? "").includes(q)
-          || (c.instagram_handle ?? "").toLowerCase().includes(q);
-      }
-    });
-  }, [rows, search]);
+  // Sunucudan gelen sayfa (sıralama/filtre sunucuda)
+  const filtered: Row[] = useMemo(() => (
+    kind === "member"
+      ? members.map(m => ({ kind: "member" as const, created_at: m.created_at, member: m }))
+      : contacts.map(c => ({ kind: "contact" as const, created_at: c.created_at, contact: c }))
+  ), [members, contacts, kind]);
+  const pages = Math.max(1, Math.ceil(total / PAGE));
+  const selCls = "h-9 rounded-lg border border-input bg-background px-2 text-xs font-medium";
 
   return (
     <div className="space-y-6">
@@ -355,10 +368,10 @@ export default function MembersPage() {
       {/* Filtre + arama */}
       <div className="flex items-center gap-3 flex-wrap">
         <div className="flex gap-1 bg-slate-100 rounded-xl p-1">
-          {([["all","Hepsi"],["member","Üyeler"],["contact","Kişiler"]] as const).map(([k, label]) => (
+          {([["member", `Üyeler${counts ? ` (${counts.members})` : ""}`], ["contact", `Kişiler${counts ? ` (${counts.contacts})` : ""}`]] as const).map(([k, label]) => (
             <button
               key={k}
-              onClick={() => setKind(k)}
+              onClick={() => { setKind(k); setTotal(0); if (searched) runSearch(0, k); }}
               className={cn("px-3 py-1.5 rounded-lg text-xs font-bold transition-colors",
                 kind === k ? "bg-white shadow-sm text-slate-900" : "text-slate-500 hover:text-slate-700")}
             >
@@ -366,20 +379,48 @@ export default function MembersPage() {
             </button>
           ))}
         </div>
-        <div className="relative max-w-sm flex-1 min-w-[200px]">
+        <form onSubmit={(e) => { e.preventDefault(); runSearch(0); }} className="relative max-w-sm flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={16} />
-          <Input placeholder="İsim / e-posta / telefon / Instagram ara..." className="pl-9" value={search} onChange={e => setSearch(e.target.value)} />
-        </div>
+          <Input placeholder={kind === "member" ? "Ad soyad / e-posta / telefon — Enter" : "İsim / e-posta / telefon / Instagram — Enter"} className="pl-9" value={search} onChange={e => setSearch(e.target.value)} />
+        </form>
+        {kind === "member" && (
+          <>
+            <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} className={selCls}>
+              <option value="">Rol: tümü</option>
+              {allRoles.map((r) => <option key={r.id} value={r.id}>Rol: {r.name}</option>)}
+            </select>
+            <select value={tagFilter} onChange={(e) => setTagFilter(e.target.value)} className={selCls}>
+              <option value="">Etiket: tümü</option>
+              {tagGroups.flatMap((g) => g.options.map((o) => <option key={o.id} value={o.id}>{g.name}: {o.value}</option>))}
+            </select>
+            <select value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)} className={selCls}>
+              <option value="">Kaynak: tümü</option>
+              <option value="new">Yeni sitede üye olan</option>
+              <option value="legacy">Eski siteden aktarılan</option>
+              <option value="woo_yerihisset">Eski YeriHisset</option>
+              <option value="woo_attipas">Attipas</option>
+            </select>
+          </>
+        )}
+        <Button onClick={() => runSearch(0)} disabled={loading} className="gap-2 h-9">
+          {loading ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />} Listele
+        </Button>
       </div>
 
       <Card className="shadow-sm border-muted">
         <CardHeader className="pb-3">
           <CardTitle>Liste</CardTitle>
-          <CardDescription>{members.length} üye · {contacts.length} kişi</CardDescription>
+          <CardDescription>
+            {!searched
+              ? "Aramak ya da filtrelemek için yukarıdan seç, sonra Listele. Boş arama + Listele = en yeni kayıtlar."
+              : `${total} sonuç · sayfa ${page + 1} / ${pages}`}
+          </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
           {loading ? (
             <div className="flex h-48 items-center justify-center"><Loader2 className="h-7 w-7 animate-spin text-muted-foreground" /></div>
+          ) : !searched ? (
+            <div className="py-12 text-center text-muted-foreground border-t text-sm">Henüz liste yok — ara ya da Listele&apos;ye bas.</div>
           ) : filtered.length === 0 ? (
             <div className="py-12 text-center text-muted-foreground border-t text-sm">Kayıt bulunamadı.</div>
           ) : (
@@ -409,6 +450,11 @@ export default function MembersPage() {
                         <TableCell>
                           <div className="flex flex-wrap gap-1">
                             <Badge className="text-[10px] font-semibold border px-1.5 py-0 bg-green-50 text-green-700 border-green-200">Üye</Badge>
+                            {member.import_source && (
+                              <Badge className="text-[10px] font-semibold border px-1.5 py-0 bg-slate-100 text-slate-600 border-slate-200" title="Eski siteden aktarıldı">
+                                {member.import_source === "woo_attipas" ? "Attipas" : "Eski site"}
+                              </Badge>
+                            )}
                             {member.email_verified === false && (
                               <Badge className="text-[10px] font-semibold border px-1.5 py-0 bg-amber-100 text-amber-800 border-amber-200" title="Bu üye e-posta adresini henüz doğrulamadı">E-posta ✗</Badge>
                             )}
@@ -426,6 +472,7 @@ export default function MembersPage() {
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
                           <div>{new Date(member.created_at).toLocaleDateString("tr-TR")}</div>
+                          <div className="text-[10px] text-slate-500 mt-0.5">{member.order_count ? `${member.order_count} sipariş` : "sipariş yok"}</div>
                           {member.last_active_at && (
                             <div className="text-[10px] text-slate-400 mt-0.5" title={new Date(member.last_active_at).toLocaleString("tr-TR")}>
                               Son görülme: {relativeTime(member.last_active_at)}
@@ -474,6 +521,13 @@ export default function MembersPage() {
                 })}
               </TableBody>
             </Table>
+          )}
+          {searched && pages > 1 && (
+            <div className="flex items-center justify-end gap-2 border-t px-4 py-3 text-sm">
+              <Button variant="outline" size="sm" disabled={loading || page === 0} onClick={() => runSearch(page - 1)}>‹ Önceki</Button>
+              <span className="text-muted-foreground">{page + 1} / {pages}</span>
+              <Button variant="outline" size="sm" disabled={loading || page + 1 >= pages} onClick={() => runSearch(page + 1)}>Sonraki ›</Button>
+            </div>
           )}
         </CardContent>
       </Card>
