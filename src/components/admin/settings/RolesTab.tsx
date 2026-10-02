@@ -174,7 +174,7 @@ export default function RolesTab() {
                       {role.created_at ? new Date(role.created_at).toLocaleDateString("tr-TR") : "—"}
                     </TableCell>
                     <TableCell className="text-right">
-                      {role.slug !== "admin" && role.slug !== "customer" && (
+                      {!["admin", "customer", "musteri", "uye"].includes(role.slug) && ( // sistem rolleri silinemez (kod bu kısa adlara bağlı)
                         <Button
                           variant="ghost"
                           size="icon"

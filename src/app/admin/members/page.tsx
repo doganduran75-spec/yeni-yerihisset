@@ -438,7 +438,7 @@ export default function MembersPage() {
                 {filtered.map(row => {
                   if (row.kind === "member") {
                     const member = row.member;
-                    const memberRoles = allRoles.filter(r => member.roleIds.includes(r.id));
+                    const memberRoles = allRoles.filter(r => r.slug !== "uye" && member.roleIds.includes(r.id)); // "Üye" rozeti zaten sabit
                     const memberTags  = member.tagOptionIds.map(id => allOptionsById.get(id)).filter(Boolean);
                     return (
                       <TableRow key={"m" + member.id} className="group cursor-pointer hover:bg-slate-50/60" onClick={() => router.push(`/admin/members/${member.id}`)}>

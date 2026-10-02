@@ -2,7 +2,7 @@
 -- TEST VERİSİ TEMİZLİĞİ (canlıya geçiş öncesi; tekrar çalıştırılabilir)
 -- ============================================================
 -- Kural: "işaretsiz SİTE kaydı = test". KALANLAR:
---   * yöneticiler (profiles.role='admin') ve uye/musteri/affiliate dışında rolü olanlar
+--   * yöneticiler (profiles.role='admin') ve uye/musteri/mudavim/affiliate dışında rolü olanlar
 --   * WooCommerce'ten aktarılanlar (orders.import_source / profiles.import_source)
 --   * pazaryeri siparişleri (channel <> 'site'), p_delete ile açıkça istenmedikçe
 --   * kalan bir siparişi olan üye (sipariş üyesiz kalamaz)
@@ -58,7 +58,7 @@ BEGIN
     AND NOT (lower(coalesce(u.email, '')) = ANY (k))
     AND NOT (lower(coalesce(p.email, '')) = ANY (k))
     AND NOT EXISTS (SELECT 1 FROM public.user_roles ur JOIN public.roles r ON r.id = ur.role_id
-                    WHERE ur.user_id = u.id AND r.slug NOT IN ('uye', 'musteri', 'affiliate'))
+                    WHERE ur.user_id = u.id AND r.slug NOT IN ('uye', 'musteri', 'customer', 'mudavim', 'affiliate'))
     AND NOT EXISTS (SELECT 1 FROM public.orders o
                     WHERE o.user_id = u.id AND o.id NOT IN (SELECT id FROM t_orders));
 
