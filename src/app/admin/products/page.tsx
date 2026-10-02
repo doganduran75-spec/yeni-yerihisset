@@ -9,7 +9,6 @@ import { Input } from "@/components/ui/input";
 import { supabase } from "@/lib/supabase";
 import { Plus, Edit, Trash2, Search, Download, Loader2, Link2 } from "lucide-react";
 import Link from "next/link";
-import { formatPriceDisplay } from "@/lib/product-price";
 
 type Product = {
   id: string;
@@ -295,7 +294,6 @@ export default function ProductsPage() {
                   <TableHead>Ürün Adı</TableHead>
                   <TableHead>Marka</TableHead>
                   <TableHead>Kategori</TableHead>
-                  <TableHead>Fiyat</TableHead>
                   <TableHead>Durum</TableHead>
                   <TableHead className="text-right">İşlemler</TableHead>
                 </TableRow>
@@ -306,7 +304,6 @@ export default function ProductsPage() {
                     <TableCell className="font-medium">{product.title}</TableCell>
                     <TableCell>{product.brand?.name || '-'}</TableCell>
                     <TableCell>{product.category?.name || 'Kategorisiz'}</TableCell>
-                    <TableCell>{formatPriceDisplay(product)}</TableCell>
                     <TableCell>
                       {product.is_active ? (
                         <span className="inline-flex items-center rounded-full bg-green-50 px-2.5 py-0.5 text-xs font-bold text-green-700 ring-1 ring-inset ring-green-600/20">AKTİF</span>
