@@ -83,7 +83,16 @@ export default function LegacyMemberReviewPage() {
       });
       const j = await r.json().catch(() => ({}));
       if (!r.ok || !j.ok) throw new Error(j.error || "Silinemedi");
-      siteAlert({ message: `${j.deleted} hesap silindi${j.skipped?.length ? ` · ${j.skipped.length} hesap atlandı (sipariş/yönetici)` : ""}.`, tone: "success" });
+      const skipped: { email: string; reason: string }[] = j.skipped ?? [];
+      const byReason = new Map<string, number>();
+      skipped.forEach((s) => byReason.set(s.reason, (byReason.get(s.reason) || 0) + 1));
+      siteAlert({
+        title: skipped.length ? "Kısmen tamamlandı" : "Silindi",
+        message: `${j.deleted} hesap silindi.` + (skipped.length
+          ? `\n${skipped.length} hesap atlandı:\n` + [...byReason.entries()].map(([r, n]) => `• ${n} hesap — ${r}`).join("\n")
+          : ""),
+        tone: skipped.length && !j.deleted ? "danger" : "success",
+      });
       await load();
     } catch (e: any) {
       siteAlert({ title: "Hata", message: e.message, tone: "danger" });

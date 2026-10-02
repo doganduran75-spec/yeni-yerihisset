@@ -8,7 +8,8 @@ import { scoreMember } from "@/lib/member-suspicion";
 // ESKİ SİTE ÜYELERİ İNCELEME: WooCommerce'ten aktarılan, HİÇ SİPARİŞİ olmayan hesaplar +
 // sahte/bot şüphe puanı (src/lib/member-suspicion.ts). Admin seçtiklerini siler; silinenler
 // legacy_import_blocklist'e yazılır → geçiş günü aktarımı onları yeniden getirmez.
-// Silme sunucuda YENİDEN doğrulanır: yalnız aktarılmış, yönetici olmayan, siparişi olmayan hesap.
+// Silme veritabanında (admin_delete_legacy_members): koşullar YENİDEN doğrulanır (aktarılmış,
+// yönetici değil, siparişsiz), her hesap ayrı denenir, atlananın gerçek nedeni döner.
 
 async function requireAdmin(req: NextRequest) {
   const user = await getAuthUserFromRequest(req);
@@ -81,23 +82,11 @@ export async function POST(req: NextRequest) {
   if (!ids.length) return NextResponse.json({ error: "Silinecek hesap seçilmedi." }, { status: 400 });
   if (ids.length > 500) return NextResponse.json({ error: "Tek seferde en fazla 500 hesap." }, { status: 400 });
 
-  let deleted = 0;
-  const skipped: string[] = [];
-  for (const id of ids) {
-    const { data: p } = await sb.from("profiles").select("id, email, role, import_source").eq("id", id).maybeSingle();
-    if (!p || p.role === "admin" || !p.import_source) { skipped.push(p?.email || id); continue; }
-    const { count } = await sb.from("orders").select("id", { count: "exact", head: true }).eq("user_id", id);
-    if ((count ?? 0) > 0) { skipped.push(p.email); continue; }
-    const email = String(p.email || "").toLowerCase();
-    if (email) {
-      await sb.from("legacy_import_blocklist").upsert(
-        { email, reason: String(reasons[id] || "admin: sahte üye").slice(0, 300), created_by: userId },
-        { onConflict: "email" },
-      );
-    }
-    const { error } = await sb.auth.admin.deleteUser(id);
-    if (error) { skipped.push(p.email); continue; }
-    deleted++;
-  }
-  return NextResponse.json({ ok: true, deleted, skipped });
+  const { data, error } = await sb.rpc("admin_delete_legacy_members", {
+    p_ids: ids,
+    p_reasons: Object.fromEntries(ids.map((id) => [id, String(reasons[id] || "admin: sahte üye").slice(0, 300)])),
+    p_admin: userId,
+  });
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ ok: true, deleted: data?.deleted ?? 0, skipped: data?.skipped ?? [] });
 }
