@@ -137,11 +137,20 @@ export async function hbUpdateStocks(c: HepsiburadaConfig, items: { key: string;
   return String(id);
 }
 
+/** Fiyat gönder (merchantSku ile). Yükleme id'si döner. */
+export async function hbUpdatePrices(c: HepsiburadaConfig, items: { key: string; price: number }[]): Promise<string> {
+  const body = items.map((i) => ({ merchantSku: i.key, price: i.price }));
+  const j = await call(c, "POST", `/listings/merchantid/${encodeURIComponent(c.merchantId)}/price-uploads`, body);
+  const id = j?.id ?? j?.Id;
+  if (!id) throw new HepsiburadaError(0, "Hepsiburada yükleme id'si döndürmedi");
+  return String(id);
+}
+
 export type HbItemResult = { pos: number | null; key: string | null; reason: string };
 
 /** Yüklemenin sonucu. done=false ise Hepsiburada hâlâ işliyor. errors: yalnız HATALI kalemler. */
-export async function hbGetUploadResult(c: HepsiburadaConfig, id: string): Promise<{ done: boolean; failedAll: string | null; errors: HbItemResult[] }> {
-  const j = await call(c, "GET", `/listings/merchantid/${encodeURIComponent(c.merchantId)}/stock-uploads/id/${encodeURIComponent(id)}`);
+export async function hbGetUploadResult(c: HepsiburadaConfig, id: string, kind: "stock" | "price" = "stock"): Promise<{ done: boolean; failedAll: string | null; errors: HbItemResult[] }> {
+  const j = await call(c, "GET", `/listings/merchantid/${encodeURIComponent(c.merchantId)}/${kind === "price" ? "price" : "stock"}-uploads/id/${encodeURIComponent(id)}`);
   const status = String(j?.status ?? "").toLowerCase();
   const errors: HbItemResult[] = ((Array.isArray(j?.errors) ? j.errors : []) as any[]).map((e) => ({
     pos: Number.isFinite(Number(e?.elementNo)) ? Number(e.elementNo) : null,
@@ -149,6 +158,14 @@ export async function hbGetUploadResult(c: HepsiburadaConfig, id: string): Promi
     reason: [e?.errorCode, e?.errorMessage ?? e?.message ?? e?.description].filter(Boolean).join(": ") ||
       (Array.isArray(e?.errors) ? e.errors.join("; ") : JSON.stringify(e)),
   }));
+  // Fiyat kilidi (MinLock / MaxLock): fiyat platform aralığı dışında → ilan kilitlendi
+  for (const v of ((Array.isArray(j?.priceValidations) ? j.priceValidations : []) as any[])) {
+    errors.push({
+      pos: Number.isFinite(Number(v?.elementNo)) ? Number(v.elementNo) : null,
+      key: v?.merchantSku ?? null,
+      reason: `${v?.type ?? "Fiyat kilidi"}: ${v?.description ?? ""}${v?.minPrice != null ? ` (aralık ${v.minPrice}–${v.maxPrice})` : ""}`,
+    });
+  }
   const done = /done|complete|finish|success|fail/.test(status);
   const failedAll = /fail/.test(status) && errors.length === 0 ? `Hepsiburada yüklemesi başarısız (${j?.status})` : null;
   return { done, failedAll, errors };

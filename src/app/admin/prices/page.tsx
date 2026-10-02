@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { siteAlert, siteConfirm } from "@/components/ui/site-dialog";
 import { cn } from "@/lib/utils";
 import { sortByVariantValue } from "@/lib/variant-sort";
-import { Loader2, Search, Save, Tag, Wand2, History, ListPlus, FileDown, Undo2, X, AlertTriangle } from "lucide-react";
+import { Loader2, Search, Save, Tag, Wand2, History, ListPlus, FileDown, Undo2, X, AlertTriangle, Send } from "lucide-react";
 
 type PriceList = { id: string; code: string; name: string; channel: string; kind: "sale" | "list"; currency: string; sort_order: number; is_active: boolean; builtin: boolean };
 type Row = {
@@ -217,8 +217,36 @@ export default function PricesPage() {
     siteAlert({ message: `${n} satırda “${listByCode.get(bTarget)?.name ?? bTarget}” güncellendi (henüz kaydedilmedi).`, tone: "success" });
   }
 
+  // ── Pazaryerine fiyat gönder (Trendyol satış+PSF, Hepsiburada satış) ──
+  async function pushToMarketplaces(variantIds: string[]) {
+    const ids = [...new Set(variantIds.filter(Boolean))];
+    if (!ids.length) { siteAlert({ message: "Gönderilecek (varyantlı) ürün yok.", tone: "danger" }); return; }
+    const { data: { session } } = await supabase.auth.getSession();
+    const r = await fetch("/api/admin/marketplace/price-push", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
+      body: JSON.stringify({ variantIds: ids }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { siteAlert({ title: "Pazaryerine gönderilemedi", message: j.error || "Hata", tone: "danger" }); return; }
+    const parts: string[] = [];
+    for (const rep of j.reports || []) {
+      const name = rep.channel === "trendyol" ? "Trendyol" : "Hepsiburada";
+      const q = j.queued?.[rep.channel] ?? 0;
+      if (rep.skipped === "disabled") parts.push(`${name}: senkron kapalı (${q} fiyat sırada bekliyor)`);
+      else if (rep.skipped === "no_credentials") parts.push(`${name}: bağlantı bilgisi eksik`);
+      else if (rep.errors?.length) parts.push(`${name}: hata — ${rep.errors[0]}`);
+      else parts.push(`${name}: ${rep.sent} fiyat gönderildi${q - rep.sent > 0 ? `, ${q - rep.sent} sırada` : ""}`);
+    }
+    siteAlert({
+      title: "Pazaryeri fiyatları",
+      message: parts.join("\n") + "\nSonuçlar: Pazaryeri Stok › Otomatik Senkron (fiyat satırları).",
+      tone: (j.reports || []).some((x: any) => x.errors?.length) ? "danger" : "success",
+    });
+  }
+
   // ── Kaydet ──
-  async function save() {
+  async function save(push = false) {
     const bad = changes.filter((c) => c.invalid);
     if (bad.length) {
       siteAlert({ title: "Hatalı değerler var", message: `${bad.length} hücrede geçersiz değer var (site satış fiyatı boş veya 0 olamaz, negatif fiyat olamaz). Kırmızı hücreleri düzelt.`, tone: "danger" });
@@ -243,8 +271,14 @@ export default function PricesPage() {
       const payload = changes.map((c) => ({ product_id: c.row.productId, variant_id: c.row.variantId, list_code: c.code, amount: c.amount }));
       const { data, error } = await (supabase as any).rpc("apply_price_changes", { p_changes: payload, p_source: "price_page" });
       if (error) throw new Error(error.message.includes("SITE_PRICE_REQUIRED") ? "Site satış fiyatı boş veya 0 olamaz." : error.message);
-      siteAlert({ message: `${data?.changed ?? changes.length} fiyat kaydedildi.`, tone: "success" });
+      const touched = changes.filter((c) => c.code.startsWith("trendyol_") || c.code.startsWith("hepsiburada_")).map((c) => c.row.variantId!).filter(Boolean);
       await load();
+      if (push) {
+        if (touched.length) await pushToMarketplaces(touched);
+        else siteAlert({ message: `${data?.changed ?? changes.length} fiyat kaydedildi. Pazaryeri fiyatı değişmediği için gönderim yapılmadı.`, tone: "success" });
+      } else {
+        siteAlert({ message: `${data?.changed ?? changes.length} fiyat kaydedildi.`, tone: "success" });
+      }
     } catch (e: any) {
       siteAlert({ title: "Kaydedilemedi", message: e?.message || "Kaydedilemedi", tone: "danger" });
     } finally {
@@ -319,6 +353,15 @@ export default function PricesPage() {
             <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setBulkOpen(true)}><Wand2 size={14} /> Toplu işlem ({filtered.length})</Button>
             <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setListsOpen(true)}><ListPlus size={14} /> Listeler</Button>
             <Button size="sm" variant="outline" className="gap-1.5" onClick={exportExcel}><FileDown size={14} /> Excel</Button>
+            <Button size="sm" variant="outline" className="gap-1.5" disabled={dirtyCount > 0} title={dirtyCount ? "Önce değişiklikleri kaydet" : "Filtrelenmiş satırların kayıtlı Trendyol / Hepsiburada fiyatlarını yeniden gönder"}
+              onClick={async () => {
+                const ids = filtered.map((r) => r.variantId).filter(Boolean) as string[];
+                if (await siteConfirm({ title: "Fiyatlar pazaryerlerine gönderilsin mi?", message: `Filtrelenmiş ${ids.length} satırın kayıtlı Trendyol ve Hepsiburada fiyatları gönderilecek (o kanalda fiyatı boş olanlar atlanır).`, confirmText: "Gönder" })) {
+                  await pushToMarketplaces(ids);
+                }
+              }}>
+              <Send size={14} /> Filtrelenmişi pazaryerine gönder
+            </Button>
             <div className="ml-auto flex items-center gap-2">
               {dirtyCount > 0 && (
                 <>
@@ -326,8 +369,11 @@ export default function PricesPage() {
                   <Button size="sm" variant="ghost" className="gap-1 text-slate-500" onClick={() => setDraft({})}><Undo2 size={14} /> Vazgeç</Button>
                 </>
               )}
-              <Button size="sm" className="gap-1.5" onClick={save} disabled={!dirtyCount || saving}>
+              <Button size="sm" variant="outline" className="gap-1.5" onClick={() => save(false)} disabled={!dirtyCount || saving}>
                 {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Kaydet
+              </Button>
+              <Button size="sm" className="gap-1.5" onClick={() => save(true)} disabled={!dirtyCount || saving} title="Kaydet + değişen Trendyol / Hepsiburada fiyatlarını pazaryerlerine gönder">
+                {saving ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} Kaydet ve pazaryerlerine gönder
               </Button>
             </div>
           </div>

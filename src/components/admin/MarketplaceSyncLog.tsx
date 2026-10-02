@@ -81,7 +81,7 @@ export default function MarketplaceSyncLog({ initialChannel = "" }: { initialCha
                 <th className="px-3 py-2 font-bold">Pazaryeri</th>
                 <th className="px-3 py-2 font-bold">Barkod / SKU</th>
                 <th className="px-3 py-2 font-bold">Ürün</th>
-                <th className="px-3 py-2 font-bold text-right">Adet</th>
+                <th className="px-3 py-2 font-bold text-right">Adet / Fiyat</th>
                 <th className="px-3 py-2 font-bold">Sonuç</th>
               </tr>
             </thead>
@@ -98,7 +98,11 @@ export default function MarketplaceSyncLog({ initialChannel = "" }: { initialCha
                   <td className="px-3 py-2 whitespace-nowrap font-semibold">{CH_LABEL[r.channel] ?? r.channel}</td>
                   <td className="px-3 py-2 font-mono text-xs">{r.listing_key}</td>
                   <td className="px-3 py-2 text-slate-700 max-w-[240px] truncate">{r.title}{r.label ? ` · ${r.label}` : ""}</td>
-                  <td className="px-3 py-2 text-right font-bold">{r.qty}</td>
+                  <td className="px-3 py-2 text-right font-bold whitespace-nowrap">
+                    {r.kind === "price"
+                      ? <span className="text-violet-700">₺{Number(r.price ?? 0).toLocaleString("tr-TR", { minimumFractionDigits: 2 })} <span className="text-[10px] font-semibold">fiyat</span></span>
+                      : r.qty}
+                  </td>
                   <td className="px-3 py-2">
                     {r.ok
                       ? <span className="text-green-700 font-semibold">✓ Güncellendi</span>

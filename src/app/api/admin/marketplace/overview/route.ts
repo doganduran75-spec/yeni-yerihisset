@@ -63,7 +63,7 @@ export async function GET(req: NextRequest) {
   }));
 
   const { data: recent } = await sb.from("marketplace_stock_log")
-    .select("id, channel, listing_key, qty, ok, message, created_at, variant_id")
+    .select("id, channel, kind, price, listing_key, qty, ok, message, created_at, variant_id")
     .order("created_at", { ascending: false }).limit(6);
 
   return NextResponse.json({

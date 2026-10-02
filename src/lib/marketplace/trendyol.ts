@@ -98,6 +98,14 @@ export async function updateStocks(c: TrendyolConfig, items: { barcode: string; 
   return String(id);
 }
 
+/** Fiyat gönder (satış + liste/PSF; Trendyol liste fiyatı ≥ satış fiyatı ister). batchRequestId döner. */
+export async function updatePrices(c: TrendyolConfig, items: { barcode: string; salePrice: number; listPrice: number }[]): Promise<string> {
+  const j = await call(c, "POST", `/integration/inventory/sellers/${encodeURIComponent(c.sellerId)}/products/price-and-inventory`, { items });
+  const id = j?.batchRequestId;
+  if (!id) throw new TrendyolError(0, "Trendyol batchRequestId döndürmedi");
+  return String(id);
+}
+
 export type BatchItemResult = { barcode: string; ok: boolean; reason: string | null };
 
 /** Toplu isteğin sonucu. done=false ise Trendyol hâlâ işliyor. */

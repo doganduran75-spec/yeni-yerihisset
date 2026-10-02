@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
   const page = Math.max(0, Number(sp.get("page") || 0) || 0);
 
   let query = sb.from("marketplace_stock_log")
-    .select("id, channel, variant_id, listing_key, qty, ok, message, created_at", { count: "exact" })
+    .select("id, channel, kind, price, variant_id, listing_key, qty, ok, message, created_at", { count: "exact" })
     .order("created_at", { ascending: false })
     .range(page * PAGE, page * PAGE + PAGE - 1);
   if (channel === "trendyol" || channel === "hepsiburada") query = query.eq("channel", channel);
