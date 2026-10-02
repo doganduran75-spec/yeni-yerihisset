@@ -61,8 +61,12 @@ export async function POST(req: NextRequest) {
       recipientEmails = (profiles || []).map((p: any) => p.email).filter(Boolean);
     }
   } else {
-    const { data: profiles } = await supabase.from("profiles").select("email").not("email", "is", null);
-    recipientEmails = (profiles || []).map((p: any) => p.email).filter(Boolean);
+    // Sunucu tek seferde en fazla 1000 satır verir → sayfa sayfa hepsini al
+    for (let from = 0; ; from += 1000) {
+      const { data: profiles } = await supabase.from("profiles").select("email").not("email", "is", null).order("id").range(from, from + 999);
+      recipientEmails.push(...(profiles || []).map((p: any) => p.email).filter(Boolean));
+      if (!profiles || profiles.length < 1000) break;
+    }
   }
 
   if (!recipientEmails.length) {

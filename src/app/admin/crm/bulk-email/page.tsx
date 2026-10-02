@@ -178,12 +178,18 @@ export default function BulkEmailPage() {
       let profiles: { id: string; first_name: string; last_name: string; email: string }[] = [];
 
       if (form.recipient_type === "all") {
-        const { data } = await supabase
-          .from("profiles")
-          .select("id, first_name, last_name, email")
-          .not("email", "is", null)
-          .neq("email", "");
-        profiles = (data as any) || [];
+        // Sunucu tek seferde en fazla 1000 satır verir → sayfa sayfa hepsini al
+        for (let from = 0; ; from += 1000) {
+          const { data } = await supabase
+            .from("profiles")
+            .select("id, first_name, last_name, email")
+            .not("email", "is", null)
+            .neq("email", "")
+            .order("id")
+            .range(from, from + 999);
+          profiles.push(...((data as any[]) || []));
+          if (!data || data.length < 1000) break;
+        }
       } else if (form.recipient_type === "tag" && form.tag_option_id) {
         const { data } = await (supabase as any)
           .from("user_tags")
