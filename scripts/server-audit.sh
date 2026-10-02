@@ -115,7 +115,9 @@ sec "7) Caddy'nin yayınladığı adresler"
 if [ -f /etc/caddy/Caddyfile ]; then
   grep -E '^[^#[:space:]][^{]*\{' /etc/caddy/Caddyfile | sed 's/{//' | while read -r site; do
     BLOCK=$(awk -v s="$site" 'index($0,s)==1 {f=1} f {print} f && /^}/ {exit}' /etc/caddy/Caddyfile)
-    if grep -qiE 'basic_?auth' <<< "$BLOCK"; then info "$site → şifre korumalı (basic auth)"; else info "$site → herkese açık"; fi
+    if grep -qiE 'basic_?auth' <<< "$BLOCK"; then info "$site → şifre korumalı (basic auth)"
+    elif grep -q '127.0.0.1:8000' <<< "$BLOCK"; then info "$site → Supabase API (herkese açık olması normal; anahtar ister — anahtarsız istek 401 dönmeli)"
+    else info "$site → herkese açık"; fi
   done
   info "(Supabase Studio / yönetim panelleri herkese açık olmamalı.)"
 else

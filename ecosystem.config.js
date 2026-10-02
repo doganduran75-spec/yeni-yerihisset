@@ -15,7 +15,10 @@ module.exports = {
     {
       name: "yerihisset",
       script: "node_modules/next/dist/bin/next",
-      args: "start -p 3000",
+      // -H 127.0.0.1: uygulama yalnız sunucunun İÇİNE açık; dışarıdan yalnız Caddy (şifre/HTTPS)
+      // üzerinden erişilir (Caddy: reverse_proxy 127.0.0.1:3000). Değişince bir kez:
+      // pm2 delete yerihisset && pm2 start ecosystem.config.js && pm2 save
+      args: "start -p 3000 -H 127.0.0.1",
       cwd: "/opt/yerihisset-app",
       instances: "max",        // tüm çekirdekler; sabit sayı istersen 2/3/4 yaz
       exec_mode: "cluster",
