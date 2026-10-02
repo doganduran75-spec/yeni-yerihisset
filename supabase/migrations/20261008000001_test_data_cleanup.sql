@@ -151,7 +151,10 @@ BEGIN
   DELETE FROM public.email_campaign_sends WHERE true;
   DELETE FROM public.popup_impressions WHERE true;
   DELETE FROM public.opportunity_clicks WHERE true;
-  DELETE FROM auth.users WHERE id IN (SELECT id FROM t_users);               -- profil, adres, rol, etiket, not, affiliate CASCADE
+  -- Profil + adresler AÇIKÇA (bağlantı düşmüş olsa bile sahipsiz kalmasın; bkz. 20261014000001)
+  DELETE FROM public.user_addresses WHERE user_id IN (SELECT id FROM t_users);
+  DELETE FROM public.profiles WHERE id IN (SELECT id FROM t_users);          -- rol, etiket, affiliate… CASCADE
+  DELETE FROM auth.users WHERE id IN (SELECT id FROM t_users);
   GET DIAGNOSTICS n = ROW_COUNT;
 
   -- Kalanların sayaçlarını gerçeğe çek
