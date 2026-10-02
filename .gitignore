@@ -45,3 +45,6 @@ zap-rapor.json
 
 # WooCommerce keşif/aktarım raporları (sunucuda üretilir)
 /.woo-report/
+/.cleanup-report/
+/.temizlik-kalsin.txt
+/.temizlik-sil.txt
