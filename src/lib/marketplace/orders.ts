@@ -45,10 +45,11 @@ function mapTrendyolStatus(s: string): { status: string; shipment_status: string
 const n = (v: any) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 const round2 = (v: number) => Math.round(v * 100) / 100;
 
+// Trendyol Order V2 (eski /orders ucu 15.10.2026'da kapanıyor; yeni hesaplara erişim vermiyor)
 async function trendyolPage(c: TrendyolConfig, params: Record<string, string>) {
   const base = c.stage ? "https://stageapigw.trendyol.com" : "https://apigw.trendyol.com";
   const qs = new URLSearchParams(params).toString();
-  const res = await fetch(`${base}/integration/order/sellers/${encodeURIComponent(c.sellerId)}/orders?${qs}`, {
+  const res = await fetch(`${base}/integration/order/sellers/${encodeURIComponent(c.sellerId)}/v2/orders?${qs}`, {
     headers: {
       Authorization: "Basic " + Buffer.from(`${c.apiKey}:${c.apiSecret}`).toString("base64"),
       "User-Agent": `${c.sellerId} - SelfIntegration`,
