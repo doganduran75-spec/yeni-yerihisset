@@ -89,9 +89,9 @@ export async function POST(req: NextRequest) {
           console.error("[iyzico/callback] stok düşümü hatası:", e);
         }
 
-        // Müşteri rolü ata + etiketler + bildirim (non-blocking)
+        // Bildirim (non-blocking)
         Promise.allSettled([
-          import("@/lib/user-roles").then(({ assignRole }) => assignRole(order.user_id, "musteri")),
+          // Müşteri rolü + etiketler: ödeme işlenince veritabanı tetikleyicisi atar (20261015000001)
           import("@/lib/notifications").then(({ sendOrderNotification }) =>
             sendOrderNotification("order_placed", { orderId: order.id, userId: order.user_id })
           ),

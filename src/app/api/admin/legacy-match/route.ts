@@ -94,5 +94,7 @@ export async function POST(req: NextRequest) {
 
   const { data, error } = await sb.rpc("rematch_order_items");
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ ok: true, ...(data || {}) });
+  // Üye etiketlerini tazele: eşleşen ürünler + yeni tanımlanan markalar (ör. Attipas) → Marka/Kategori/Numara
+  const { data: tags } = await sb.rpc("refresh_member_auto_tags");
+  return NextResponse.json({ ok: true, ...(data || {}), tags: tags ?? null });
 }
