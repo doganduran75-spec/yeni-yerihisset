@@ -43,7 +43,7 @@ export default function HepsiburadaTestCenter() {
   // 1) Katalog
   // Hepsiburada (2026-10): hızlı ürün yüklemede barkod kalktı → hbSku ile yüklenir
   const [hbSku, setHbSku] = useState("");
-  const [merchantSku, setMerchantSku] = useState("");
+  const [merchantSku, setMerchantSku] = useState(() => `YH-TEST-${Date.now().toString().slice(-6)}`);
   const [productName, setProductName] = useState("YeriHisset Test Ürünü");
   const [trackingId, setTrackingId] = useState("");
   // 2) Listeleme
@@ -121,6 +121,8 @@ export default function HepsiburadaTestCenter() {
     setPrice(p != null ? String(p) : "");
   }
   const selHb = sel ? String(pick(sel, "hepsiburadaSku", "HepsiburadaSku") ?? "") : "";
+  // Girilen hbSku envanterde var mı? (hızlı yükleme yalnız envanterde OLMAYAN ürün içindir)
+  const inInventory = !!hbSku && !!listings?.some((l) => String(pick(l, "hepsiburadaSku", "HepsiburadaSku") ?? "").toUpperCase() === hbSku.toUpperCase());
   const selMs = sel ? String(pick(sel, "merchantSku", "MerchantSku") ?? "") : "";
 
   async function stockSend() {
@@ -218,24 +220,20 @@ export default function HepsiburadaTestCenter() {
               <Input className="h-9" value={productName} onChange={(e) => setProductName(e.target.value)} placeholder="Ürün adı" />
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              {sel && selHb && (
-                <Button size="sm" variant="ghost" className="text-orange-700" onClick={() => {
-                  setHbSku(selHb);
-                  setMerchantSku(`YH-TEST-${selHb}`);
-                  const n = pick(sel, "productName", "ProductName");
-                  if (n) setProductName(String(n));
-                }}>
-                  2. adımda seçili ürünü kullan ({selHb})
-                </Button>
-              )}
-              {btn("catalog_fastlisting", "Ürünü gönder", catalogSend, !hbSku || !merchantSku)}
+              {btn("catalog_fastlisting", "Ürünü gönder", catalogSend, !hbSku || !merchantSku || inInventory)}
               <Input className="h-9 w-72" value={trackingId} onChange={(e) => setTrackingId(e.target.value)} placeholder="trackingId" />
               {btn("catalog_status", "Durumu sorgula", catalogStatus, !trackingId)}
             </div>
+            {inInventory && (
+              <p className="text-xs font-semibold text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                Bu hbSku zaten test envanterinde. Hızlı ürün yükleme, katalogda olup envanterinde OLMAYAN bir ürünü eklemek içindir —
+                envanterdeki ürünü tekrar yüklemek “Barcode must be unique” hatası verir. Envanterde olmayan bir hbSku gir.
+              </p>
+            )}
             <p className="text-[11px] text-muted-foreground">
-              Hepsiburada artık hızlı ürün yüklemeyi <b>barkodla değil hbSku ile</b> kabul ediyor. hbSku, Hepsiburada kataloğundaki ürün
-              numarasıdır (HBV… / HBC…): önce 2. adımda test envanterini listele, bir ürün seç ve “seçili ürünü kullan”a bas.
-              Satıcı Stok Kodu her denemede farklı olsun.
+              Hızlı ürün yükleme <b>hbSku ile</b> yapılır (barkod gönderilmez). hbSku, Hepsiburada kataloğundaki ürün numarasıdır (HBV… / HBC…)
+              ve <b>senin envanterinde olmayan</b> bir ürün olmalı. Belgedeki örnekler: <code>HBV0000106NM0</code>, <code>HBV0000106NLG</code>;
+              olmazsa Hepsiburada destekten test için envanterinde olmayan bir hbSku iste. Satıcı Stok Kodu her denemede farklı olsun.
             </p>
           </Section>
 
