@@ -48,6 +48,10 @@ const sb = createClient(URL_, KEY, { auth: { persistSession: false, autoRefreshT
 const gmt = (v) => (v ? new Date(String(v).endsWith("Z") ? v : `${v}Z`).toISOString() : null);
 const money = (n) => `₺${Number(n || 0).toLocaleString("tr-TR", { maximumFractionDigits: 0 })}`;
 const inc = (m, k, n = 1) => m.set(k, (m.get(k) || 0) + n);
+// Uzun yazma aşamalarında ekranda ilerleme (ekran donmuş sanılmasın)
+const progress = (label, i, total) => {
+  if (i % 10 === 0 || i === total) process.stdout.write(`\r  ${label}: ${i} / ${total}   ${i === total ? "\n" : ""}`);
+};
 
 async function pageAll(table, cols, filter) {
   const rows = [];
@@ -195,7 +199,9 @@ async function main() {
 
     const cStat = { new: 0, linked: 0, addr: 0, failed: 0 };
     const userIdByEmail = new Map();
+    let pi = 0;
     for (const [email, p] of people) {
+      progress(APPLY ? "hesaplar yazılıyor" : "hesaplar kontrol ediliyor", ++pi, people.size);
       let id = authByEmail.get(email);
       if (authByEmail.has(email)) {
         cStat.linked++;
@@ -249,7 +255,9 @@ async function main() {
     const oStat = { insert: 0, update: 0, same: 0, conflicts: 0, items: 0 };
     const skipped = new Map(), statuses = new Map(), revenueByYear = new Map();
     const match = { map: 0, sku: 0, barcode: 0, none: 0 };
+    let oi = 0;
     for (const o of orders) {
+      progress(APPLY ? "siparişler yazılıyor" : "siparişler kontrol ediliyor", ++oi, orders.length);
       const st = mapStatus(o);
       if (st.skip) { inc(skipped, st.skip); continue; }
       const ref = String(o.id);
