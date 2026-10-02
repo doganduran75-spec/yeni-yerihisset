@@ -10,9 +10,22 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { supabase } from "@/lib/supabase";
-import { Search, Mail, Phone, AtSign, Loader2, UserCog, Tags, X, Plus, UserPlus, Trash2, Users, Link2, Activity } from "lucide-react";
+import { Search, Mail, Phone, AtSign, Loader2, UserCog, Tags, X, Plus, UserPlus, Trash2, Users, Link2, Activity, ShieldAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 import MemberJourney from "@/components/admin/MemberJourney";
+import Link from "next/link";
+
+// Sunucu tek seferde en fazla 1000 satır verir → üye/rol/etiket listelerini sayfa sayfa al
+async function pageAll(build: (from: number, to: number) => any): Promise<{ data: any[] }> {
+  const out: any[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await build(from, from + 999);
+    if (error) break;
+    out.push(...(data || []));
+    if (!data || data.length < 1000) break;
+  }
+  return { data: out };
+}
 
 /* -- Tipler ------------------------------------------- */
 type Role = { id: string; name: string; slug: string };
@@ -110,12 +123,12 @@ export default function MembersPage() {
   async function fetchAll() {
     setLoading(true);
     const [profilesRes, rolesRes, tagGroupsRes, userRolesRes, userTagsRes, contactsRes] = await Promise.all([
-      supabase.from("profiles").select("id, email, first_name, last_name, phone, city, created_at, email_verified, last_active_at").order("created_at", { ascending: false }),
+      pageAll((f, t) => supabase.from("profiles").select("id, email, first_name, last_name, phone, city, created_at, email_verified, last_active_at").order("created_at", { ascending: false }).range(f, t)),
       supabase.from("roles").select("id, name, slug").order("name"),
       supabase.from("member_tag_groups").select("id, name, member_tag_options(id, group_id, value)").order("created_at"),
-      supabase.from("user_roles").select("user_id, role_id"),
-      supabase.from("user_tags").select("user_id, tag_option_id"),
-      (supabase as any).from("contacts").select("*").is("linked_user_id", null).order("created_at", { ascending: false }),
+      pageAll((f, t) => supabase.from("user_roles").select("user_id, role_id").range(f, t)),
+      pageAll((f, t) => supabase.from("user_tags").select("user_id, tag_option_id").range(f, t)),
+      pageAll((f, t) => (supabase as any).from("contacts").select("*").is("linked_user_id", null).order("created_at", { ascending: false }).range(f, t)),
     ]);
 
     const profiles  = profilesRes.data  || [];
@@ -325,6 +338,11 @@ export default function MembersPage() {
           <p className="text-muted-foreground">Markayla temas etmiş herkes tek yerde — üye olsun olmasın.</p>
         </div>
         <div className="flex items-center gap-2">
+          <Link href="/admin/members/legacy-review">
+            <Button variant="outline" className="gap-2" title="Eski sitelerden gelen, hiç sipariş vermemiş hesaplar — sahte/bot kayıtları temizle">
+              <ShieldAlert size={16} /> Eski site üyelerini incele
+            </Button>
+          </Link>
           <Button variant="outline" onClick={mergeDuplicates} disabled={merging} className="gap-2" title="Aynı e-posta/Instagram'a sahip mükerrer kişileri birleştir">
             {merging ? <Loader2 size={16} className="animate-spin" /> : <Users size={16} />} Mükerrerleri Temizle
           </Button>

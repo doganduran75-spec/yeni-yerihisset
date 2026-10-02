@@ -141,6 +141,8 @@ async function main() {
   // Dolu numaralar (aktarılanlar dahil): eski sitenin sonraki siparişleri, sayaçtan numara almış
   // bir siparişle çakışırsa yeni numara alır (eski no "Eski no" olarak görünür)
   const takenNumbers = new Set(existingOrders.filter((o) => o.order_number).map((o) => String(o.order_number)));
+  // Admin'in "sahte üye" diye sildikleri: sipariş vermedikçe bir daha aktarılmaz
+  const blocked = new Set((await pageAll("legacy_import_blocklist", "email").catch(() => [])).map((b) => lower(b.email)));
   const variants = await pageAll("product_variants", "id, sku, barcode");
   const skuMap = new Map((await pageAll("legacy_sku_map", "old_sku, variant_id")).map((m) => [m.old_sku, m.variant_id]));
   const bySku = new Set(variants.map((v) => normSku(v.sku)).filter(Boolean));
@@ -197,11 +199,12 @@ async function main() {
       people.set(e, p);
     }
 
-    const cStat = { new: 0, linked: 0, addr: 0, failed: 0 };
+    const cStat = { new: 0, linked: 0, addr: 0, failed: 0, blocked: 0 };
     const userIdByEmail = new Map();
     let pi = 0;
     for (const [email, p] of people) {
       progress(APPLY ? "hesaplar yazılıyor" : "hesaplar kontrol ediliyor", ++pi, people.size);
+      if (blocked.has(email) && !orderEmails.has(email)) { cStat.blocked++; continue; }
       let id = authByEmail.get(email);
       if (authByEmail.has(email)) {
         cStat.linked++;
@@ -366,7 +369,7 @@ async function main() {
     // ── Rapor ──
     log("");
     log(`═══ ${site.label} → kanal: ${site.channel === "site" ? "YeriHisset" : "Attipas"} ═══`);
-    log(`MÜŞTERİ: ${people.size} kişi · yeni hesap ${cStat.new} · var olan hesaba bağlanan ${cStat.linked} · adres eklenecek ${cStat.addr}${cStat.failed ? ` · HATA ${cStat.failed}` : ""}`);
+    log(`MÜŞTERİ: ${people.size} kişi · yeni hesap ${cStat.new} · var olan hesaba bağlanan ${cStat.linked} · adres eklenecek ${cStat.addr}${cStat.blocked ? ` · silinmiş sahte üye (atlandı) ${cStat.blocked}` : ""}${cStat.failed ? ` · HATA ${cStat.failed}` : ""}`);
     log(`SİPARİŞ: eklenecek ${oStat.insert} (${oStat.items} satır) · durumu güncellenecek ${oStat.update} · değişmeyen ${oStat.same}`);
     log(`  Durumlar: ${[...statuses.entries()].map(([k, n]) => `${k} ${n}`).join(" · ") || "—"}`);
     log(`  Alınmayan: ${[...skipped.entries()].map(([k, n]) => `${k} ${n}`).join(" · ") || "—"}`);
