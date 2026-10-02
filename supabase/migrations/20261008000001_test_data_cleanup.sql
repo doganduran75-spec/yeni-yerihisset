@@ -13,6 +13,7 @@
 --
 -- Kullanım: scripts/cleanup-test-data.mjs (önce deneme listesi, sonra --apply).
 -- Fonksiyon tek işlemdir: bir hata olursa hiçbir şey silinmez.
+-- Not: Supabase (pg_safeupdate) WHERE'siz DELETE/UPDATE'i reddeder → tümünü silmede "WHERE true".
 
 -- WooCommerce aktarım işaretleri (Faz 1 aktarımı bunları doldurur)
 ALTER TABLE public.orders   ADD COLUMN IF NOT EXISTS import_source text;  -- woo_yerihisset | woo_attipas
@@ -143,24 +144,24 @@ BEGIN
    WHERE NOT (lower(coalesce(sn.email, '')) = ANY (k))
      AND (sn.user_id IS NULL OR sn.user_id NOT IN (SELECT id FROM public.profiles WHERE import_source IS NOT NULL));
   DELETE FROM public.feedback f WHERE NOT (lower(coalesce(f.email, '')) = ANY (k));
-  DELETE FROM public.store_credit_ledger;
-  DELETE FROM public.affiliate_payout_runs;
-  DELETE FROM public.affiliate_clicks;
-  DELETE FROM public.email_queue;
-  DELETE FROM public.email_campaign_sends;
-  DELETE FROM public.popup_impressions;
-  DELETE FROM public.opportunity_clicks;
+  DELETE FROM public.store_credit_ledger WHERE true;
+  DELETE FROM public.affiliate_payout_runs WHERE true;
+  DELETE FROM public.affiliate_clicks WHERE true;
+  DELETE FROM public.email_queue WHERE true;
+  DELETE FROM public.email_campaign_sends WHERE true;
+  DELETE FROM public.popup_impressions WHERE true;
+  DELETE FROM public.opportunity_clicks WHERE true;
   DELETE FROM auth.users WHERE id IN (SELECT id FROM t_users);               -- profil, adres, rol, etiket, not, affiliate CASCADE
   GET DIAGNOSTICS n = ROW_COUNT;
 
   -- Kalanların sayaçlarını gerçeğe çek
   UPDATE public.affiliate_profiles SET credit_balance = 0 WHERE credit_balance <> 0;
-  UPDATE public.coupons c SET used_count = (SELECT count(*) FROM public.orders o WHERE o.coupon_id = c.id AND o.status <> 'cancelled');
+  UPDATE public.coupons c SET used_count = (SELECT count(*) FROM public.orders o WHERE o.coupon_id = c.id AND o.status <> 'cancelled') WHERE true;
 
   IF p_analytics THEN
-    DELETE FROM public.analytics_events;
-    DELETE FROM public.analytics_sessions;
-    DELETE FROM public.analytics_daily;
+    DELETE FROM public.analytics_events WHERE true;
+    DELETE FROM public.analytics_sessions WHERE true;
+    DELETE FROM public.analytics_daily WHERE true;
   END IF;
 
   RETURN rep || jsonb_build_object('applied', true, 'deleted_users', n);
