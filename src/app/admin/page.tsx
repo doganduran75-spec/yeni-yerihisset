@@ -66,6 +66,8 @@ type OpenOrder = {
   invoice_status: string | null;
   created_at: string;
   profiles: { first_name: string | null; last_name: string | null } | null;
+  channel?: string | null;       // site | trendyol | hepsiburada
+  customer_name?: string | null; // pazaryeri müşterisi (üye değil)
 };
 
 export default function AdminDashboard() {
@@ -99,7 +101,7 @@ export default function AdminDashboard() {
       // Tamamlanmamış (kapanmamış) siparişler — süreç takibi
       const { data: openData } = await (supabase as any)
         .from('orders')
-        .select('id, order_number, total_amount, status, shipment_status, invoice_status, created_at, profiles (first_name, last_name)')
+        .select('id, order_number, total_amount, status, shipment_status, invoice_status, created_at, channel, customer_name, profiles (first_name, last_name)')
         .eq('is_closed', false)
         .not('status', 'in', '(cancelled,refunded)')
         .order('created_at', { ascending: false })
@@ -268,7 +270,12 @@ export default function AdminDashboard() {
                     className="flex items-center gap-3 py-2.5 px-2 hover:bg-amber-50/50 rounded-lg transition-colors group">
                     <span className="font-mono text-xs font-bold text-blue-600 w-16 shrink-0">YH{o.order_number ?? "—"}</span>
                     <span className="text-sm font-medium shrink-0 truncate max-w-[150px]">
-                      {o.profiles?.first_name} {o.profiles?.last_name}
+                      {o.channel && o.channel !== "site" && (
+                        <span className="mr-1 text-[9px] font-black uppercase px-1 py-0.5 rounded bg-orange-100 text-orange-700">
+                          {o.channel === "trendyol" ? "TY" : "HB"}
+                        </span>
+                      )}
+                      {o.channel && o.channel !== "site" ? o.customer_name : `${o.profiles?.first_name ?? ""} ${o.profiles?.last_name ?? ""}`}
                     </span>
                     {/* Süreç durumu — ortadaki boş alanda */}
                     <div className="flex-1 flex justify-center min-w-0">

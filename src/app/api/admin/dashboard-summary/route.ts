@@ -10,7 +10,7 @@ import { getAuthUserFromRequest } from "@/lib/auth-from-request";
 // Adet = bu siparişlerdeki satılan ürün adedi (ücretsiz hediye hariç).
 // Dönemler Türkiye saatine göre (UTC+3, yaz saati yok).
 
-type Bucket = { revenue: number; orders: number; units: number };
+type Bucket = { revenue: number; orders: number; units: number; byChannel: Record<string, number> };
 
 function trNow() {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Istanbul", year: "numeric", month: "2-digit" })
@@ -49,14 +49,14 @@ export async function GET(req: NextRequest) {
   // ── Satış ──
   const orders = await fetchAll((from, to) => (supabase as any)
     .from("orders")
-    .select("id, created_at, total_amount, refunded_amount, status, payment_status, order_items(quantity, unit_price)")
+    .select("id, created_at, total_amount, refunded_amount, status, payment_status, channel, order_items(quantity, unit_price)")
     .gte("created_at", since.toISOString())
     .eq("payment_status", "paid")
     .neq("status", "cancelled")
     .order("created_at", { ascending: true })
     .range(from, to));
 
-  const empty = (): Bucket => ({ revenue: 0, orders: 0, units: 0 });
+  const empty = (): Bucket => ({ revenue: 0, orders: 0, units: 0, byChannel: {} });
   const sales = { year: empty(), month: empty(), lastMonth: empty() };
   for (const o of orders) {
     const t = new Date(o.created_at);
@@ -64,12 +64,19 @@ export async function GET(req: NextRequest) {
     const units = ((o.order_items as any[]) || [])
       .filter((i) => Number(i.unit_price) > 0)
       .reduce((a, i) => a + Number(i.quantity || 0), 0);
-    const add = (b: Bucket) => { b.revenue += revenue; b.orders += 1; b.units += units; };
+    const ch = o.channel || "site";
+    const add = (b: Bucket) => {
+      b.revenue += revenue; b.orders += 1; b.units += units;
+      b.byChannel[ch] = (b.byChannel[ch] ?? 0) + revenue; // ciro kanal kırılımı (site / trendyol / hepsiburada)
+    };
     if (t >= yearStart) add(sales.year);
     if (t >= monthStart) add(sales.month);
     else if (t >= lastMonthStart) add(sales.lastMonth);
   }
-  for (const b of Object.values(sales)) b.revenue = Math.round(b.revenue * 100) / 100;
+  for (const b of Object.values(sales)) {
+    b.revenue = Math.round(b.revenue * 100) / 100;
+    for (const k of Object.keys(b.byChannel)) b.byChannel[k] = Math.round(b.byChannel[k] * 100) / 100;
+  }
 
   // ── Kişiler (hesabını kapatanlar hariç) ──
   const since30 = new Date(Date.now() - 30 * 86400_000);

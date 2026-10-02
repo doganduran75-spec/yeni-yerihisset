@@ -4,12 +4,14 @@ import { getAuthUserFromRequest } from "@/lib/auth-from-request";
 import { processChannel, kickMarketplaceSync, testChannel, isChannel, type Channel } from "@/lib/marketplace/sync";
 import { getTrendyolConfig, hasCredentials } from "@/lib/marketplace/trendyol";
 import { getHepsiburadaConfig, hbHasCredentials } from "@/lib/marketplace/hepsiburada";
+import { importTrendyolOrders } from "@/lib/marketplace/orders";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 // Ayarlar › Entegrasyonlar › <kanal> paneli (trendyol | hepsiburada). Yalnız admin, servis-rol.
 // GET: durum özeti (kuyruk sayıları, son gönderim/doğrulama, sorunlu kayıtlar, eşleşme kapsamı)
 // POST {action}: test | kick (arka planda işle) | sync (bekleyenleri şimdi gönder) | full (tümünü gönder) | retry
+//              | orders_toggle {on} (sipariş çekmeyi aç/kapat) | orders_pull (siparişleri şimdi çek)
 
 type Ctx = { params: Promise<{ channel: string }> };
 
@@ -77,7 +79,27 @@ export async function GET(req: NextRequest, { params }: Ctx) {
   ]);
 
   const info = await variantInfo(sb, ((failures as any[]) || []).map((f) => f.variant_id));
+
+  // Sipariş çekme durumu
+  const [{ data: ost }, { data: osync }, { count: ordersCount }, { count: warnCount }] = await Promise.all([
+    sb.from("settings").select(`${channel}_orders_enabled, ${channel}_orders_since`).order("id").limit(1).maybeSingle(),
+    sb.from("marketplace_order_sync").select("*").eq("channel", channel).maybeSingle(),
+    sb.from("orders").select("id", { count: "exact", head: true }).eq("channel", channel),
+    sb.from("orders").select("id", { count: "exact", head: true }).eq("channel", channel).not("mp_warning", "is", null).eq("mp_warning_ack", false),
+  ]);
+  const orders = {
+    supported: channel === "trendyol",
+    enabled: !!ost?.[`${channel}_orders_enabled`],
+    since: ost?.[`${channel}_orders_since`] ?? null,
+    lastRunAt: osync?.last_run_at ?? null,
+    lastOkAt: osync?.last_ok_at ?? null,
+    lastError: osync?.last_error ?? null,
+    total: ordersCount ?? 0,
+    warnings: warnCount ?? 0,
+  };
+
   return NextResponse.json({
+    orders,
     ok: true,
     config: cfg,
     counts,
@@ -94,7 +116,8 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   const auth = await requireAdmin(req);
   if ("error" in auth) return auth.error;
   const sb = auth.supabase as any;
-  const { action } = (await req.json().catch(() => ({}))) as { action?: string };
+  const body = (await req.json().catch(() => ({}))) as { action?: string; on?: boolean };
+  const { action } = body;
 
   if (action === "test") {
     try {
@@ -103,6 +126,24 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     } catch (e: any) {
       return NextResponse.json({ error: e?.message || "Bağlantı başarısız" }, { status: 400 });
     }
+  }
+
+  if (action === "orders_toggle") {
+    if (channel !== "trendyol") return NextResponse.json({ error: "Bu kanal için sipariş aktarımı henüz hazır değil." }, { status: 400 });
+    const on = !!body.on;
+    const { data: cur } = await sb.from("settings").select("id, trendyol_orders_since").order("id").limit(1).maybeSingle();
+    const patch: Record<string, unknown> = { trendyol_orders_enabled: on };
+    // İlk açılışta başlangıç anı: bu andan ÖNCEKİ siparişler aktarılmaz (stoğu zaten elle düşülmüştü)
+    if (on && !cur?.trendyol_orders_since) patch.trendyol_orders_since = new Date().toISOString();
+    const { error } = await sb.from("settings").update(patch).not("id", "is", null);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ ok: true, since: patch.trendyol_orders_since ?? cur?.trendyol_orders_since ?? null });
+  }
+
+  if (action === "orders_pull") {
+    if (channel !== "trendyol") return NextResponse.json({ error: "Bu kanal için sipariş aktarımı henüz hazır değil." }, { status: 400 });
+    const r = await importTrendyolOrders(auth.supabase);
+    return NextResponse.json({ ok: true, ...r });
   }
 
   if (action === "kick") {

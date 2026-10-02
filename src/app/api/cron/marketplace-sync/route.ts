@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { processMarketplaceStock } from "@/lib/marketplace/sync";
+import { importMarketplaceOrders } from "@/lib/marketplace/orders";
 
-// Pazaryeri stok kuyruğu (Trendyol + Hepsiburada) — YEDEK tetik: anlık tetik
+// Pazaryeri SİPARİŞLERİ (önce: yeni siparişleri al, iptallerde stoğu geri ekle) +
+// stok kuyruğu (Trendyol + Hepsiburada) — YEDEK tetik: anlık tetik
 // kaçarsa gönderir, başarısızları bekleyerek tekrar dener, sonuçları doğrular.
 // Sistem cron'u DAKİKADA BİR çağırır; yalnız x-cron-secret başlığıyla.
 // Ayrıca senkron geçmişinin 180 günden eskisini siler.
@@ -13,13 +15,19 @@ async function run(req: NextRequest) {
     return NextResponse.json({ error: "Yetkisiz" }, { status: 401 });
   }
   const supabase = createAdminClient();
+  // 1) Pazaryeri siparişleri → sitedeki stok düşer/iade olur (kuyruğa girer)
+  const orders = await importMarketplaceOrders(supabase);
+  for (const o of orders) {
+    if (o.errors.length) console.error(`[cron/marketplace-orders:${o.channel}]`, o.errors.join(" | "));
+  }
+  // 2) Stok kuyruğu → pazaryerlerine gönder
   const reports = await processMarketplaceStock(supabase);
   for (const r of reports) {
     if (r.errors.length) console.error(`[cron/marketplace-sync:${r.channel}]`, r.errors.join(" | "));
   }
   await (supabase as any).from("marketplace_stock_log")
     .delete().lt("created_at", new Date(Date.now() - 180 * 86400_000).toISOString());
-  return NextResponse.json({ ok: true, reports });
+  return NextResponse.json({ ok: true, orders, reports });
 }
 
 export const GET = run;

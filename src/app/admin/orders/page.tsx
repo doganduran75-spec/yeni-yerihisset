@@ -38,7 +38,12 @@ type OrderItem = {
   id: string;
   quantity: number;
   unit_price: number;
-  product_id: string;
+  product_id: string | null;
+  title?: string | null;            // pazaryeri kaleminde ürün adı (anlık görüntü)
+  barcode?: string | null;
+  external_status?: string | null;
+  stock_applied_at?: string | null;
+  stock_restored_at?: string | null;
   variant_id?: string | null;
   sku?: string | null;
   variant_name?: string | null;
@@ -68,6 +73,18 @@ type Order = {
   coupon_discount?: number | null;
   credit_used?: number | null;
   affiliate_profiles?: { code: string } | null;
+  // Pazaryeri siparişi (Trendyol / Hepsiburada)
+  channel?: string | null;
+  external_order_number?: string | null;
+  external_status?: string | null;
+  customer_name?: string | null;
+  customer_email?: string | null;
+  customer_phone?: string | null;
+  cargo_provider?: string | null;
+  cargo_tracking_number?: string | null;
+  cargo_tracking_url?: string | null;
+  mp_warning?: string | null;
+  mp_warning_ack?: boolean | null;
   profiles: {
     first_name: string;
     last_name: string;
@@ -99,6 +116,8 @@ const shipmentColors: Record<string, string> = {
   shipped:    "bg-purple-50  text-purple-700 ring-purple-500/20",
   delivered:  "bg-green-50   text-green-700  ring-green-500/20",
   cancelled:  "bg-red-50     text-red-700    ring-red-500/20",
+  undelivered: "bg-orange-50 text-orange-700 ring-orange-500/20",
+  returned:   "bg-amber-50   text-amber-700  ring-amber-500/20",
 };
 const shipmentLabels: Record<string, string> = {
   waiting:   "Bekleniyor",
@@ -106,7 +125,18 @@ const shipmentLabels: Record<string, string> = {
   shipped:   "Kargoya Verildi",
   delivered: "Teslim Edildi",
   cancelled: "İptal Edildi",
+  undelivered: "Teslim Edilemedi",
+  returned:  "İade",
 };
+
+// ─── Satış kanalı (site / pazaryeri) ─────────────────────────────────────────
+const CHANNEL_LABEL: Record<string, string> = { site: "Site", trendyol: "Trendyol", hepsiburada: "Hepsiburada" };
+const CHANNEL_CLS: Record<string, string> = {
+  site: "bg-slate-100 text-slate-600",
+  trendyol: "bg-orange-100 text-orange-700",
+  hepsiburada: "bg-amber-100 text-amber-800",
+};
+const isMarketplace = (o?: { channel?: string | null } | null) => !!o?.channel && o.channel !== "site";
 
 // ─── Fatura Durumu ────────────────────────────────────────────────────────────
 
@@ -189,6 +219,7 @@ export default function OrdersPage() {
   const [fShip, setFShip] = useState("all");
   const [fInv, setFInv] = useState("all");
   const [fMethod, setFMethod] = useState("all");
+  const [fChannel, setFChannel] = useState("all"); // site | trendyol | hepsiburada
   const [sortKey, setSortKey] = useState<"no" | "customer" | "date" | "amount" | "pay" | "ship" | "inv">("date");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [listPage, setListPage] = useState(0);
@@ -563,7 +594,7 @@ export default function OrdersPage() {
     try {
       const { data } = await supabase
         .from("order_items")
-        .select("id, quantity, unit_price, product_id, variant_id, sku, variant_name, products(title)")
+        .select("id, quantity, unit_price, product_id, variant_id, sku, variant_name, title, barcode, external_status, stock_applied_at, stock_restored_at, products(title)")
         .eq("order_id", order.id);
       const items = (data as any[]) ?? [];
       setSelectedOrder(prev => prev ? { ...prev, order_items: items } : null);
@@ -745,6 +776,7 @@ export default function OrdersPage() {
   const LIST_PAGE = 50;
   const trNorm = (v: unknown) => String(v ?? "").toLocaleLowerCase("tr-TR");
   const customerName = (o: Order) => {
+    if (isMarketplace(o) && o.customer_name) return o.customer_name;
     const n = `${o.profiles?.first_name ?? ""} ${o.profiles?.last_name ?? ""}`.trim();
     if (n) return n;
     try { const a = typeof o.shipping_address === "string" ? JSON.parse(o.shipping_address as any) : (o.shipping_address as any); return a?.name || ""; } catch { return ""; }
@@ -759,10 +791,12 @@ export default function OrdersPage() {
       if (fShip !== "all" && (o.shipment_status || "waiting") !== fShip) return false;
       if (fInv !== "all" && (o.invoice_status || "pending") !== fInv) return false;
       if (fMethod !== "all" && (o.payment_method || "credit_card") !== fMethod) return false;
+      if (fChannel !== "all" && (o.channel || "site") !== fChannel) return false;
       if (!needle) return true;
       const hay = trNorm([
         o.order_number ? `yh${o.order_number}` : "", o.order_number, o.id,
         customerName(o), o.profiles?.email, o.profiles?.phone,
+        o.external_order_number, o.customer_email, o.customer_phone, o.cargo_tracking_number,
       ].filter(Boolean).join(" "));
       return needle.split(/\s+/).every((t) => hay.includes(t));
     });
@@ -787,7 +821,7 @@ export default function OrdersPage() {
   const listPageCount = Math.max(1, Math.ceil(visibleOrders.length / LIST_PAGE));
   const safeListPage = Math.min(listPage, listPageCount - 1);
   const pagedOrders = visibleOrders.slice(safeListPage * LIST_PAGE, safeListPage * LIST_PAGE + LIST_PAGE);
-  const filtersActive = !!q.trim() || fPay !== "all" || fShip !== "all" || fInv !== "all" || fMethod !== "all";
+  const filtersActive = !!q.trim() || fPay !== "all" || fShip !== "all" || fInv !== "all" || fMethod !== "all" || fChannel !== "all";
 
   function toggleSort(k: typeof sortKey) {
     if (sortKey === k) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -845,10 +879,16 @@ export default function OrdersPage() {
                 <input
                   value={q}
                   onChange={(e) => { setQ(e.target.value); setListPage(0); }}
-                  placeholder="Ara: sipariş no (YH25018), ad soyad, e-posta, telefon…"
+                  placeholder="Ara: sipariş no (YH25018 / pazaryeri no), ad soyad, e-posta, telefon…"
                   className="w-full h-9 pl-8 pr-3 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring/30"
                 />
               </div>
+              <select value={fChannel} onChange={(e) => { setFChannel(e.target.value); setListPage(0); }} className={selCls}>
+                <option value="all">Kanal: tümü</option>
+                <option value="site">Kanal: Site</option>
+                <option value="trendyol">Kanal: Trendyol</option>
+                <option value="hepsiburada">Kanal: Hepsiburada</option>
+              </select>
               <select value={fPay} onChange={(e) => { setFPay(e.target.value); setListPage(0); }} className={selCls}>
                 <option value="all">Ödeme: tümü</option>
                 {Object.entries(paymentLabels).map(([k, l]) => <option key={k} value={k}>Ödeme: {l}</option>)}
@@ -869,7 +909,7 @@ export default function OrdersPage() {
               </select>
               {filtersActive && (
                 <button
-                  onClick={() => { setQ(""); setFPay("all"); setFShip("all"); setFInv("all"); setFMethod("all"); setListPage(0); }}
+                  onClick={() => { setQ(""); setFPay("all"); setFShip("all"); setFInv("all"); setFMethod("all"); setFChannel("all"); setListPage(0); }}
                   className="h-9 px-3 rounded-lg text-xs font-bold text-muted-foreground hover:text-foreground"
                 >
                   Temizle
@@ -916,11 +956,22 @@ export default function OrdersPage() {
                       {/* Sipariş / Müşteri */}
                       <TableCell>
                         <div className="flex flex-col">
-                          <span className="font-mono text-[11px] font-bold text-blue-600">
+                          <span className="font-mono text-[11px] font-bold text-blue-600 flex items-center gap-1.5">
                             {order.order_number ? `YH${order.order_number}` : `#${order.id.slice(0, 8).toUpperCase()}`}
+                            {isMarketplace(order) && (
+                              <span className={`font-sans text-[9px] font-black uppercase px-1.5 py-0.5 rounded ${CHANNEL_CLS[order.channel!] ?? CHANNEL_CLS.site}`}>
+                                {CHANNEL_LABEL[order.channel!] ?? order.channel}
+                              </span>
+                            )}
+                            {isMarketplace(order) && order.mp_warning && !order.mp_warning_ack && (
+                              <span title={order.mp_warning} className="text-red-600"><AlertCircle size={12} /></span>
+                            )}
                           </span>
+                          {isMarketplace(order) && order.external_order_number && (
+                            <span className="font-mono text-[10px] text-slate-500">#{order.external_order_number}</span>
+                          )}
                           <span className="font-medium text-sm">
-                            {order.profiles?.first_name} {order.profiles?.last_name}
+                            {customerName(order)}
                           </span>
                           {order.payment_method === "bank_transfer" && (
                             <span className="text-[10px] text-amber-600 flex items-center gap-0.5 mt-0.5">
@@ -943,9 +994,11 @@ export default function OrdersPage() {
                         ₺{order.total_amount.toFixed(2)}
                       </TableCell>
 
-                      {/* Ödeme durumu + aksiyon */}
+                      {/* Ödeme durumu + aksiyon (pazaryerinde salt okunur — pazaryeri tahsil eder) */}
                       <TableCell>
-                        {isUpdating ? (
+                        {isMarketplace(order) ? (
+                          <StatusBadge label={paymentLabels[pStatus] ?? pStatus} color={paymentColors[pStatus] ?? paymentColors.pending} />
+                        ) : isUpdating ? (
                           <Loader2 size={14} className="animate-spin text-muted-foreground" />
                         ) : (
                           <DropdownMenu>
@@ -970,9 +1023,18 @@ export default function OrdersPage() {
                         )}
                       </TableCell>
 
-                      {/* Sevkiyat durumu + aksiyon */}
+                      {/* Sevkiyat durumu + aksiyon (pazaryerinde durum pazaryerinden gelir) */}
                       <TableCell>
-                        {isUpdating ? (
+                        {isMarketplace(order) ? (
+                          <div className="flex flex-col gap-1">
+                            <StatusBadge label={shipmentLabels[sStatus] ?? sStatus} color={shipmentColors[sStatus] ?? shipmentColors.waiting} />
+                            {order.cargo_tracking_number && (
+                              <span className="text-[10px] font-mono text-purple-600 flex items-center gap-1">
+                                <Truck size={9} /> {order.cargo_tracking_number}
+                              </span>
+                            )}
+                          </div>
+                        ) : isUpdating ? (
                           <Loader2 size={14} className="animate-spin text-muted-foreground" />
                         ) : (
                           <div className="flex flex-col gap-1">
@@ -1184,11 +1246,28 @@ export default function OrdersPage() {
               <span className="text-sm font-mono font-bold text-blue-600">
                 {selectedOrder?.order_number ? `YH${selectedOrder.order_number}` : `#${selectedOrder?.id.slice(0, 8).toUpperCase()}`}
               </span>
+              {isMarketplace(selectedOrder) && (
+                <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${CHANNEL_CLS[selectedOrder!.channel!] ?? CHANNEL_CLS.site}`}>
+                  {CHANNEL_LABEL[selectedOrder!.channel!] ?? selectedOrder!.channel}
+                </span>
+              )}
             </DialogTitle>
           </DialogHeader>
 
           {selectedOrder && (
             <div className="space-y-6 py-2">
+
+              {/* Pazaryeri siparişi: numara, durum, kargo, uyarı, iade → stok */}
+              {isMarketplace(selectedOrder) && (
+                <MarketplaceOrderPanel
+                  order={selectedOrder}
+                  onChange={(fields) => {
+                    setSelectedOrder((prev) => (prev ? { ...prev, ...fields } : prev));
+                    setOrders((prev) => prev.map((o) => (o.id === selectedOrder.id ? { ...o, ...fields } : o)));
+                  }}
+                  onRestocked={() => handleViewDetails(selectedOrder)}
+                />
+              )}
 
               {/* Fatura Bilgileri + Teslimat Adresi */}
               <div className="grid grid-cols-2 gap-4">
@@ -1274,6 +1353,20 @@ export default function OrdersPage() {
 
               {/* 3 Boyutlu Durum — kompakt: güncel durum + tıklayınca combobox */}
               <div className="grid grid-cols-3 gap-3">
+{isMarketplace(selectedOrder) ? (
+              <>
+                {/* Pazaryeri: ödeme + sevkiyat pazaryerinden gelir (salt okunur) */}
+                <div className="space-y-1">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Ödeme</p>
+                  <StatusBadge label={paymentLabels[selectedOrder.payment_status || "paid"] ?? "Ödendi"} color={paymentColors[selectedOrder.payment_status || "paid"] ?? paymentColors.paid} />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Sevkiyat</p>
+                  <StatusBadge label={shipmentLabels[selectedOrder.shipment_status || "preparing"] ?? (selectedOrder.shipment_status || "")} color={shipmentColors[selectedOrder.shipment_status || "preparing"] ?? shipmentColors.waiting} />
+                </div>
+              </>
+              ) : (
+              <>
                 {/* Ödeme */}
                 <StatusCombo
                   title="Ödeme"
@@ -1324,6 +1417,9 @@ export default function OrdersPage() {
                     </div>
                   )}
                 </div>
+
+              </>
+              )}
 
                 {/* Fatura */}
                 <StatusCombo
@@ -1474,7 +1570,13 @@ export default function OrdersPage() {
                             {/* Ürün Adı + Varyasyon */}
                             <TableCell className="text-xs font-medium py-2">
                               <div className="flex flex-col gap-0.5">
-                                <span>{edit?.title || item.products?.title || <span className="text-muted-foreground italic">—</span>}</span>
+                                <span>{edit?.title || item.products?.title || item.title || <span className="text-muted-foreground italic">—</span>}</span>
+                                {isMarketplace(selectedOrder) && !item.product_id && (
+                                  <span className="text-[10px] text-red-600 font-semibold">Sitede eşleşmedi — stok düşülmedi (barkod {item.barcode || "—"})</span>
+                                )}
+                                {isMarketplace(selectedOrder) && item.stock_restored_at && (
+                                  <span className="text-[10px] text-amber-700">Stok geri eklendi</span>
+                                )}
                                 {item.variant_name && (
                                   <span className="text-[10px] text-muted-foreground font-normal bg-slate-100 rounded px-1.5 py-0.5 w-fit">
                                     {item.variant_name}
@@ -1888,6 +1990,86 @@ export default function OrdersPage() {
           </div>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+// ─── Pazaryeri sipariş paneli ─────────────────────────────────────────────────
+// Pazaryeri no + durum + kargo takibi; eşleşmeyen ürün / fazla satış uyarısı ("Gördüm");
+// pazaryerinde İADE olan siparişte "İadeyi stoğa ekle" (admin onayıyla, tek seferlik).
+function MarketplaceOrderPanel({ order, onChange, onRestocked }: {
+  order: Order;
+  onChange: (fields: Partial<Order>) => void;
+  onRestocked: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const returned = order.status === "refunded" || order.shipment_status === "returned";
+
+  async function ack() {
+    setBusy(true);
+    const { error } = await (supabase as any).from("orders").update({ mp_warning_ack: true }).eq("id", order.id);
+    setBusy(false);
+    if (!error) onChange({ mp_warning_ack: true });
+  }
+  async function restock() {
+    setBusy(true); setMsg(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const r = await fetch("/api/admin/orders/marketplace-restock", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
+        body: JSON.stringify({ orderId: order.id }),
+      });
+      const j = await r.json().catch(() => ({}));
+      setMsg(r.ok ? (j.restored > 0 ? `${j.restored} adet stoğa eklendi; pazaryerlerine gönderiliyor.` : "Eklenecek stok yok (zaten eklenmiş ya da düşülmemiş).") : (j.error || "Hata"));
+      if (r.ok) onRestocked();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="rounded-xl border-2 border-orange-100 bg-orange-50/40 p-4 space-y-3">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
+        <span><span className="text-muted-foreground">{CHANNEL_LABEL[order.channel!] ?? order.channel} sipariş no:</span> <b className="font-mono">{order.external_order_number || "—"}</b></span>
+        <span><span className="text-muted-foreground">Pazaryeri durumu:</span> <b>{order.external_status || "—"}</b></span>
+        {order.cargo_provider && <span><span className="text-muted-foreground">Kargo:</span> <b>{order.cargo_provider}</b></span>}
+        {order.cargo_tracking_number && (
+          <span className="flex items-center gap-1">
+            <span className="text-muted-foreground">Takip:</span>
+            {order.cargo_tracking_url
+              ? <a href={order.cargo_tracking_url} target="_blank" rel="noopener noreferrer" className="font-mono text-blue-600 hover:underline flex items-center gap-1">{order.cargo_tracking_number} <ExternalLink size={11} /></a>
+              : <b className="font-mono">{order.cargo_tracking_number}</b>}
+          </span>
+        )}
+      </div>
+      {(order.customer_email || order.customer_phone) && (
+        <p className="text-xs text-slate-600">
+          {order.customer_name}{order.customer_email ? ` · ${order.customer_email}` : ""}{order.customer_phone ? ` · ${order.customer_phone}` : ""}
+        </p>
+      )}
+      <p className="text-[11px] text-muted-foreground">
+        Ödeme ve sevkiyat durumu pazaryerinden otomatik güncellenir; müşteriye bizden e-posta gitmez. Faturayı aşağıdan yönetebilirsin.
+      </p>
+
+      {order.mp_warning && !order.mp_warning_ack && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800 space-y-2">
+          <p className="font-bold flex items-center gap-1.5"><AlertCircle size={13} /> Dikkat</p>
+          <p className="whitespace-pre-line">{order.mp_warning}</p>
+          <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy} onClick={ack}>Gördüm</Button>
+        </div>
+      )}
+
+      {returned && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 space-y-2">
+          <p>Bu sipariş pazaryerinde <b>iade</b> durumunda. Ürün depoya döndü ve satılabilir durumdaysa stoğa ekle; yeni stok tüm pazaryerlerine gönderilir.</p>
+          <Button size="sm" className="h-7 text-xs gap-1.5" disabled={busy} onClick={restock}>
+            {busy ? <Loader2 size={12} className="animate-spin" /> : <Package size={12} />} İadeyi stoğa ekle
+          </Button>
+        </div>
+      )}
+      {msg && <p className="text-xs font-semibold text-slate-700">{msg}</p>}
     </div>
   );
 }

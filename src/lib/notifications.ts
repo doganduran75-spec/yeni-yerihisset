@@ -250,12 +250,16 @@ export async function sendOrderNotification(
   // 1. Sipariş + ilişkileri EMBED'SİZ getir (self-host PostgREST embed kırılgan)
   const { data: order, error: orderError } = await (supabase
     .from("orders")
-    .select("id, order_number, total_amount, status, created_at, shipping_address, payment_method, user_id")
+    .select("id, order_number, total_amount, status, created_at, shipping_address, payment_method, user_id, channel")
     .eq("id", context.orderId)
     .maybeSingle() as any) as { data: any; error: any };
 
   if (orderError || !order) {
     return { channel: "skipped", status: "failed", error: "Sipariş bulunamadı" };
+  }
+  // Pazaryeri (Trendyol/Hepsiburada) siparişine bizden e-posta GİTMEZ — müşteriyle pazaryeri iletişim kurar
+  if (order.channel && order.channel !== "site") {
+    return { channel: "skipped", status: "skipped", error: "Pazaryeri siparişi — e-posta gönderilmez" };
   }
 
   // Müşteri (profil)

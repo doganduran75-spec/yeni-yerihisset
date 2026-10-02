@@ -14,7 +14,7 @@ import { supabase } from "@/lib/supabase";
 import { siteAlert, siteConfirm } from "@/components/ui/site-dialog";
 import HepsiburadaTestCenter from "@/components/admin/settings/HepsiburadaTestCenter";
 import {
-  Loader2, Save, Eye, EyeOff, Truck, Store, RefreshCw, Send, PlugZap, AlertTriangle, CheckCircle2, Info, RotateCcw, History,
+  Loader2, Save, Eye, EyeOff, Truck, Store, RefreshCw, Send, PlugZap, AlertTriangle, CheckCircle2, Info, RotateCcw, History, ShoppingBag,
 } from "lucide-react";
 
 type IntegrationSettings = {
@@ -148,6 +148,52 @@ function SyncPanel({ channel, enabled }: { channel: Channel; enabled: boolean })
     }
   }
 
+  async function toggleOrders(on: boolean) {
+    if (on && !(await siteConfirm({
+      title: `${name} siparişleri aktarılsın mı?`,
+      message: `Bu andan sonra ${name}'a gelen siparişler sitenin Siparişler listesine girecek ve sitedeki stoktan düşülecek. Daha önceki siparişler alınmaz.`,
+      confirmText: "Aç",
+    }))) return;
+    setBusy("orders");
+    try {
+      const r = await fetch(`/api/admin/integrations/${channel}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+        body: JSON.stringify({ action: "orders_toggle", on }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || "Kaydedilemedi");
+    } catch (e: any) {
+      siteAlert({ title: "Hata", message: e?.message || "Kaydedilemedi", tone: "danger" });
+    } finally {
+      setBusy(null);
+      load();
+    }
+  }
+
+  async function pullOrders() {
+    setBusy("orders_pull");
+    try {
+      const r = await fetch(`/api/admin/integrations/${channel}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+        body: JSON.stringify({ action: "orders_pull" }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || "Siparişler alınamadı");
+      if (j.errors?.length) siteAlert({ title: "Sipariş aktarımında hata", message: j.errors[0], tone: "danger" });
+      else siteAlert({
+        message: `${j.fetched} paket kontrol edildi · ${j.imported} yeni sipariş · ${j.updated} güncelleme${j.warnings?.length ? ` · ${j.warnings.length} uyarı` : ""}.`,
+        tone: j.warnings?.length ? "danger" : "success",
+      });
+    } catch (e: any) {
+      siteAlert({ title: "Hata", message: e?.message || "Siparişler alınamadı", tone: "danger" });
+    } finally {
+      setBusy(null);
+      load();
+    }
+  }
+
   const c = status?.counts || {};
   const inFlight = (c.pending || 0) + (c.sending || 0) + (c.sent || 0);
 
@@ -217,6 +263,37 @@ function SyncPanel({ channel, enabled }: { channel: Channel; enabled: boolean })
           </div>
         )}
       </div>
+
+      {/* Sipariş aktarımı: pazaryerindeki siparişler sitenin Siparişler listesine girer, stok düşer */}
+      {status?.orders?.supported && (
+        <div className="w-full rounded-xl border bg-white p-4 space-y-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-bold text-slate-800 flex items-center gap-2"><ShoppingBag size={15} className="text-orange-500" /> Sipariş Aktarımı</p>
+              <p className="text-xs text-muted-foreground mt-0.5 max-w-xl">
+                {name}'daki yeni siparişler dakikada bir alınır → Siparişler listesine “{name}” etiketiyle girer → sitedeki stok düşer ve
+                yeni stok tüm pazaryerlerine gider. İptalde stok otomatik geri eklenir; iadede sipariş detayından onayla eklenir.
+                Müşteriye bizden e-posta gitmez.
+              </p>
+            </div>
+            <Toggle on={!!status.orders.enabled} onChange={toggleOrders} disabled={busy === "orders"} />
+          </div>
+          <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-600">
+            <span>Başlangıç: <b>{fmtTime(status.orders.since)}</b> <span className="text-slate-400">(öncesindeki siparişler alınmaz)</span></span>
+            <span>Son kontrol: <b>{fmtTime(status.orders.lastRunAt)}</b></span>
+            <span>Aktarılan sipariş: <b>{status.orders.total}</b></span>
+            {status.orders.warnings > 0 && (
+              <Link href={`/admin/orders`} className="text-red-600 font-bold hover:underline">{status.orders.warnings} uyarılı sipariş</Link>
+            )}
+          </div>
+          {status.orders.lastError && (
+            <p className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">Son hata: {status.orders.lastError}</p>
+          )}
+          <Button size="sm" variant="outline" onClick={pullOrders} disabled={!!busy || !status.orders.enabled} className="gap-1.5">
+            {busy === "orders_pull" ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} Siparişleri şimdi çek
+          </Button>
+        </div>
+      )}
     </>
   );
 }

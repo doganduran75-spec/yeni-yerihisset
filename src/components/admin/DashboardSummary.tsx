@@ -49,8 +49,17 @@ export default function DashboardSummary({ children }: { children?: ReactNode })
     { key: "month", label: `Bu ay (${d.labels.month})` },
     { key: "lastMonth", label: `Geçen ay (${d.labels.lastMonth})` },
   ] as const;
-  const rows = [
+  // Pazaryeri siparişi varsa ciroyu kanala göre de göster
+  const channels = [...new Set(cols.flatMap((c) => Object.keys(d.sales[c.key]?.byChannel ?? {})))];
+  const CH: Record<string, string> = { site: "Site", trendyol: "Trendyol", hepsiburada: "Hepsiburada" };
+  const channelRows = channels.length > 1 || (channels.length === 1 && channels[0] !== "site")
+    ? ["site", "trendyol", "hepsiburada"].filter((k) => channels.includes(k)).map((k) => ({
+        label: `↳ ${CH[k] ?? k}`, fmt: (b: any) => tl(b.byChannel?.[k] ?? 0), sub: true,
+      }))
+    : [];
+  const rows: { label: string; fmt: (b: any) => string; strong?: boolean; sub?: boolean }[] = [
     { label: "Toplam ciro", fmt: (b: any) => tl(b.revenue), strong: true },
+    ...channelRows,
     { label: "Sipariş", fmt: (b: any) => num(b.orders) },
     { label: "Satılan adet", fmt: (b: any) => num(b.units) },
   ];
@@ -75,9 +84,9 @@ export default function DashboardSummary({ children }: { children?: ReactNode })
             <tbody>
               {rows.map((r) => (
                 <tr key={r.label} className="border-b last:border-0">
-                  <td className="py-2.5 pr-3 font-bold text-slate-600 whitespace-nowrap">{r.label}</td>
+                  <td className={`pr-3 whitespace-nowrap ${r.sub ? "py-1 pl-3 text-xs font-semibold text-slate-400" : "py-2.5 font-bold text-slate-600"}`}>{r.label}</td>
                   {cols.map((c) => (
-                    <td key={c.key} className={`py-2.5 px-2 text-right whitespace-nowrap ${r.strong ? "font-black text-slate-900 text-base" : "font-bold text-slate-700"}`}>
+                    <td key={c.key} className={`px-2 text-right whitespace-nowrap ${r.sub ? "py-1 text-xs font-semibold text-slate-500" : "py-2.5"} ${r.strong ? "font-black text-slate-900 text-base" : r.sub ? "" : "font-bold text-slate-700"}`}>
                       {r.fmt(d.sales[c.key])}
                     </td>
                   ))}
