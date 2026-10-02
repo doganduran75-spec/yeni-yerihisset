@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/lib/supabase";
-import { Plus, Edit, Trash2, Search, Download, Loader2 } from "lucide-react";
+import { Plus, Edit, Trash2, Search, Download, Loader2, Link2 } from "lucide-react";
 import Link from "next/link";
 import { formatPriceDisplay } from "@/lib/product-price";
 
@@ -221,6 +221,11 @@ export default function ProductsPage() {
         </div>
         
         <div className="flex items-center gap-2">
+          <Link href="/admin/products/unmatched">
+            <Button variant="outline" className="gap-2" title="Eski siteden aktarılan siparişlerde sitede karşılığı olmayan ürünler">
+              <Link2 size={15} /> Eşleşmeyen eski ürünler
+            </Button>
+          </Link>
           <Button
             variant="outline"
             className="gap-2 border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:border-emerald-300"

@@ -38,6 +38,9 @@ type Settings = {
   smtp_password: string;
   smtp_from_name: string;
   smtp_from_email: string;
+  // E-posta kilidi (canlıya geçene kadar)
+  email_lock_enabled: boolean;
+  email_allowlist: string;
   // Ödeme
   bank_transfer_enabled: boolean;
   bank_transfer_info: string;
@@ -73,6 +76,8 @@ const DEFAULT_SETTINGS: Settings = {
   smtp_password: "",
   smtp_from_name: "",
   smtp_from_email: "",
+  email_lock_enabled: true,
+  email_allowlist: "",
   bank_transfer_enabled: false,
   bank_transfer_info: "",
   kargonomi_api_token: "",
@@ -352,6 +357,43 @@ function SettingsPageInner() {
         </Card>
 
         {/* SMTP Ayarları */}
+        <Card className={`shadow-sm ${settings.email_lock_enabled ? "border-amber-300 bg-amber-50/40" : "border-muted"}`}>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ShieldCheck size={20} className="text-amber-600" /> E-posta Kilidi
+            </CardTitle>
+            <CardDescription>
+              Canlıya geçene kadar AÇIK kalmalı: e-postalar yalnız yöneticilere ve aşağıdaki izinli adreslere gider.
+              Aktarılan gerçek müşterilere testlerden yanlışlıkla e-posta gitmez; engellenen gönderim bildirim kayıtlarında
+              &quot;failed — E-posta kilidi&quot; olarak görünür. Canlıya geçiş günü kapatılır.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={settings.email_lock_enabled}
+                onChange={(e) => set({ email_lock_enabled: e.target.checked })}
+                className="h-4 w-4 accent-amber-600"
+              />
+              <span className="text-sm font-semibold">
+                {settings.email_lock_enabled ? "Kilit açık — yalnız izinli adreslere gönderilir" : "Kilit kapalı — tüm müşterilere gönderilir (canlı)"}
+              </span>
+            </label>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">İzinli adresler (yöneticiler zaten izinli)</label>
+              <textarea
+                value={settings.email_allowlist}
+                onChange={(e) => set({ email_allowlist: e.target.value })}
+                rows={3}
+                placeholder={"test1@gmail.com\ntest2@gmail.com"}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
+              />
+              <p className="text-xs text-muted-foreground">Her satıra bir e-posta (virgülle de ayırabilirsin). Testte kullandığın hesapları buraya yaz.</p>
+            </div>
+          </CardContent>
+        </Card>
+
         <Card className="shadow-sm border-muted">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">

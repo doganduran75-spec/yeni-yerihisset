@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { getAuthUserFromRequest } from "@/lib/auth-from-request";
 import { buildSmtpConfig } from "@/lib/smtp-config";
-import nodemailer from "nodemailer";
+import { createMailTransport } from "@/lib/mail-guard";
 
 /** N milisaniye bekle */
 function delay(ms: number) {
@@ -91,7 +91,7 @@ export async function POST(req: NextRequest) {
     .in("id", ids);
 
   // Nodemailer transporter
-  const transporter = nodemailer.createTransport(smtpConfig as any);
+  const transporter = createMailTransport(smtpConfig as any);
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com";
   let sent = 0;

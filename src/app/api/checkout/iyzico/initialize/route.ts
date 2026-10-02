@@ -157,7 +157,7 @@ export async function POST(req: NextRequest) {
 
   // YeriHisset Kredisi uygula (sunucuda doğrula + sınırla)
   const { applied: creditApplied, wallet: creditWallet } =
-    await resolveCreditApply(supabase, userId, Number(creditApply || 0), preTotal);
+    await resolveCreditApply(supabase, userId, authUser ? Number(creditApply || 0) : 0, preTotal); // misafir (şifresiz hesaba bağlansa da) kredi harcayamaz
   const totalAmount = Math.max(0, Math.round((preTotal - creditApplied) * 100) / 100);
   const fullyCredited = totalAmount <= 0; // kredi tüm tutarı karşıladı → iyzico'ya gerek yok
 

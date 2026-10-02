@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
   const r = await resolveGuest(supabase, {
     email: body.email, firstName: body.firstName, lastName: body.lastName, phone: body.phone,
     city: body.city, district: body.district, addressDetail: body.addressDetail,
-  });
+  }, { attachPasswordless: false }); // var olan müşteri (aktarılan dahil) aramadan seçilir
   if (!r.ok) {
     const error = r.code === 409 ? "Bu e-posta ile kayıtlı bir müşteri var — aramadan e-postasıyla bulup seçin." : r.error;
     return NextResponse.json({ error }, { status: r.code });

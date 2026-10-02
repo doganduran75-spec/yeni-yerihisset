@@ -272,10 +272,10 @@ export default function AdminDashboard() {
                     <span className="text-sm font-medium shrink-0 truncate max-w-[150px]">
                       {o.channel && o.channel !== "site" && (
                         <span className="mr-1 text-[9px] font-black uppercase px-1 py-0.5 rounded bg-orange-100 text-orange-700">
-                          {o.channel === "trendyol" ? "TY" : "HB"}
+                          {({ trendyol: "TY", hepsiburada: "HB", attipas: "AT" } as Record<string, string>)[o.channel] ?? o.channel.slice(0, 2).toUpperCase()}
                         </span>
                       )}
-                      {o.channel && o.channel !== "site" ? o.customer_name : `${o.profiles?.first_name ?? ""} ${o.profiles?.last_name ?? ""}`}
+                      {(o.profiles ? `${o.profiles.first_name ?? ""} ${o.profiles.last_name ?? ""}`.trim() : "") || o.customer_name || "—"}
                     </span>
                     {/* Süreç durumu — ortadaki boş alanda */}
                     <div className="flex-1 flex justify-center min-w-0">

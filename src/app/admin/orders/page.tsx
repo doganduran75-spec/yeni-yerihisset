@@ -86,6 +86,12 @@ type Order = {
   cargo_tracking_url?: string | null;
   mp_warning?: string | null;
   mp_warning_ack?: boolean | null;
+  // Eski siteden (WooCommerce) aktarılan sipariş
+  import_source?: string | null;
+  import_ref?: string | null;
+  extra_fee?: number | null;
+  customer_note?: string | null;
+  external_raw?: any;
   profiles: {
     first_name: string;
     last_name: string;
@@ -130,14 +136,32 @@ const shipmentLabels: Record<string, string> = {
   returned:  "İade",
 };
 
-// ─── Satış kanalı (site / pazaryeri) ─────────────────────────────────────────
-const CHANNEL_LABEL: Record<string, string> = { site: "Site", trendyol: "Trendyol", hepsiburada: "Hepsiburada" };
-const CHANNEL_CLS: Record<string, string> = {
-  site: "bg-slate-100 text-slate-600",
-  trendyol: "bg-orange-100 text-orange-700",
-  hepsiburada: "bg-amber-100 text-amber-800",
-};
-const isMarketplace = (o?: { channel?: string | null } | null) => !!o?.channel && o.channel !== "site";
+// ─── Satış kanalı (sales_channels tablosu: YeriHisset, Attipas, Trendyol, Hepsiburada…) ──
+type SalesChannel = { code: string; label: string; color: string; kind: string; is_active: boolean };
+const CHANNEL_FALLBACK: SalesChannel[] = [
+  { code: "site", label: "YeriHisset", color: "#475569", kind: "site", is_active: true },
+  { code: "attipas", label: "Attipas", color: "#db2777", kind: "legacy", is_active: true },
+  { code: "trendyol", label: "Trendyol", color: "#ea580c", kind: "marketplace", is_active: true },
+  { code: "hepsiburada", label: "Hepsiburada", color: "#d97706", kind: "marketplace", is_active: true },
+];
+// Pazaryeri siparişi: ödeme/sevkiyat pazaryerinden gelir (salt okunur). Eski siteden
+// aktarılan siparişler (Attipas dahil) pazaryeri sayılmaz; site siparişi gibi yönetilir.
+const isMarketplace = (o?: { channel?: string | null; import_source?: string | null } | null) =>
+  !!o?.channel && o.channel !== "site" && !o.import_source;
+const isImported = (o?: { import_source?: string | null } | null) => !!o?.import_source;
+function ChannelBadge({ code, channels, size = "sm" }: { code?: string | null; channels: SalesChannel[]; size?: "sm" | "md" }) {
+  if (!code || code === "site") return null;
+  const ch = channels.find((c) => c.code === code);
+  const color = ch?.color || "#64748b";
+  return (
+    <span
+      className={`font-sans font-black uppercase rounded ${size === "md" ? "text-[10px] px-2 py-0.5" : "text-[9px] px-1.5 py-0.5"}`}
+      style={{ backgroundColor: `${color}1f`, color }}
+    >
+      {ch?.label ?? code}
+    </span>
+  );
+}
 
 // ─── Fatura Durumu ────────────────────────────────────────────────────────────
 
@@ -220,7 +244,8 @@ export default function OrdersPage() {
   const [fShip, setFShip] = useState("all");
   const [fInv, setFInv] = useState("all");
   const [fMethod, setFMethod] = useState("all");
-  const [fChannel, setFChannel] = useState("all"); // site | trendyol | hepsiburada
+  const [fChannel, setFChannel] = useState("all"); // sales_channels.code
+  const [channels, setChannels] = useState<SalesChannel[]>(CHANNEL_FALLBACK);
   const [sortKey, setSortKey] = useState<"no" | "customer" | "date" | "amount" | "pay" | "ship" | "inv">("date");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [listPage, setListPage] = useState(0);
@@ -248,17 +273,25 @@ export default function OrdersPage() {
   async function fetchOrders() {
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from("orders")
-        .select(`*, profiles(first_name, last_name, email, phone, email_verified), affiliate_profiles(code)`)
-        .order("created_at", { ascending: false });
-
-      if (error) {
-        const { data: simple } = await supabase.from("orders").select("*").order("created_at", { ascending: false });
-        setOrders((simple as any) || []);
-        return;
+      (supabase as any).from("sales_channels").select("code, label, color, kind, is_active").order("sort_order")
+        .then(({ data }: any) => { if (data?.length) setChannels(data); });
+      // Sunucu tek seferde en fazla 1000 satır verir → sayfa sayfa hepsini al (aktarılan eski siparişler dahil)
+      const all: any[] = [];
+      for (let from = 0; ; from += 1000) {
+        const { data, error } = await supabase
+          .from("orders")
+          .select(`*, profiles(first_name, last_name, email, phone, email_verified), affiliate_profiles(code)`)
+          .order("created_at", { ascending: false })
+          .range(from, from + 999);
+        if (error) {
+          const { data: simple } = await supabase.from("orders").select("*").order("created_at", { ascending: false });
+          setOrders((simple as any) || []);
+          return;
+        }
+        all.push(...((data as any[]) || []));
+        if (!data || data.length < 1000) break;
       }
-      setOrders((data as any) || []);
+      setOrders(all);
     } catch (e) {
       console.error(e);
     } finally {
@@ -777,7 +810,7 @@ export default function OrdersPage() {
   const LIST_PAGE = 50;
   const trNorm = (v: unknown) => String(v ?? "").toLocaleLowerCase("tr-TR");
   const customerName = (o: Order) => {
-    if (isMarketplace(o) && o.customer_name) return o.customer_name;
+    if ((isMarketplace(o) || !o.profiles) && o.customer_name) return o.customer_name;
     const n = `${o.profiles?.first_name ?? ""} ${o.profiles?.last_name ?? ""}`.trim();
     if (n) return n;
     try { const a = typeof o.shipping_address === "string" ? JSON.parse(o.shipping_address as any) : (o.shipping_address as any); return a?.name || ""; } catch { return ""; }
@@ -886,9 +919,9 @@ export default function OrdersPage() {
               </div>
               <select value={fChannel} onChange={(e) => { setFChannel(e.target.value); setListPage(0); }} className={selCls}>
                 <option value="all">Kanal: tümü</option>
-                <option value="site">Kanal: Site</option>
-                <option value="trendyol">Kanal: Trendyol</option>
-                <option value="hepsiburada">Kanal: Hepsiburada</option>
+                {channels.filter((c) => c.is_active || orders.some((o) => (o.channel || "site") === c.code)).map((c) => (
+                  <option key={c.code} value={c.code}>Kanal: {c.label}</option>
+                ))}
               </select>
               <select value={fPay} onChange={(e) => { setFPay(e.target.value); setListPage(0); }} className={selCls}>
                 <option value="all">Ödeme: tümü</option>
@@ -959,17 +992,13 @@ export default function OrdersPage() {
                         <div className="flex flex-col">
                           <span className="font-mono text-[11px] font-bold text-blue-600 flex items-center gap-1.5">
                             {order.order_number ? `YH${order.order_number}` : `#${order.id.slice(0, 8).toUpperCase()}`}
-                            {isMarketplace(order) && (
-                              <span className={`font-sans text-[9px] font-black uppercase px-1.5 py-0.5 rounded ${CHANNEL_CLS[order.channel!] ?? CHANNEL_CLS.site}`}>
-                                {CHANNEL_LABEL[order.channel!] ?? order.channel}
-                              </span>
-                            )}
+                            <ChannelBadge code={order.channel} channels={channels} />
                             {isMarketplace(order) && order.mp_warning && !order.mp_warning_ack && (
                               <span title={order.mp_warning} className="text-red-600"><AlertCircle size={12} /></span>
                             )}
                           </span>
-                          {isMarketplace(order) && order.external_order_number && (
-                            <span className="font-mono text-[10px] text-slate-500">#{order.external_order_number}</span>
+                          {(isMarketplace(order) || isImported(order)) && order.external_order_number && String(order.external_order_number) !== String(order.order_number) && (
+                            <span className="font-mono text-[10px] text-slate-500">{isImported(order) ? "Eski no " : ""}#{order.external_order_number}</span>
                           )}
                           <span className="font-medium text-sm">
                             {customerName(order)}
@@ -1247,11 +1276,7 @@ export default function OrdersPage() {
               <span className="text-sm font-mono font-bold text-blue-600">
                 {selectedOrder?.order_number ? `YH${selectedOrder.order_number}` : `#${selectedOrder?.id.slice(0, 8).toUpperCase()}`}
               </span>
-              {isMarketplace(selectedOrder) && (
-                <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${CHANNEL_CLS[selectedOrder!.channel!] ?? CHANNEL_CLS.site}`}>
-                  {CHANNEL_LABEL[selectedOrder!.channel!] ?? selectedOrder!.channel}
-                </span>
-              )}
+              <ChannelBadge code={selectedOrder?.channel} channels={channels} size="md" />
             </DialogTitle>
           </DialogHeader>
 
@@ -1269,6 +1294,9 @@ export default function OrdersPage() {
                   onRestocked={() => handleViewDetails(selectedOrder)}
                 />
               )}
+
+              {/* Eski siteden aktarılan sipariş: kaynak, eski no, ödeme yöntemi, kupon, ek ücret, not */}
+              {isImported(selectedOrder) && <ImportedOrderPanel order={selectedOrder} channels={channels} />}
 
               {/* Fatura Bilgileri + Teslimat Adresi */}
               <div className="grid grid-cols-2 gap-4">
@@ -1574,6 +1602,11 @@ export default function OrdersPage() {
                                 <span>{edit?.title || item.products?.title || item.title || <span className="text-muted-foreground italic">—</span>}</span>
                                 {isMarketplace(selectedOrder) && !item.product_id && (
                                   <span className="text-[10px] text-red-600 font-semibold">Sitede eşleşmedi — stok düşülmedi (barkod {item.barcode || "—"})</span>
+                                )}
+                                {isImported(selectedOrder) && !item.product_id && (
+                                  <a href="/admin/products/unmatched" className="text-[10px] text-amber-700 font-semibold hover:underline">
+                                    Eski ürün — sitede eşleşmedi (SKU {item.sku || "—"}) · eşleştir →
+                                  </a>
                                 )}
                                 {isMarketplace(selectedOrder) && item.stock_restored_at && (
                                   <span className="text-[10px] text-amber-700">Stok geri eklendi</span>
@@ -2033,7 +2066,7 @@ function MarketplaceOrderPanel({ order, onChange, onRestocked }: {
   return (
     <div className="rounded-xl border-2 border-orange-100 bg-orange-50/40 p-4 space-y-3">
       <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
-        <span><span className="text-muted-foreground">{CHANNEL_LABEL[order.channel!] ?? order.channel} sipariş no:</span> <b className="font-mono">{order.external_order_number || "—"}</b></span>
+        <span><span className="text-muted-foreground">{CHANNEL_FALLBACK.find((c) => c.code === order.channel)?.label ?? order.channel} sipariş no:</span> <b className="font-mono">{order.external_order_number || "—"}</b></span>
         <span><span className="text-muted-foreground">Pazaryeri durumu:</span> <b>{order.external_status || "—"}</b></span>
         {order.cargo_provider && <span><span className="text-muted-foreground">Kargo:</span> <b>{order.cargo_provider}</b></span>}
         {order.cargo_tracking_number && (
@@ -2082,6 +2115,34 @@ function MarketplaceOrderPanel({ order, onChange, onRestocked }: {
         </button>
       )}
       {msg && <p className="text-xs font-semibold text-slate-700">{msg}</p>}
+    </div>
+  );
+}
+
+// ─── Eski siteden aktarılan sipariş bilgisi ──────────────────────────────────
+const IMPORT_SOURCE_LABEL: Record<string, string> = { woo_yerihisset: "yerihisset.com (eski site)", woo_attipas: "attipas.com.tr" };
+
+function ImportedOrderPanel({ order, channels }: { order: Order; channels: SalesChannel[] }) {
+  const raw = (order.external_raw ?? {}) as any;
+  const ch = channels.find((c) => c.code === (order.channel || "site"));
+  const rows: [string, React.ReactNode][] = [
+    ["Kaynak", `${IMPORT_SOURCE_LABEL[order.import_source ?? ""] ?? order.import_source} · ${ch?.label ?? order.channel}`],
+    ["Eski sipariş no", <b key="no" className="font-mono">#{order.external_order_number || order.import_ref}</b>],
+  ];
+  if (raw.payment_title) rows.push(["Ödeme yöntemi", raw.payment_title]);
+  if (raw.wc_status) rows.push(["Eski sitedeki durum", raw.wc_status]);
+  if (Array.isArray(raw.coupons) && raw.coupons.length) rows.push(["Kupon", raw.coupons.join(", ")]);
+  if (Number(order.extra_fee) > 0) rows.push(["Ek ücret", `₺${Number(order.extra_fee).toFixed(2)}${raw.fee_names?.length ? ` (${raw.fee_names.join(", ")})` : ""}`]);
+  if (raw.utm_source) rows.push(["Geldiği kaynak", [raw.utm_source, raw.utm_medium].filter(Boolean).join(" / ")]);
+  if (order.customer_note) rows.push(["Müşteri notu", order.customer_note]);
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-2">
+      <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">Eski siteden aktarıldı · stok düşülmedi</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 text-xs">
+        {rows.map(([k, v]) => (
+          <span key={k}><span className="text-muted-foreground">{k}:</span> {v}</span>
+        ))}
+      </div>
     </div>
   );
 }

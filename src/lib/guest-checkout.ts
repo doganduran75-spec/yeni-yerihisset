@@ -1,9 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // Misafir (guest) checkout: verilen bilgiden ŞİFRESİZ bir üye bulur/oluşturur ve
-// sipariş için adres snapshot'ı üretir. Var olan e-posta bir üyeye aitse hata
-// döner (hesap ele geçirme riski → kullanıcıdan giriş istenir). Sipariş her zaman
-// bir user_id'ye bağlanır (orphan olmaz); misafir sonradan "şifremi unuttum" ile
-// hesabına erişebilir.
+// sipariş için adres snapshot'ı üretir. E-posta ŞİFRELİ bir üyeye aitse hata döner
+// (kullanıcıdan giriş istenir). Hesap HENÜZ ŞİFRESİZSE (önceki misafir siparişi ya da
+// eski siteden aktarılan müşteri) sipariş o hesaba bağlanır: siparişi veren kişi
+// hesabın içini göremez (giriş için şifre belirlemek gerekir), yalnız kendi siparişinin
+// sonucunu görür. Sipariş her zaman bir user_id'ye bağlanır (orphan olmaz).
 
 import type { createAdminClient } from "@/lib/supabase-admin";
 
@@ -21,7 +22,8 @@ export type GuestAddress = {
 
 export async function resolveGuest(
   supabase: AdminClient,
-  g: GuestInput
+  g: GuestInput,
+  opts: { attachPasswordless?: boolean } = {}
 ): Promise<{ ok: true; userId: string; email: string; address: GuestAddress } | { ok: false; error: string; code: number }> {
   const email = (g.email || "").trim().toLowerCase();
   const first = (g.firstName || "").trim();
@@ -36,10 +38,24 @@ export async function resolveGuest(
   if (phone.length !== 10) return { ok: false, error: "Telefon 10 haneli olmalı.", code: 400 };
   if (!city || !district || !addressDetail) return { ok: false, error: "Teslimat adresi bilgileri eksik.", code: 400 };
 
-  // Bu e-posta zaten kayıtlı mı? (üye → giriş iste, sessizce üstüne yazma)
-  const { data: existing } = await (supabase as any).from("profiles").select("id").eq("email", email).maybeSingle();
+  const address = { first_name: first, last_name: last, phone, address_detail: addressDetail, district, city };
+
+  // Bu e-posta zaten kayıtlı mı? Şifreli üye → giriş iste; şifresiz hesap → o hesaba bağla
+  const { data: existing } = await (supabase as any).from("profiles").select("id, first_name, last_name, phone").eq("email", email).maybeSingle();
   if (existing?.id) {
-    return { ok: false, error: "Bu e-posta zaten kayıtlı. Lütfen giriş yapıp devam edin (şifreni unuttuysan sıfırlayabilirsin).", code: 409 };
+    const { data: state } = opts.attachPasswordless === false
+      ? { data: null }
+      : await (supabase as any).rpc("account_password_state", { p_email: email });
+    if (state !== "passwordless") {
+      return { ok: false, error: "Bu e-posta zaten kayıtlı. Lütfen giriş yapıp devam edin (şifreni unuttuysan sıfırlayabilirsin).", code: 409 };
+    }
+    // Profilde eksik olanları tamamla (var olan bilgilerin üstüne yazma)
+    const fill: Record<string, string> = {};
+    if (!existing.first_name) fill.first_name = first;
+    if (!existing.last_name) fill.last_name = last;
+    if (!existing.phone) fill.phone = phone;
+    if (Object.keys(fill).length) await (supabase as any).from("profiles").update(fill).eq("id", existing.id);
+    return { ok: true, userId: existing.id, email, address };
   }
 
   // Şifresiz kullanıcı oluştur
@@ -59,8 +75,5 @@ export async function resolveGuest(
     { onConflict: "id" }
   );
 
-  return {
-    ok: true, userId, email,
-    address: { first_name: first, last_name: last, phone, address_detail: addressDetail, district, city },
-  };
+  return { ok: true, userId, email, address };
 }

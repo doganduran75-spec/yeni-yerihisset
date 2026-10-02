@@ -102,8 +102,12 @@ export async function GET(req: NextRequest) {
   const monthName = (yy: number, mm: number) =>
     new Date(Date.UTC(yy, mm - 1, 15)).toLocaleDateString("tr-TR", { month: "long", timeZone: "UTC" });
 
+  // Kanal adları (sales_channels: YeriHisset, Attipas, Trendyol, Hepsiburada…)
+  const { data: chRows } = await (supabase as any).from("sales_channels").select("code, label").order("sort_order");
+
   return NextResponse.json({
     ok: true,
+    channels: (chRows as any[]) ?? [],
     labels: {
       year: String(y),
       month: monthName(y, m),

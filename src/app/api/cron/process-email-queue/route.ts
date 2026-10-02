@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { buildSmtpConfig } from "@/lib/smtp-config";
-import nodemailer from "nodemailer";
+import { createMailTransport, isEmailLockedError } from "@/lib/mail-guard";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -45,7 +45,7 @@ async function run(req: NextRequest) {
 
   await (supabase as any).from("email_queue").update({ status: "processing" }).in("id", items.map((i) => i.id));
 
-  const transporter = nodemailer.createTransport(smtpConfig as any);
+  const transporter = createMailTransport(smtpConfig as any);
   let sent = 0, failed = 0, retried = 0;
   const touchedCampaigns = new Set<string>();
 
@@ -70,7 +70,7 @@ async function run(req: NextRequest) {
       sent++;
     } catch (err: any) {
       const attempts = (item.attempts ?? 0) + 1;
-      const giveUp = attempts >= MAX_ATTEMPTS;
+      const giveUp = attempts >= MAX_ATTEMPTS || isEmailLockedError(err); // kilitliyse tekrar deneme
       await (supabase as any).from("email_queue")
         .update({ status: giveUp ? "failed" : "pending", attempts, last_attempt_at: new Date().toISOString(), error_message: err?.message || "hata" })
         .eq("id", item.id);

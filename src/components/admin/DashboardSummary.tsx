@@ -49,12 +49,15 @@ export default function DashboardSummary({ children }: { children?: ReactNode })
     { key: "month", label: `Bu ay (${d.labels.month})` },
     { key: "lastMonth", label: `Geçen ay (${d.labels.lastMonth})` },
   ] as const;
-  // Pazaryeri siparişi varsa ciroyu kanala göre de göster
+  // Birden fazla kanaldan satış varsa ciroyu kanala göre de göster (sıra/ad: sales_channels)
   const channels = [...new Set(cols.flatMap((c) => Object.keys(d.sales[c.key]?.byChannel ?? {})))];
-  const CH: Record<string, string> = { site: "Site", trendyol: "Trendyol", hepsiburada: "Hepsiburada" };
+  const chList: { code: string; label: string }[] = d.channels?.length ? d.channels : [
+    { code: "site", label: "YeriHisset" }, { code: "trendyol", label: "Trendyol" }, { code: "hepsiburada", label: "Hepsiburada" },
+  ];
+  const ordered = [...chList.map((c) => c.code).filter((k) => channels.includes(k)), ...channels.filter((k) => !chList.some((c) => c.code === k))];
   const channelRows = channels.length > 1 || (channels.length === 1 && channels[0] !== "site")
-    ? ["site", "trendyol", "hepsiburada"].filter((k) => channels.includes(k)).map((k) => ({
-        label: `↳ ${CH[k] ?? k}`, fmt: (b: any) => tl(b.byChannel?.[k] ?? 0), sub: true,
+    ? ordered.map((k) => ({
+        label: `↳ ${chList.find((c) => c.code === k)?.label ?? k}`, fmt: (b: any) => tl(b.byChannel?.[k] ?? 0), sub: true,
       }))
     : [];
   const rows: { label: string; fmt: (b: any) => string; strong?: boolean; sub?: boolean }[] = [

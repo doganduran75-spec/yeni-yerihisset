@@ -36,6 +36,8 @@ function LoginForm() {
   
   const [isLogin, setIsLogin] = useState(true);
   const [forgot, setForgot] = useState(false);
+  // Eski siteden aktarılan / misafir hesaplar şifresiz: hatalı girişte "şifreni belirle" yönlendirmesi
+  const [setPwHint, setSetPwHint] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -119,6 +121,7 @@ function LoginForm() {
     setLoading(true);
     setError(null);
     setSuccess(null);
+    setSetPwHint(false);
 
     try {
       if (forgot) {
@@ -182,6 +185,8 @@ function LoginForm() {
         }
       }
     } catch (err: any) {
+      const raw = String(err?.message || "").toLowerCase();
+      setSetPwHint(!forgot && (raw.includes("invalid login") || raw.includes("invalid credentials") || raw.includes("zaten kayıtlı")));
       setError(trAuthError(err.message));
     } finally {
       setLoading(false);
@@ -367,6 +372,23 @@ function LoginForm() {
               <div className="bg-red-50 border-l-4 border-red-500 p-4 flex gap-3 animate-in shake">
                  <AlertCircle className="text-red-500 shrink-0" size={18} />
                  <p className="text-xs font-bold text-red-700">{error}</p>
+              </div>
+            )}
+
+            {error && setPwHint && (
+              <div className="rounded-xl border border-olive-200 bg-olive-50 p-4 space-y-2">
+                <p className="text-xs font-bold text-olive-800">Yeni sitemize geçtik!</p>
+                <p className="text-xs text-olive-800 leading-relaxed">
+                  Eski sitemizden (yerihisset.com / attipas.com.tr) üyeysen ya da daha önce misafir olarak alışveriş yaptıysan,
+                  hesabın burada hazır; yalnız şifreni bir kez belirlemen gerekiyor.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => { setForgot(true); setIsLogin(true); setError(null); setSetPwHint(false); setSuccess(null); }}
+                  className="text-xs font-black text-olive-700 underline"
+                >
+                  Şifremi belirle →
+                </button>
               </div>
             )}
 

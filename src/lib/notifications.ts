@@ -1,4 +1,4 @@
-import nodemailer from "nodemailer";
+import { createMailTransport } from "./mail-guard";
 import { createAdminClient } from "./supabase-admin";
 import { buildSmtpConfig } from "./smtp-config";
 
@@ -412,7 +412,7 @@ export async function sendOrderNotification(
   }
 
   try {
-    const transporter = nodemailer.createTransport(smtpConfig);
+    const transporter = createMailTransport(smtpConfig);
     await transporter.sendMail({
       from: `"${settings?.smtp_from_name || storeName}" <${settings?.smtp_from_email || smtpConfig.auth.user}>`,
       to: customerEmail,
@@ -506,7 +506,7 @@ export async function sendCouponAssignedNotification(
   if (!smtpConfig.host || !smtpConfig.auth.user) return { status: "failed", error: "SMTP ayarları eksik" };
 
   try {
-    const transporter = nodemailer.createTransport(smtpConfig);
+    const transporter = createMailTransport(smtpConfig);
     await transporter.sendMail({
       from: `"${settings?.smtp_from_name || storeName}" <${settings?.smtp_from_email || smtpConfig.auth.user}>`,
       to: profile.email,
@@ -621,7 +621,7 @@ export async function sendMessageNotification(
   if (!smtpConfig.host || !smtpConfig.auth.user) return { status: "failed", error: "SMTP ayarları eksik" };
 
   try {
-    const transporter = nodemailer.createTransport(smtpConfig);
+    const transporter = createMailTransport(smtpConfig);
     await transporter.sendMail({
       from: `"${settings?.smtp_from_name || storeName}" <${settings?.smtp_from_email || smtpConfig.auth.user}>`,
       to, subject, html: buildEmailDocument(bodyHtml, storeName), text: htmlToText(bodyHtml),
@@ -690,7 +690,7 @@ export async function sendLeadMagnetWelcome(params: {
   if (!smtpConfig.host || !smtpConfig.auth.user) return { status: "failed", error: "SMTP ayarları eksik" };
 
   try {
-    const transporter = nodemailer.createTransport(smtpConfig);
+    const transporter = createMailTransport(smtpConfig);
     await transporter.sendMail({
       from: `"${settings?.smtp_from_name || storeName}" <${settings?.smtp_from_email || smtpConfig.auth.user}>`,
       to: params.to,
@@ -742,7 +742,7 @@ export async function sendAdminOutOfStockAlert(
   if (!smtpConfig.host || !smtpConfig.auth.user) return { status: "failed", error: "SMTP ayarları eksik" };
 
   try {
-    const transporter = nodemailer.createTransport(smtpConfig);
+    const transporter = createMailTransport(smtpConfig);
     await transporter.sendMail({
       from: `"${settings?.smtp_from_name || storeName}" <${settings?.smtp_from_email || smtpConfig.auth.user}>`,
       to,
@@ -873,7 +873,7 @@ export async function sendAdminNewOrderNotification(
   if (!smtpConfig.host || !smtpConfig.auth.user) return { status: "failed", error: "SMTP ayarları eksik" };
 
   try {
-    const transporter = nodemailer.createTransport(smtpConfig);
+    const transporter = createMailTransport(smtpConfig);
     await transporter.sendMail({
       from: `"${settings?.smtp_from_name || storeName}" <${settings?.smtp_from_email || smtpConfig.auth.user}>`,
       to,
@@ -925,7 +925,7 @@ export async function sendEmailVerification(params: {
   if (!smtpConfig.host || !smtpConfig.auth.user) return { status: "failed", error: "SMTP ayarları eksik" };
 
   try {
-    const transporter = nodemailer.createTransport(smtpConfig);
+    const transporter = createMailTransport(smtpConfig);
     await transporter.sendMail({
       from: `"${settings?.smtp_from_name || storeName}" <${settings?.smtp_from_email || smtpConfig.auth.user}>`,
       to: params.to,
@@ -978,7 +978,7 @@ export async function sendPasswordRecoveryEmail(params: {
   if (!smtpConfig.host || !smtpConfig.auth.user) return { status: "failed", error: "SMTP ayarları eksik" };
 
   try {
-    const transporter = nodemailer.createTransport(smtpConfig);
+    const transporter = createMailTransport(smtpConfig);
     await transporter.sendMail({
       from: `"${settings?.smtp_from_name || storeName}" <${settings?.smtp_from_email || smtpConfig.auth.user}>`,
       to: params.to,
@@ -1051,7 +1051,7 @@ export async function sendGuestActivationEmail(params: {
   if (!smtpConfig.host || !smtpConfig.auth.user) return { status: "failed", error: "SMTP ayarları eksik" };
 
   try {
-    const transporter = nodemailer.createTransport(smtpConfig);
+    const transporter = createMailTransport(smtpConfig);
     await transporter.sendMail({
       from: `"${settings?.smtp_from_name || storeName}" <${settings?.smtp_from_email || smtpConfig.auth.user}>`,
       to: params.email,
@@ -1125,7 +1125,7 @@ export async function sendStockNotifySignupWelcome(params: {
   if (!smtpConfig.host || !smtpConfig.auth.user) return { status: "failed", error: "SMTP ayarları eksik" };
 
   try {
-    const transporter = nodemailer.createTransport(smtpConfig);
+    const transporter = createMailTransport(smtpConfig);
     await transporter.sendMail({
       from: `"${settings?.smtp_from_name || storeName}" <${settings?.smtp_from_email || smtpConfig.auth.user}>`,
       to: params.to,
@@ -1178,7 +1178,7 @@ export async function sendBackInStockNotification(params: {
   if (!smtpConfig.host || !smtpConfig.auth.user) return { status: "failed", error: "SMTP ayarları eksik" };
 
   try {
-    const transporter = nodemailer.createTransport(smtpConfig);
+    const transporter = createMailTransport(smtpConfig);
     await transporter.sendMail({
       from: `"${settings?.smtp_from_name || storeName}" <${settings?.smtp_from_email || smtpConfig.auth.user}>`,
       to: params.to,
