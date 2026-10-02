@@ -92,7 +92,7 @@ fi
 #    indirilir), çalışan DB'nin ham dosyaları, görseller (ayrı arşiv), .git,
 #    node_modules, loglar.
 CFG_PATHS=()
-for p in "$SUPABASE_DIR" /etc/caddy /etc/cron.d/yerihisset-backup /root/.config/rclone /root/yerihisset-supabase-secrets.txt \
+for p in "$SUPABASE_DIR" /etc/caddy /etc/cron.d/yerihisset-backup /etc/cron.d/yerihisset-health /root/.config/rclone /root/yerihisset-supabase-secrets.txt \
          "$APP_DIR/.env" "$APP_DIR/.env.local" "$APP_DIR/.env.production" "$APP_DIR/ecosystem.config.js"; do
   [ -e "$p" ] && CFG_PATHS+=("${p#/}")
 done

@@ -1192,3 +1192,65 @@ export async function sendBackInStockNotification(params: {
     return { status: "failed", error: err?.message || "Email gönderim hatası" };
   }
 }
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/**
+ * ADMIN'e SUNUCU UYARISI — scripts/server-health.sh → /api/cron/server-health.
+ * Alıcı: settings.admin_notify_email || contact_email (yeni sipariş bildirimiyle aynı).
+ * problems boşsa "sorunlar giderildi" e-postası. fresh: bu e-postada yeni çıkan sorunlar.
+ */
+export async function sendAdminSystemAlert(
+  subject: string,
+  problems: { key: string; label: string; status: string; value: string; hint: string }[],
+  fresh: string[] = []
+): Promise<{ status: "sent" | "failed" | "skipped"; error?: string }> {
+  const supabase = createAdminClient();
+  const { data: settings } = await (supabase.from("settings").select("*").limit(1).maybeSingle() as any) as { data: any };
+  const storeName = settings?.store_name || "YeriHisset";
+  const storeUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com";
+  const to = settings?.admin_notify_email || settings?.contact_email || settings?.smtp_from_email || settings?.smtp_user;
+  if (!to) return { status: "skipped", error: "Admin e-posta adresi ayarlı değil" };
+
+  const rows = problems.map((p) => `
+      <tr>
+        <td style="padding:8px 10px;border-bottom:1px solid #f1f5f9;vertical-align:top;font-size:16px">${p.status === "fail" ? "🔴" : "🟠"}</td>
+        <td style="padding:8px 10px;border-bottom:1px solid #f1f5f9">
+          <div style="font-weight:800;color:#111827">${escapeHtml(p.label)}${fresh.includes(p.key) ? ' <span style="font-size:11px;color:#b91c1c">YENİ</span>' : ""}</div>
+          <div style="color:#374151;font-size:13px">${escapeHtml(p.value)}</div>
+          ${p.hint ? `<div style="color:#6b7280;font-size:12px;margin-top:2px">→ ${escapeHtml(p.hint)}</div>` : ""}
+        </td>
+      </tr>`).join("");
+  const bodyHtml = problems.length
+    ? `<h1 style="font-size:20px;font-weight:800;color:#111827;margin:0 0 8px">⚠️ Sunucu uyarısı</h1>
+       <p style="font-size:14px;color:#374151;margin:0 0 14px">Otomatik sağlık kontrolü şu sorunları buldu. Ne yapacağından emin değilsen bu e-postayı olduğu gibi Claude'a ilet.</p>
+       <table style="width:100%;border-collapse:collapse;font-size:14px;margin:0 0 16px">${rows}</table>`
+    : `<h1 style="font-size:20px;font-weight:800;color:#166534;margin:0 0 8px">✅ Sunucu sorunları giderildi</h1>
+       <p style="font-size:14px;color:#374151;margin:0 0 14px">Önceki uyarıdaki sorunların hepsi düzeldi; tüm kontroller sağlıklı.</p>`;
+  const html = `${bodyHtml}
+    <div style="text-align:center;margin:8px 0 0">
+      <a href="${storeUrl}/admin" style="display:inline-block;background:#536430;color:#fff;text-decoration:none;padding:12px 28px;border-radius:12px;font-weight:800;font-size:14px">Dashboard'u aç</a>
+    </div>`;
+
+  const smtpConfig = buildSmtpConfig({
+    smtp_host: settings?.smtp_host || "",
+    smtp_port: settings?.smtp_port,
+    smtp_secure: settings?.smtp_secure,
+    smtp_user: settings?.smtp_user,
+    smtp_password: settings?.smtp_password,
+  });
+  if (!smtpConfig.host || !smtpConfig.auth.user) return { status: "failed", error: "SMTP ayarları eksik" };
+  try {
+    await createMailTransport(smtpConfig).sendMail({
+      from: `"${settings?.smtp_from_name || storeName}" <${settings?.smtp_from_email || smtpConfig.auth.user}>`,
+      to,
+      subject: `${subject} — ${storeName}`,
+      html: buildEmailDocument(html, storeName),
+      text: htmlToText(html),
+    });
+    return { status: "sent" };
+  } catch (err: any) {
+    console.error("[server-health alert]", err?.message || err);
+    return { status: "failed", error: err?.message || "Bilinmeyen hata" };
+  }
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */

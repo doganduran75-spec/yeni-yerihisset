@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/lib/supabase";
 import BackupStatusCard from "@/components/admin/BackupStatusCard";
+import ServerHealthCard from "@/components/admin/ServerHealthCard";
 import DashboardSummary from "@/components/admin/DashboardSummary";
 import MarketplaceSyncCard from "@/components/admin/MarketplaceSyncCard";
 import { Loader2, MessageCircle, ArrowRight, Star, Clock, PackageOpen, BellRing } from "lucide-react";
@@ -227,10 +228,14 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* Üst satır: Satış özeti %50 · Kişiler %25 · Yedekleme %25 */}
+      {/* Üst satır: Satış özeti %50 · Kişiler %25 · Sunucu Sağlığı + Yedekleme %25 */}
       <DashboardSummary>
-        {/* Yedekleme durumu (gece yedeği + haftalık geri yükleme testi) */}
-        <BackupStatusCard />
+        <div className="flex flex-col gap-4">
+          {/* Sunucu sağlığı (15 dk'da bir otomatik kontrol; sorun olursa e-posta) */}
+          <ServerHealthCard />
+          {/* Yedekleme durumu (gece yedeği + haftalık geri yükleme testi) */}
+          <BackupStatusCard />
+        </div>
       </DashboardSummary>
 
       <div className="grid gap-6 lg:grid-cols-3 items-start">

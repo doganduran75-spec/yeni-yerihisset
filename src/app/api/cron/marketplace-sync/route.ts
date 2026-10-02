@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { processMarketplaceStock } from "@/lib/marketplace/sync";
@@ -33,6 +34,11 @@ async function run(req: NextRequest) {
   }
   await (supabase as any).from("marketplace_stock_log")
     .delete().lt("created_at", new Date(Date.now() - 180 * 86400_000).toISOString());
+  // Sunucu Sağlığı: "çalışıyorum" kaydı (uzun süre gelmezse dashboard + e-posta uyarır)
+  const firstError = [...orders, ...reports, ...prices].flatMap((r: { errors?: string[] }) => r.errors ?? [])[0];
+  await (supabase as any).from("cron_heartbeats").upsert({
+    name: "marketplace-sync", last_run_at: new Date().toISOString(), ok: !firstError, message: firstError ?? null,
+  });
   return NextResponse.json({ ok: true, orders, reports, prices });
 }
 

@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // E-POSTA KİLİDİ: canlıya geçene kadar (settings.email_lock_enabled) e-postalar
-// yalnız İZİNLİ adreslere gider: yöneticiler + settings.email_allowlist. Amaç:
+// yalnız İZİNLİ adreslere gider: yöneticiler, mağazanın kendi adresleri (bildirim /
+// iletişim / gönderen) + settings.email_allowlist. Amaç:
 // WooCommerce'ten aktarılan GERÇEK müşterilere staging'deki testlerden yanlışlıkla
 // e-posta gitmesin. Engellenen gönderim EmailLockedError fırlatır → çağıran yer
 // gönderimi "failed" olarak kaydeder (bildirim kaydında / kuyrukta görünür).
@@ -25,12 +26,15 @@ async function lockState(): Promise<LockState> {
   if (cache && Date.now() - cache.at < 30_000) return cache;
   const sb = createAdminClient() as any;
   const [settingsRes, adminsRes] = await Promise.all([
-    sb.from("settings").select("email_lock_enabled, email_allowlist").limit(1).maybeSingle(),
+    sb.from("settings").select("*").limit(1).maybeSingle(),
     sb.from("profiles").select("email").eq("role", "admin"),
   ]);
   const allow = new Set<string>();
   for (const a of adminsRes.data || []) if (a.email) allow.add(String(a.email).toLowerCase());
-  for (const e of String(settingsRes.data?.email_allowlist || "").split(/[\s,;]+/)) {
+  // Mağazanın kendi adresleri (yönetici bildirimi, sunucu uyarısı) her zaman izinli
+  const st = settingsRes.data || {};
+  for (const e of [st.admin_notify_email, st.contact_email, st.smtp_from_email]) if (e) allow.add(String(e).trim().toLowerCase());
+  for (const e of String(st.email_allowlist || "").split(/[\s,;]+/)) {
     if (e.trim()) allow.add(e.trim().toLowerCase());
   }
   const locked = settingsRes.error ? true : settingsRes.data?.email_lock_enabled !== false;
