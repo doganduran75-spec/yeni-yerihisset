@@ -8,7 +8,8 @@ import { getHepsiburadaConfig, hbHasCredentials, hbSitRequest } from "@/lib/mark
 
 // Hepsiburada TEST MERKEZİ — canlı ortam bilgisi almak için Hepsiburada'nın
 // test (SIT) ortamında istediği adımlar. YALNIZ "-sit" adreslerine gider.
-//  1) Katalog: hızlı ürün yükleme → trackingId → ürün durumu sorgulama
+//  1) Katalog: hızlı ürün yükleme (hbSku ile — barkodla yükleme kalktı) → trackingId → ürün durumu
+//     sorgulama
 //  2) Listeleme: test envanterini listeleme, stok ve fiyat güncelleme + sonuç sorgulama
 //  3) Sipariş: test siparişi oluşturma → ödemesi tamamlanmış siparişleri listeleme →
 //     kalem paketleme → paketleri listeleme
@@ -35,12 +36,13 @@ export async function POST(req: NextRequest) {
   switch (b.action) {
     // ── 1) Katalog ──
     case "catalog_fastlisting": {
-      const barcode = str(b.barcode, 60), merchantSku = str(b.merchantSku, 60), productName = str(b.productName, 200);
-      if (!barcode || !merchantSku || !productName) return NextResponse.json({ error: "Barkod, Satıcı Stok Kodu ve ürün adı zorunlu." }, { status: 400 });
+      // Hepsiburada (2026-10): hızlı ürün yüklemede barkod kalktı → hbSku ile yüklenir
+      const hbSku = str(b.hbSku, 60), merchantSku = str(b.merchantSku, 60), productName = str(b.productName, 200);
+      if (!hbSku || !merchantSku || !productName) return NextResponse.json({ error: "hbSku, Satıcı Stok Kodu ve ürün adı zorunlu." }, { status: 400 });
       request = {
         service: "mpop", method: "POST", path: "/product/api/products/fastlisting",
         body: [{
-          merchant: cfg.merchantId, merchantSku, productName, barcode,
+          merchant: cfg.merchantId, merchantSku, productName, hbSku,
           ...(str(b.stock) ? { stock: str(b.stock, 10) } : {}),
           ...(str(b.price) ? { price: str(b.price, 20) } : {}),
         }],
@@ -95,28 +97,42 @@ export async function POST(req: NextRequest) {
 
     // ── 3) Sipariş ──
     case "order_create": {
+      // Belgedeki örnekle BİREBİR alanlar: Sku = doğru hbSku, MerchantId = URL'deki ile aynı,
+      // OrderNumber benzersiz, OrderDate "YYYY-MM-DDTHH:mm:ss" (milisaniye / Z yok).
+      const hbSku = str(b.hbSku, 60);
       const price = num(b.price), quantity = Math.max(1, Math.floor(num(b.quantity) || 1));
-      if (!(price > 0) || !str(b.merchantSku)) return NextResponse.json({ error: "Önce listeden fiyatı olan bir ürün seç." }, { status: 400 });
+      if (!hbSku) return NextResponse.json({ error: "Önce listeden bir ürün seç (hbSku gerekli)." }, { status: 400 });
+      if (!(price > 0)) return NextResponse.json({ error: "Geçerli bir fiyat gir." }, { status: 400 });
       const total = Math.round(price * quantity * 100) / 100;
+      const tr = new Date(Date.now() + 3 * 3600_000).toISOString().slice(0, 19); // Türkiye saati
       request = {
         service: "omsStub", method: "POST", path: `/orders/merchantId/${m}`,
         body: {
-          Customer: { CustomerId: randomUUID(), Name: "YeriHisset Test Müşteri" },
+          OrderNumber: String(Date.now()).slice(-9),
+          OrderDate: tr,
+          Customer: { CustomerId: randomUUID(), Name: "YeriHisset Test" },
           DeliveryAddress: {
-            AddressDetail: "Test Mah. Entegrasyon Sok. No:1", AddressId: randomUUID(),
-            AlternatePhoneNumber: "05320000000", City: "İstanbul", CountryCode: "TR", District: "Kadıköy",
-            Email: "test@yerihisset.com", Name: "YeriHisset Test Müşteri", PhoneNumber: "905320000000",
+            AddressId: randomUUID(),
+            Name: "YeriHisset Test",
+            AddressDetail: "Test Mah. Entegrasyon Sok. No:1",
+            Email: "test@yerihisset.com",
+            CountryCode: "TR",
+            PhoneNumber: "905320000000",
+            AlternatePhoneNumber: "05320000000",
+            Town: "Kadıköy",
+            District: "Caferağa",
+            City: "İstanbul",
           },
           LineItems: [{
-            CargoCompanyId: 1, DeliveryOptionId: 1,
-            ...(str(b.listingId) ? { ListingId: str(b.listingId, 80) } : {}),
-            MerchantId: cfg.merchantId, MerchantSku: str(b.merchantSku, 60), Sku: str(b.hbSku, 60),
-            Price: { Amount: price, Currency: "TRY" }, Quantity: quantity,
-            TotalPrice: { Amount: total, Currency: "TRY" }, Vat: 0, TagList: [], isBnplMP: false,
+            Sku: hbSku,
+            MerchantId: cfg.merchantId,
+            Quantity: quantity,
+            Price: { Amount: price, Currency: "TRY" },
+            Vat: 0,
+            TotalPrice: { Amount: total, Currency: "TRY" },
+            CargoCompanyId: 1,
+            DeliveryOptionId: 1,
           }],
-          OrderDate: new Date().toISOString(),
-          OrderNumber: String(Date.now()).slice(-10),
-          PaymentStatus: "Paid",
         },
       };
       break;

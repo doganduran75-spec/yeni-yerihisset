@@ -2,7 +2,7 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // Hepsiburada TEST MERKEZİ — canlı ortam bilgisi için Hepsiburada'nın test (SIT)
-// ortamında istediği adımlar: 1) Katalog (ürün gönder → trackingId) 2) Listeleme
+// ortamında istediği adımlar: 1) Katalog (hbSku ile hızlı ürün yükleme → trackingId) 2) Listeleme
 // (test envanterindeki ürünle stok + fiyat güncelleme) 3) Sipariş (test siparişi
 // oluştur → listele → paketle). Her istek/yanıt aşağıda kayıtlanır; "Özeti kopyala"
 // ile Hepsiburada'ya açılacak ticket'a yapıştırılır. İstekler YALNIZ test ortamına gider.
@@ -14,7 +14,6 @@ import { Loader2, Copy, Check, FlaskConical, Trash2, ChevronDown, ChevronRight }
 
 type LogEntry = { id: string; at: string; step: string; status: number; ok: boolean; request: any; response: any; key?: string };
 const LS_KEY = "yh:hb-sit-log";
-const TEST_BARCODES = ["7541828790114", "7541828790155", "7541828790080"];
 
 const pick = (o: any, ...keys: string[]) => { for (const k of keys) if (o && o[k] != null) return o[k]; return undefined; };
 
@@ -42,8 +41,9 @@ export default function HepsiburadaTestCenter() {
   const [copied, setCopied] = useState<string | null>(null);
 
   // 1) Katalog
-  const [barcode, setBarcode] = useState(TEST_BARCODES[0]);
-  const [merchantSku, setMerchantSku] = useState(`YH-TEST-${TEST_BARCODES[0]}`);
+  // Hepsiburada (2026-10): hızlı ürün yüklemede barkod kalktı → hbSku ile yüklenir
+  const [hbSku, setHbSku] = useState("");
+  const [merchantSku, setMerchantSku] = useState("");
   const [productName, setProductName] = useState("YeriHisset Test Ürünü");
   const [trackingId, setTrackingId] = useState("");
   // 2) Listeleme
@@ -95,7 +95,7 @@ export default function HepsiburadaTestCenter() {
 
   // ── 1) Katalog ──
   async function catalogSend() {
-    const out = await run("catalog_fastlisting", "Katalog — Hızlı ürün yükleme", { barcode, merchantSku, productName });
+    const out = await run("catalog_fastlisting", "Katalog — Hızlı ürün yükleme", { hbSku, merchantSku, productName });
     if (!out) return;
     const t = pick(out.res.json?.data, "trackingId", "TrackingId") ?? pick(out.res.json, "trackingId", "TrackingId");
     if (t) setTrackingId(String(t));
@@ -211,21 +211,32 @@ export default function HepsiburadaTestCenter() {
           </p>
           {err && <p className="text-xs font-semibold text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{err}</p>}
 
-          <Section n={1} title="Katalog — ürün gönder, trackingId al">
+          <Section n={1} title="Katalog — hbSku ile ürün gönder, trackingId al">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-              <select value={barcode} onChange={(e) => { setBarcode(e.target.value); setMerchantSku(`YH-TEST-${e.target.value}`); }}
-                className="h-9 rounded-md border px-2 text-sm bg-white">
-                {TEST_BARCODES.map((b) => <option key={b} value={b}>Barkod {b}</option>)}
-              </select>
-              <Input className="h-9" value={merchantSku} onChange={(e) => setMerchantSku(e.target.value)} placeholder="Satıcı Stok Kodu" />
+              <Input className="h-9 font-mono" value={hbSku} onChange={(e) => setHbSku(e.target.value.trim())} placeholder="hbSku (ör. HBV0000106NM0)" />
+              <Input className="h-9" value={merchantSku} onChange={(e) => setMerchantSku(e.target.value)} placeholder="Satıcı Stok Kodu (kendi kodun)" />
               <Input className="h-9" value={productName} onChange={(e) => setProductName(e.target.value)} placeholder="Ürün adı" />
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              {btn("catalog_fastlisting", "Ürünü gönder", catalogSend)}
+              {sel && selHb && (
+                <Button size="sm" variant="ghost" className="text-orange-700" onClick={() => {
+                  setHbSku(selHb);
+                  setMerchantSku(`YH-TEST-${selHb}`);
+                  const n = pick(sel, "productName", "ProductName");
+                  if (n) setProductName(String(n));
+                }}>
+                  2. adımda seçili ürünü kullan ({selHb})
+                </Button>
+              )}
+              {btn("catalog_fastlisting", "Ürünü gönder", catalogSend, !hbSku || !merchantSku)}
               <Input className="h-9 w-72" value={trackingId} onChange={(e) => setTrackingId(e.target.value)} placeholder="trackingId" />
               {btn("catalog_status", "Durumu sorgula", catalogStatus, !trackingId)}
             </div>
-            <p className="text-[11px] text-muted-foreground">Barkodlar Hepsiburada'nın test için verdikleridir (hızlı ürün yükleme; ürün HB kataloğunda var).</p>
+            <p className="text-[11px] text-muted-foreground">
+              Hepsiburada artık hızlı ürün yüklemeyi <b>barkodla değil hbSku ile</b> kabul ediyor. hbSku, Hepsiburada kataloğundaki ürün
+              numarasıdır (HBV… / HBC…): önce 2. adımda test envanterini listele, bir ürün seç ve “seçili ürünü kullan”a bas.
+              Satıcı Stok Kodu her denemede farklı olsun.
+            </p>
           </Section>
 
           <Section n={2} title="Listeleme — test envanterindeki ürünle stok ve fiyat güncelle">
