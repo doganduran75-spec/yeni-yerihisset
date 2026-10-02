@@ -111,8 +111,6 @@ export default function ProductsPage() {
             price,
             compare_at_price,
             stock,
-            trendyol_psf,
-            trendyol_price,
             is_active,
             variant_options(value)
           )
@@ -135,8 +133,6 @@ export default function ProductsPage() {
             "Stok": "",
             "Fiyat": "",
             "Barkod": "",
-            "T.PSF": "",
-            "T.Fiyat": "",
             "Aktif mi?": product.is_active ? "Evet" : "Hayır",
           });
         } else {
@@ -148,8 +144,6 @@ export default function ProductsPage() {
               "Stok": v.stock ?? 0,
               "Fiyat": v.price ?? "",
               "Barkod": v.barcode ?? "",
-              "T.PSF": v.trendyol_psf ?? "",
-              "T.Fiyat": v.trendyol_price ?? "",
               "Aktif mi?": v.is_active === false ? "Hayır" : "Evet",
             });
           }
@@ -159,7 +153,8 @@ export default function ProductsPage() {
       // xlsx ile dosya oluştur — dinamik import (SSR güvenliği)
       const XLSX = await import("xlsx");
       const ws = XLSX.utils.json_to_sheet(rows, {
-        header: ["SKU", "Ürün Adı", "Değer", "Stok", "Fiyat", "Barkod", "T.PSF", "T.Fiyat", "Aktif mi?"],
+        // Pazaryeri fiyatları (Trendyol vb.) artık Fiyatlar sayfasında (kendi Excel dışa aktarımıyla)
+        header: ["SKU", "Ürün Adı", "Değer", "Stok", "Fiyat", "Barkod", "Aktif mi?"],
       });
 
       // Sütun genişlikleri
@@ -170,8 +165,6 @@ export default function ProductsPage() {
         { wch: 8  }, // Stok
         { wch: 10 }, // Fiyat
         { wch: 16 }, // Barkod
-        { wch: 10 }, // T.PSF
-        { wch: 10 }, // T.Fiyat
         { wch: 10 }, // Aktif mi?
       ];
 

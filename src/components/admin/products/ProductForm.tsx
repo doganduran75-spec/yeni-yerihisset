@@ -268,11 +268,11 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
 
     try {
       const slug = turkishToSlug(formData.title);
-      const payload = {
+      // Fiyat bu sayfada YOK (Fiyatlar sayfası); stok yalnız YENİ üründe ilk değer olarak girilir,
+      // sonra Stok Yönetimi'nden değişir — form açıkken pazaryeri siparişiyle değişen stok ezilmesin.
+      const payload: Record<string, unknown> = {
         title: formData.title,
         slug: slug,
-        price: parseFloat(formData.price) || 0,
-        stock: parseInt(formData.stock) || 0,
         category_id: formData.category_id || null,
         brand_id: formData.brand_id || null,
         short_description: formData.short_description,
@@ -286,12 +286,17 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
       };
 
       let finalId = productId;
+      let createdInactive = false;
 
       if (productId) {
-        const { error } = await supabase.from("products").update(payload).eq("id", productId);
+        const { error } = await supabase.from("products").update(payload as any).eq("id", productId);
         if (error) throw error;
       } else {
-        const { data, error } = await supabase.from("products").insert(payload).select().single();
+        // Yeni ürün PASİF oluşturulur: fiyatı girilmeden yayına alınamaz (Fiyatlar sayfası)
+        createdInactive = formData.is_active;
+        const { data, error } = await supabase.from("products")
+          .insert({ ...payload, is_active: false, price: 0, stock: parseInt(formData.stock) || 0 } as any)
+          .select().single();
         if (error) throw error;
         finalId = data.id;
       }
@@ -317,18 +322,20 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
           await supabase.from("product_variants").delete().in("id", toDelete);
         }
 
-        // Var olanı GÜNCELLE (id korunur), yeni olanı EKLE
+        // Yeni eklenen numaraya başlangıç fiyatı: üründeki mevcut satış fiyatı (yoksa 0 →
+        // Fiyatlar sayfasından girilene kadar satılamaz). Fiyatlar burada DÜZENLENMEZ.
+        const { data: priced } = await supabase.from("product_variants")
+          .select("price, compare_at_price").eq("product_id", finalId).gt("price", 0).limit(1);
+        const basePrice = Number((priced as any[])?.[0]?.price ?? 0);
+        const baseList = (priced as any[])?.[0]?.compare_at_price ?? null;
+
+        // Var olanı GÜNCELLE (id korunur; fiyat ve stok dokunulmaz), yeni olanı EKLE
         for (const v of formData.variants) {
           const row = {
             product_id: finalId,
             variant_option_id: v.variant_option_id,
             sku: v.sku || `${formData.title.slice(0, 3)}-${v.value}`,
             barcode: v.barcode || null,
-            price: parseFloat(v.price) || 0,
-            compare_at_price: v.compare_at_price !== "" ? parseFloat(v.compare_at_price) : null,
-            stock: parseInt(v.stock) || 0,
-            trendyol_psf: v.trendyol_psf !== "" ? parseFloat(v.trendyol_psf) : null,
-            trendyol_price: v.trendyol_price !== "" ? parseFloat(v.trendyol_price) : null,
             is_active: v.is_active,
             image_url: formData.variants_have_images ? (v.image_url || null) : null,
           };
@@ -337,7 +344,8 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
             const { error: upErr } = await supabase.from("product_variants").update(row).eq("id", existingId);
             if (upErr) throw upErr;
           } else {
-            const { error: insErr } = await supabase.from("product_variants").insert(row);
+            const { error: insErr } = await supabase.from("product_variants")
+              .insert({ ...row, price: basePrice, compare_at_price: baseList, stock: parseInt(v.stock) || 0 });
             if (insErr) throw insErr;
           }
         }
@@ -357,10 +365,16 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
         }
       } catch { /* kritik değil: dakikalık cron zaten gönderir */ }
 
+      if (createdInactive) {
+        alert("Ürün PASİF olarak oluşturuldu. Fiyatlar sayfasından satış fiyatını girip ürünü yayına alabilirsin.");
+      }
       router.push("/admin/products");
       router.refresh();
     } catch (error: any) {
-      alert("Hata: " + error.message);
+      const msg = String(error?.message || "");
+      alert(msg.includes("PRICE_REQUIRED_TO_ACTIVATE")
+        ? "Bu ürünün satış fiyatı yok — fiyatsız ürün yayına alınamaz. Önce Admin › Fiyatlar sayfasından fiyat gir."
+        : "Hata: " + msg);
     } finally {
       setLoading(false);
     }
@@ -532,28 +546,9 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
                         <TableHeader className="bg-slate-50">
                           <TableRow>
                             <TableHead className="w-14 text-center">Değer</TableHead>
-                            <TableHead className="w-24">
-                              <span className="flex flex-col leading-tight">
-                                <span className="line-through decoration-red-400">PSF (₺)</span>
-                                <span className="text-[10px] font-normal text-slate-400 no-underline">Üstü Çizili</span>
-                              </span>
-                            </TableHead>
-                            <TableHead className="w-24">Fiyat (₺)</TableHead>
-                            <TableHead className="w-16">Stok</TableHead>
-                            <TableHead className="w-32">SKU</TableHead>
-                            <TableHead className="w-32">Barkod</TableHead>
-                            <TableHead className="w-28">
-                              <span className="flex flex-col leading-tight">
-                                <span>T. PSF</span>
-                                <span className="text-[10px] font-normal text-slate-400">Piy. Satış</span>
-                              </span>
-                            </TableHead>
-                            <TableHead className="w-28">
-                              <span className="flex flex-col leading-tight">
-                                <span>T. Fiyat</span>
-                                <span className="text-[10px] font-normal text-slate-400">Satış Fiy.</span>
-                              </span>
-                            </TableHead>
+                            <TableHead className="w-20">Stok</TableHead>
+                            <TableHead className="w-40">SKU</TableHead>
+                            <TableHead className="w-40">Barkod</TableHead>
                             <TableHead className="w-10 text-center">Aktif</TableHead>
                           </TableRow>
                         </TableHeader>
@@ -562,25 +557,17 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
                             <TableRow key={v.id || idx}>
                               <TableCell className="font-black text-blue-600 text-center">{v.value}</TableCell>
                               <TableCell>
-                                <Input type="number" step="0.01" className="h-8 w-full px-2 text-sm text-slate-400" placeholder="—" value={v.compare_at_price} onChange={(e) => handleVariantChange(idx, "compare_at_price", e.target.value)} />
-                              </TableCell>
-                              <TableCell>
-                                <Input type="number" step="0.01" className="h-8 w-full px-2 text-sm" value={v.price} onChange={(e) => handleVariantChange(idx, "price", e.target.value)} />
-                              </TableCell>
-                              <TableCell>
-                                <Input type="number" className="h-8 w-full px-2 text-sm" value={v.stock} onChange={(e) => handleVariantChange(idx, "stock", e.target.value)} />
+                                {v.id ? (
+                                  <span className="text-sm font-semibold text-slate-600 px-2" title="Stok, Stok Yönetimi sayfasından değişir">{v.stock || 0}</span>
+                                ) : (
+                                  <Input type="number" className="h-8 w-full px-2 text-sm" value={v.stock} onChange={(e) => handleVariantChange(idx, "stock", e.target.value)} title="Yeni numaranın başlangıç stoğu" />
+                                )}
                               </TableCell>
                               <TableCell>
                                 <Input className="h-8 w-full px-2 text-sm" value={v.sku} onChange={(e) => handleVariantChange(idx, "sku", e.target.value)} />
                               </TableCell>
                               <TableCell>
                                 <Input className="h-8 w-full px-2 text-sm" value={v.barcode} onChange={(e) => handleVariantChange(idx, "barcode", e.target.value)} />
-                              </TableCell>
-                              <TableCell>
-                                <Input type="number" step="0.01" className="h-8 w-full px-2 text-sm" placeholder="—" value={v.trendyol_psf} onChange={(e) => handleVariantChange(idx, "trendyol_psf", e.target.value)} />
-                              </TableCell>
-                              <TableCell>
-                                <Input type="number" step="0.01" className="h-8 w-full px-2 text-sm" placeholder="—" value={v.trendyol_price} onChange={(e) => handleVariantChange(idx, "trendyol_price", e.target.value)} />
                               </TableCell>
                               <TableCell className="text-center">
                                 <input type="checkbox" checked={v.is_active} onChange={(e) => handleVariantChange(idx, "is_active", e.target.checked)} className="h-4 w-4" />
@@ -590,6 +577,12 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
                         </TableBody>
                       </Table>
                     </div>
+
+                    <p className="text-xs text-muted-foreground px-1">
+                      Fiyatlar <a href="/admin/prices" className="text-blue-600 hover:underline font-semibold">Fiyatlar</a> sayfasından,
+                      stok <a href="/admin/stock" className="text-blue-600 hover:underline font-semibold">Stok Yönetimi</a>'nden değişir.
+                      Yeni eklenen numaranın başlangıç stoğunu burada girebilirsin.
+                    </p>
 
                     {/* ── Varyasyon görseli sorusu ── */}
                     <div className="flex flex-col sm:flex-row sm:items-center gap-3 p-4 bg-slate-50 rounded-2xl border">
@@ -669,15 +662,20 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
                 )}
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-6 animate-in fade-in">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Fiyat (₺)</label>
-                  <Input type="number" step="0.01" className="h-12" value={formData.price} onChange={(e) => setFormData({ ...formData, price: e.target.value })} />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Stok Adedi</label>
-                  <Input type="number" className="h-12" value={formData.stock} onChange={(e) => setFormData({ ...formData, stock: e.target.value })} />
-                </div>
+              <div className="space-y-3 animate-in fade-in">
+                {productId ? (
+                  <p className="text-sm text-slate-600">
+                    Stok: <b>{formData.stock || 0}</b> — <a href="/admin/stock" className="text-blue-600 hover:underline">Stok Yönetimi</a>'nden değişir.
+                  </p>
+                ) : (
+                  <div className="space-y-2 max-w-xs">
+                    <label className="text-sm font-medium">Başlangıç stoğu</label>
+                    <Input type="number" className="h-12" value={formData.stock} onChange={(e) => setFormData({ ...formData, stock: e.target.value })} />
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Fiyat <a href="/admin/prices" className="text-blue-600 hover:underline font-semibold">Fiyatlar</a> sayfasından girilir; fiyatsız ürün yayına alınamaz.
+                </p>
               </div>
             )}
           </section>

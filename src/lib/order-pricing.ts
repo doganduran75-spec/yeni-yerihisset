@@ -171,8 +171,9 @@ export async function validateCartPricing(
       realPrice = p.price;
     }
 
-    if (typeof realPrice !== "number" || !(realPrice >= 0)) {
-      return { ok: false, error: `"${it.title}" için fiyat bulunamadı.` };
+    // Hediye olmayan ürünün fiyatı 0 olamaz (fiyatı girilmemiş ürün BEDAVA satılmasın)
+    if (typeof realPrice !== "number" || !(realPrice > 0)) {
+      return { ok: false, error: `"${it.title}" şu an satışta değil (fiyat bulunamadı).` };
     }
 
     priced.push({ ...it, price: realPrice });
