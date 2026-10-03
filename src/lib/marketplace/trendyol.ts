@@ -133,3 +133,18 @@ export async function getBatchResult(c: TrendyolConfig, batchId: string): Promis
   });
   return { done: status === "COMPLETED" || (items.length > 0 && status !== "IN_PROGRESS"), items };
 }
+
+/** İLANDAKİ ürünlerin barkodları (arşivlenmemiş, kara listede olmayan) — ilan eşitleme. */
+export async function listTrendyolBarcodes(c: TrendyolConfig): Promise<string[]> {
+  const out: string[] = [];
+  for (let page = 0; page < 1000; page++) {
+    const j = await call(c, "GET", `/integration/product/sellers/${encodeURIComponent(c.sellerId)}/products?page=${page}&size=200&archived=false`);
+    const items: any[] = Array.isArray(j?.content) ? j.content : [];
+    for (const p of items) {
+      if (p?.barcode && !p.archived && !p.blacklisted) out.push(String(p.barcode));
+    }
+    const totalPages = Number(j?.totalPages ?? 0);
+    if (!items.length || page + 1 >= totalPages) break;
+  }
+  return out;
+}

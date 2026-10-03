@@ -170,3 +170,20 @@ export async function hbGetUploadResult(c: HepsiburadaConfig, id: string, kind: 
   const failedAll = /fail/.test(status) && errors.length === 0 ? `Hepsiburada yüklemesi başarısız (${j?.status})` : null;
   return { done, failedAll, errors };
 }
+
+/** İLANDAKİ ürünlerin satıcı stok kodları (merchantSku) — ilan eşitleme. */
+export async function hbListMerchantSkus(c: HepsiburadaConfig): Promise<string[]> {
+  const out: string[] = [];
+  const limit = 100;
+  for (let offset = 0; offset < 500000; offset += limit) {
+    const j = await call(c, "GET", `/listings/merchantid/${encodeURIComponent(c.merchantId)}?offset=${offset}&limit=${limit}`);
+    const items: any[] = j?.listings ?? j?.Listings ?? j?.data ?? (Array.isArray(j) ? j : []);
+    for (const l of items) {
+      const k = l?.merchantSku ?? l?.MerchantSku;
+      if (k) out.push(String(k));
+    }
+    const total = Number(j?.totalCount ?? j?.TotalCount ?? j?.total ?? 0);
+    if (items.length < limit || (total && offset + limit >= total)) break;
+  }
+  return out;
+}

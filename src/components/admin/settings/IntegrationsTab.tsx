@@ -112,6 +112,47 @@ function SyncPanel({ channel, enabled }: { channel: Channel; enabled: boolean })
   }, [enabled, load]);
 
   const keyName = status?.variants?.keyField === "sku" ? "SKU" : "barkod";
+  const [bufferDraft, setBufferDraft] = useState<string | null>(null);
+
+  // İlan eşitleme: pazaryerindeki ilan listesini şimdi çek (stok/fiyat yalnız ilandakilere gider)
+  async function syncListings() {
+    setBusy("listings");
+    try {
+      const r = await fetch(`/api/admin/integrations/${channel}`, {
+        method: "POST", headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+        body: JSON.stringify({ action: "listings" }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || "İlan listesi alınamadı");
+      siteAlert({ message: `${name}'da ${j.count ?? "?"} ilan bulundu${j.added ? ` · ${j.added} yeni ilana stok gönderilecek` : ""}${j.removed ? ` · ${j.removed} ilan kalkmış` : ""}.`, tone: "success" });
+      load();
+    } catch (e: any) {
+      siteAlert({ title: "Eşitlenemedi", message: e.message, tone: "danger" });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function saveBuffer() {
+    const v = Number(bufferDraft);
+    if (!Number.isInteger(v) || v < 0) { siteAlert({ message: "Tampon 0 veya daha büyük tam sayı olmalı.", tone: "danger" }); return; }
+    setBusy("buffer");
+    try {
+      const r = await fetch(`/api/admin/integrations/${channel}`, {
+        method: "POST", headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+        body: JSON.stringify({ action: "buffer", value: v }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || "Kaydedilemedi");
+      setBufferDraft(null);
+      siteAlert({ message: `Tampon ${v} olarak kaydedildi; ${j.queued ?? 0} ürünün stoğu yeniden gönderilecek.`, tone: "success" });
+      load();
+    } catch (e: any) {
+      siteAlert({ title: "Kaydedilemedi", message: e.message, tone: "danger" });
+    } finally {
+      setBusy(null);
+    }
+  }
 
   async function act(action: "test" | "sync" | "full" | "retry") {
     if (action === "full" && !(await siteConfirm({
@@ -236,6 +277,39 @@ function SyncPanel({ channel, enabled }: { channel: Channel; enabled: boolean })
           <span>Eşleşen ({keyName}lu) varyant: <b>{status?.variants?.withKey ?? "—"}</b></span>
         </div>
 
+        {/* İlanlar: stok ve fiyat yalnız bu kanalda İLANI OLAN ürünlere gider (ilanı olmayana hata üretmeden hiç gönderilmez) */}
+        {status?.listings && (
+          <div className="rounded-lg border bg-white p-3 space-y-2 text-xs text-slate-600">
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
+              <span>{name}'da ilandaki ürün: <b>{status.listings.synced ? status.listings.count : "henüz eşitlenmedi"}</b></span>
+              <span>Son eşitleme: <b>{fmtTime(status.listings.lastOkAt)}</b> <span className="text-slate-400">(saatte bir)</span></span>
+              <span>Fiyatlar'da “Kapalı”: <b>{status.listings.closed}</b></span>
+              <Button size="sm" variant="outline" onClick={syncListings} disabled={!!busy} className="gap-1.5 h-7 ml-auto">
+                {busy === "listings" ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />} İlanları eşitle
+              </Button>
+            </div>
+            {!status.listings.synced && (
+              <p className="text-amber-700">İlk eşitlemeye kadar stok, {keyName}u olan tüm ürünlere gönderilmeye çalışılır. “İlanları eşitle”ye bir kez bas.</p>
+            )}
+            {status.listings.message && <p className="text-red-700">{status.listings.message}</p>}
+            <div className="flex flex-wrap items-center gap-2 pt-1 border-t">
+              <span>Stok tamponu: {name}'a <b>site stoğu −</b></span>
+              <input
+                type="number" min={0} value={bufferDraft ?? String(status.listings.buffer ?? 0)}
+                onChange={(e) => setBufferDraft(e.target.value)}
+                className="h-7 w-16 rounded-md border px-2 text-xs"
+              />
+              <span>adet gönderilir.</span>
+              {bufferDraft != null && Number(bufferDraft) !== Number(status.listings.buffer ?? 0) && (
+                <Button size="sm" className="h-7" onClick={saveBuffer} disabled={!!busy}>
+                  {busy === "buffer" ? <Loader2 size={13} className="animate-spin" /> : "Kaydet ve stokları yeniden gönder"}
+                </Button>
+              )}
+              <span className="text-slate-400 w-full">0 = sitedeki stok aynen gider. 1 = son ürün yalnız sitede satılır (iki kanalda aynı anda satılma riski azalır).</span>
+            </div>
+          </div>
+        )}
+
         <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="outline" onClick={() => act("sync")} disabled={!!busy || !enabled} className="gap-1.5">
             {busy === "sync" ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} Bekleyenleri şimdi gönder
@@ -267,6 +341,7 @@ function SyncPanel({ channel, enabled }: { channel: Channel; enabled: boolean })
             </div>
             <p className="text-[11px] text-muted-foreground">
               “Bulunamadı” türü hatalar: bu {keyName} {name}'da yok ya da farklı yazılmış → ürün sayfasındaki {keyName}u {name}'dakiyle aynı yap.
+              Ürünü bu kanalda hiç satmıyorsan bir şey yapmana gerek yok: “İlanları eşitle”den sonra ilanı olmayanlara gönderilmez ve bu kayıtlar temizlenir.
             </p>
           </div>
         )}

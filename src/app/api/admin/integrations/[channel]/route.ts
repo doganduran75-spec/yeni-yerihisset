@@ -6,6 +6,7 @@ import { getTrendyolConfig, hasCredentials } from "@/lib/marketplace/trendyol";
 import { getHepsiburadaConfig, hbHasCredentials } from "@/lib/marketplace/hepsiburada";
 import { importTrendyolOrders } from "@/lib/marketplace/orders";
 import { importHepsiburadaOrders } from "@/lib/marketplace/hb-orders";
+import { syncMarketplaceListings } from "@/lib/marketplace/listings";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -13,6 +14,7 @@ import { importHepsiburadaOrders } from "@/lib/marketplace/hb-orders";
 // GET: durum özeti (kuyruk sayıları, son gönderim/doğrulama, sorunlu kayıtlar, eşleşme kapsamı)
 // POST {action}: test | kick (arka planda işle) | sync (bekleyenleri şimdi gönder) | full (tümünü gönder) | retry
 //              | orders_toggle {on} (sipariş çekmeyi aç/kapat) | orders_pull (siparişleri şimdi çek)
+//              | listings (ilan listesini şimdi eşitle) | buffer {value} (stok tamponu; tümü yeniden gönderilir)
 
 type Ctx = { params: Promise<{ channel: string }> };
 
@@ -99,8 +101,25 @@ export async function GET(req: NextRequest, { params }: Ctx) {
     warnings: warnCount ?? 0,
   };
 
+  // İlan eşitleme + stok tamponu + Kapalı sayısı
+  const [{ data: lst }, { data: bst }, { count: closedCount }] = await Promise.all([
+    sb.from("marketplace_listing_state").select("*").eq("channel", channel).maybeSingle(),
+    sb.from("settings").select(`${channel}_stock_buffer`).order("id").limit(1).maybeSingle(),
+    sb.from("marketplace_closed_listings").select("variant_id", { count: "exact", head: true }).eq("channel", channel),
+  ]);
+  const listings = {
+    synced: !!lst?.last_ok_at,
+    count: lst?.count ?? null,
+    lastRunAt: lst?.last_run_at ?? null,
+    lastOkAt: lst?.last_ok_at ?? null,
+    message: lst?.message ?? null,
+    closed: closedCount ?? 0,
+    buffer: Number(bst?.[`${channel}_stock_buffer`] ?? 0),
+  };
+
   return NextResponse.json({
     orders,
+    listings,
     ok: true,
     config: cfg,
     counts,
@@ -150,6 +169,26 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     // Ürün kaydından sonra: TÜM kanalların kuyruğunu arka planda işle, yanıtı bekletme
     kickMarketplaceSync(500);
     return NextResponse.json({ ok: true });
+  }
+
+  if (action === "listings") {
+    const [r] = await syncMarketplaceListings(auth.supabase, { channel, force: true });
+    if (!r?.ok) return NextResponse.json({ error: r?.message || r?.skipped || "İlan listesi alınamadı" }, { status: 502 });
+    kickMarketplaceSync(500);
+    return NextResponse.json({ ...r, ok: true });
+  }
+
+  if (action === "buffer") {
+    const v = Number((body as any).value);
+    if (!Number.isInteger(v) || v < 0 || v > 1000) return NextResponse.json({ error: "Tampon 0 ile 1000 arasında tam sayı olmalı" }, { status: 400 });
+    const { data: rows } = await sb.from("settings").select("id").limit(1);
+    if (!rows?.length) return NextResponse.json({ error: "Ayar satırı yok" }, { status: 500 });
+    const { error: uErr } = await sb.from("settings").update({ [`${channel}_stock_buffer`]: v }).not("id", "is", null);
+    if (uErr) return NextResponse.json({ error: uErr.message }, { status: 500 });
+    // Yeni tamponla tüm stokları yeniden hesapla + gönder
+    const { data } = await sb.rpc("enqueue_all_marketplace_stock", { p_channel: channel });
+    kickMarketplaceSync(500);
+    return NextResponse.json({ ok: true, buffer: v, queued: data ?? 0 });
   }
 
   if (action === "full") {

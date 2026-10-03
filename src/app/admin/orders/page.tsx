@@ -86,6 +86,7 @@ type Order = {
   cargo_tracking_url?: string | null;
   mp_warning?: string | null;
   mp_warning_ack?: boolean | null;
+  stock_reduced_at?: string | null;
   // Eski siteden (WooCommerce) aktarılan sipariş
   import_source?: string | null;
   import_ref?: string | null;
@@ -246,6 +247,7 @@ export default function OrdersPage() {
   const [fMethod, setFMethod] = useState("all");
   const [fChannel, setFChannel] = useState("all"); // sales_channels.code
   const [channels, setChannels] = useState<SalesChannel[]>(CHANNEL_FALLBACK);
+  const [timelineTick, setTimelineTick] = useState(0); // sipariş geçmişini yenile
   const [sortKey, setSortKey] = useState<"no" | "customer" | "date" | "amount" | "pay" | "ship" | "inv">("date");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [listPage, setListPage] = useState(0);
@@ -651,9 +653,12 @@ export default function OrdersPage() {
     }
   }
 
-  // SKU değişince ürün ara ve başlığı güncelle
+  // SKU değişince ürün ara ve başlığı güncelle. STOK OTOMATİK DEĞİŞMEZ (değişimde stok elle
+  // düzenlenir: eski ürün +1, yeni ürün −1); değişiklik sipariş geçmişine not düşer.
   async function handleSkuLookup(itemId: string, newSku: string) {
     const trimmed = newSku.trim();
+    const prevItem: any = selectedOrder?.order_items?.find((i) => i.id === itemId);
+    if (prevItem && String(prevItem.sku ?? "").trim() === trimmed) return;
     setSkuEdits(prev => ({ ...prev, [itemId]: { ...prev[itemId], sku: trimmed, error: "", saving: true } }));
 
     if (!trimmed) {
@@ -688,6 +693,30 @@ export default function OrdersPage() {
       .eq("id", itemId) as any);
 
     setSkuEdits(prev => ({ ...prev, [itemId]: { sku: trimmed, title: newTitle, saving: false, error: "" } }));
+
+    // Sipariş geçmişine not + (stoğu düşülmüş siparişte) elle stok hatırlatması
+    if (selectedOrder) {
+      const oldLabel = `${prevItem?.sku || "—"}${prevItem?.variant_name ? ` (${prevItem.variant_name})` : ""}`;
+      const newLabel = `${trimmed}${newVariantName ? ` (${newVariantName})` : ""}`;
+      const stockTaken = !!selectedOrder.stock_reduced_at || !!prevItem?.stock_applied_at;
+      const { data: { user } } = await supabase.auth.getUser();
+      await (supabase as any).from("order_events").insert({
+        order_id: selectedOrder.id,
+        type: "corrected",
+        note: `Satır değiştirildi: ${oldLabel} → ${newLabel}.${stockTaken ? " Stok otomatik değişmedi — elle düzenlenmeli." : ""}`,
+        created_by: user?.id ?? null,
+      });
+      setTimelineTick((t) => t + 1);
+      if (stockTaken) {
+        const open = await siteConfirm({
+          title: "Stok otomatik değişmedi",
+          message: `Bu siparişin stoğu daha önce düşülmüştü. Stok Yönetimi'nde:\n• ${oldLabel} → +1\n• ${newLabel} → −1\n(Değişimde yeni ürünü gönderdiğinde düş, eski ürün geri geldiğinde ekle.)`,
+          confirmText: "Stok Yönetimi'ni aç",
+          cancelText: "Tamam",
+        });
+        if (open) window.open("/admin/stock", "_blank");
+      }
+    }
 
     // Lokal order_items state'ini de güncelle (variant_name dahil)
     setSelectedOrder(prev => {
@@ -1692,6 +1721,7 @@ export default function OrdersPage() {
               {/* Süreç Takibi (yaşam döngüsü) */}
               <div className="pt-2 border-t">
                 <OrderTimeline
+                  key={`${selectedOrder.id}:${timelineTick}`}
                   orderId={selectedOrder.id}
                   onOrderChanged={(patch) => {
                     setOrders(prev => prev.map(o => o.id === selectedOrder.id ? { ...o, ...patch } : o));

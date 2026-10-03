@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase-admin";
 import { processMarketplaceStock } from "@/lib/marketplace/sync";
 import { importMarketplaceOrders } from "@/lib/marketplace/orders";
 import { processMarketplacePrices } from "@/lib/marketplace/price-sync";
+import { syncMarketplaceListings } from "@/lib/marketplace/listings";
 
 // Pazaryeri SİPARİŞLERİ (önce: yeni siparişleri al, iptallerde stoğu geri ekle) +
 // stok kuyruğu (Trendyol + Hepsiburada) — YEDEK tetik: anlık tetik
@@ -21,6 +22,13 @@ async function run(req: NextRequest) {
   const orders = await importMarketplaceOrders(supabase);
   for (const o of orders) {
     if (o.errors.length) console.error(`[cron/marketplace-orders:${o.channel}]`, o.errors.join(" | "));
+  }
+  // 1b) İlan eşitleme (saatte bir): stok/fiyat yalnız o kanalda ilanı olan ürüne gider
+  try {
+    const ls = await syncMarketplaceListings(supabase);
+    for (const l of ls) if (!l.ok && !l.skipped) console.error(`[cron/marketplace-listings:${l.channel}]`, l.message);
+  } catch (e: any) {
+    console.error("[cron/marketplace-listings]", e?.message || e);
   }
   // 2) Stok kuyruğu → pazaryerlerine gönder
   const reports = await processMarketplaceStock(supabase);
