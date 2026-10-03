@@ -47,6 +47,33 @@ async function hbGet(c: HepsiburadaConfig, svc: "oms" | "listing", path: string)
   return json;
 }
 
+// Tarihli uçlar (iptal / kargolanan / teslim edilen): Hepsiburada tarih biçimini uçtan uca farklı
+// bekleyebiliyor ("WrongDateFormat"). Biçimler sırayla denenir, çalışan hatırlanır (Türkiye saati).
+const trTime = (t: number) => new Date(t + 3 * 3600_000).toISOString();
+const DATE_FORMATS: { name: string; fmt: (t: number, isEnd: boolean) => string }[] = [
+  { name: "yyyy-MM-dd HH:mm", fmt: (t) => trTime(t).slice(0, 16).replace("T", " ") },
+  { name: "yyyy-MM-dd", fmt: (t, isEnd) => trTime(isEnd ? t + 86400_000 : t).slice(0, 10) },
+  { name: "yyyy-MM-ddTHH:mm:ss", fmt: (t) => trTime(t).slice(0, 19) },
+];
+let workingDateFormat = 0;
+async function hbGetDated(c: HepsiburadaConfig, svc: "oms" | "listing", path: string, begin: number, end: number) {
+  let last: unknown = null;
+  for (let i = 0; i < DATE_FORMATS.length; i++) {
+    const idx = (workingDateFormat + i) % DATE_FORMATS.length;
+    const f = DATE_FORMATS[idx];
+    const sep = path.includes("?") ? "&" : "?";
+    try {
+      const j = await hbGet(c, svc, `${path}${sep}begindate=${encodeURIComponent(f.fmt(begin, false))}&enddate=${encodeURIComponent(f.fmt(end, true))}`);
+      workingDateFormat = idx;
+      return j;
+    } catch (e: any) {
+      if (!/WrongDateFormat|date ?format/i.test(String(e?.message))) throw e;
+      last = e;
+    }
+  }
+  throw last;
+}
+
 // Satıcı stok kodu (veya HBSKU → listing'den satıcı kodu) → sitedeki varyant
 function makeMatcher(sb: any, c: HepsiburadaConfig) {
   const cache = new Map<string, { variant_id: string; product_id: string } | null>();
@@ -151,9 +178,8 @@ export async function importHepsiburadaOrders(supabase: AdminClient = createAdmi
   const runStarted = Date.now();
   const m = encodeURIComponent(cfg.merchantId);
   const match = makeMatcher(sb, cfg);
-  const fmt = (t: number) => new Date(t + 3 * 3600_000).toISOString().slice(0, 19); // Türkiye saati, "YYYY-MM-DDTHH:mm:ss"
-  const begin = fmt(Math.max(since, runStarted - 2 * 86400_000));
-  const end = fmt(runStarted);
+  const begin = Math.max(since, runStarted - 2 * 86400_000);
+  const end = runStarted;
 
   try {
     // 1) Ödemesi tamamlanmış kalemler (paketlenmemiş)
@@ -194,8 +220,13 @@ export async function importHepsiburadaOrders(supabase: AdminClient = createAdmi
       }
     }
 
-    // 3) İptal edilen kalemler → stoğu geri ekle
-    const cj = await hbGet(cfg, "oms", `/orders/merchantid/${m}/cancelled?begindate=${begin}&enddate=${end}`);
+    // 3) İptal edilen kalemler → stoğu geri ekle (hata diğer adımları durdurmaz)
+    let cj: any = null;
+    try {
+      cj = await hbGetDated(cfg, "oms", `/orders/merchantid/${m}/cancelled`, begin, end);
+    } catch (e: any) {
+      report.errors.push(`İptal listesi: ${e?.message || e}`);
+    }
     for (const c of listOf(cj)) {
       const lineId = String(pick(c, "lineItemId", "LineItemId", "id") ?? "");
       const orderNumber = String(pick(c, "orderNumber", "OrderNumber") ?? "");
@@ -220,7 +251,13 @@ export async function importHepsiburadaOrders(supabase: AdminClient = createAdmi
       ["undelivered", { status: "shipped", shipment_status: "undelivered", external: "Undelivered" }],
     ];
     for (const [path, mapped] of statusLists) {
-      const j = await hbGet(cfg, "oms", `/packages/merchantid/${m}/${path}?begindate=${begin}&enddate=${end}`);
+      let j: any = null;
+      try {
+        j = await hbGetDated(cfg, "oms", `/packages/merchantid/${m}/${path}`, begin, end);
+      } catch (e: any) {
+        report.errors.push(`${path} listesi: ${e?.message || e}`);
+        continue;
+      }
       for (const p of listOf(j)) {
         const orderNumber = String(pick(p, "orderNumber", "OrderNumber") ?? "");
         if (!orderNumber) continue;
