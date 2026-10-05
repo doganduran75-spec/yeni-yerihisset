@@ -7,7 +7,8 @@
 import { createAdminClient } from "@/lib/supabase-admin";
 import { getTrendyolConfig, hasCredentials, updatePrices, getBatchResult, TrendyolError } from "@/lib/marketplace/trendyol";
 import { getHepsiburadaConfig, hbHasCredentials, hbUpdatePrices, hbGetUploadResult, HepsiburadaError } from "@/lib/marketplace/hepsiburada";
-import type { Channel } from "@/lib/marketplace/sync";
+// Fiyat gönderimi yalnız Trendyol + Hepsiburada (Amazon fiyatı: sonraki aşama)
+type Channel = "trendyol" | "hepsiburada";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 export type PriceReport = { channel: Channel; skipped?: "disabled" | "no_credentials"; sent: number; confirmed: number; failed: number; errors: string[] };

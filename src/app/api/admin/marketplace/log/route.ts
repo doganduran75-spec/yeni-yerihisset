@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
     .select("id, channel, kind, price, variant_id, listing_key, qty, ok, message, created_at", { count: "exact" })
     .order("created_at", { ascending: false })
     .range(page * PAGE, page * PAGE + PAGE - 1);
-  if (channel === "trendyol" || channel === "hepsiburada") query = query.eq("channel", channel);
+  if (channel === "trendyol" || channel === "hepsiburada" || channel === "amazon") query = query.eq("channel", channel);
   if (status === "ok") query = query.eq("ok", true);
   if (status === "fail") query = query.eq("ok", false);
   if (q) query = query.ilike("listing_key", `%${q}%`);

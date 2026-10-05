@@ -1,7 +1,7 @@
 "use client";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// Ayarlar › Entegrasyonlar: Trendyol + Hepsiburada (stok senkronu) + Kargonomi (kargo).
+// Ayarlar › Entegrasyonlar: Trendyol + Hepsiburada + Amazon (stok senkronu + sipariş) + Kargonomi (kargo).
 // Ayarlar /api/admin/settings ile okunur/yazılır (gizli kolonlar yalnız sunucuda).
 // Her kart YALNIZ kendi alanlarını kaydeder (başka kartın/sekmenin ayarını ezmez).
 // Kanal durumu/işlemleri: /api/admin/integrations/<kanal>.
@@ -29,21 +29,30 @@ type IntegrationSettings = {
   hepsiburada_username: string;
   hepsiburada_match_field: "barcode" | "sku";
   hepsiburada_stage: boolean;
+  amazon_enabled: boolean;
+  amazon_seller_id: string;
+  amazon_lwa_client_id: string;
+  amazon_lwa_client_secret: string;
+  amazon_refresh_token: string;
+  amazon_marketplace_id: string;
+  amazon_match_field: "barcode" | "sku";
   kargonomi_enabled: boolean;
   kargonomi_api_token: string;
   kargonomi_warehouse_id: string;
 };
-type Group = "trendyol" | "hepsiburada" | "kargonomi";
-type Channel = "trendyol" | "hepsiburada";
+type Group = "trendyol" | "hepsiburada" | "amazon" | "kargonomi";
+type Channel = "trendyol" | "hepsiburada" | "amazon";
 
 const DEFAULTS: IntegrationSettings = {
   trendyol_enabled: false, trendyol_seller_id: "", trendyol_api_key: "", trendyol_api_secret: "", trendyol_stage: false,
   hepsiburada_enabled: false, hepsiburada_merchant_id: "", hepsiburada_service_key: "", hepsiburada_username: "",
   hepsiburada_match_field: "barcode", hepsiburada_stage: false,
+  amazon_enabled: false, amazon_seller_id: "", amazon_lwa_client_id: "", amazon_lwa_client_secret: "", amazon_refresh_token: "",
+  amazon_marketplace_id: "A33AVAJ2PDY3EV", amazon_match_field: "sku",
   kargonomi_enabled: true, kargonomi_api_token: "", kargonomi_warehouse_id: "",
 };
 
-const LABEL: Record<Channel, string> = { trendyol: "Trendyol", hepsiburada: "Hepsiburada" };
+const LABEL: Record<Channel, string> = { trendyol: "Trendyol", hepsiburada: "Hepsiburada", amazon: "Amazon" };
 
 async function authHeaders(): Promise<Record<string, string>> {
   const { data: { session } } = await supabase.auth.getSession();
@@ -176,7 +185,7 @@ function SyncPanel({ channel, enabled }: { channel: Channel; enabled: boolean })
           title: anyFail ? "Bağlantı kısmen başarılı" : "Bağlantı başarılı",
           message: svc.length
             ? svc.map((x) => `${x.ok ? "✓" : "✗"} ${x.name}: ${x.detail}`).join("\n")
-            : `${name} hesabına bağlanıldı${j.totalProducts != null ? ` — ${name}'da ${j.totalProducts} ürün görünüyor` : ""}.`,
+            : `${name} hesabına bağlanıldı${j.totalProducts != null ? ` — ${name}'da ${j.totalProducts} ürün görünüyor` : ""}.${Array.isArray(j.marketplaces) ? `\nHesabın açık olduğu pazaryerleri: ${j.marketplaces.join(", ") || "—"}${j.participating === false ? "\n⚠ Seçili pazaryerinde (Amazon.com.tr) hesap aktif görünmüyor." : ""}` : ""}`,
           tone: anyFail ? "danger" : "success",
         });
       } else if (j.skipped === "disabled") {
@@ -354,9 +363,9 @@ function SyncPanel({ channel, enabled }: { channel: Channel; enabled: boolean })
             <div>
               <p className="text-sm font-bold text-slate-800 flex items-center gap-2"><ShoppingBag size={15} className="text-orange-500" /> Sipariş Aktarımı</p>
               <p className="text-xs text-muted-foreground mt-0.5 max-w-xl">
-                {name}'daki yeni siparişler dakikada bir alınır → Siparişler listesine “{name}” etiketiyle girer → sitedeki stok düşer ve
+                {name}'daki yeni siparişler {channel === "amazon" ? "5 dakikada bir (Amazon sınırı)" : "dakikada bir"} alınır → Siparişler listesine “{name}” etiketiyle girer → sitedeki stok düşer ve
                 yeni stok tüm pazaryerlerine gider. İptalde stok otomatik geri eklenir; iadede sipariş detayından onayla eklenir.
-                Müşteriye bizden e-posta gitmez.
+                Müşteriye bizden e-posta gitmez.{channel === "amazon" && " Amazon siparişlerinde müşteri adı/adresi alınmaz (kişisel veri izni gerekmez); kargo etiketi Seller Central'dan alınır. Yalnız kendi gönderdiğin (FBM) siparişler gelir."}
               </p>
             </div>
             <Toggle on={!!status.orders.enabled} onChange={toggleOrders} disabled={busy === "orders"} />
@@ -408,6 +417,13 @@ export default function IntegrationsTab() {
           hepsiburada_username: d.hepsiburada_username ?? "",
           hepsiburada_match_field: d.hepsiburada_match_field === "sku" ? "sku" : "barcode",
           hepsiburada_stage: !!d.hepsiburada_stage,
+          amazon_enabled: !!d.amazon_enabled,
+          amazon_seller_id: d.amazon_seller_id ?? "",
+          amazon_lwa_client_id: d.amazon_lwa_client_id ?? "",
+          amazon_lwa_client_secret: d.amazon_lwa_client_secret ?? "",
+          amazon_refresh_token: d.amazon_refresh_token ?? "",
+          amazon_marketplace_id: d.amazon_marketplace_id || "A33AVAJ2PDY3EV",
+          amazon_match_field: d.amazon_match_field === "barcode" ? "barcode" : "sku",
           kargonomi_enabled: d.kargonomi_enabled !== false,
           kargonomi_api_token: d.kargonomi_api_token ?? "",
           kargonomi_warehouse_id: d.kargonomi_warehouse_id ?? "",
@@ -452,7 +468,9 @@ export default function IntegrationsTab() {
     const name = LABEL[channel];
     const ready = channel === "trendyol"
       ? !!(s.trendyol_seller_id && s.trendyol_api_key && s.trendyol_api_secret)
-      : !!(s.hepsiburada_merchant_id && s.hepsiburada_service_key && s.hepsiburada_username);
+      : channel === "amazon"
+        ? !!(s.amazon_seller_id && s.amazon_lwa_client_id && s.amazon_lwa_client_secret && s.amazon_refresh_token)
+        : !!(s.hepsiburada_merchant_id && s.hepsiburada_service_key && s.hepsiburada_username);
     if (on && !ready) {
       siteAlert({ title: "Bilgiler eksik", message: `Açmadan önce ${name} bağlantı bilgilerini girip kaydet.`, tone: "danger" });
       return;
@@ -462,15 +480,17 @@ export default function IntegrationsTab() {
     if (ok && on) {
       siteAlert({
         title: `${name} senkronu açık`,
-        message: `Bundan sonra stok değişiklikleri otomatik gönderilecek. İlk kez açtıysan “Tüm stokları gönder” ile ${name}'u sitedeki stoklarla bir kez eşitle.`,
+        message: channel === "amazon"
+          ? "Şimdi “İlanları eşitle”ye bas: Amazon'da yalnız ilandaki SKU'lara stok gider ve ilk eşitlemede hepsinin stoğu otomatik gönderilir. Satışa açmadan önce aşağıdan Sipariş Aktarımı'nı da aç."
+          : `Bundan sonra stok değişiklikleri otomatik gönderilecek. İlk kez açtıysan “Tüm stokları gönder” ile ${name}'u sitedeki stoklarla bir kez eşitle.`,
         tone: "success",
       });
     }
   }
 
-  async function changeMatchField(v: "barcode" | "sku") {
-    if (v === s.hepsiburada_match_field) return;
-    const ok = await save("hepsiburada", { hepsiburada_match_field: v });
+  async function changeMatchField(v: "barcode" | "sku", channel: "hepsiburada" | "amazon" = "hepsiburada") {
+    if (v === s[`${channel}_match_field`]) return;
+    const ok = await save(channel, { [`${channel}_match_field`]: v } as Partial<IntegrationSettings>);
     if (ok) siteAlert({ message: "Eşleştirme alanı değişti. Kuyruğu yeni alana göre yenilemek için Senkron Durumu'ndan bir kez “Tüm stokları gönder”e bas.", tone: "success" });
   }
 
@@ -593,6 +613,69 @@ export default function IntegrationsTab() {
             <SyncPanel channel="hepsiburada" enabled={s.hepsiburada_enabled} />
           </div>
           <HepsiburadaTestCenter />
+        </CardContent>
+      </Card>
+
+      {/* ─── Amazon (Amazon.com.tr) ─── */}
+      <Card className="shadow-sm border-muted">
+        <CardHeader>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <CardTitle className="flex items-center gap-2"><Store size={20} className="text-slate-800" /> Amazon (Türkiye) — Stok Senkronu ve Siparişler</CardTitle>
+              <CardDescription className="mt-1">
+                Amazon&apos;daki <b>satıcı SKU&apos;su</b> ile eşleştirilir; yalnız Amazon&apos;da <b>ilanı olan</b> ürünlere, kendi gönderdiğin (FBM) stok olarak yazılır.
+                Ürünleri Amazon Seller Central&apos;dan açarsın; fiyat gönderimi henüz yok.
+              </CardDescription>
+            </div>
+            <Toggle on={s.amazon_enabled} onChange={(v) => toggleChannel("amazon", v)} disabled={savingKey === "amazon"} />
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Field label="Satıcı token'ı (Merchant Token)" hint="Seller Central → Ayarlar → Hesap Bilgileri → Satıcı Token'ınız">
+              <Input value={s.amazon_seller_id} onChange={(e) => set({ amazon_seller_id: e.target.value.trim() })} placeholder="Örn: A1B2C3D4E5F6G7" />
+            </Field>
+            <Field label="Pazaryeri">
+              <select value={s.amazon_marketplace_id} onChange={(e) => set({ amazon_marketplace_id: e.target.value })}
+                className="h-10 w-full rounded-md border px-2 text-sm bg-white">
+                <option value="A33AVAJ2PDY3EV">Amazon.com.tr (Türkiye)</option>
+              </select>
+            </Field>
+            <Field label="LWA Client ID"><Input value={s.amazon_lwa_client_id} onChange={(e) => set({ amazon_lwa_client_id: e.target.value.trim() })} placeholder="amzn1.application-oa2-client.…" /></Field>
+            <Field label="LWA Client Secret"><SecretInput value={s.amazon_lwa_client_secret} onChange={(v) => set({ amazon_lwa_client_secret: v.trim() })} placeholder="••••••••••••" /></Field>
+            <Field label="Refresh Token" hint="Uygulamayı kendi hesabına yetkilendirince bir kez gösterilir (Atzr|… ile başlar).">
+              <SecretInput value={s.amazon_refresh_token} onChange={(v) => set({ amazon_refresh_token: v.trim() })} placeholder="Atzr|••••••••••••" />
+            </Field>
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Amazon&apos;daki satıcı SKU&apos;su, sitedeki hangi alana karşılık geliyor?</p>
+            <div className="flex flex-wrap gap-2">
+              {([["sku", "Varyant SKU / ürün kodu"], ["barcode", "Varyant barkodu"]] as const).map(([v, lbl]) => (
+                <button key={v} type="button" onClick={() => changeMatchField(v, "amazon")} disabled={savingKey === "amazon"}
+                  className={`px-3.5 py-2 rounded-lg text-sm font-semibold border-2 transition-colors ${s.amazon_match_field === v ? "border-blue-600 bg-blue-50 text-blue-700" : "border-slate-200 text-slate-600 hover:border-slate-300"}`}>
+                  {lbl}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">Amazon&apos;da teklif/ürün açarken “Satıcı SKU” alanına sitedeki varyant SKU&apos;sunu yazarsan eşleşme kendiliğinden olur (her numara ayrı SKU).</p>
+          </div>
+
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-sm text-slate-800 space-y-2">
+            <p className="font-semibold">Bu bilgileri nereden alırım? (bir kerelik)</p>
+            <ol className="list-decimal list-inside space-y-1 text-xs text-slate-700">
+              <li><a href="https://sellercentral.amazon.com.tr" target="_blank" rel="noopener noreferrer" className="underline font-medium">Seller Central</a> → <strong>Uygulamalar ve Hizmetler → Uygulama Geliştirme</strong>. İlk kez ise <strong>geliştirici profili</strong> doldur: “Kendi şirketim için özel (private) uygulama”; roller: <strong>Ürün Listeleme</strong> + <strong>Envanter ve Sipariş Takibi</strong>. Kişisel veri (kısıtlı) rollerini <b>seçme</b> — gerekmiyor. Amazon onayını bekle.</li>
+              <li><strong>Yeni uygulama istemcisi ekle</strong> (API türü: SP-API, aynı roller) → LWA bilgilerinden <strong>Client ID</strong> ve <strong>Client Secret</strong>&apos;ı buraya yapıştır.</li>
+              <li>Uygulamanın yanındaki <strong>Yetkilendir</strong> → çıkan <strong>Refresh Token</strong>&apos;ı buraya yapıştır (bir kez gösterilir).</li>
+              <li><strong>Satıcı token&apos;ı</strong>: Ayarlar → Hesap Bilgileri.</li>
+              <li><strong>Kaydet</strong> → <strong>Bağlantıyı Test Et</strong> → sağ üstten <strong>Aç</strong> → <strong>İlanları eşitle</strong> → aşağıda <strong>Sipariş Aktarımı</strong>&apos;nı aç.</li>
+            </ol>
+            <p className="text-[11px] text-slate-500">Amazon kuralları: stok SKU başına tek tek gönderilir (saniyede ~4); sınırına takılan birkaç saniye sonra otomatik tekrar gider. Siparişler en çok 5 dakikada bir çekilebilir.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {saveBtn("amazon", "Amazon")}
+            <SyncPanel channel="amazon" enabled={s.amazon_enabled} />
+          </div>
         </CardContent>
       </Card>
 

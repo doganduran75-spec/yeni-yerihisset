@@ -15,7 +15,7 @@ async function authHeaders(): Promise<Record<string, string>> {
   return session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
 }
 
-const CH_LABEL: Record<string, string> = { trendyol: "Trendyol", hepsiburada: "Hepsiburada" };
+const CH_LABEL: Record<string, string> = { trendyol: "Trendyol", hepsiburada: "Hepsiburada", amazon: "Amazon" };
 
 export default function MarketplaceSyncLog({ initialChannel = "" }: { initialChannel?: string }) {
   const [channel, setChannel] = useState(initialChannel);
@@ -56,6 +56,7 @@ export default function MarketplaceSyncLog({ initialChannel = "" }: { initialCha
           <option value="">Tüm pazaryerleri</option>
           <option value="trendyol">Trendyol</option>
           <option value="hepsiburada">Hepsiburada</option>
+          <option value="amazon">Amazon</option>
         </select>
         <select value={status} onChange={(e) => { setStatus(e.target.value); setPage(0); }} className={sel}>
           <option value="">Tüm sonuçlar</option>

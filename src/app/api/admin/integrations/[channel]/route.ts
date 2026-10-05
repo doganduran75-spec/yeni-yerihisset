@@ -4,13 +4,15 @@ import { getAuthUserFromRequest } from "@/lib/auth-from-request";
 import { processChannel, kickMarketplaceSync, testChannel, isChannel, type Channel } from "@/lib/marketplace/sync";
 import { getTrendyolConfig, hasCredentials } from "@/lib/marketplace/trendyol";
 import { getHepsiburadaConfig, hbHasCredentials } from "@/lib/marketplace/hepsiburada";
+import { getAmazonConfig, amzHasCredentials } from "@/lib/marketplace/amazon";
 import { importTrendyolOrders } from "@/lib/marketplace/orders";
 import { importHepsiburadaOrders } from "@/lib/marketplace/hb-orders";
+import { importAmazonOrders } from "@/lib/marketplace/amazon-orders";
 import { syncMarketplaceListings } from "@/lib/marketplace/listings";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-// Ayarlar › Entegrasyonlar › <kanal> paneli (trendyol | hepsiburada). Yalnız admin, servis-rol.
+// Ayarlar › Entegrasyonlar › <kanal> paneli (trendyol | hepsiburada | amazon). Yalnız admin, servis-rol.
 // GET: durum özeti (kuyruk sayıları, son gönderim/doğrulama, sorunlu kayıtlar, eşleşme kapsamı)
 // POST {action}: test | kick (arka planda işle) | sync (bekleyenleri şimdi gönder) | full (tümünü gönder) | retry
 //              | orders_toggle {on} (sipariş çekmeyi aç/kapat) | orders_pull (siparişleri şimdi çek)
@@ -31,6 +33,10 @@ async function loadConfig(sb: any, channel: Channel) {
   if (channel === "trendyol") {
     const c = await getTrendyolConfig(sb);
     return { enabled: c.enabled, hasCredentials: hasCredentials(c), stage: c.stage, matchField: "barcode" as const };
+  }
+  if (channel === "amazon") {
+    const c = await getAmazonConfig(sb);
+    return { enabled: c.enabled, hasCredentials: amzHasCredentials(c), stage: false, matchField: c.matchField };
   }
   const c = await getHepsiburadaConfig(sb);
   return { enabled: c.enabled, hasCredentials: hbHasCredentials(c), stage: c.stage, matchField: c.matchField };
@@ -161,7 +167,9 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   }
 
   if (action === "orders_pull") {
-    const r = channel === "trendyol" ? await importTrendyolOrders(auth.supabase) : await importHepsiburadaOrders(auth.supabase);
+    const r = channel === "trendyol" ? await importTrendyolOrders(auth.supabase)
+      : channel === "amazon" ? await importAmazonOrders(auth.supabase, { force: true })
+      : await importHepsiburadaOrders(auth.supabase);
     return NextResponse.json({ ok: true, ...r });
   }
 

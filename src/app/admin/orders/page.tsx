@@ -155,6 +155,7 @@ const CHANNEL_FALLBACK: SalesChannel[] = [
   { code: "attipas", label: "Attipas", color: "#db2777", kind: "legacy", is_active: true },
   { code: "trendyol", label: "Trendyol", color: "#ea580c", kind: "marketplace", is_active: true },
   { code: "hepsiburada", label: "Hepsiburada", color: "#d97706", kind: "marketplace", is_active: true },
+  { code: "amazon", label: "Amazon", color: "#0f172a", kind: "marketplace", is_active: true },
 ];
 // Pazaryeri siparişi: ödeme/sevkiyat pazaryerinden gelir (salt okunur). Eski siteden
 // aktarılan siparişler (Attipas dahil) pazaryeri sayılmaz; site siparişi gibi yönetilir.
