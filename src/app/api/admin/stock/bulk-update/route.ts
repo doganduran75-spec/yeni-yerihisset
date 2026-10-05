@@ -5,7 +5,8 @@ import { kickMarketplaceSync } from "@/lib/marketplace/sync";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-// Toplu stok/fiyat/barkod güncelleme — SKU'ya göre eşleştirir (product_variants).
+// Toplu stok/barkod güncelleme — SKU'ya göre eşleştirir (product_variants).
+// Fiyat GÜNCELLENMEZ (gelse de yok sayılır): fiyatlar yalnız Fiyatlar sayfasından (geçmiş tutulur).
 // Yalnız admin. Yalnızca gönderilen alanları günceller.
 export async function POST(req: NextRequest) {
   const user = await getAuthUserFromRequest(req);
@@ -25,7 +26,6 @@ export async function POST(req: NextRequest) {
     if (!sku) continue;
     const patch: any = {};
     if (r.stock !== undefined && r.stock !== null && !Number.isNaN(Number(r.stock))) patch.stock = Math.max(0, Math.trunc(Number(r.stock)));
-    if (r.price !== undefined && r.price !== null && !Number.isNaN(Number(r.price))) patch.price = Number(r.price);
     if (r.barcode !== undefined && r.barcode !== null && String(r.barcode).trim() !== "") patch.barcode = String(r.barcode).trim();
     if (Object.keys(patch).length === 0) continue;
 

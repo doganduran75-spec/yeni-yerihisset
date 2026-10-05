@@ -7,8 +7,9 @@ import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { FileUp, Loader2 } from "lucide-react";
 
-// Toplu stok/fiyat/barkod güncelleme. Excel/CSV yükle → SKU'ya göre eşleştir →
-// stok/fiyat/barkod güncelle. Excel'e Aktar formatıyla uyumlu.
+// Toplu stok/barkod güncelleme. Excel/CSV yükle → SKU'ya göre eşleştir → stok/barkod güncelle.
+// Excel'e Aktar formatıyla uyumlu. FİYAT GÜNCELLEMEZ: fiyatlar yalnız Fiyatlar sayfasından
+// (geçmiş + geri alma orada); dosyadaki "Fiyat" sütunu yok sayılır.
 const norm = (s: any) => String(s ?? "").trim().toLocaleLowerCase("tr-TR");
 
 export default function BulkStockImport({ onDone }: { onDone?: () => void }) {
@@ -32,7 +33,6 @@ export default function BulkStockImport({ onDone }: { onDone?: () => void }) {
       const col = (names: string[]) => headers.findIndex((h) => names.includes(h));
       const iSku = col(["sku", "stok kodu"]);
       const iStock = col(["stok"]);
-      const iPrice = col(["fiyat"]);
       const iBarcode = col(["barkod"]);
       if (iSku < 0) { setMsg("SKU / Stok Kodu sütunu bulunamadı."); setBusy(false); return; }
 
@@ -43,13 +43,12 @@ export default function BulkStockImport({ onDone }: { onDone?: () => void }) {
         if (!sku || !String(sku).trim()) continue;
         const entry: any = { sku: String(sku).trim() };
         if (iStock >= 0 && row[iStock] !== undefined && row[iStock] !== "") entry.stock = Number(String(row[iStock]).replace(/[^\d.-]/g, ""));
-        if (iPrice >= 0 && row[iPrice] !== undefined && row[iPrice] !== "") entry.price = Number(String(row[iPrice]).replace(/[^\d.,-]/g, "").replace(",", "."));
         if (iBarcode >= 0 && row[iBarcode] !== undefined && String(row[iBarcode]).trim() !== "") entry.barcode = String(row[iBarcode]).trim();
         rows.push(entry);
       }
       if (!rows.length) { setMsg("Güncellenecek satır bulunamadı."); setBusy(false); return; }
 
-      if (!confirm(`${rows.length} satır bulundu. SKU eşleşen ürünlerin stok/fiyat/barkod bilgileri güncellenecek. Devam edilsin mi?`)) {
+      if (!confirm(`${rows.length} satır bulundu. SKU eşleşen ürünlerin stok/barkod bilgileri güncellenecek (fiyat sütunu yok sayılır; fiyatlar Fiyatlar sayfasından). Devam edilsin mi?`)) {
         setBusy(false); return;
       }
 
@@ -76,7 +75,7 @@ export default function BulkStockImport({ onDone }: { onDone?: () => void }) {
       <input ref={inputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden"
         onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
       <Button variant="outline" className="gap-2" disabled={busy} onClick={() => inputRef.current?.click()}
-        title="Excel/CSV ile stok/fiyat/barkod toplu güncelle (SKU'ya göre)">
+        title="Excel/CSV ile stok/barkod toplu güncelle (SKU'ya göre; fiyat Fiyatlar sayfasından)">
         {busy ? <Loader2 size={16} className="animate-spin" /> : <FileUp size={16} />} Toplu Güncelle
       </Button>
       {msg && <span className={`text-[11px] font-medium ${msg.startsWith("✓") ? "text-green-600" : "text-amber-600"}`}>{msg}</span>}
