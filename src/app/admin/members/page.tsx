@@ -10,10 +10,9 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { supabase } from "@/lib/supabase";
-import { Search, Mail, Phone, AtSign, Loader2, UserCog, Tags, X, Plus, UserPlus, Trash2, Users, Link2, Activity, ShieldAlert } from "lucide-react";
+import { Search, Mail, Phone, AtSign, Loader2, UserCog, Tags, X, Plus, UserPlus, Trash2, Link2, Activity } from "lucide-react";
 import { cn } from "@/lib/utils";
 import MemberJourney from "@/components/admin/MemberJourney";
-import Link from "next/link";
 
 // Sayfa TÜM üyeleri çekmez (aktarımla ~900+): boş açılır; arama/filtre ile sunucudan
 // 50'şer satır gelir (admin_search_members). Kişiler (henüz üye olmayan) ayrı sekmede.
@@ -250,20 +249,6 @@ export default function MembersPage() {
     } finally { setMerging(false); }
   }
 
-  // Mevcut mükerrer kişileri (aynı e-posta/Instagram) toplu birleştir
-  async function mergeDuplicates() {
-    if (!confirm("Aynı e-posta veya Instagram'a sahip mükerrer kişiler tek kayda birleştirilsin mi?\nBu işlem geri alınamaz.")) return;
-    setMerging(true);
-    try {
-      const { data, error } = await (supabase as any).rpc("admin_merge_duplicate_contacts");
-      if (error) throw error;
-      alert(`${data ?? 0} mükerrer kişi birleştirildi.`);
-      fetchAll();
-    } catch (e: any) {
-      alert("Hata: " + (e?.message ?? ""));
-    } finally { setMerging(false); }
-  }
-
   async function saveContact() {
     const hasIdentity = cForm.full_name.trim() || cForm.email.trim() || cForm.phone.trim() || cForm.instagram_handle.trim();
     if (!hasIdentity) { alert("En az bir bilgi girin (isim, e-posta, telefon veya Instagram)."); return; }
@@ -284,9 +269,9 @@ export default function MembersPage() {
       if (!contactId) {
         if (payload.email) {
           const { data: dupP } = await supabase.from("profiles").select("id").eq("email", payload.email).maybeSingle();
-          if (dupP) { if (!confirm("Bu e-posta zaten kayıtlı bir ÜYE'ye ait. Yine de kişi eklensin mi?")) { setCSaving(false); return; } }
+          if (dupP) { alert("Bu e-posta kayıtlı bir ÜYE'ye ait — kişi eklemek yerine Üyeler'de o üyeyi kullan."); setCSaving(false); return; }
           const { data: dupC } = await (supabase as any).from("contacts").select("id").eq("email", payload.email).maybeSingle();
-          if (dupC) { if (!confirm("Bu e-posta ile zaten bir kişi var. Yine de yeni kişi eklensin mi?")) { setCSaving(false); return; } }
+          if (dupC) { alert("Bu e-posta ile zaten bir kişi var — Kişiler sekmesinde arayıp mevcut kaydı düzenle."); setCSaving(false); return; }
         }
         if (payload.instagram_handle) {
           const { data: dupI } = await (supabase as any).from("contacts").select("id").ilike("instagram_handle", payload.instagram_handle).maybeSingle();
@@ -351,14 +336,6 @@ export default function MembersPage() {
           <p className="text-muted-foreground">Markayla temas etmiş herkes tek yerde — üye olsun olmasın.</p>
         </div>
         <div className="flex items-center gap-2">
-          <Link href="/admin/members/legacy-review">
-            <Button variant="outline" className="gap-2" title="Eski sitelerden gelen, hiç sipariş vermemiş hesaplar — sahte/bot kayıtları temizle">
-              <ShieldAlert size={16} /> Eski site üyelerini incele
-            </Button>
-          </Link>
-          <Button variant="outline" onClick={mergeDuplicates} disabled={merging} className="gap-2" title="Aynı e-posta/Instagram'a sahip mükerrer kişileri birleştir">
-            {merging ? <Loader2 size={16} className="animate-spin" /> : <Users size={16} />} Mükerrerleri Temizle
-          </Button>
           <Button onClick={openNewContact} className="gap-2">
             <UserPlus size={16} /> Kişi Ekle
           </Button>

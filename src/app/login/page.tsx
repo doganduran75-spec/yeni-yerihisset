@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -35,7 +35,7 @@ function LoginForm() {
   const redirect = searchParams.get("redirect") || "/";
   
   const [isLogin, setIsLogin] = useState(true);
-  const [forgot, setForgot] = useState(false);
+  const [forgot, setForgot] = useState(searchParams.get("forgot") === "1"); // ?forgot=1 → doğrudan şifre belirleme
   // Eski siteden aktarılan / misafir hesaplar şifresiz: hatalı girişte "şifreni belirle" yönlendirmesi
   const [setPwHint, setSetPwHint] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -78,6 +78,13 @@ function LoginForm() {
     firstName: "",
     lastName: ""
   });
+  // Ödeme sayfasındaki "Şifremi belirle" → e-posta oturum belleğinden (URL'ye kişisel veri koymadan)
+  useEffect(() => {
+    try {
+      const pre = sessionStorage.getItem("yh_prefill_email");
+      if (pre) { setFormData((f) => ({ ...f, email: pre })); sessionStorage.removeItem("yh_prefill_email"); }
+    } catch { /* yoksa elle yazar */ }
+  }, []);
 
   // Tarayıcının İngilizce form-doğrulama baloncuklarını Türkçeleştir
   // ("Please fill out this field", geçersiz e-posta vb.).

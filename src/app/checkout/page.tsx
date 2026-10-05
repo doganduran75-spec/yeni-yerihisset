@@ -80,7 +80,8 @@ export default function CheckoutPage() {
     email: "",
   });
   const [identityNumber, setIdentityNumber] = useState("");
-  const [emailExists, setEmailExists] = useState(false); // misafir e-postası zaten kayıtlı
+  const [emailExists, setEmailExists] = useState(false); // misafir e-postası şifreli bir üyeye ait → giriş gerekir
+  const [emailKnown, setEmailKnown] = useState(false);   // şifresi belirlenmemiş hesap (eski müşteri / önceki misafir) → devam
   // Site içi uyarılar (tarayıcı alert'i yerine)
   const [stockProblems, setStockProblems] = useState<{ id: string; title: string; variant: string | null; qty: number; live: number }[] | null>(null);
   const [orderError, setOrderError] = useState<string | null>(null);
@@ -236,8 +237,8 @@ export default function CheckoutPage() {
         body: JSON.stringify({ email }),
       });
       const d = await res.json();
-      if (d.exists === true) { setEmailExists(true); setErrors((p) => ({ ...p, email: true })); }
-      else if (d.exists === false) setEmailExists(false);
+      if (d.exists === true) { setEmailExists(true); setEmailKnown(false); setErrors((p) => ({ ...p, email: true })); }
+      else if (d.exists === false) { setEmailExists(false); setEmailKnown(!!d.known); }
     } catch { /* kontrol kritik değil; sipariş anında zaten yapılır */ }
   }
 
@@ -762,7 +763,7 @@ export default function CheckoutPage() {
                         <Input
                           value={personalInfo.email}
                           disabled={!isGuest}
-                          onChange={isGuest ? (e) => { setPersonalInfo({ ...personalInfo, email: e.target.value }); clearErr("email"); setEmailExists(false); } : undefined}
+                          onChange={isGuest ? (e) => { setPersonalInfo({ ...personalInfo, email: e.target.value }); clearErr("email"); setEmailExists(false); setEmailKnown(false); } : undefined}
                           onBlur={isGuest ? checkGuestEmail : undefined}
                           placeholder={isGuest ? "ornek@eposta.com" : undefined}
                           type="email"
@@ -781,7 +782,17 @@ export default function CheckoutPage() {
                           </Link>
                         </div>
                       )}
-                      {isGuest && !emailExists && (
+                      {isGuest && !emailExists && emailKnown && (
+                        <div className="rounded-2xl border border-olive-200 bg-olive-50 p-4 space-y-1.5">
+                          <p className="text-sm font-black text-olive-800">Tekrar hoş geldin! 👋</p>
+                          <p className="text-xs text-olive-800/90 leading-relaxed">
+                            Bu e-postayla daha önce alışveriş yapmışsın; siparişin hesabına eklenecek, giriş yapmadan devam edebilirsin.
+                            Sipariş geçmişini ve adreslerini görmek istersen şifreni bir kez belirleyebilirsin:{" "}
+                            <Link href="/login?forgot=1&redirect=/checkout" onClick={() => { try { sessionStorage.setItem("yh_prefill_email", personalInfo.email.trim()); } catch { /* yoksa elle yazar */ } }} className="font-bold underline">Şifremi belirle</Link>.
+                          </p>
+                        </div>
+                      )}
+                      {isGuest && !emailExists && !emailKnown && (
                         <p className="text-[10px] text-slate-400 font-medium px-1 leading-relaxed">
                           Üyeliğin var mı? <Link href="/login?redirect=/checkout" className="text-olive-600 font-bold">Giriş yap</Link> — kayıtlı adreslerinle daha hızlı.
                           <br />Siparişinle birlikte bu e-postaya bir YeriHisset hesabı açılır; şifreni sonra e-postadaki bağlantıdan belirleyip siparişini takip edebilirsin.

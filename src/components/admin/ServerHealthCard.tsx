@@ -99,7 +99,9 @@ export default function ServerHealthCard() {
               </div>
             )}
             <p className="text-[11px] text-slate-400">
-              {d.checkedAt ? `Son kontrol ${ago(d.checkedAt)} · 15 dakikada bir` : "Sunucu kontrolü henüz kurulmadı"} · sorun olursa e-posta gelir
+              {d.checkedAt
+                ? `Son kontrol: ${new Date(d.checkedAt).toLocaleString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })} (${ago(d.checkedAt)}) · 15 dakikada bir`
+                : "Sunucu kontrolü henüz kurulmadı"} · 40 dakikadan eskiyse kart kırmızıya döner ve e-posta gelir
             </p>
           </>
         )}

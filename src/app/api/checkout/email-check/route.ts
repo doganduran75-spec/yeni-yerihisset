@@ -17,7 +17,11 @@ export async function POST(req: NextRequest) {
   const e = (email || "").trim().toLowerCase();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) return NextResponse.json({ exists: null });
 
+  // exists: şifreli üye → giriş gerekir. known: şifresi henüz belirlenmemiş hesap (eski siteden
+  // aktarılan müşteri / önceki misafir) → misafir olarak devam eder, sipariş o hesaba bağlanır.
   const supabase = createAdminClient();
-  const { data } = await (supabase as any).from("profiles").select("id").eq("email", e).maybeSingle();
-  return NextResponse.json({ exists: !!data?.id });
+  const { data: state } = await (supabase as any).rpc("account_password_state", { p_email: e });
+  if (state === "password") return NextResponse.json({ exists: true });
+  if (state === "passwordless") return NextResponse.json({ exists: false, known: true });
+  return NextResponse.json({ exists: false });
 }

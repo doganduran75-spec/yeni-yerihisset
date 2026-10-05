@@ -22,6 +22,7 @@ export async function POST(req: NextRequest) {
 
   const { error } = await (supabase as any)
     .from("contacts").insert({ email, source_channel: "newsletter", status: "lead" });
+  if (error?.code === "23505") return NextResponse.json({ ok: true, already: true }); // aynı anda gelen ikinci istek
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   return NextResponse.json({ ok: true });

@@ -5,6 +5,7 @@ import { processMarketplaceStock } from "@/lib/marketplace/sync";
 import { importMarketplaceOrders } from "@/lib/marketplace/orders";
 import { processMarketplacePrices } from "@/lib/marketplace/price-sync";
 import { syncMarketplaceListings } from "@/lib/marketplace/listings";
+import { evaluateHealthAlerts } from "@/lib/server-health-alerts";
 
 // Pazaryeri SİPARİŞLERİ (önce: yeni siparişleri al, iptallerde stoğu geri ekle) +
 // stok kuyruğu (Trendyol + Hepsiburada) — YEDEK tetik: anlık tetik
@@ -47,6 +48,10 @@ async function run(req: NextRequest) {
   await (supabase as any).from("cron_heartbeats").upsert({
     name: "marketplace-sync", last_run_at: new Date().toISOString(), ok: !firstError, message: firstError ?? null,
   });
+  // Sunucu sağlığı uyarısı yedeği (15 dk'da bir): sağlık betiği durursa da e-posta gitsin
+  if (new Date().getMinutes() % 15 === 7) {
+    await evaluateHealthAlerts(supabase).catch((e: any) => console.error("[cron/health-alerts]", e?.message || e));
+  }
   return NextResponse.json({ ok: true, orders, reports, prices });
 }
 
