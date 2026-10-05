@@ -19,11 +19,10 @@ import { cn } from "@/lib/utils";
 import { sortByVariantValue } from "@/lib/variant-sort";
 import { Loader2, Search, Save, Tag, Wand2, History, ListPlus, FileDown, Undo2, X, AlertTriangle, Send, Store, RefreshCw } from "lucide-react";
 
-type MktChannel = "trendyol" | "hepsiburada" | "ozon";
+type MktChannel = "trendyol" | "hepsiburada";
 type MktStatus = { key: boolean; listed: boolean; closed: boolean };
-// Ozon sütunu yalnız Ozon ilanları en az bir kez eşitlendikten sonra görünür
-const BASE_MKT_CHANNELS: MktChannel[] = ["trendyol", "hepsiburada"];
-const MKT_SHORT: Record<MktChannel, string> = { trendyol: "TY", hepsiburada: "HB", ozon: "OZ" };
+const MKT_CHANNELS: MktChannel[] = ["trendyol", "hepsiburada"];
+const MKT_SHORT: Record<MktChannel, string> = { trendyol: "TY", hepsiburada: "HB" };
 
 async function authHeaders(): Promise<Record<string, string>> {
   const { data: { session } } = await supabase.auth.getSession();
@@ -38,7 +37,7 @@ type Row = {
   search: string;
 };
 
-const CHANNEL_LABEL: Record<string, string> = { site: "Site", trendyol: "Trendyol", hepsiburada: "Hepsiburada", ozon: "Ozon", other: "Diğer" };
+const CHANNEL_LABEL: Record<string, string> = { site: "Site", trendyol: "Trendyol", hepsiburada: "Hepsiburada", other: "Diğer" };
 const PAGE = 200;
 
 function norm(s: string): string {
@@ -108,14 +107,12 @@ export default function PricesPage() {
       m[x.variant_id] = {
         trendyol: { key: !!x.ty_key, listed: !!x.ty_listed, closed: !!x.ty_closed },
         hepsiburada: { key: !!x.hb_key, listed: !!x.hb_listed, closed: !!x.hb_closed },
-        ozon: { key: !!x.oz_key, listed: !!x.oz_listed, closed: !!x.oz_closed },
       };
     }
     setMkt(m);
     setMktSynced(Object.fromEntries(((ls as any[]) || []).map((x) => [x.channel, x.last_ok_at])));
   }, []);
   useEffect(() => { loadMkt(); }, [loadMkt]);
-  const MKT_CHANNELS = useMemo<MktChannel[]>(() => (mktSynced.ozon ? [...BASE_MKT_CHANNELS, "ozon"] : BASE_MKT_CHANNELS), [mktSynced.ozon]);
 
   // Kapalı kutusu (anında): sunucuda o kanala stok 0 / gerçek stok kuyruğa girer
   async function setClosed(items: { channel: MktChannel; variant_id: string; closed: boolean }[]) {
@@ -256,7 +253,7 @@ export default function PricesPage() {
       if (last) (out[last.code] ||= []).push(ch); else tail.push(ch);
     }
     return { out, tail };
-  }, [activeLists, MKT_CHANNELS]);
+  }, [activeLists]);
 
   // Değişiklikler (kayıtlıdan farklı taslaklar)
   const changes = useMemo(() => {

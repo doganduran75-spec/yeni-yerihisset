@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// Pazaryeri stok kuyruğu işleyicisi — Trendyol + Hepsiburada + Ozon.
+// Pazaryeri stok kuyruğu işleyicisi — Trendyol + Hepsiburada.
 // Kuyruğu veritabanı tetikleyicisi doldurur (migration 20261003000001 + 20261004000001):
 // varyant stoğu/barkodu/SKU'su nereden değişirse değişsin, her kanal için satır 'pending' olur.
 // Kanal başına bu işleyici:
@@ -8,19 +8,16 @@
 //   2) 'sent' paketlerin sonucunu kanaldan sorar → 'ok' / 'failed' (+sebep) ve
 //      her kesin sonucu SENKRON GEÇMİŞİ'ne (marketplace_stock_log) yazar;
 //   3) stok 0 başarıyla gittiyse o kanalın manuel "Pazaryeri Stok Görevi"ni kapatır.
-// Ozon sonucu gönderim yanıtında HEMEN döndürür (ayrı sonuç sorgusu yok) → gönderimden
-// hemen sonra kesinleştirilir; "30 sn'de bir" sınırına takılanlar 40 sn sonra tekrar gider.
 // Çağıranlar: ürün kaydı / sipariş / iptal (kickMarketplaceSync, anlık) ve
 // dakikalık cron (/api/cron/marketplace-sync, yedek).
 
 import { createAdminClient } from "@/lib/supabase-admin";
 import { getTrendyolConfig, hasCredentials, updateStocks, getBatchResult, testConnection, TrendyolError } from "@/lib/marketplace/trendyol";
 import { getHepsiburadaConfig, hbHasCredentials, hbUpdateStocks, hbGetUploadResult, hbTestConnection, HepsiburadaError } from "@/lib/marketplace/hepsiburada";
-import { getOzonConfig, ozReady, ozHasCredentials, ozUpdateStocks, ozTestConnection, OzonError, type OzonStockResult } from "@/lib/marketplace/ozon";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
-export type Channel = "trendyol" | "hepsiburada" | "ozon";
-export const CHANNELS: Channel[] = ["trendyol", "hepsiburada", "ozon"];
+export type Channel = "trendyol" | "hepsiburada";
+export const CHANNELS: Channel[] = ["trendyol", "hepsiburada"];
 
 type SentRow = { id: string; variant_id: string; product_id: string | null; barcode: string; last_sent_qty: number; batch_pos: number | null; sent_at: string };
 
@@ -29,10 +26,8 @@ type Adapter = {
   label: string;          // marketplace_channels.name ile aynı
   maxBatch: number;
   maxInFlight: number;    // aynı anda bekleyen (sonucu gelmemiş) yükleme sınırı
-  maxRounds?: number;     // bir çalıştırmada en çok kaç paket (varsayılan 5)
   load(sb: AdminClient): Promise<{ enabled: boolean; ready: boolean; cfg: any }>;
-  /** Yükleme id'si (sonuç sonra sorulur) ya da eşzamanlı sonuç (anahtar → sonuç) */
-  send(cfg: any, items: { key: string; qty: number }[]): Promise<string | { batchId: string; results: Map<string, OzonStockResult> }>;
+  send(cfg: any, items: { key: string; qty: number }[]): Promise<string>;
   /** Sonuç: done=false → henüz işleniyor. failures: satır id → sebep */
   result(cfg: any, batchId: string, rows: SentRow[]): Promise<{ done: boolean; failures: Map<string, string> }>;
   test(cfg: any): Promise<{ totalProducts: number | null }>;
@@ -84,34 +79,11 @@ const hepsiburada: Adapter = {
   isFatal: (e) => e instanceof HepsiburadaError && [0, 401, 403, 429].includes(e.status),
 };
 
-const ozon: Adapter = {
-  channel: "ozon",
-  label: "Ozon",
-  maxBatch: 100,          // Ozon: istekte en çok 100 ürün-depo çifti
-  maxInFlight: 1000,      // eşzamanlı sonuç → bekleyen yükleme olmaz
-  maxRounds: 20,          // dakikada 80 istek sınırının altında
-  async load(sb) { const cfg = await getOzonConfig(sb); return { enabled: cfg.enabled, ready: ozReady(cfg), cfg }; },
-  async send(cfg, items) {
-    const results = await ozUpdateStocks(cfg, items);
-    return { batchId: `oz-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, results };
-  },
-  // Sonuç gönderimde kesinleşir; buraya yalnız yarıda kalmış (çöken işleyici) satırlar düşer
-  async result() { return { done: true, failures: new Map<string, string>() }; },
-  test: (cfg) => ozTestConnection(cfg),
-  isFatal: (e) => e instanceof OzonError && [0, 400, 401, 403, 429].includes(e.status),
-};
-
-const ADAPTERS: Record<Channel, Adapter> = { trendyol, hepsiburada, ozon };
+const ADAPTERS: Record<Channel, Adapter> = { trendyol, hepsiburada };
 export const channelLabel = (c: Channel) => ADAPTERS[c].label;
 export const isChannel = (c: string): c is Channel => (CHANNELS as string[]).includes(c);
 
 export async function testChannel(channel: Channel, sb: AdminClient = createAdminClient()) {
-  if (channel === "ozon") {
-    // Ozon testi depo seçilmeden de çalışır (depo listesini getirir)
-    const cfg = await getOzonConfig(sb);
-    if (!ozHasCredentials(cfg)) throw new Error("Önce Client ID ve API anahtarını girip kaydet.");
-    return ozTestConnection(cfg);
-  }
   const a = ADAPTERS[channel];
   const { ready, cfg } = await a.load(sb);
   if (!ready) throw new Error("Önce bağlantı bilgilerini girip kaydet.");
@@ -136,44 +108,6 @@ async function writeLog(sb: any, channel: Channel, rows: any[], ok: boolean, rea
   })));
 }
 
-// Eşzamanlı sonuç (Ozon): gönderilen satırları hemen ok / hatalı / "biraz sonra tekrar" yap
-async function settleImmediate(
-  sb: any, channel: Channel, batchId: string, results: Map<string, OzonStockResult>, report: SyncReport, zeroOkVariants: string[],
-) {
-  const { data } = await sb.from("marketplace_stock_sync")
-    .select("id, variant_id, product_id, barcode, last_sent_qty")
-    .eq("channel", channel).eq("batch_request_id", batchId).eq("status", "sent");
-  const rows = (data as any[]) || [];
-  const now = new Date().toISOString();
-  const okRows: any[] = [], badRows: any[] = [];
-  for (const r of rows) {
-    const res = results.get(r.barcode);
-    if (res?.ok) { okRows.push(r); continue; }
-    if (res?.retry) {
-      await sb.from("marketplace_stock_sync")
-        .update({ status: "pending", next_attempt_at: new Date(Date.now() + 40_000).toISOString(), error: res.reason ?? null, updated_at: now })
-        .eq("id", r.id).eq("status", "sent");
-      continue;
-    }
-    badRows.push({ ...r, _reason: res?.reason || "Sonuç dönmedi (ürün kanalda yok olabilir)" });
-  }
-  for (const r of badRows) {
-    await sb.from("marketplace_stock_sync")
-      .update({ status: "failed", error: r._reason, updated_at: now })
-      .eq("id", r.id).eq("status", "sent").eq("batch_request_id", batchId);
-  }
-  if (okRows.length) {
-    await sb.from("marketplace_stock_sync")
-      .update({ status: "ok", confirmed_at: now, error: null })
-      .in("id", okRows.map((r) => r.id)).eq("status", "sent").eq("batch_request_id", batchId);
-    for (const r of okRows) if (Number(r.last_sent_qty) === 0) zeroOkVariants.push(r.variant_id);
-  }
-  await writeLog(sb, channel, okRows, true, () => null, batchId);
-  await writeLog(sb, channel, badRows, false, (r) => r._reason, batchId);
-  report.confirmed += okRows.length;
-  report.failed += badRows.length;
-}
-
 export async function processChannel(channel: Channel, supabase: AdminClient = createAdminClient()): Promise<SyncReport> {
   const a = ADAPTERS[channel];
   const report: SyncReport = { channel, sent: 0, batches: 0, confirmed: 0, failed: 0, errors: [] };
@@ -181,10 +115,9 @@ export async function processChannel(channel: Channel, supabase: AdminClient = c
   if (!enabled) return { ...report, skipped: "disabled" };
   if (!ready) return { ...report, skipped: "no_credentials" };
   const sb = supabase as any;
-  const zeroOkVariants: string[] = [];
 
   // ── 1) Gönder ──
-  for (let round = 0; round < (a.maxRounds ?? 5); round++) {
+  for (let round = 0; round < 5; round++) {
     const { data: inflight } = await sb.from("marketplace_stock_sync").select("batch_request_id")
       .eq("channel", channel).eq("status", "sent").not("batch_request_id", "is", null).limit(5000);
     if (new Set(((inflight as any[]) || []).map((r) => r.batch_request_id)).size >= a.maxInFlight) break;
@@ -203,12 +136,10 @@ export async function processChannel(channel: Channel, supabase: AdminClient = c
     const ids = list.map((r) => r.id);
 
     try {
-      const sent = await a.send(cfg, items);
-      const batchId = typeof sent === "string" ? sent : sent.batchId;
+      const batchId = await a.send(cfg, items);
       await sb.rpc("mark_marketplace_stock_sent", { p_ids: ids, p_batch: batchId, p_pos: list.map((r) => posByKey.get(r.barcode)) });
       report.sent += items.length;
       report.batches += 1;
-      if (typeof sent !== "string") await settleImmediate(sb, channel, batchId, sent.results, report, zeroOkVariants);
     } catch (e: any) {
       const msg = e?.message || String(e);
       await sb.rpc("mark_marketplace_stock_retry", { p_ids: ids, p_error: msg });
@@ -237,6 +168,7 @@ export async function processChannel(channel: Channel, supabase: AdminClient = c
     byBatch.get(r.batch_request_id)!.push(r);
   }
 
+  const zeroOkVariants: string[] = [];
   for (const [batchId, rows] of [...byBatch.entries()].slice(0, 20)) {
     const oldest = Math.min(...rows.map((r) => new Date(r.sent_at).getTime()));
     let res: { done: boolean; failures: Map<string, string> };

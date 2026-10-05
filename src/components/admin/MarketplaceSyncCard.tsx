@@ -89,7 +89,7 @@ export default function MarketplaceSyncCard() {
             </div>
 
             <div className="divide-y">
-              {d.channels.filter((c: any) => c.channel !== "ozon" || c.enabled || c.ready).map((c: any) => {
+              {d.channels.map((c: any) => {
                 const h = HEALTH[c.health] ?? HEALTH.off;
                 return (
                   <div key={c.channel} className="flex items-center gap-2 py-2">
