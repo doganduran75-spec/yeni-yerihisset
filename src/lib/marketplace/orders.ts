@@ -12,6 +12,7 @@ import { createAdminClient } from "@/lib/supabase-admin";
 import { getTrendyolConfig, hasCredentials, type TrendyolConfig } from "@/lib/marketplace/trendyol";
 import { kickMarketplaceSync } from "@/lib/marketplace/sync";
 import { importHepsiburadaOrders } from "@/lib/marketplace/hb-orders";
+import { marketplacePaymentPatch } from "@/lib/marketplace/payment-patch";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 export type OrderChannel = "trendyol" | "hepsiburada";
@@ -43,6 +44,7 @@ function mapTrendyolStatus(s: string): { status: string; shipment_status: string
 }
 
 const n = (v: any) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+
 const round2 = (v: number) => Math.round(v * 100) / 100;
 
 // Trendyol Order V2 (eski /orders ucu 15.10.2026'da kapanıyor; yeni hesaplara erişim vermiyor)
@@ -190,7 +192,7 @@ async function upsertTrendyolPackage(sb: any, pkg: any, since: number, match: Ma
     cargo_tracking_url: pkg.cargoTrackingLink ?? null,
   };
 
-  const { data: existing } = await sb.from("orders").select("id, external_updated_at, status")
+  const { data: existing } = await sb.from("orders").select("id, external_updated_at, status, total_amount, invoice_status")
     .eq("channel", "trendyol").eq("external_package_id", packageId).maybeSingle();
 
   // ── Yeni paket ──
@@ -211,6 +213,7 @@ async function upsertTrendyolPackage(sb: any, pkg: any, since: number, match: Ma
       payment_status: "paid",
       shipment_status: mapped.shipment_status,
       invoice_status: "pending",
+      ...marketplacePaymentPatch(mapped.status, round2(total), "pending"),
       payment_method: "marketplace",
       total_amount: round2(total),
       shipping_cost: 0,
@@ -270,6 +273,7 @@ async function upsertTrendyolPackage(sb: any, pkg: any, since: number, match: Ma
     external_updated_at: lastMod,
     status: mapped.status,
     shipment_status: mapped.shipment_status,
+    ...marketplacePaymentPatch(mapped.status, Number(existing.total_amount || 0), existing.invoice_status),
     ...cargo,
     external_raw: pkg,
   }).eq("id", existing.id);
@@ -311,5 +315,14 @@ export async function restockReturnedOrder(orderId: string, supabase: AdminClien
     if (r?.restored) restored += Number(r.restored);
   }
   if (restored > 0) kickMarketplaceSync(500);
+  // Pazaryeri iadesi depoya geldi → kargo "İade geldi", ödeme "İade edildi" (pazaryeri müşteriye iade etti; ciroda 0)
+  const { data: o } = await sb.from("orders").select("total_amount, invoice_status, payment_status").eq("id", orderId).maybeSingle();
+  if (o && o.payment_status !== "refunded") {
+    await sb.from("orders").update({
+      shipment_status: "returned", status: "refunded",
+      ...marketplacePaymentPatch("refunded", Number(o.total_amount || 0), o.invoice_status),
+    }).eq("id", orderId);
+    await sb.from("order_events").insert({ order_id: orderId, type: "return_received", note: `Pazaryeri iadesi depoya geldi; ${restored} adet stoğa eklendi` });
+  }
   return restored;
 }

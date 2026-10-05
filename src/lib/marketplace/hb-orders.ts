@@ -14,6 +14,7 @@ import { createAdminClient } from "@/lib/supabase-admin";
 import { getHepsiburadaConfig, hbHasCredentials, type HepsiburadaConfig } from "@/lib/marketplace/hepsiburada";
 import { kickMarketplaceSync } from "@/lib/marketplace/sync";
 import type { OrderImportReport } from "@/lib/marketplace/orders";
+import { marketplacePaymentPatch } from "@/lib/marketplace/payment-patch";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -239,7 +240,11 @@ export async function importHepsiburadaOrders(supabase: AdminClient = createAdmi
       await sb.rpc("mp_restore_item_stock", { p_item_id: item.id, p_source: "hepsiburada_cancel" });
       const { data: rest } = await sb.from("order_items").select("id").eq("order_id", order.id).neq("external_status", "Cancelled");
       if (!rest?.length) {
-        await sb.from("orders").update({ status: "cancelled", shipment_status: "cancelled", external_status: "Cancelled", external_updated_at: new Date().toISOString() }).eq("id", order.id);
+        const { data: cur } = await sb.from("orders").select("total_amount, invoice_status").eq("id", order.id).maybeSingle();
+        await sb.from("orders").update({
+          status: "cancelled", shipment_status: "cancelled", external_status: "Cancelled", external_updated_at: new Date().toISOString(),
+          ...marketplacePaymentPatch("cancelled", Number(cur?.total_amount || 0), cur?.invoice_status),
+        }).eq("id", order.id);
       }
       report.updated++;
     }

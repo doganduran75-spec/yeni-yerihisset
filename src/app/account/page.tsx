@@ -77,17 +77,17 @@ function parseShippingAddr(raw: any): { name?: string; phone?: string; address?:
   try { return typeof raw === "string" ? JSON.parse(raw) : raw; } catch { return null; }
 }
 function payMethodLabel(m?: string): string { return m === "bank_transfer" ? "Havale / EFT" : "Kart (iyzico)"; }
-function payStatusLabel(s?: string): string { return s === "paid" ? "Ödendi" : s === "failed" ? "Başarısız" : "Bekliyor"; }
+function payStatusLabel(s?: string): string { return PAY_LABEL[s || "pending"] ?? "Bekliyor"; }
 
 // Admin ile birebir aynı 3 boyutlu durum (Ödeme / Sevkiyat / Fatura) rozetleri.
 // Müşteri sipariş satırında da güncel durumu gösterir (legacy `status` yerine
 // gerçek payment_status/shipment_status/invoice_status alanlarını okur).
-const PAY_LABEL: Record<string, string> = { paid: "Ödendi", failed: "Başarısız", pending: "Bekliyor" };
-const PAY_COLOR: Record<string, string> = { paid: "bg-green-50 text-green-700", failed: "bg-red-50 text-red-600", pending: "bg-amber-50 text-amber-700" };
-const SHIP_LABEL: Record<string, string> = { waiting: "Bekliyor", preparing: "Hazırlanıyor", shipped: "Kargoya Verildi", delivered: "Teslim Edildi", cancelled: "İptal Edildi" };
-const SHIP_COLOR: Record<string, string> = { waiting: "bg-slate-100 text-slate-500", preparing: "bg-blue-50 text-blue-700", shipped: "bg-purple-50 text-purple-700", delivered: "bg-green-50 text-green-700", cancelled: "bg-red-50 text-red-600" };
-const INV_LABEL: Record<string, string> = { pending: "Bekliyor", invoiced: "Faturalandı" };
-const INV_COLOR: Record<string, string> = { pending: "bg-slate-100 text-slate-500", invoiced: "bg-teal-50 text-teal-700" };
+const PAY_LABEL: Record<string, string> = { paid: "Ödendi", failed: "Alınmadı", pending: "Bekliyor", partial_refund: "Kısmi iade", refunded: "İade edildi" };
+const PAY_COLOR: Record<string, string> = { paid: "bg-green-50 text-green-700", failed: "bg-red-50 text-red-600", pending: "bg-amber-50 text-amber-700", partial_refund: "bg-orange-50 text-orange-700", refunded: "bg-slate-100 text-slate-700" };
+const SHIP_LABEL: Record<string, string> = { waiting: "Bekliyor", preparing: "Hazırlanıyor", shipped: "Kargoya Verildi", delivered: "Teslim Edildi", cancelled: "İptal Edildi", undelivered: "Teslim Edilemedi", returned: "İade Geldi" };
+const SHIP_COLOR: Record<string, string> = { waiting: "bg-slate-100 text-slate-500", preparing: "bg-blue-50 text-blue-700", shipped: "bg-purple-50 text-purple-700", delivered: "bg-green-50 text-green-700", cancelled: "bg-red-50 text-red-600", undelivered: "bg-orange-50 text-orange-700", returned: "bg-amber-50 text-amber-700" };
+const INV_LABEL: Record<string, string> = { pending: "Bekliyor", invoiced: "Faturalandı", return_invoiced: "İade faturası kesildi", not_required: "Gerekmiyor" };
+const INV_COLOR: Record<string, string> = { pending: "bg-slate-100 text-slate-500", invoiced: "bg-teal-50 text-teal-700", return_invoiced: "bg-slate-100 text-slate-700", not_required: "bg-slate-50 text-slate-400" };
 
 function Chip({ title, label, color }: { title: string; label: string; color: string }) {
   return (

@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { supabase } from "@/lib/supabase";
 import { shipFee } from "@/lib/shipping-fee";
-import { siteConfirm } from "@/components/ui/site-dialog";
+import { siteAlert, siteConfirm } from "@/components/ui/site-dialog";
 import { GeoSelect } from "@/components/ui/geo-select";
 import { CITIES, DISTRICTS } from "@/lib/turkey-geo";
 import {
@@ -46,6 +46,8 @@ type OrderItem = {
   external_status?: string | null;
   stock_applied_at?: string | null;
   stock_restored_at?: string | null;
+  returned_qty?: number | null;     // iade gelen adet
+  restocked_qty?: number | null;    // stoğa geri eklenen adet
   variant_id?: string | null;
   sku?: string | null;
   variant_name?: string | null;
@@ -70,6 +72,7 @@ type Order = {
   iyzico_payment_id?: string | null;
   refund_status?: string | null;
   refunded_amount?: number | null;
+  refund_method?: string | null;
   shipping_method?: string | null;
   shipping_cost?: number | null;
   coupon_discount?: number | null;
@@ -110,11 +113,18 @@ const paymentColors: Record<string, string> = {
   pending:  "bg-amber-50  text-amber-700  ring-amber-500/20",
   paid:     "bg-green-50  text-green-700  ring-green-500/20",
   failed:   "bg-red-50    text-red-700    ring-red-500/20",
+  partial_refund: "bg-orange-50 text-orange-700 ring-orange-500/20",
+  refunded: "bg-slate-100 text-slate-700 ring-slate-500/20",
 };
 const paymentLabels: Record<string, string> = {
   pending: "Bekleniyor",
   paid:    "Ödendi",
-  failed:  "Başarısız",
+  failed:  "Alınmadı",
+  partial_refund: "Kısmi iade",
+  refunded: "İade edildi",
+};
+const REFUND_METHOD_LABEL: Record<string, string> = {
+  iyzico: "iyzico", bank_transfer: "Havale/EFT", cash: "Kapıda / nakit", marketplace: "Pazaryeri", other: "Diğer",
 };
 
 // ─── Sevkiyat Durumu ──────────────────────────────────────────────────────────
@@ -135,7 +145,7 @@ const shipmentLabels: Record<string, string> = {
   delivered: "Teslim Edildi",
   cancelled: "İptal Edildi",
   undelivered: "Teslim Edilemedi",
-  returned:  "İade",
+  returned:  "İade geldi",
 };
 
 // ─── Satış kanalı (sales_channels tablosu: YeriHisset, Attipas, Trendyol, Hepsiburada…) ──
@@ -170,10 +180,14 @@ function ChannelBadge({ code, channels, size = "sm" }: { code?: string | null; c
 const invoiceColors: Record<string, string> = {
   pending:  "bg-slate-50  text-slate-500  ring-slate-400/20",
   invoiced: "bg-teal-50   text-teal-700   ring-teal-500/20",
+  return_invoiced: "bg-slate-100 text-slate-700 ring-slate-500/20",
+  not_required: "bg-slate-50 text-slate-400 ring-slate-300/20",
 };
 const invoiceLabels: Record<string, string> = {
   pending:  "Bekleniyor",
   invoiced: "Faturalandı",
+  return_invoiced: "İade faturası kesildi",
+  not_required: "Gerekmiyor",
 };
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -236,15 +250,15 @@ export default function OrdersPage() {
   const EMPTY_ITEM = { sku: "", productId: "", variantId: "", variantName: "", title: "", quantity: 1, unitPrice: 0, stock: 0, query: "", skuError: "", skuLoading: false };
 
   // ─── iyzico İade state ────────────────────────────────────────────────────
-  const [refundAmount, setRefundAmount] = useState("");
-  const [refundLoading, setRefundLoading] = useState(false);
-  const [refundResult, setRefundResult] = useState<{ ok: boolean; msg: string } | null>(null);
+  // Sipariş işlemleri (iptal / iade al / ücret iadesi) penceresi
+  const [actionMode, setActionMode] = useState<null | "cancel" | "return" | "refund">(null);
 
   // ─── Liste: arama / süzgeç / sıralama / sayfalama ──────────────────────────
   const [q, setQ] = useState("");
   const [fPay, setFPay] = useState("all");
   const [fShip, setFShip] = useState("all");
   const [fInv, setFInv] = useState("all");
+  const [fRet, setFRet] = useState("all"); // iade/iptal hazır filtreleri
   const [fMethod, setFMethod] = useState("all");
   const [fChannel, setFChannel] = useState("all"); // sales_channels.code
   const [channels, setChannels] = useState<SalesChannel[]>(CHANNEL_FALLBACK);
@@ -382,51 +396,6 @@ export default function OrdersPage() {
     setAdminNoteSaving(false);
   }
 
-  async function handleRefund(orderId: string) {
-    const amt = parseFloat(refundAmount);
-    if (isNaN(amt) || amt <= 0) {
-      setRefundResult({ ok: false, msg: "Geçerli bir tutar girin." });
-      return;
-    }
-    setRefundLoading(true);
-    setRefundResult(null);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch("/api/admin/orders/refund", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-        },
-        body: JSON.stringify({ orderId, amount: amt }),
-      });
-      const data = await res.json();
-      if (data.ok) {
-        setRefundResult({ ok: true, msg: `✓ ₺${amt.toFixed(2)} iade başarıyla gerçekleşti.` });
-        // Local state güncelle
-        const newRefunded = data.totalRefunded;
-        const isFull = data.refundStatus === "full";
-        setSelectedOrder(prev => prev ? {
-          ...prev,
-          refund_status: data.refundStatus,
-          refunded_amount: newRefunded,
-          payment_status: isFull ? "refunded" : prev.payment_status,
-          status: isFull ? "refunded" : prev.status,
-        } : prev);
-        setOrders(prev => prev.map(o => o.id === orderId ? {
-          ...o,
-          refund_status: data.refundStatus,
-          refunded_amount: newRefunded,
-        } : o));
-      } else {
-        setRefundResult({ ok: false, msg: data.error ?? "İade başarısız." });
-      }
-    } catch {
-      setRefundResult({ ok: false, msg: "Bağlantı hatası." });
-    } finally {
-      setRefundLoading(false);
-    }
-  }
 
   // ─── Yeni Sipariş fonksiyonları ───────────────────────────────────────────
 
@@ -626,12 +595,11 @@ export default function OrdersPage() {
     setItemsLoading(true);
     setSkuEdits({});
     setAdminNote((order as any).admin_note ?? "");
-    setRefundAmount(String(order.total_amount ?? ""));
-    setRefundResult(null);
+    setActionMode(null);
     try {
       const { data } = await supabase
         .from("order_items")
-        .select("id, quantity, unit_price, product_id, variant_id, sku, variant_name, title, barcode, external_status, stock_applied_at, stock_restored_at, products(title)")
+        .select("id, quantity, unit_price, product_id, variant_id, sku, variant_name, title, barcode, external_status, stock_applied_at, stock_restored_at, returned_qty, restocked_qty, products(title)")
         .eq("order_id", order.id);
       const items = (data as any[]) ?? [];
       setSelectedOrder(prev => prev ? { ...prev, order_items: items } : null);
@@ -854,6 +822,14 @@ export default function OrdersPage() {
       if (fPay !== "all" && (o.payment_status || "pending") !== fPay) return false;
       if (fShip !== "all" && (o.shipment_status || "waiting") !== fShip) return false;
       if (fInv !== "all" && (o.invoice_status || "pending") !== fInv) return false;
+      if (fRet !== "all") {
+        const pay = o.payment_status || "pending";
+        const refundedPay = pay === "refunded" || pay === "partial_refund";
+        if (fRet === "returned_unrefunded" && !(o.shipment_status === "returned" && pay === "paid")) return false;
+        if (fRet === "refunded_no_return_invoice" && !(refundedPay && (o.invoice_status || "pending") === "invoiced")) return false;
+        if (fRet === "cancelled_unrefunded" && !(o.status === "cancelled" && (pay === "paid" || pay === "partial_refund"))) return false;
+        if (fRet === "any_refund" && !refundedPay) return false;
+      }
       if (fMethod !== "all" && (o.payment_method || "credit_card") !== fMethod) return false;
       if (fChannel !== "all" && (o.channel || "site") !== fChannel) return false;
       if (!needle) return true;
@@ -885,7 +861,7 @@ export default function OrdersPage() {
   const listPageCount = Math.max(1, Math.ceil(visibleOrders.length / LIST_PAGE));
   const safeListPage = Math.min(listPage, listPageCount - 1);
   const pagedOrders = visibleOrders.slice(safeListPage * LIST_PAGE, safeListPage * LIST_PAGE + LIST_PAGE);
-  const filtersActive = !!q.trim() || fPay !== "all" || fShip !== "all" || fInv !== "all" || fMethod !== "all" || fChannel !== "all";
+  const filtersActive = !!q.trim() || fPay !== "all" || fShip !== "all" || fInv !== "all" || fMethod !== "all" || fChannel !== "all" || fRet !== "all";
 
   function toggleSort(k: typeof sortKey) {
     if (sortKey === k) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -961,6 +937,13 @@ export default function OrdersPage() {
                 <option value="all">Sevkiyat: tümü</option>
                 {Object.entries(shipmentLabels).map(([k, l]) => <option key={k} value={k}>Sevkiyat: {l}</option>)}
               </select>
+              <select value={fRet} onChange={(e) => { setFRet(e.target.value); setListPage(0); }} className={selCls}>
+                <option value="all">İade / iptal: tümü</option>
+                <option value="returned_unrefunded">İade geldi, ücret iade edilmedi</option>
+                <option value="refunded_no_return_invoice">Ücret iade edildi, iade faturası eksik</option>
+                <option value="cancelled_unrefunded">İptal, ücret iade edilmedi</option>
+                <option value="any_refund">Ücret iadesi olanlar</option>
+              </select>
               <select value={fInv} onChange={(e) => { setFInv(e.target.value); setListPage(0); }} className={selCls}>
                 <option value="all">Fatura: tümü</option>
                 {Object.entries(invoiceLabels).map(([k, l]) => <option key={k} value={k}>Fatura: {l}</option>)}
@@ -973,7 +956,7 @@ export default function OrdersPage() {
               </select>
               {filtersActive && (
                 <button
-                  onClick={() => { setQ(""); setFPay("all"); setFShip("all"); setFInv("all"); setFMethod("all"); setFChannel("all"); setListPage(0); }}
+                  onClick={() => { setQ(""); setFPay("all"); setFShip("all"); setFInv("all"); setFMethod("all"); setFChannel("all"); setFRet("all"); setListPage(0); }}
                   className="h-9 px-3 rounded-lg text-xs font-bold text-muted-foreground hover:text-foreground"
                 >
                   Temizle
@@ -1053,6 +1036,9 @@ export default function OrdersPage() {
                       {/* Tutar */}
                       <TableCell className="font-semibold text-sm">
                         ₺{order.total_amount.toFixed(2)}
+                        {Number(order.refunded_amount || 0) > 0 && (
+                          <div className="text-[10px] font-semibold text-orange-700">−₺{Number(order.refunded_amount).toFixed(2)} iade</div>
+                        )}
                       </TableCell>
 
                       {/* Ödeme durumu + aksiyon (pazaryerinde salt okunur — pazaryeri tahsil eder) */}
@@ -1436,9 +1422,22 @@ export default function OrdersPage() {
                   options={[
                     { value: "paid", label: "Ödendi" },
                     { value: "pending", label: "Ödeme Bekleniyor" },
-                    { value: "failed", label: "Başarısız" },
+                    { value: "failed", label: "Alınmadı" },
+                    { value: "partial_refund", label: "Kısmi iade…" },
+                    { value: "refunded", label: "İade edildi…" },
                   ]}
                   onSelect={(v) => {
+                    const cur = selectedOrder.payment_status || "pending";
+                    const paidNow = cur === "paid" || cur === "partial_refund";
+                    if (v === "partial_refund" || v === "refunded") {
+                      if (!paidNow) { siteAlert({ message: "Ödemesi alınmamış siparişe ücret iadesi girilemez.", tone: "danger" }); return; }
+                      setActionMode("refund");
+                      return;
+                    }
+                    if (Number(selectedOrder.refunded_amount || 0) > 0) {
+                      siteAlert({ title: "Değiştirilemez", message: "Bu siparişte ücret iadesi kaydı var; ödeme durumu iade kaydıyla belirlenir.", tone: "danger" });
+                      return;
+                    }
                     if (v === "paid") markPaymentPaid(selectedOrder.id);
                     else if (v === "pending") updateField(selectedOrder.id, { payment_status: "pending", status: "awaiting_payment" });
                     else updateField(selectedOrder.id, { payment_status: "failed" });
@@ -1457,9 +1456,21 @@ export default function OrdersPage() {
                       { value: "preparing", label: "Hazırlanıyor" },
                       { value: "shipped", label: selectedOrder.kargonomi_tracking_code ? "Kargoya Verildi" : "Kargoya Ver (Kargonomi)" },
                       { value: "delivered", label: "Teslim Edildi" },
-                      { value: "cancelled", label: "İptal Edildi" },
+                      { value: "returned", label: "İade geldi…" },
+                      { value: "cancelled", label: "İptal Edildi…" },
                     ]}
                     onSelect={(v) => {
+                      const shippedNow = ["shipped", "delivered", "undelivered", "returned"].includes(selectedOrder.shipment_status || "");
+                      if (v === "cancelled") {
+                        if (shippedNow) { siteAlert({ message: "Kargolanmış sipariş iptal edilemez — “İade al” kullan.", tone: "danger" }); return; }
+                        setActionMode("cancel");
+                        return;
+                      }
+                      if (v === "returned") {
+                        if (!shippedNow) { siteAlert({ message: "Henüz kargolanmamış sipariş için “Siparişi iptal et” kullan.", tone: "danger" }); return; }
+                        setActionMode("return");
+                        return;
+                      }
                       if (v === "shipped" && !selectedOrder.kargonomi_tracking_code) {
                         setIsDetailsOpen(false);
                         openShipDialog(selectedOrder);
@@ -1490,76 +1501,67 @@ export default function OrdersPage() {
                   options={[
                     { value: "invoiced", label: "Faturalandı" },
                     { value: "pending", label: "Bekleniyor" },
+                    { value: "return_invoiced", label: "İade faturası kesildi" },
+                    { value: "not_required", label: "Gerekmiyor" },
                   ]}
-                  onSelect={(v) => updateField(selectedOrder.id, { invoice_status: v })}
+                  onSelect={(v) => {
+                    const inv = selectedOrder.invoice_status || "pending";
+                    if (v === "return_invoiced" && inv !== "invoiced") {
+                      siteAlert({ message: "İade faturası yalnız faturalanmış siparişte işaretlenebilir.", tone: "danger" }); return;
+                    }
+                    if (v === "not_required" && !(selectedOrder.status === "cancelled" || selectedOrder.payment_status === "failed")) {
+                      siteAlert({ message: "“Gerekmiyor” yalnız iptal edilmiş ya da ödemesi alınmamış siparişte seçilebilir.", tone: "danger" }); return;
+                    }
+                    updateField(selectedOrder.id, { invoice_status: v });
+                  }}
                 />
               </div>
 
-              {/* iyzico İade Paneli */}
-              {selectedOrder.payment_method === "iyzico" && selectedOrder.iyzico_payment_id && (
-                <div className={`border rounded-xl p-4 space-y-3 ${
-                  selectedOrder.refund_status === "full"
-                    ? "border-slate-200 bg-slate-50"
-                    : "border-blue-100 bg-blue-50/40"
-                }`}>
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs font-black uppercase tracking-wider text-blue-700 flex items-center gap-1.5">
-                      <Landmark size={12} /> iyzico İade
-                    </p>
-                    {selectedOrder.refund_status && (
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                        selectedOrder.refund_status === "full"
-                          ? "bg-green-100 text-green-700"
-                          : "bg-amber-100 text-amber-700"
-                      }`}>
-                        {selectedOrder.refund_status === "full" ? "Tam İade" : "Kısmi İade"}
-                        {selectedOrder.refunded_amount ? ` — ₺${Number(selectedOrder.refunded_amount).toFixed(2)}` : ""}
-                      </span>
-                    )}
-                  </div>
-
-                  {selectedOrder.refund_status !== "full" ? (
-                    <div className="flex gap-2 items-end">
-                      <div className="flex-1 space-y-1">
-                        <label className="text-[10px] text-slate-500 font-medium">
-                          İade Tutarı (maks. ₺{(Number(selectedOrder.total_amount) - Number(selectedOrder.refunded_amount ?? 0)).toFixed(2)})
-                        </label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0.01"
-                          max={Number(selectedOrder.total_amount) - Number(selectedOrder.refunded_amount ?? 0)}
-                          value={refundAmount}
-                          onChange={e => setRefundAmount(e.target.value)}
-                          className="w-full h-9 rounded-lg border border-slate-200 px-3 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-400"
-                        />
-                      </div>
-                      <Button
-                        size="sm"
-                        className="h-9 gap-1.5 bg-blue-600 hover:bg-blue-700 shrink-0"
-                        disabled={refundLoading}
-                        onClick={() => handleRefund(selectedOrder.id)}
-                      >
-                        {refundLoading
-                          ? <Loader2 size={13} className="animate-spin" />
-                          : <Landmark size={13} />}
-                        İade Et
-                      </Button>
+              {/* Sipariş işlemleri: iptal / iade al / ücret iadesi (senaryo matrisi) */}
+              {(() => {
+                const o = selectedOrder;
+                const ship = o.shipment_status || "waiting";
+                const pay = o.payment_status || "pending";
+                const shippedNow = ["shipped", "delivered", "undelivered", "returned"].includes(ship);
+                const allReturned = (o.order_items ?? []).length > 0 && (o.order_items ?? []).every((i) => Number(i.returned_qty || 0) >= Number(i.quantity));
+                const canCancel = !isMarketplace(o) && o.status !== "cancelled" && !shippedNow;
+                const canReturn = !isMarketplace(o) && shippedNow && !allReturned;
+                const canRefund = !isMarketplace(o) && (pay === "paid" || pay === "partial_refund");
+                const refunded = Number(o.refunded_amount || 0);
+                const warn =
+                  ship === "returned" && pay === "paid" ? "İade geldi, ücret henüz iade edilmedi."
+                  : (pay === "refunded" || pay === "partial_refund") && (o.invoice_status || "pending") === "invoiced" ? "Ücret iade edildi; iade faturası kesilince Fatura’yı “İade faturası kesildi” yap."
+                  : o.status === "cancelled" && (pay === "paid" || pay === "partial_refund") ? "Sipariş iptal ama ücret iadesi kaydı yok."
+                  : null;
+                if (!canCancel && !canReturn && !canRefund && !refunded && !warn) return null;
+                return (
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {canCancel && (
+                        <Button size="sm" variant="outline" className="gap-1.5 text-red-700 border-red-200 hover:bg-red-50" onClick={() => setActionMode("cancel")}>
+                          <XCircle size={14} /> Siparişi iptal et
+                        </Button>
+                      )}
+                      {canReturn && (
+                        <Button size="sm" variant="outline" className="gap-1.5 text-amber-800 border-amber-200 hover:bg-amber-50" onClick={() => setActionMode("return")}>
+                          <Package size={14} /> İade al
+                        </Button>
+                      )}
+                      {canRefund && (
+                        <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setActionMode("refund")}>
+                          <Landmark size={14} /> Ücret iadesi yap
+                        </Button>
+                      )}
+                      {refunded > 0 && (
+                        <span className="text-xs text-slate-600 ml-auto">
+                          İade edilen: <b>₺{refunded.toFixed(2)}</b>{o.refund_method ? ` (${REFUND_METHOD_LABEL[o.refund_method] ?? o.refund_method})` : ""}
+                        </span>
+                      )}
                     </div>
-                  ) : (
-                    <p className="text-xs text-slate-500">Bu sipariş tam olarak iade edilmiştir.</p>
-                  )}
-
-                  {refundResult && (
-                    <p className={`text-xs font-medium flex items-center gap-1 ${refundResult.ok ? "text-green-700" : "text-red-600"}`}>
-                      {refundResult.ok
-                        ? <CheckCircle size={12} />
-                        : <AlertCircle size={12} />}
-                      {refundResult.msg}
-                    </p>
-                  )}
-                </div>
-              )}
+                    {warn && <p className="text-xs font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-center gap-1.5"><AlertCircle size={13} /> {warn}</p>}
+                  </div>
+                );
+              })()}
 
               {/* Ürünler */}
               <div className="space-y-2">
@@ -1719,6 +1721,21 @@ export default function OrdersPage() {
                   )}
                 </div>
               </div>
+
+              {/* İptal / iade al / ücret iadesi penceresi */}
+              {actionMode && (
+                <OrderActionDialog
+                  mode={actionMode}
+                  order={selectedOrder}
+                  onClose={() => setActionMode(null)}
+                  onDone={(fresh) => {
+                    setActionMode(null);
+                    setOrders((prev) => prev.map((o) => (o.id === fresh.id ? { ...o, ...fresh } : o)));
+                    handleViewDetails({ ...selectedOrder, ...fresh });
+                    setTimelineTick((t) => t + 1);
+                  }}
+                />
+              )}
 
               {/* Süreç Takibi (yaşam döngüsü) */}
               <div className="pt-2 border-t">
@@ -2174,6 +2191,178 @@ function ImportedOrderPanel({ order, channels }: { order: Order; channels: Sales
         {rows.map(([k, v]) => (
           <span key={k}><span className="text-muted-foreground">{k}:</span> {v}</span>
         ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Sipariş işlemleri penceresi: iptal / iade al / ücret iadesi ─────────────
+// Senaryo matrisi (migration 20261020000001): durum kolonları, stok, ciro ve sipariş
+// geçmişi sunucuda TEK işlemle değişir (/api/admin/orders/action). Para iadesi stoğa
+// dokunmaz; stok yalnız ürün depoya dönünce (iptalde otomatik, iadede "stoğa ekle" ile).
+function OrderActionDialog({ mode, order, onClose, onDone }: {
+  mode: "cancel" | "return" | "refund";
+  order: Order;
+  onClose: () => void;
+  onDone: (fresh: any) => void;
+}) {
+  const total = Number(order.total_amount || 0);
+  const refunded = Number(order.refunded_amount || 0);
+  const remaining = Math.round((total - refunded) * 100) / 100;
+  const paidNow = order.payment_status === "paid" || order.payment_status === "partial_refund";
+  const iyzicoOk = order.payment_method === "iyzico" && !!order.iyzico_payment_id;
+  const [method, setMethod] = useState(iyzicoOk ? "iyzico" : "bank_transfer");
+  const [note, setNote] = useState("");
+  const [amount, setAmount] = useState(mode === "refund" ? String(remaining) : "");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const items = (order.order_items ?? []).map((i) => ({ ...i, left: Number(i.quantity) - Number(i.returned_qty || 0) }));
+  const [ret, setRet] = useState<Record<string, { on: boolean; qty: number; restock: boolean }>>(() =>
+    Object.fromEntries(items.filter((i) => i.left > 0).map((i) => [i.id, { on: true, qty: i.left, restock: true }])));
+  const [withRefund, setWithRefund] = useState(paidNow);
+  const retSum = Math.min(remaining, Math.round(items.reduce((a, i) => a + (ret[i.id]?.on ? Number(i.unit_price) * (ret[i.id]?.qty || 0) : 0), 0) * 100) / 100);
+  const [retAmount, setRetAmount] = useState<string | null>(null);
+
+  async function submit() {
+    setBusy(true); setErr(null);
+    try {
+      const body: any = { action: mode, orderId: order.id, note: note.trim() || undefined };
+      if (mode === "refund") { body.amount = Number(String(amount).replace(",", ".")); body.method = method; }
+      if (mode === "cancel") body.method = method;
+      if (mode === "return") {
+        body.items = items.filter((i) => ret[i.id]?.on && ret[i.id].qty > 0).map((i) => ({ item_id: i.id, qty: ret[i.id].qty, restock: ret[i.id].restock }));
+        if (!body.items.length) throw new Error("İade gelen ürünü seç.");
+        if (withRefund && paidNow) body.refund = { amount: Number(String(retAmount ?? retSum).replace(",", ".")), method, note: note.trim() || undefined };
+      }
+      const { data: { session } } = await supabase.auth.getSession();
+      const r = await fetch("/api/admin/orders/action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
+        body: JSON.stringify(body),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.ok) throw new Error(j.error || "İşlem yapılamadı");
+      onDone(j.order);
+    } catch (e: any) {
+      setErr(e?.message || "İşlem yapılamadı");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const sel = "w-full h-9 rounded-lg border border-input bg-background px-2 text-sm";
+  const methodSelect = (
+    <label className="block space-y-1">
+      <span className="text-xs font-semibold">İade yöntemi</span>
+      <select value={method} onChange={(e) => setMethod(e.target.value)} className={sel}>
+        {iyzicoOk && <option value="iyzico">iyzico — kartına otomatik iade edilir</option>}
+        <option value="bank_transfer">Havale/EFT — parayı ben gönderdim / göndereceğim</option>
+        <option value="cash">Kapıda / nakit</option>
+        <option value="other">Diğer (ör. iyzico panelinden elle)</option>
+      </select>
+    </label>
+  );
+  const title = mode === "cancel" ? "Siparişi iptal et" : mode === "return" ? "İade al (ürün geri geldi)" : "Ücret iadesi yap";
+
+  return (
+    <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-3 border-b">
+          <h3 className="font-bold">{title}</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-700 text-xl leading-none">×</button>
+        </div>
+        <div className="p-5 space-y-4 text-sm">
+          {mode === "cancel" && (
+            <>
+              <ul className="text-xs text-slate-600 space-y-1 list-disc pl-4">
+                <li>Kargo <b>İptal</b>, sipariş <b>İptal</b> olur; düşülen stok <b>geri eklenir</b> (ürün depodan çıkmadı).</li>
+                <li>Fatura kesilmediyse <b>Gerekmiyor</b> olur{(order.invoice_status || "pending") === "invoiced" ? <> — <b className="text-amber-700">fatura kesilmiş: iade faturası gerekecek</b></> : null}.</li>
+                {paidNow
+                  ? <li>Ödeme alınmış: <b>₺{remaining.toFixed(2)}</b> ücret iadesi yapılır, ödeme <b>İade edildi</b> olur; kullanılan YeriHisset Kredisi cüzdana döner.</li>
+                  : <li>Ödeme alınmamış: ödeme <b>Alınmadı</b> olur.</li>}
+                <li>Müşteriye iptal e-postası gider.</li>
+              </ul>
+              {paidNow && methodSelect}
+            </>
+          )}
+
+          {mode === "refund" && (
+            <>
+              <label className="block space-y-1">
+                <span className="text-xs font-semibold">Tutar (en çok ₺{remaining.toFixed(2)})</span>
+                <input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" className={sel} />
+              </label>
+              {methodSelect}
+              <p className="text-[11px] text-muted-foreground">Ücret iadesi stoğa ve kargoya dokunmaz. Tamamı iade edilirse ödeme “İade edildi”, bir kısmıysa “Kısmi iade” olur; ciro buna göre düşer.</p>
+            </>
+          )}
+
+          {mode === "return" && (
+            <>
+              <div className="space-y-2">
+                <p className="text-xs font-semibold">Geri gelen ürünler</p>
+                {items.map((i) => {
+                  const st = ret[i.id];
+                  if (i.left <= 0) return (
+                    <div key={i.id} className="text-xs text-slate-400">{i.products?.title || i.title || i.sku} — iade alındı</div>
+                  );
+                  return (
+                    <div key={i.id} className="rounded-lg border p-2.5 space-y-1.5">
+                      <label className="flex items-center gap-2 font-medium text-xs">
+                        <input type="checkbox" checked={!!st?.on} onChange={(e) => setRet((r) => ({ ...r, [i.id]: { ...r[i.id], on: e.target.checked } }))} />
+                        {i.products?.title || i.title || i.sku}{i.variant_name ? ` · ${i.variant_name}` : ""}
+                      </label>
+                      {st?.on && (
+                        <div className="flex flex-wrap items-center gap-3 pl-6 text-xs">
+                          <span>Adet:</span>
+                          <input type="number" min={1} max={i.left} value={st.qty}
+                            onChange={(e) => setRet((r) => ({ ...r, [i.id]: { ...r[i.id], qty: Math.max(1, Math.min(i.left, Number(e.target.value) || 1)) } }))}
+                            className="w-16 h-7 rounded-md border px-2" />
+                          <span className="text-slate-400">/ {i.left}</span>
+                          <label className="flex items-center gap-1.5">
+                            <input type="checkbox" checked={st.restock} onChange={(e) => setRet((r) => ({ ...r, [i.id]: { ...r[i.id], restock: e.target.checked } }))} />
+                            Stoğa ekle (ürün sağlam)
+                          </label>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                <p className="text-[11px] text-muted-foreground">Kusurlu ürünü stoğa ekleme. Tüm ürünler gelirse kargo “İade geldi” olur; bir kısmıysa kargo değişmez, sipariş geçmişine not düşer.</p>
+              </div>
+              {paidNow && (
+                <div className="rounded-lg border p-3 space-y-2">
+                  <label className="flex items-center gap-2 text-xs font-semibold">
+                    <input type="checkbox" checked={withRefund} onChange={(e) => setWithRefund(e.target.checked)} /> Ücret iadesini de şimdi yap
+                  </label>
+                  {withRefund && (
+                    <>
+                      <label className="block space-y-1">
+                        <span className="text-xs">Tutar (seçilen ürünlere göre önerildi; en çok ₺{remaining.toFixed(2)})</span>
+                        <input value={retAmount ?? String(retSum)} onChange={(e) => setRetAmount(e.target.value)} inputMode="decimal" className={sel} />
+                      </label>
+                      {methodSelect}
+                    </>
+                  )}
+                  {!withRefund && <p className="text-[11px] text-muted-foreground">Ücret iadesini sonra “Ücret iadesi yap” ile girebilirsin; o zamana kadar sipariş “İade geldi, ücret iade edilmedi” filtresinde görünür.</p>}
+                </div>
+              )}
+            </>
+          )}
+
+          <label className="block space-y-1">
+            <span className="text-xs font-semibold">Not (sipariş geçmişine yazılır)</span>
+            <input value={note} onChange={(e) => setNote(e.target.value)} placeholder={mode === "cancel" ? "ör. stoktaki üründe sorun, müşteriyle görüşüldü" : "ör. numara küçük geldi"} className={sel} />
+          </label>
+          {err && <p className="text-xs font-semibold text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{err}</p>}
+        </div>
+        <div className="flex justify-end gap-2 px-5 py-3 border-t bg-slate-50 rounded-b-2xl">
+          <Button variant="outline" size="sm" onClick={onClose} disabled={busy}>Vazgeç</Button>
+          <Button size="sm" onClick={submit} disabled={busy} className={mode === "cancel" ? "bg-red-600 hover:bg-red-700" : ""}>
+            {busy ? <Loader2 size={14} className="animate-spin" /> : title}
+          </Button>
+        </div>
       </div>
     </div>
   );

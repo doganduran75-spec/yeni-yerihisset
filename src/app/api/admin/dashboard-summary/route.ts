@@ -5,7 +5,7 @@ import { getAuthUserFromRequest } from "@/lib/auth-from-request";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 // Admin dashboard üst özeti: satış (bu yıl / bu ay / geçen ay) + rollere göre kişi.
-// Ciro = ödemesi alınmış (payment_status=paid), iptal edilmemiş siparişlerin
+// Ciro = ödemesi alınmış (paid / partial_refund / refunded), iptal edilmemiş siparişlerin
 // tahsil edilen tutarı (total_amount; kargo dahil, kupon/kredi sonrası) − iade.
 // Adet = bu siparişlerdeki satılan ürün adedi (ücretsiz hediye hariç).
 // Dönemler Türkiye saatine göre (UTC+3, yaz saati yok).
@@ -51,7 +51,8 @@ export async function GET(req: NextRequest) {
     .from("orders")
     .select("id, created_at, total_amount, refunded_amount, status, payment_status, channel, order_items(quantity, unit_price)")
     .gte("created_at", since.toISOString())
-    .eq("payment_status", "paid")
+    // Ciro tek kural: iptal edilmemiş + ödemesi alınmış (kısmi / tam iade dahil) → tutar − iade
+    .in("payment_status", ["paid", "partial_refund", "refunded"])
     .neq("status", "cancelled")
     .order("created_at", { ascending: true })
     .range(from, to));
