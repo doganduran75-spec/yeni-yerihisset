@@ -1,5 +1,6 @@
 "use client";
 
+import { orderLabel } from "@/lib/order-label";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -102,7 +103,7 @@ export default function AdminDashboard() {
       // Tamamlanmamış (kapanmamış) siparişler — süreç takibi
       const { data: openData } = await (supabase as any)
         .from('orders')
-        .select('id, order_number, total_amount, status, shipment_status, invoice_status, created_at, channel, customer_name, profiles (first_name, last_name)')
+        .select('id, order_number, external_order_number, total_amount, status, shipment_status, invoice_status, created_at, channel, customer_name, profiles (first_name, last_name)')
         .eq('is_closed', false)
         .not('status', 'in', '(cancelled,refunded)')
         .order('created_at', { ascending: false })
@@ -273,7 +274,7 @@ export default function AdminDashboard() {
                 return (
                   <Link key={o.id} href={`/admin/orders?id=${o.id}`}
                     className="flex items-center gap-3 py-2.5 px-2 hover:bg-amber-50/50 rounded-lg transition-colors group">
-                    <span className="font-mono text-xs font-bold text-blue-600 w-16 shrink-0">YH{o.order_number ?? "—"}</span>
+                    <span className="font-mono text-xs font-bold text-blue-600 w-24 shrink-0 truncate">{orderLabel(o)}</span>
                     <span className="text-sm font-medium shrink-0 truncate max-w-[150px]">
                       {o.channel && o.channel !== "site" && (
                         <span className="mr-1 text-[9px] font-black uppercase px-1 py-0.5 rounded bg-orange-100 text-orange-700">

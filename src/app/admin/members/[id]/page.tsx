@@ -1,6 +1,7 @@
 "use client";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { orderLabel } from "@/lib/order-label";
 import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
@@ -34,7 +35,7 @@ export default function MemberDetailPage() {
     const sb = supabase as any;
     const [p, o, c, m, n] = await Promise.all([
       sb.from("profiles").select("id, email, first_name, last_name, phone, city, created_at").eq("id", id).maybeSingle(),
-      sb.from("orders").select("id, order_number, status, total_amount, payment_status, created_at").eq("user_id", id).order("created_at", { ascending: false }),
+      sb.from("orders").select("id, order_number, channel, external_order_number, status, total_amount, payment_status, created_at").eq("user_id", id).order("created_at", { ascending: false }),
       sb.from("user_coupons").select("id, use_count, created_at, coupons(code, name, type, amount)").eq("user_id", id).order("created_at", { ascending: false }),
       sb.from("messages").select("id, content, sender_role, created_at").eq("user_id", id).order("created_at", { ascending: false }),
       sb.from("member_notes").select("id, note, created_at").eq("user_id", id).order("created_at", { ascending: false }),
@@ -170,7 +171,7 @@ export default function MemberDetailPage() {
               {orders.map((o) => (
                 <li key={o.id} className="flex items-center justify-between border border-slate-100 rounded-xl px-3 py-2">
                   <div>
-                    <span className="font-bold text-slate-800 text-sm">{o.order_number ? `YH${o.order_number}` : `#${o.id.slice(0, 8).toUpperCase()}`}</span>
+                    <span className="font-bold text-slate-800 text-sm">{o.order_number || o.external_order_number ? orderLabel(o) : `#${o.id.slice(0, 8).toUpperCase()}`}</span>
                     <span className="text-[10px] text-slate-400 ml-2">{fmtDate(o.created_at)}</span>
                   </div>
                   <div className="text-right">

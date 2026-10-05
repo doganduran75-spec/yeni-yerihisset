@@ -1,5 +1,6 @@
 "use client";
 
+import { orderLabel } from "@/lib/order-label";
 import { useEffect, useState, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import AdminOpsTabs from "@/components/admin/AdminOpsTabs";
@@ -1020,14 +1021,15 @@ export default function OrdersPage() {
                       <TableCell>
                         <div className="flex flex-col">
                           <span className="font-mono text-[11px] font-bold text-blue-600 flex items-center gap-1.5">
-                            {order.order_number ? `YH${order.order_number}` : `#${order.id.slice(0, 8).toUpperCase()}`}
+                            {orderLabel(order)}
                             <ChannelBadge code={order.channel} channels={channels} />
                             {isMarketplace(order) && order.mp_warning && !order.mp_warning_ack && (
                               <span title={order.mp_warning} className="text-red-600"><AlertCircle size={12} /></span>
                             )}
                           </span>
-                          {(isMarketplace(order) || isImported(order)) && order.external_order_number && String(order.external_order_number) !== String(order.order_number) && (
-                            <span className="font-mono text-[10px] text-slate-500">{isImported(order) ? "Eski no " : ""}#{order.external_order_number}</span>
+                          {/* Eski YeriHisset siparişi numarası doluyken yeni YH numarası aldıysa: eski no */}
+                          {isImported(order) && (order.channel || "site") === "site" && order.external_order_number && String(order.external_order_number) !== String(order.order_number) && (
+                            <span className="font-mono text-[10px] text-slate-500">Eski no #{order.external_order_number}</span>
                           )}
                           <span className="font-medium text-sm">
                             {customerName(order)}
@@ -1201,7 +1203,7 @@ export default function OrdersPage() {
               <Truck size={18} className="text-purple-600" /> Kargoya Ver
             </DialogTitle>
             <DialogDescription>
-              Sipariş {shipDialogOrder?.order_number ? `YH${shipDialogOrder.order_number}` : `#${shipDialogOrder?.id.slice(0, 8).toUpperCase()}`} — Kargonomi üzerinden gönderi oluşturulacak.
+              Sipariş {orderLabel(shipDialogOrder)} — Kargonomi üzerinden gönderi oluşturulacak.
             </DialogDescription>
           </DialogHeader>
 
@@ -1303,7 +1305,7 @@ export default function OrdersPage() {
             <DialogTitle className="flex items-center gap-2">
               Sipariş Detayı
               <span className="text-sm font-mono font-bold text-blue-600">
-                {selectedOrder?.order_number ? `YH${selectedOrder.order_number}` : `#${selectedOrder?.id.slice(0, 8).toUpperCase()}`}
+                {orderLabel(selectedOrder)}
               </span>
               <ChannelBadge code={selectedOrder?.channel} channels={channels} size="md" />
             </DialogTitle>

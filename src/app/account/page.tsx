@@ -1,5 +1,6 @@
 "use client";
 
+import { orderLabel } from "@/lib/order-label";
 import { useEffect, useState, Suspense } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -535,7 +536,7 @@ function AccountPageInner() {
     // E-postadan "Yanıtla" ile gelindiyse o siparişin mesaj modalını aç
     if (msgParam) {
       const o = (ords.data || []).find((x: any) => x.id === msgParam);
-      if (o) setMsgOrder({ id: o.id, label: o.order_number ? `YH${o.order_number}` : `#${o.id.slice(0, 8)}` });
+      if (o) setMsgOrder({ id: o.id, label: orderLabel(o) });
     }
   }
 
@@ -873,7 +874,7 @@ function AccountPageInner() {
                                 <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">SİPARİŞ NO</p>
                                 <div className="flex items-center gap-2">
                                   <p className="text-sm font-bold text-olive-600">
-                                    {order.order_number ? `YH${order.order_number}` : `#${order.id.slice(0,8)}`}
+                                    {orderLabel(order)}
                                   </p>
                                   {reviewedOrderIds.has(order.id) ? (
                                     <span className="text-[10px] font-bold text-green-600 border border-green-200 bg-green-50 rounded-full px-2 py-0.5">
@@ -903,7 +904,7 @@ function AccountPageInner() {
                               )}
                               <Button
                                 variant="outline" size="sm"
-                                onClick={() => setMsgOrder({ id: order.id, label: order.order_number ? `YH${order.order_number}` : `#${order.id.slice(0,8)}` })}
+                                onClick={() => setMsgOrder({ id: order.id, label: orderLabel(order) })}
                                 className="relative font-bold text-xs gap-1.5 rounded-xl border-olive-200 text-olive-700 hover:bg-olive-50 h-9"
                               >
                                 <MessageSquare size={14} /> Mesaj
@@ -916,7 +917,7 @@ function AccountPageInner() {
                                 returnRequested.has(order.id) ? (
                                   <Button
                                     variant="outline" size="sm"
-                                    onClick={() => setMsgOrder({ id: order.id, label: order.order_number ? `YH${order.order_number}` : `#${order.id.slice(0,8)}` })}
+                                    onClick={() => setMsgOrder({ id: order.id, label: orderLabel(order) })}
                                     className="font-bold text-xs gap-1.5 rounded-xl border-green-200 text-green-700 bg-green-50 hover:bg-green-100 h-9"
                                   >
                                     <CheckCircle2 size={14} /> Talebin alındı
@@ -1590,7 +1591,7 @@ function AccountPageInner() {
       {returnOrder && user && (
         <ReturnRequestModal
           order={returnOrder}
-          orderLabel={returnOrder.order_number ? `YH${returnOrder.order_number}` : `#${returnOrder.id.slice(0, 8)}`}
+          orderLabel={orderLabel(returnOrder)}
           userId={user.id}
           onClose={() => setReturnOrder(null)}
           onSent={() => {
