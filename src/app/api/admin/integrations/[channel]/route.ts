@@ -4,17 +4,19 @@ import { getAuthUserFromRequest } from "@/lib/auth-from-request";
 import { processChannel, kickMarketplaceSync, testChannel, isChannel, type Channel } from "@/lib/marketplace/sync";
 import { getTrendyolConfig, hasCredentials } from "@/lib/marketplace/trendyol";
 import { getHepsiburadaConfig, hbHasCredentials } from "@/lib/marketplace/hepsiburada";
+import { getOzonConfig, ozHasCredentials, ozListWarehouses } from "@/lib/marketplace/ozon";
 import { importTrendyolOrders } from "@/lib/marketplace/orders";
 import { importHepsiburadaOrders } from "@/lib/marketplace/hb-orders";
 import { syncMarketplaceListings } from "@/lib/marketplace/listings";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-// Ayarlar › Entegrasyonlar › <kanal> paneli (trendyol | hepsiburada). Yalnız admin, servis-rol.
+// Ayarlar › Entegrasyonlar › <kanal> paneli (trendyol | hepsiburada | ozon). Yalnız admin, servis-rol.
 // GET: durum özeti (kuyruk sayıları, son gönderim/doğrulama, sorunlu kayıtlar, eşleşme kapsamı)
 // POST {action}: test | kick (arka planda işle) | sync (bekleyenleri şimdi gönder) | full (tümünü gönder) | retry
 //              | orders_toggle {on} (sipariş çekmeyi aç/kapat) | orders_pull (siparişleri şimdi çek)
 //              | listings (ilan listesini şimdi eşitle) | buffer {value} (stok tamponu; tümü yeniden gönderilir)
+//              | warehouses (Ozon: depo listesi)
 
 type Ctx = { params: Promise<{ channel: string }> };
 
@@ -31,6 +33,10 @@ async function loadConfig(sb: any, channel: Channel) {
   if (channel === "trendyol") {
     const c = await getTrendyolConfig(sb);
     return { enabled: c.enabled, hasCredentials: hasCredentials(c), stage: c.stage, matchField: "barcode" as const };
+  }
+  if (channel === "ozon") {
+    const c = await getOzonConfig(sb);
+    return { enabled: c.enabled, hasCredentials: ozHasCredentials(c), stage: false, matchField: c.matchField, warehouseId: c.warehouseId };
   }
   const c = await getHepsiburadaConfig(sb);
   return { enabled: c.enabled, hasCredentials: hbHasCredentials(c), stage: c.stage, matchField: c.matchField };
@@ -83,7 +89,8 @@ export async function GET(req: NextRequest, { params }: Ctx) {
 
   const info = await variantInfo(sb, ((failures as any[]) || []).map((f) => f.variant_id));
 
-  // Sipariş çekme durumu
+  // Sipariş çekme durumu (Ozon: henüz yok — Faz 2)
+  const ordersSupported = channel !== "ozon";
   const [{ data: ost }, { data: osync }, { count: ordersCount }, { count: warnCount }] = await Promise.all([
     sb.from("settings").select(`${channel}_orders_enabled, ${channel}_orders_since`).order("id").limit(1).maybeSingle(),
     sb.from("marketplace_order_sync").select("*").eq("channel", channel).maybeSingle(),
@@ -91,7 +98,7 @@ export async function GET(req: NextRequest, { params }: Ctx) {
     sb.from("orders").select("id", { count: "exact", head: true }).eq("channel", channel).not("mp_warning", "is", null).eq("mp_warning_ack", false),
   ]);
   const orders = {
-    supported: true,
+    supported: ordersSupported,
     enabled: !!ost?.[`${channel}_orders_enabled`],
     since: ost?.[`${channel}_orders_since`] ?? null,
     lastRunAt: osync?.last_run_at ?? null,
@@ -158,6 +165,21 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     const { error } = await sb.from("settings").update(patch).not("id", "is", null);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ ok: true, since: patch[sinceCol] ?? cur?.[sinceCol] ?? null });
+  }
+
+  if (action === "warehouses") {
+    if (channel !== "ozon") return NextResponse.json({ error: "Yalnız Ozon" }, { status: 400 });
+    const c = await getOzonConfig(sb);
+    if (!ozHasCredentials(c)) return NextResponse.json({ error: "Önce Client ID ve API anahtarını girip kaydet." }, { status: 400 });
+    try {
+      return NextResponse.json({ ok: true, warehouses: await ozListWarehouses(c) });
+    } catch (e: any) {
+      return NextResponse.json({ error: e?.message || "Depolar alınamadı" }, { status: 502 });
+    }
+  }
+
+  if ((action === "orders_toggle" || action === "orders_pull") && channel === "ozon") {
+    return NextResponse.json({ error: "Ozon sipariş aktarımı henüz yok" }, { status: 400 });
   }
 
   if (action === "orders_pull") {

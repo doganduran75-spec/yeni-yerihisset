@@ -1,7 +1,7 @@
 "use client";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// Ayarlar › Entegrasyonlar: Trendyol + Hepsiburada (stok senkronu) + Kargonomi (kargo).
+// Ayarlar › Entegrasyonlar: Trendyol + Hepsiburada + Ozon (stok senkronu) + Kargonomi (kargo).
 // Ayarlar /api/admin/settings ile okunur/yazılır (gizli kolonlar yalnız sunucuda).
 // Her kart YALNIZ kendi alanlarını kaydeder (başka kartın/sekmenin ayarını ezmez).
 // Kanal durumu/işlemleri: /api/admin/integrations/<kanal>.
@@ -29,21 +29,27 @@ type IntegrationSettings = {
   hepsiburada_username: string;
   hepsiburada_match_field: "barcode" | "sku";
   hepsiburada_stage: boolean;
+  ozon_enabled: boolean;
+  ozon_client_id: string;
+  ozon_api_key: string;
+  ozon_warehouse_id: string;
+  ozon_match_field: "barcode" | "sku";
   kargonomi_enabled: boolean;
   kargonomi_api_token: string;
   kargonomi_warehouse_id: string;
 };
-type Group = "trendyol" | "hepsiburada" | "kargonomi";
-type Channel = "trendyol" | "hepsiburada";
+type Group = "trendyol" | "hepsiburada" | "ozon" | "kargonomi";
+type Channel = "trendyol" | "hepsiburada" | "ozon";
 
 const DEFAULTS: IntegrationSettings = {
   trendyol_enabled: false, trendyol_seller_id: "", trendyol_api_key: "", trendyol_api_secret: "", trendyol_stage: false,
   hepsiburada_enabled: false, hepsiburada_merchant_id: "", hepsiburada_service_key: "", hepsiburada_username: "",
   hepsiburada_match_field: "barcode", hepsiburada_stage: false,
+  ozon_enabled: false, ozon_client_id: "", ozon_api_key: "", ozon_warehouse_id: "", ozon_match_field: "sku",
   kargonomi_enabled: true, kargonomi_api_token: "", kargonomi_warehouse_id: "",
 };
 
-const LABEL: Record<Channel, string> = { trendyol: "Trendyol", hepsiburada: "Hepsiburada" };
+const LABEL: Record<Channel, string> = { trendyol: "Trendyol", hepsiburada: "Hepsiburada", ozon: "Ozon" };
 
 async function authHeaders(): Promise<Record<string, string>> {
   const { data: { session } } = await supabase.auth.getSession();
@@ -176,7 +182,7 @@ function SyncPanel({ channel, enabled }: { channel: Channel; enabled: boolean })
           title: anyFail ? "Bağlantı kısmen başarılı" : "Bağlantı başarılı",
           message: svc.length
             ? svc.map((x) => `${x.ok ? "✓" : "✗"} ${x.name}: ${x.detail}`).join("\n")
-            : `${name} hesabına bağlanıldı${j.totalProducts != null ? ` — ${name}'da ${j.totalProducts} ürün görünüyor` : ""}.`,
+            : `${name} hesabına bağlanıldı${j.totalProducts != null ? ` — ${name}'da ${j.totalProducts} ürün görünüyor` : ""}${Array.isArray(j.warehouses) ? ` · ${j.warehouses.length} depo bulundu` : ""}.`,
           tone: anyFail ? "danger" : "success",
         });
       } else if (j.skipped === "disabled") {
@@ -408,6 +414,11 @@ export default function IntegrationsTab() {
           hepsiburada_username: d.hepsiburada_username ?? "",
           hepsiburada_match_field: d.hepsiburada_match_field === "sku" ? "sku" : "barcode",
           hepsiburada_stage: !!d.hepsiburada_stage,
+          ozon_enabled: !!d.ozon_enabled,
+          ozon_client_id: d.ozon_client_id ?? "",
+          ozon_api_key: d.ozon_api_key ?? "",
+          ozon_warehouse_id: d.ozon_warehouse_id ?? "",
+          ozon_match_field: d.ozon_match_field === "barcode" ? "barcode" : "sku",
           kargonomi_enabled: d.kargonomi_enabled !== false,
           kargonomi_api_token: d.kargonomi_api_token ?? "",
           kargonomi_warehouse_id: d.kargonomi_warehouse_id ?? "",
@@ -452,9 +463,11 @@ export default function IntegrationsTab() {
     const name = LABEL[channel];
     const ready = channel === "trendyol"
       ? !!(s.trendyol_seller_id && s.trendyol_api_key && s.trendyol_api_secret)
-      : !!(s.hepsiburada_merchant_id && s.hepsiburada_service_key && s.hepsiburada_username);
+      : channel === "ozon"
+        ? !!(s.ozon_client_id && s.ozon_api_key && s.ozon_warehouse_id)
+        : !!(s.hepsiburada_merchant_id && s.hepsiburada_service_key && s.hepsiburada_username);
     if (on && !ready) {
-      siteAlert({ title: "Bilgiler eksik", message: `Açmadan önce ${name} bağlantı bilgilerini girip kaydet.`, tone: "danger" });
+      siteAlert({ title: "Bilgiler eksik", message: `Açmadan önce ${name} bağlantı bilgilerini${channel === "ozon" ? " ve deposunu" : ""} girip kaydet.`, tone: "danger" });
       return;
     }
     if (!on && !(await siteConfirm({ title: `${name} senkronu kapatılsın mı?`, message: `Kapalıyken stok değişiklikleri ${name}'a gönderilmez; değişiklikler kuyrukta bekler ve tekrar açtığında gönderilir.`, confirmText: "Kapat" }))) return;
@@ -462,16 +475,39 @@ export default function IntegrationsTab() {
     if (ok && on) {
       siteAlert({
         title: `${name} senkronu açık`,
-        message: `Bundan sonra stok değişiklikleri otomatik gönderilecek. İlk kez açtıysan “Tüm stokları gönder” ile ${name}'u sitedeki stoklarla bir kez eşitle.`,
+        message: channel === "ozon"
+          ? "Önce “İlanları eşitle”ye bas (Ozon'da yalnız ilandaki ürünlere stok gider), sonra “Tüm stokları gönder” ile bir kez eşitle."
+          : `Bundan sonra stok değişiklikleri otomatik gönderilecek. İlk kez açtıysan “Tüm stokları gönder” ile ${name}'u sitedeki stoklarla bir kez eşitle.`,
         tone: "success",
       });
     }
   }
 
-  async function changeMatchField(v: "barcode" | "sku") {
-    if (v === s.hepsiburada_match_field) return;
-    const ok = await save("hepsiburada", { hepsiburada_match_field: v });
+  async function changeMatchField(v: "barcode" | "sku", channel: "hepsiburada" | "ozon" = "hepsiburada") {
+    if (v === s[`${channel}_match_field`]) return;
+    const ok = await save(channel, { [`${channel}_match_field`]: v } as Partial<IntegrationSettings>);
     if (ok) siteAlert({ message: "Eşleştirme alanı değişti. Kuyruğu yeni alana göre yenilemek için Senkron Durumu'ndan bir kez “Tüm stokları gönder”e bas.", tone: "success" });
+  }
+
+  // Ozon: kayıtlı Client ID / API anahtarıyla depo listesini getir
+  const [ozWarehouses, setOzWarehouses] = useState<{ id: string; name: string; status: string; rfbs: boolean }[] | null>(null);
+  const [ozWhBusy, setOzWhBusy] = useState(false);
+  async function loadOzonWarehouses() {
+    setOzWhBusy(true);
+    try {
+      const r = await fetch("/api/admin/integrations/ozon", {
+        method: "POST", headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+        body: JSON.stringify({ action: "warehouses" }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || "Depolar alınamadı");
+      setOzWarehouses(j.warehouses || []);
+      if (!j.warehouses?.length) siteAlert({ message: "Ozon hesabında depo bulunamadı. Ozon panelinde Lojistik → Lojistik Yönetimi → Depo Ekle ile OGL deposu oluştur.", tone: "danger" });
+    } catch (e: any) {
+      siteAlert({ title: "Depolar alınamadı", message: e?.message || "Hata", tone: "danger" });
+    } finally {
+      setOzWhBusy(false);
+    }
   }
 
   const saveBtn = (g: Group, name: string) => (
@@ -593,6 +629,76 @@ export default function IntegrationsTab() {
             <SyncPanel channel="hepsiburada" enabled={s.hepsiburada_enabled} />
           </div>
           <HepsiburadaTestCenter />
+        </CardContent>
+      </Card>
+
+      {/* ─── Ozon (Rusya — Ozon Global) ─── */}
+      <Card className="shadow-sm border-muted">
+        <CardHeader>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <CardTitle className="flex items-center gap-2"><Store size={20} className="text-blue-600" /> Ozon (Rusya) — Stok Senkronu</CardTitle>
+              <CardDescription className="mt-1">
+                Ozon&apos;daki <b>ürün kodu (offer_id / Артикул)</b> ile eşleştirilir; stok seçtiğin tek bir Ozon deposuna (OGL deposu) yazılır.
+                Yalnız Ozon&apos;da <b>ilanı olan</b> ürünlere stok gider. Fiyat ve sipariş aktarımı henüz yok.
+              </CardDescription>
+            </div>
+            <Toggle on={s.ozon_enabled} onChange={(v) => toggleChannel("ozon", v)} disabled={savingKey === "ozon"} />
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Field label="Client ID">
+              <Input value={s.ozon_client_id} onChange={(e) => set({ ozon_client_id: e.target.value.replace(/\D/g, "") })} placeholder="Örn: 1234567" inputMode="numeric" />
+            </Field>
+            <Field label="API Key"><SecretInput value={s.ozon_api_key} onChange={(v) => set({ ozon_api_key: v.trim() })} placeholder="••••••••-••••-••••" /></Field>
+            <Field label="Depo (warehouse_id)" hint={<>Önce Client ID + API Key&apos;i <b>kaydet</b>, sonra “Depoları getir”.</>}>
+              {ozWarehouses && ozWarehouses.length > 0 ? (
+                <select value={s.ozon_warehouse_id} onChange={(e) => set({ ozon_warehouse_id: e.target.value })}
+                  className="h-10 w-full rounded-md border px-2 text-sm bg-white">
+                  <option value="">Depo seç…</option>
+                  {ozWarehouses.map((w) => (
+                    <option key={w.id} value={w.id}>{w.name || w.id} · {w.id}{w.rfbs ? " · rFBS" : ""}{w.status ? ` · ${w.status}` : ""}</option>
+                  ))}
+                </select>
+              ) : (
+                <div className="flex gap-2">
+                  <Input value={s.ozon_warehouse_id} onChange={(e) => set({ ozon_warehouse_id: e.target.value.replace(/\D/g, "") })} placeholder="Örn: 22142605386000" inputMode="numeric" />
+                  <Button type="button" variant="outline" onClick={loadOzonWarehouses} disabled={ozWhBusy} className="shrink-0 gap-1.5">
+                    {ozWhBusy ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} Depoları getir
+                  </Button>
+                </div>
+              )}
+            </Field>
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Ozon&apos;daki ürün kodu (offer_id), sitedeki hangi alana karşılık geliyor?</p>
+            <div className="flex flex-wrap gap-2">
+              {([["sku", "Varyant SKU / ürün kodu"], ["barcode", "Varyant barkodu"]] as const).map(([v, lbl]) => (
+                <button key={v} type="button" onClick={() => changeMatchField(v, "ozon")} disabled={savingKey === "ozon"}
+                  className={`px-3.5 py-2 rounded-lg text-sm font-semibold border-2 transition-colors ${s.ozon_match_field === v ? "border-blue-600 bg-blue-50 text-blue-700" : "border-slate-200 text-slate-600 hover:border-slate-300"}`}>
+                  {lbl}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">Ozon&apos;da ürün açarken “Артикул / Offer ID” alanına sitedeki varyant SKU&apos;sunu yazarsan eşleşme kendiliğinden olur (her numara ayrı varyant = ayrı offer_id).</p>
+          </div>
+
+          <div className="p-4 rounded-xl bg-blue-50 border border-blue-100 text-sm text-blue-900 space-y-2">
+            <p className="font-semibold">Bu bilgileri nereden alırım?</p>
+            <ol className="list-decimal list-inside space-y-1 text-xs text-blue-800">
+              <li><a href="https://seller.ozon.ru" target="_blank" rel="noopener noreferrer" className="underline font-medium">Ozon satıcı paneline</a> giriş yap → <strong>Ayarlar → Seller API</strong>.</li>
+              <li><strong>Anahtar oluştur</strong>: ad ver, ürün/stok yönetimine izin veren rolü seç. <strong>Client ID</strong> ve <strong>API Key</strong>&apos;i buraya yapıştır. (Güvenlik için anahtar ayarındaki “İzinli ağlar”a yalnız sunucu IP&apos;sini ekleyebilirsin.)</li>
+              <li><strong>Kaydet</strong> → <strong>Depoları getir</strong> → OGL deposunu seç → tekrar <strong>Kaydet</strong>.</li>
+              <li><strong>Bağlantıyı Test Et</strong> → sağ üstten <strong>Aç</strong> → <strong>İlanları eşitle</strong> → bir kez <strong>Tüm stokları gönder</strong>.</li>
+            </ol>
+            <p className="text-[11px] text-blue-700">Ozon kuralları: aynı ürünün stoğu 30 saniyede bir güncellenebilir (sık değişimde birkaç saniye sonra otomatik tekrar gider); ürün Ozon&apos;da satışa hazır (fiyatı onaylanmış) olmadan stok kabul edilmez.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {saveBtn("ozon", "Ozon")}
+            <SyncPanel channel="ozon" enabled={s.ozon_enabled} />
+          </div>
         </CardContent>
       </Card>
 

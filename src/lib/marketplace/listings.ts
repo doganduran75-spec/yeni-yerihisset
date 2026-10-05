@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // PAZARYERİ İLAN EŞİTLEME: her pazaryerinden İLANDAKİ ürün anahtarlarını çeker (Trendyol:
-// barkod, Hepsiburada: satıcı stok kodu) ve apply_marketplace_listings ile kaydeder.
+// barkod, Hepsiburada: satıcı stok kodu, Ozon: offer_id) ve apply_marketplace_listings ile kaydeder.
 // Stok / fiyat yalnız ilandaki varyantlara gider → o kanalda ilanı olmayan ürün hata üretmez.
 // Saatte bir (cron/marketplace-sync içinden) + elle "İlanları eşitle" (force).
 // Pazaryeri hata verirse önceki liste korunur (marketplace_listing_state.message'a yazılır).
@@ -8,6 +8,7 @@
 import { createAdminClient } from "@/lib/supabase-admin";
 import { getTrendyolConfig, hasCredentials, listTrendyolBarcodes } from "./trendyol";
 import { getHepsiburadaConfig, hbHasCredentials, hbListMerchantSkus } from "./hepsiburada";
+import { getOzonConfig, ozHasCredentials, ozListOfferIds } from "./ozon";
 import type { Channel } from "./sync";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
@@ -22,6 +23,10 @@ async function fetchKeys(sb: AdminClient, channel: Channel): Promise<{ enabled: 
     const c = await getTrendyolConfig(sb);
     return { enabled: c.enabled, ready: hasCredentials(c), keys: () => listTrendyolBarcodes(c) };
   }
+  if (channel === "ozon") {
+    const c = await getOzonConfig(sb);
+    return { enabled: c.enabled, ready: ozHasCredentials(c), keys: () => ozListOfferIds(c) };
+  }
   const c = await getHepsiburadaConfig(sb);
   return { enabled: c.enabled, ready: hbHasCredentials(c), keys: () => hbListMerchantSkus(c) };
 }
@@ -31,7 +36,7 @@ export async function syncMarketplaceListings(
   opts: { channel?: Channel; force?: boolean } = {},
 ): Promise<ListingSyncResult[]> {
   const out: ListingSyncResult[] = [];
-  const channels: Channel[] = opts.channel ? [opts.channel] : ["trendyol", "hepsiburada"];
+  const channels: Channel[] = opts.channel ? [opts.channel] : ["trendyol", "hepsiburada", "ozon"];
   for (const channel of channels) {
     const src = await fetchKeys(sb, channel);
     if (!src.ready) { out.push({ channel, ok: false, skipped: "API bilgileri eksik" }); continue; }
@@ -47,6 +52,10 @@ export async function syncMarketplaceListings(
       const keys = await src.keys!();
       const { data, error } = await (sb as any).rpc("apply_marketplace_listings", { p_channel: channel, p_keys: keys });
       if (error) throw new Error(error.message);
+      // Ozon'da eşitlemeden önce hiçbir ürüne stok gitmiyordu → ilk eşitlemede ilandakilerin tamamını kuyruğa al
+      if (channel === "ozon" && data?.ok && data?.first_time) {
+        await (sb as any).rpc("enqueue_all_marketplace_stock", { p_channel: "ozon" });
+      }
       out.push({ channel, ok: !!data?.ok, count: data?.count, added: data?.added, removed: data?.removed, message: data?.message });
     } catch (e: any) {
       const message = e?.message || String(e);

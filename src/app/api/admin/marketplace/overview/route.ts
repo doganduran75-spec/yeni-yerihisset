@@ -4,6 +4,7 @@ import { getAuthUserFromRequest } from "@/lib/auth-from-request";
 import { CHANNELS, channelLabel, type Channel } from "@/lib/marketplace/sync";
 import { getTrendyolConfig, hasCredentials } from "@/lib/marketplace/trendyol";
 import { getHepsiburadaConfig, hbHasCredentials } from "@/lib/marketplace/hepsiburada";
+import { getOzonConfig, ozReady } from "@/lib/marketplace/ozon";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -22,9 +23,10 @@ export async function GET(req: NextRequest) {
   if (me?.role !== "admin") return NextResponse.json({ error: "Yetkisiz" }, { status: 403 });
 
   // Sitede son stok değişikliği: stock_changed_at damgası (tetikleyici; her yoldan değişimi yakalar)
-  const [ty, hb, { data: lastVar }, { data: lastProd }] = await Promise.all([
+  const [ty, hb, oz, { data: lastVar }, { data: lastProd }] = await Promise.all([
     getTrendyolConfig(supabase),
     getHepsiburadaConfig(supabase),
+    getOzonConfig(supabase),
     sb.from("product_variants").select("stock_changed_at, stock, products(title), variant_options(value)")
       .not("stock_changed_at", "is", null).order("stock_changed_at", { ascending: false }).limit(1).maybeSingle(),
     sb.from("products").select("stock_changed_at, stock, title")
@@ -36,6 +38,7 @@ export async function GET(req: NextRequest) {
   const conf: Record<Channel, { enabled: boolean; ready: boolean }> = {
     trendyol: { enabled: ty.enabled, ready: hasCredentials(ty) },
     hepsiburada: { enabled: hb.enabled, ready: hbHasCredentials(hb) },
+    ozon: { enabled: oz.enabled, ready: ozReady(oz) },
   };
 
   const channels = await Promise.all(CHANNELS.map(async (c) => {
