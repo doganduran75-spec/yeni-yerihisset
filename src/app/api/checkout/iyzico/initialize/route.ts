@@ -19,6 +19,10 @@ type CartItem = {
 };
 
 export async function POST(req: NextRequest) {
+  // Anahtarlar sunucuda tanımlı değilse sipariş/stok rezervasyonu yapmadan net mesaj ver
+  if (!process.env.IYZICO_API_KEY || !process.env.IYZICO_SECRET_KEY) {
+    return NextResponse.json({ error: "Kartla ödeme şu an kullanılamıyor. Lütfen Havale/EFT ile devam edin." }, { status: 503 });
+  }
   const authUser = await getAuthUserFromRequest(req);
 
   const body = await req.json();
@@ -40,7 +44,7 @@ export async function POST(req: NextRequest) {
     billingSameAsShipping?: boolean;
     affiliateCode?: string;
     couponCode?: string;
-    identityNumber: string;
+    identityNumber?: string;
     creditApply?: number;
     guest?: GuestInput;
     shippingMethodId?: string;
@@ -49,9 +53,10 @@ export async function POST(req: NextRequest) {
   if (!items?.length) {
     return NextResponse.json({ error: "Eksik bilgi" }, { status: 400 });
   }
-  if (!identityNumber || identityNumber.replace(/\D/g, "").length !== 11) {
-    return NextResponse.json({ error: "Geçerli bir TC Kimlik No girin." }, { status: 400 });
-  }
+  // TC Kimlik No checkout'ta SORULMAZ (siparişi basitleştirmek için). Profilde kayıtlıysa o,
+  // yoksa iyzico'ya bireysel müşteri varsayılanı 11111111111 gider (fatura da bu numarayla
+  // kesilebilir). Kurumsal faturada vergi no kullanılır.
+  const tcknInput = (identityNumber || "").replace(/\D/g, "");
 
   const supabase = createAdminClient();
 
@@ -78,11 +83,12 @@ export async function POST(req: NextRequest) {
     profile = { first_name: g.address.first_name, last_name: g.address.last_name, email: g.email, phone: g.address.phone };
   }
 
-  // TC'yi profile'a kaydet
-  await (supabase as any)
-    .from("profiles")
-    .update({ identity_number: identityNumber.replace(/\D/g, "") })
-    .eq("id", userId);
+  // Elle girilmiş geçerli TC varsa profile kaydet; yoksa profildeki kullanılır
+  if (tcknInput.length === 11) {
+    await (supabase as any).from("profiles").update({ identity_number: tcknInput }).eq("id", userId);
+  }
+  const savedTckn = String(profile?.identity_number || "").replace(/\D/g, "");
+  const tckn = tcknInput.length === 11 ? tcknInput : savedTckn.length === 11 ? savedTckn : "";
 
   // ── GÜVENLİK: Fiyatları sunucuda doğrula (tarayıcıdan gelen price yok sayılır) ──
   const pricing = await validateCartPricing(supabase, items);
@@ -170,7 +176,6 @@ export async function POST(req: NextRequest) {
   });
 
   // Fatura adresi snapshot'ı (TCKN dahil). Teslimatla aynıysa teslimatı kopyalar.
-  const tckn = identityNumber.replace(/\D/g, "");
   const billingFrom = (a: any, same: boolean) => ({
     same_as_shipping: same,
     name: `${a.first_name} ${a.last_name}`,
@@ -178,7 +183,7 @@ export async function POST(req: NextRequest) {
     address: a.address_detail,
     district: a.district,
     city: a.city,
-    identity_number: tckn,
+    identity_number: tckn || null,
     is_corporate: !!a.is_corporate,
     company_name: a.is_corporate ? a.company_name : null,
     tax_office: a.is_corporate ? a.tax_office : null,
@@ -358,7 +363,7 @@ export async function POST(req: NextRequest) {
       name: buyerName,
       surname: buyerSurname,
       email: buyerEmail,
-      identityNumber: identityNumber.replace(/\D/g, ""),
+      identityNumber: tckn || "11111111111",
       registrationAddress: `${address.address_detail} ${address.district} ${address.city}`,
       city: address.city,
       country: "Turkey",

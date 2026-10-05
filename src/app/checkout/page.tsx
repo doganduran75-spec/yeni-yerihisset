@@ -21,7 +21,6 @@ import {
   Loader2,
   Landmark,
   Clock,
-  IdCard,
   Banknote,
   PackageX,
   Pencil,
@@ -261,7 +260,7 @@ export default function CheckoutPage() {
 
   // İlk eksik alana kaydır + odakla
   function focusFirstError(e: Record<string, boolean>) {
-    const order = ["email", "firstName", "lastName", "phone", "city", "district", "address", "shipping", "tckn"];
+    const order = ["email", "firstName", "lastName", "phone", "city", "district", "address", "shipping"];
     const firstKey = order.find((k) => e[k]);
     const el = firstKey ? document.getElementById(`f-${firstKey}`) : null;
     if (el) {
@@ -290,7 +289,6 @@ export default function CheckoutPage() {
   async function handlePlaceOrder() {
     // ── Eksik alan doğrulaması ─────────────────────────────────────────────
     const e: Record<string, boolean> = deliveryErrors();
-    if (paymentMethod === "credit_card" && identityNumber.replace(/\D/g, "").length !== 11) e.tckn = true;
 
     setErrors(e);
     if (Object.keys(e).length > 0) {
@@ -685,8 +683,8 @@ export default function CheckoutPage() {
 
       {/* Ödeme hatası banner */}
       {paymentFailed && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-red-600 text-white px-6 py-3 rounded-2xl shadow-xl font-bold text-sm flex items-center gap-2 animate-in slide-in-from-top-4">
-          <X size={16} /> Ödeme işlemi tamamlanamadı. Lütfen tekrar deneyin.
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-red-600 text-white px-6 py-3 rounded-2xl shadow-xl font-bold text-sm flex items-center gap-2 w-[calc(100%-2rem)] max-w-xl animate-in slide-in-from-top-4">
+          <X size={16} className="shrink-0" /> Ödeme tamamlanamadı, kartından para çekilmedi. Sepetin duruyor — tekrar deneyebilir ya da Havale/EFT seçebilirsin.
         </div>
       )}
 
@@ -1198,27 +1196,6 @@ export default function CheckoutPage() {
                   )}
                </div>
 
-
-               {paymentMethod === "credit_card" && (
-                 <div className="bento-card bg-white !p-6 animate-in fade-in slide-in-from-top-4">
-                    {/* TC Kimlik — iyzico + yasal zorunluluk */}
-                   <div className="space-y-2" id="f-tckn">
-                     <label className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em] px-1 flex items-center gap-1.5">
-                       <IdCard size={12} /> TC KİMLİK NUMARASI
-                     </label>
-                     <Input
-                       value={identityNumber}
-                       onChange={e => { setIdentityNumber(e.target.value.replace(/\D/g, "").slice(0, 11)); clearErr("tckn"); }}
-                       placeholder="Örn: 12345678901"
-                       maxLength={11}
-                       className={cn("h-14 rounded-2xl bg-white border-slate-200 font-bold font-mono tracking-widest focus:ring-olive-600", errCls("tckn"))}
-                     />
-                     <p className="text-[10px] text-slate-400 font-medium px-1 leading-relaxed">
-                       <span className="text-olive-600 font-bold">Yasal zorunluluk:</span> iyzico, 6493 sayılı Ödeme Hizmetleri Kanunu gereğince kimlik doğrulaması yapmaktadır. Bilgileriniz yalnızca fatura ve ödeme işlemleri için kullanılır.
-                     </p>
-                   </div>
-                 </div>
-               )}
 
                {/* Banka bilgileri — Havale seçilince göster */}
                {paymentMethod === "bank_transfer" && bankTransferInfo && (

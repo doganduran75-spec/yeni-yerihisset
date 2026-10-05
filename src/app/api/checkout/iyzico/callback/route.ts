@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
       // Siparişi conversationId üzerinden bul
       const { data: order } = await (supabase as any)
         .from("orders")
-        .select("id, user_id, total_amount")
+        .select("id, user_id, total_amount, order_number, payment_status, status")
         .eq("iyzico_conversation_id", conversationId)
         .single();
 
@@ -56,7 +56,17 @@ export async function POST(req: NextRequest) {
         return;
       }
 
+      const successUrl = `${SITE_URL}/siparis-tamam?id=${order.id}`;
+
       if (paymentStatus === "SUCCESS") {
+        // Aynı ödeme için İKİNCİ dönüş (iyzico tekrarı / tarayıcı yenileme) → yan etki yok
+        // (stok, kupon sayacı ve e-postalar iki kez işlenmesin)
+        if (order.payment_status === "paid") {
+          resolve(NextResponse.redirect(successUrl, 303));
+          return;
+        }
+        const wasCancelled = order.status === "cancelled"; // 30 dk dolup otomatik iptal edilmişti
+
         // Ödeme başarılı → siparişi onayla
         await (supabase as any)
           .from("orders")
@@ -67,6 +77,19 @@ export async function POST(req: NextRequest) {
             iyzico_payment_id: String(paymentId),
           })
           .eq("id", order.id);
+
+        // Kontrol notları: iyzico'nun onayladığı tutar ≠ sipariş tutarı, ya da süre dolup
+        // iptal edilmiş sipariş sonradan ödendi → admin siparişte görür
+        const notes: string[] = [];
+        const iyzPrice = Number(result?.price ?? NaN);
+        if (Number.isFinite(iyzPrice) && Math.abs(iyzPrice - Number(order.total_amount)) > 0.01) {
+          notes.push(`⚠ iyzico tutarı (₺${iyzPrice.toFixed(2)}) sipariş tutarından (₺${Number(order.total_amount).toFixed(2)}) farklı — kontrol et`);
+        }
+        if (wasCancelled) notes.push("Ödeme süresi dolup otomatik iptal edilmişti; ödeme sonradan geldi → sipariş yeniden açıldı");
+        if (result?.fraudStatus === 0) notes.push("iyzico bu ödemeyi incelemeye aldı (fraudStatus=0) — iyzico panelinden onayı bekle");
+        for (const n of notes) {
+          await (supabase as any).from("order_events").insert({ order_id: order.id, type: "note", note: n });
+        }
 
         // ── STOK DÜŞÜMÜ (soft) ────────────────────────────────────────────────
         // Para çekildiği için siparişi ASLA reddetmiyoruz. Stok yetmezse (nadir
@@ -135,8 +158,29 @@ export async function POST(req: NextRequest) {
           })(),
         ]).catch(() => {});
 
-        resolve(NextResponse.redirect(`${SITE_URL}/siparis-tamam?id=${order.id}`, 303));
+        // Misafir (şifresiz hesap) → "hesabını aktifleştir" e-postası (havale akışındaki gibi)
+        (async () => {
+          const { data: prof } = await (supabase as any)
+            .from("profiles").select("email, first_name").eq("id", order.user_id).maybeSingle();
+          if (!prof?.email) return;
+          const { data: st } = await (supabase as any).rpc("account_password_state", { p_email: prof.email });
+          if (st !== "passwordless") return;
+          const { sendGuestActivationEmail } = await import("@/lib/notifications");
+          const r = await sendGuestActivationEmail({
+            email: prof.email,
+            name: prof.first_name ?? null,
+            orderLabel: order.order_number ? `YH${order.order_number}` : null,
+          });
+          if (r.status !== "sent") console.error("[guest-activation]", r.error);
+        })().catch((e) => console.error("[guest-activation]", e?.message || e));
+
+        resolve(NextResponse.redirect(successUrl, 303));
       } else {
+        // Sipariş zaten ödendi / iptal edildi (tekrar gelen dönüş) → dokunma
+        if (order.payment_status !== "pending") {
+          resolve(NextResponse.redirect(order.payment_status === "paid" ? successUrl : `${SITE_URL}/checkout?hatali=1`, 303));
+          return;
+        }
         // Ödeme başarısız / iptal → siparişi iptal et + rezerve stoğu iade et (F9)
         // + kullanılan YeriHisset Kredisi'ni cüzdana geri yükle
         await (supabase as any).rpc("restore_order_stock", { p_order_id: order.id });
@@ -146,6 +190,11 @@ export async function POST(req: NextRequest) {
           .from("orders")
           .update({ status: "cancelled", payment_status: "failed" })
           .eq("id", order.id);
+        // Neden başarısız oldu → admin sipariş geçmişinde görür (müşteri ekranında genel mesaj)
+        const reason = [result?.errorCode, result?.errorMessage].filter(Boolean).join(" — ") || paymentStatus || "bilinmiyor";
+        await (supabase as any).from("order_events").insert({
+          order_id: order.id, type: "note", note: `Kart ödemesi başarısız: ${reason}`,
+        });
 
         resolve(NextResponse.redirect(`${SITE_URL}/checkout?hatali=1`, 303));
       }
