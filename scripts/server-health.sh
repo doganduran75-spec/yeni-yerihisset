@@ -95,6 +95,13 @@ else
   else add containers ok "Supabase konteynerleri" "$TOTAL/$TOTAL çalışıyor" ""; fi
 fi
 
+# Dağıtım sürüyor mu? (scripts/deploy.sh işareti; 20 dakikadan eskiyse dikkate alınmaz)
+DEPLOYING=false
+if [ -f /run/yerihisset-deploying ]; then
+  DEP_AGE=$(( $(date +%s) - $(cat /run/yerihisset-deploying 2>/dev/null || echo 0) ))
+  [ "$DEP_AGE" -lt 1200 ] && DEPLOYING=true
+fi
+
 # 5) Site süreçleri (pm2)
 if command -v pm2 >/dev/null 2>&1 && command -v node >/dev/null 2>&1; then
   read -r PM_TOTAL PM_ON PM_UNSTABLE < <(pm2 jlist 2>/dev/null | node -e '
@@ -102,7 +109,8 @@ if command -v pm2 >/dev/null 2>&1 && command -v node >/dev/null 2>&1; then
       const a=JSON.parse(s.slice(s.indexOf("[")));
       console.log(a.length, a.filter(p=>p.pm2_env.status==="online").length, a.reduce((x,p)=>x+(p.pm2_env.unstable_restarts||0),0));
     } catch { console.log("0 0 0"); } });' 2>/dev/null || echo "0 0 0")
-  if   [ "${PM_TOTAL:-0}" -eq 0 ]; then add app fail "Site uygulaması" "çalışan süreç yok" "Site kapalı olabilir: pm2 status ile kontrol edilmeli."
+  if $DEPLOYING && [ "${PM_ON:-0}" -lt "${PM_TOTAL:-1}" ]; then add app warn "Site uygulaması" "dağıtım sürüyor (${PM_ON:-0}/${PM_TOTAL:-0})" "Güncelleme sırasında site birkaç dakika durur; normal."
+  elif [ "${PM_TOTAL:-0}" -eq 0 ]; then add app fail "Site uygulaması" "çalışan süreç yok" "Site kapalı olabilir: pm2 status ile kontrol edilmeli."
   elif [ "${PM_ON:-0}" -lt "${PM_TOTAL:-0}" ]; then add app fail "Site uygulaması" "$PM_ON/$PM_TOTAL süreç çalışıyor" "Bazı site süreçleri durmuş."
   elif [ "${PM_UNSTABLE:-0}" -gt 0 ]; then add app warn "Site uygulaması" "$PM_ON/$PM_TOTAL çalışıyor, $PM_UNSTABLE çökme" "Site süreçleri çöküp yeniden başlıyor; log incelenmeli."
   else add app ok "Site uygulaması" "$PM_ON/$PM_TOTAL süreç çalışıyor" ""; fi
@@ -113,7 +121,8 @@ fi
 # 6) Site dışarıdan yanıt veriyor mu (Caddy üzerinden; şifreli staging'de 401 da "çalışıyor" demek)
 for D in $DOMAINS; do
   CODE=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 20 --resolve "$D:443:127.0.0.1" "https://$D/" 2>/dev/null || echo 000)
-  if [ "$CODE" = "000" ] || [ "${CODE:0:1}" = "5" ]; then add "site:$D" fail "Site ($D)" "yanıt yok (HTTP $CODE)" "Site açılmıyor."
+  if $DEPLOYING && { [ "$CODE" = "000" ] || [ "${CODE:0:1}" = "5" ]; }; then add "site:$D" warn "Site ($D)" "dağıtım sürüyor (HTTP $CODE)" "Güncelleme sırasında site birkaç dakika durur; normal."
+  elif [ "$CODE" = "000" ] || [ "${CODE:0:1}" = "5" ]; then add "site:$D" fail "Site ($D)" "yanıt yok (HTTP $CODE)" "Site açılmıyor."
   else add "site:$D" ok "Site ($D)" "yanıt veriyor (HTTP $CODE)" ""; fi
 
   # 7) SSL sertifikası

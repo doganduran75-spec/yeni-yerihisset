@@ -9,12 +9,20 @@
 #    çıktı doğruluğunu artırmaz, yalnızca her build'i sıfırdan yaptırır.
 #    Korumak ardışık build'leri belirgin hızlandırır, riski yoktur.
 #  - build BİTTİKTEN sonra pm2 yeniden başlatılır (taze .next ile).
+#  - Dağıtım süresince /run/yerihisset-deploying işareti durur: sağlık kontrolü
+#    (scripts/server-health.sh) bu sırada duran süreçleri "sorun" saymaz, e-posta atmaz.
+#    Dağıtım yarıda kalırsa işaret silinir → sonraki kontrol gerçek sorunu bildirir.
 #
 # Kullanım:  bash scripts/deploy.sh
 set -euo pipefail
 
 # Script'in bulunduğu repo köküne geç (nereden çağrılırsa çağrılsın doğru dizin)
 cd "$(dirname "$0")/.."
+
+DEPLOY_FLAG=/run/yerihisset-deploying
+date +%s > "$DEPLOY_FLAG"
+trap 'rm -f "$DEPLOY_FLAG"' EXIT
+trap 'echo; echo "✗ DAĞITIM YARIDA KALDI — site süreçleri durmuş olabilir (site kapalı)."; echo "  Hatayı düzeltip tekrar: bash scripts/deploy.sh   ·   durum: pm2 status"' ERR
 
 LOCK_BEFORE="$(sha1sum package-lock.json 2>/dev/null | cut -d' ' -f1)"
 echo "▸ git pull"
