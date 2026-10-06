@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { rateLimited, clientIp, TOO_MANY } from "@/lib/rate-limit";
+import { botVerdict, botResponse } from "@/lib/bot-guard";
 import { issueEmailVerification } from "@/lib/email-verify";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -19,6 +20,9 @@ export async function POST(req: NextRequest) {
   const password = String(body.password || "");
   const firstName = String(body.firstName || "").trim();
   const lastName = String(body.lastName || "").trim();
+  // Bot: gizli alan / çok hızlı gönderim; anlamsız ad-soyad → görünür hata (gerçek kişi düzeltebilsin)
+  const blocked = botResponse("register", botVerdict(body, { texts: [firstName, lastName], gibberish: "invalid", minMs: 2500 }), clientIp(req));
+  if (blocked) return blocked;
 
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
     return NextResponse.json({ error: "Geçerli bir e-posta girin." }, { status: 400 });

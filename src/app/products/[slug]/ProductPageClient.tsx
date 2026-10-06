@@ -151,9 +151,10 @@ export default function ProductPageClient({ product, initialSize = null }: { pro
       if (!user) return;
 
       localStorage.removeItem("pendingStockNotify");
+      const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch("/api/stock-notify", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
         body: JSON.stringify({ productId: pending.productId, variantId: pending.variantId }),
       });
       if (res.ok && pending.variantId) {

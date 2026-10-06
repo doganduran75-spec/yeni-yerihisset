@@ -63,6 +63,19 @@ export async function getServerHealth(sb: any): Promise<ServerHealth> {
     }
   }
 
+  // 4) Form spam koruması: son 24 saatte engellenen bot denemeleri (src/lib/bot-guard.ts)
+  const { count: bots, error: botErr } = await sb.from("bot_blocks").select("id", { count: "exact", head: true })
+    .gte("created_at", new Date(Date.now() - 86400_000).toISOString());
+  if (!botErr) {
+    const n = bots ?? 0;
+    checks.push({
+      key: "bot_blocks", label: "Form spam koruması",
+      status: n > 500 ? "warn" : "ok",
+      value: n ? `son 24 saatte ${n} bot denemesi engellendi` : "son 24 saatte bot denemesi yok",
+      hint: n > 500 ? "Yoğun bot saldırısı sürüyor; hepsi engellendi. Uzun sürerse Cloudflare Turnstile eklenebilir." : "",
+    });
+  }
+
   const status = checks.reduce<HealthStatus>((w, c) => (rank[c.status] > rank[w] ? c.status : w), "ok");
   checks.sort((a, b) => rank[b.status] - rank[a.status]);
   return { status, checkedAt: run?.created_at ?? null, checks };

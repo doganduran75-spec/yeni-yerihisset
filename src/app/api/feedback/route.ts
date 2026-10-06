@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { rateLimited, clientIp, TOO_MANY } from "@/lib/rate-limit";
+import { botVerdict, botResponse } from "@/lib/bot-guard";
 
 /**
  * "Aradığını bulamadın mı?" geri bildirim/talep kutusu.
@@ -15,6 +16,8 @@ export async function POST(req: NextRequest) {
   const source = String(body.source || "products").slice(0, 40);
 
   if (!message) return NextResponse.json({ error: "Lütfen ne aradığını yaz." }, { status: 400 });
+  const blocked = botResponse("feedback", botVerdict(body, { texts: [message] }), clientIp(req));
+  if (blocked) return blocked;
   if (message.length > 2000) return NextResponse.json({ error: "Not çok uzun." }, { status: 400 });
   if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
     return NextResponse.json({ error: "Geçerli bir e-posta girin (ya da boş bırak)." }, { status: 400 });

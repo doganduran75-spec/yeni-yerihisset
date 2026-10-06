@@ -1,5 +1,6 @@
 "use client";
 
+import { useBotTrap } from "@/components/BotTrap";
 import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
@@ -208,6 +209,7 @@ function ProductCard({ p, onQuickAdd, added }: { p: any; onQuickAdd?: (p: any) =
 }
 
 function DesktopFooter() {
+  const bot = useBotTrap();
   const [email, setEmail] = useState("");
   const [state, setState] = useState<"idle" | "loading" | "ok" | "err">("idle");
   const [msg, setMsg] = useState("");
@@ -218,7 +220,7 @@ function DesktopFooter() {
     setState("loading");
     try {
       const res = await fetch("/api/newsletter", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }),
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, ...bot.fields() }),
       });
       const d = await res.json().catch(() => ({}));
       if (res.ok) { setState("ok"); setMsg("Teşekkürler! Kaydınız alındı."); setEmail(""); }
@@ -256,6 +258,7 @@ function DesktopFooter() {
           <h4 style={{ fontFamily: EPI, fontWeight: 600, fontSize: 15, color: C.ink, marginBottom: 16 }}>{HC.footer.newsletterTitle}</h4>
           <p style={{ color: C.muted, fontSize: 14, lineHeight: 1.6, marginBottom: 14 }}>{HC.footer.newsletterBody}</p>
           <form onSubmit={submit} className="flex gap-2">
+            {bot.trap}
             <input
               type="email" required value={email} onChange={(e) => { setEmail(e.target.value); setState("idle"); }}
               placeholder="E-posta adresiniz"

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { rateLimited, clientIp, TOO_MANY } from "@/lib/rate-limit";
+import { botVerdict, botResponse } from "@/lib/bot-guard";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -10,6 +11,8 @@ export async function POST(req: NextRequest) {
   // Toplu kötüye kullanıma karşı IP başına sınır
   if (rateLimited("newsletter", clientIp(req), 5, 3600000)) return NextResponse.json(TOO_MANY, { status: 429 });
   const body = await req.json().catch(() => ({}));
+  const blocked = botResponse("newsletter", botVerdict(body), clientIp(req));
+  if (blocked) return blocked;
   const email = String(body.email || "").trim().toLowerCase();
   if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
     return NextResponse.json({ error: "Geçerli bir e-posta girin." }, { status: 400 });

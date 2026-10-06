@@ -1,5 +1,6 @@
 "use client";
 
+import { useBotTrap } from "@/components/BotTrap";
 import { useEffect, useState, useRef } from "react";
 import { useCartStore } from "@/store/useCartStore";
 import Navbar from "@/components/Navbar";
@@ -48,6 +49,7 @@ export default function CheckoutPage() {
   const router = useRouter();
   const { items, getTotalPrice, clearCart, couponCode: storeCouponCode } = useCartStore();
   const [addresses, setAddresses] = useState<any[]>([]);
+  const bot = useBotTrap(); // misafir siparişte bot koruması (sunucu: src/lib/bot-guard.ts)
   const [isGuest, setIsGuest] = useState(false); // giriş yapmadan alışveriş
   const [guestAddr, setGuestAddr] = useState({ phone: "", city: "", district: "", addressDetail: "" });
   const [shippingMethods, setShippingMethods] = useState<any[]>([]);
@@ -358,6 +360,7 @@ export default function CheckoutPage() {
           })),
           shippingAddressId: isGuest ? undefined : selectedShippingId,
           guest: guestPayload,
+          ...bot.fields(),
           shippingMethodId: selectedShippingMethodId || undefined,
           billingAddressId: isSameAsShipping ? null : (selectedBillingId || null),
           billingSameAsShipping: isSameAsShipping,
@@ -418,6 +421,7 @@ export default function CheckoutPage() {
         })),
         shippingAddressId: isGuest ? undefined : selectedShippingId,
         guest: guestPayload,
+        ...bot.fields(),
         shippingMethodId: selectedShippingMethodId || undefined,
         billingAddressId: isSameAsShipping ? null : (selectedBillingId || null),
         billingSameAsShipping: isSameAsShipping,
@@ -756,6 +760,7 @@ export default function CheckoutPage() {
                <div className="bento-card bg-white !p-8">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
+                      {bot.trap}
                       <label className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em] px-1">E-POSTA ADRESİ</label>
                       <div className="relative" id="f-email">
                         <Input

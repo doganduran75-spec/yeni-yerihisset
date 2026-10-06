@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Bell, Check, Apple, Loader2 } from "lucide-react";
+import { useBotTrap } from "@/components/BotTrap";
 
 interface StockNotifyModalProps {
   open: boolean;
@@ -33,6 +34,7 @@ export default function StockNotifyModal({
   variantId,
   variantName,
 }: StockNotifyModalProps) {
+  const bot = useBotTrap();
   const [step, setStep] = useState<Step>("form");
   const [user, setUser] = useState<any>(null);
   const [contact, setContact] = useState("");
@@ -74,6 +76,7 @@ export default function StockNotifyModal({
           productId,
           variantId,
           contact: user ? undefined : contact.trim(),
+          ...bot.fields(),
         }),
       });
 
@@ -153,6 +156,7 @@ export default function StockNotifyModal({
             </DialogHeader>
 
             <div className="p-6 pt-4 space-y-4">
+              {bot.trap}
               {checkingAuth ? (
                 <div className="flex justify-center py-4">
                   <Loader2 size={24} className="animate-spin text-slate-400" />

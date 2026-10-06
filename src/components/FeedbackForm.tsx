@@ -2,12 +2,14 @@
 
 import { useState } from "react";
 import { Search, Send, CheckCircle2, Loader2 } from "lucide-react";
+import { useBotTrap } from "@/components/BotTrap";
 
 /**
  * "Aradığını bulamadın mı?" — e-posta + not bırak, gönder. Admin ekranında görünür.
  * /products altında; karşılanmayan talebi yakalar.
  */
 export default function FeedbackForm({ source = "products" }: { source?: string }) {
+  const bot = useBotTrap();
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
@@ -23,7 +25,7 @@ export default function FeedbackForm({ source = "products" }: { source?: string 
       const res = await fetch("/api/feedback", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, message, source }),
+        body: JSON.stringify({ email, message, source, ...bot.fields() }),
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(d?.error || "Gönderilemedi.");
@@ -58,6 +60,7 @@ export default function FeedbackForm({ source = "products" }: { source?: string 
             </p>
           </div>
           <form onSubmit={submit} className="space-y-3">
+            {bot.trap}
             <textarea
               value={message}
               onChange={(e) => setMessage(e.target.value)}

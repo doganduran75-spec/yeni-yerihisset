@@ -5,6 +5,8 @@ import { getAuthUserFromRequest } from "@/lib/auth-from-request";
 import { validateCartPricing } from "@/lib/order-pricing";
 import { resolveCreditApply, deductCreditForOrder } from "@/lib/store-credit";
 import { resolveGuest, type GuestInput } from "@/lib/guest-checkout";
+import { rateLimited, clientIp, TOO_MANY } from "@/lib/rate-limit";
+import { botVerdict, botResponse } from "@/lib/bot-guard";
 import { resolveShipping } from "@/lib/shipping";
 
 type CartItem = {
@@ -21,6 +23,13 @@ export async function POST(req: NextRequest) {
   const authUser = await getAuthUserFromRequest(req);
 
   const body = await req.json();
+  // Misafir: IP sınırı + bot koruması (sahte sipariş stok ayırıp hesap açmasın)
+  if (!authUser) {
+    if (rateLimited("guest-order", clientIp(req), 10, 3600000)) return NextResponse.json(TOO_MANY, { status: 429 });
+    const g = (body?.guest || {}) as GuestInput;
+    const blocked = botResponse("guest-order", botVerdict(body, { texts: [g.firstName, g.lastName, g.addressDetail], gibberish: "invalid", minMs: 4000 }), clientIp(req));
+    if (blocked) return blocked;
+  }
   const { items, shippingAddressId, billingAddressId, billingSameAsShipping, affiliateCode, couponCode, paymentMethod, creditApply, guest, shippingMethodId } = body as {
     items: CartItem[];
     shippingAddressId?: string;

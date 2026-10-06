@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { trAuthError } from "@/lib/auth-errors";
+import { useBotTrap } from "@/components/BotTrap";
 
 export default function LoginPage() {
   return (
@@ -34,6 +35,7 @@ function LoginForm() {
   const searchParams = useSearchParams();
   const redirect = searchParams.get("redirect") || "/";
   
+  const bot = useBotTrap();
   const [isLogin, setIsLogin] = useState(true);
   const [forgot, setForgot] = useState(searchParams.get("forgot") === "1"); // ?forgot=1 → doğrudan şifre belirleme
   // Eski siteden aktarılan / misafir hesaplar şifresiz: hatalı girişte "şifreni belirle" yönlendirmesi
@@ -138,7 +140,7 @@ function LoginForm() {
         const res = await fetch("/api/auth/forgot-password", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: formData.email }),
+          body: JSON.stringify({ email: formData.email, ...bot.fields() }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data?.error || "İstek gönderilemedi.");
@@ -164,6 +166,7 @@ function LoginForm() {
             password: formData.password,
             firstName: formData.firstName,
             lastName: formData.lastName,
+            ...bot.fields(),
           }),
         });
         const data = await res.json().catch(() => ({}));
@@ -279,6 +282,7 @@ function LoginForm() {
             </div>
           ) : (
           <form onSubmit={handleSubmit} className="space-y-6">
+            {bot.trap}
             {!isLogin && (
               <div className="grid grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2">
                 <div className="space-y-2">

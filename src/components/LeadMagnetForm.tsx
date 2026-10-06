@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Truck, Loader2, CheckCircle2, Mail } from "lucide-react";
+import { useBotTrap } from "@/components/BotTrap";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -10,6 +11,7 @@ import { Input } from "@/components/ui/input";
  * couponCode: admin'in oluşturduğu free_shipping kuponunun kodu.
  */
 export default function LeadMagnetForm({ couponCode = "KARGOBEDAVA" }: { couponCode?: string }) {
+  const bot = useBotTrap();
   const [email, setEmail] = useState("");
   const [consent, setConsent] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -25,7 +27,7 @@ export default function LeadMagnetForm({ couponCode = "KARGOBEDAVA" }: { couponC
       const res = await fetch("/api/lead-magnet/claim", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim(), consent, couponCode }),
+        body: JSON.stringify({ email: email.trim(), consent, couponCode, ...bot.fields() }),
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "Bir hata oluştu.");
@@ -64,6 +66,7 @@ export default function LeadMagnetForm({ couponCode = "KARGOBEDAVA" }: { couponC
             </div>
           ) : (
             <form onSubmit={submit} className="space-y-3">
+              {bot.trap}
               <div className="relative">
                 <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <Input

@@ -43,6 +43,9 @@ async function run(req: NextRequest) {
   }
   await (supabase as any).from("marketplace_stock_log")
     .delete().lt("created_at", new Date(Date.now() - 180 * 86400_000).toISOString());
+  // Form spam koruması kayıtları (src/lib/bot-guard.ts): 30 günden eskiler
+  await (supabase as any).from("bot_blocks")
+    .delete().lt("created_at", new Date(Date.now() - 30 * 86400_000).toISOString());
   // Sunucu Sağlığı: "çalışıyorum" kaydı (uzun süre gelmezse dashboard + e-posta uyarır)
   const firstError = [...orders, ...reports, ...prices].flatMap((r: { errors?: string[] }) => r.errors ?? [])[0];
   await (supabase as any).from("cron_heartbeats").upsert({

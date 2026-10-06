@@ -4,6 +4,8 @@ import { createClient } from "@supabase/supabase-js";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { sendStockNotifySignupWelcome } from "@/lib/notifications";
+import { rateLimited, clientIp, TOO_MANY } from "@/lib/rate-limit";
+import { botVerdict, botResponse } from "@/lib/bot-guard";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -60,6 +62,14 @@ export async function POST(req: NextRequest) {
       } catch {
         // Cookie auth başarısız
       }
+    }
+
+    // Misafir: IP sınırı + bot koruması (her kayıt bir "haber verelim" e-postası gönderir →
+    // başkasının adresine e-posta yağdırmak için kullanılamasın)
+    if (!user) {
+      if (rateLimited("stock-notify", clientIp(req), 10, 3600000)) return NextResponse.json(TOO_MANY, { status: 429 });
+      const blocked = botResponse("stock-notify", botVerdict(body), clientIp(req), { success: true });
+      if (blocked) return blocked;
     }
 
     // Misafir ise contact bilgisi zorunlu
