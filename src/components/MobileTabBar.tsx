@@ -19,6 +19,8 @@ export default function MobileTabBar() {
 
   // Admin panelinde site alt menüsü gösterilmez (admin kendi menüsünü kullanır).
   if (pathname.startsWith("/admin")) return null;
+  // Ödeme sırasında gizli: dikkat dağıtmasın, "Siparişi tamamla"ya yakın yanlış dokunma olmasın
+  if (pathname.startsWith("/checkout")) return null;
 
   return (
     <nav

@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { getFreeShippingOver, qualifiesFreeShipping } from "@/lib/free-shipping-rule";
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
@@ -37,6 +38,7 @@ export default async function SearchPage({
   searchParams: Promise<{ q?: string }>;
 }) {
   const { q = "" } = await searchParams;
+  const freeOver = await getFreeShippingOver();
   const query = q.trim();
   const tokens = norm(query).split(/\s+/).filter(Boolean);
 
@@ -101,7 +103,7 @@ export default async function SearchPage({
               </Link>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-16">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-x-3 gap-y-8 sm:gap-x-6 md:gap-x-8 md:gap-y-16">
               {list.map((product) => {
                 const img =
                   product.images?.[0] ?? product.image_url ??
@@ -113,7 +115,7 @@ export default async function SearchPage({
 
                 return (
                   <div key={product.id} className="group cursor-pointer">
-                    <div className="relative aspect-[3/4] overflow-hidden rounded-[2.5rem] bg-olive-50 mb-6 border border-slate-100 shadow-sm transition-all duration-700 hover:shadow-2xl hover:shadow-slate-200">
+                    <div className="relative aspect-[3/4] overflow-hidden rounded-2xl md:rounded-[2.5rem] bg-olive-50 mb-3 md:mb-6 border border-slate-100 shadow-sm transition-all duration-700 hover:shadow-2xl hover:shadow-slate-200">
                       <Link href={`/products/${product.slug}`} className="block w-full h-full relative">
                         <Image
                           src={img}
@@ -125,17 +127,17 @@ export default async function SearchPage({
                       </Link>
                       <Link
                         href={`/products/${product.slug}`}
-                        className="absolute bottom-6 left-1/2 -translate-x-1/2 w-[85%] h-14 glass rounded-2xl text-slate-900 font-black text-xs uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-all transform translate-y-4 group-hover:translate-y-0 flex items-center justify-center gap-2 hover:bg-olive-600 hover:text-white hover:border-olive-600 active:scale-95 shadow-xl"
+                        className="hidden md:flex absolute bottom-6 left-1/2 -translate-x-1/2 w-[85%] h-14 glass rounded-2xl text-slate-900 font-black text-xs uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-all transform translate-y-4 group-hover:translate-y-0 items-center justify-center gap-2 hover:bg-olive-600 hover:text-white hover:border-olive-600 active:scale-95 shadow-xl"
                       >
                         <Search size={18} /> İNCELE
                       </Link>
-                      <div className="absolute top-6 left-6 flex flex-col gap-2">
+                      <div className="absolute top-2.5 left-2.5 md:top-6 md:left-6 flex flex-col items-start gap-1 md:gap-2">
                         {brand?.name && (
                           <span className="px-3 py-1 bg-white/90 backdrop-blur-md text-[9px] font-black uppercase tracking-widest rounded-full border border-slate-100 text-slate-900">
                             {brand.name}
                           </span>
                         )}
-                        {minPrice > 1000 && (
+                        {qualifiesFreeShipping(minPrice, freeOver) && (
                           <span className="px-3 py-1 bg-olive-600 text-white text-[9px] font-black uppercase tracking-widest rounded-full shadow-lg shadow-olive-100">
                             Ücretsiz Kargo
                           </span>
@@ -147,17 +149,13 @@ export default async function SearchPage({
                         <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.1em]">
                           {cat?.name ?? ""}
                         </p>
-                        <div className="flex items-center gap-1 text-yellow-400">
-                          <Star size={10} fill="currentColor" />
-                          <span className="text-[10px] text-slate-500 font-bold italic">4.9 (124+)</span>
-                        </div>
                       </div>
                       <Link href={`/products/${product.slug}`}>
-                        <h3 className="text-lg font-black text-slate-900 group-hover:text-olive-600 transition-colors tracking-tight uppercase italic">
+                        <h3 className="text-[13px] leading-snug md:text-lg md:leading-normal font-black text-slate-900 group-hover:text-olive-600 transition-colors tracking-tight uppercase italic">
                           {product.title}
                         </h3>
                       </Link>
-                      <p className="font-black text-2xl text-olive-600 italic tracking-tighter">
+                      <p className="font-black text-lg md:text-2xl text-olive-600 italic tracking-tighter">
                         {priceText}
                       </p>
                     </div>

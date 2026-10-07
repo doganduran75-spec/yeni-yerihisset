@@ -15,11 +15,12 @@ const SUPABASE_WS = SUPABASE_ORIGIN.replace(/^https:/, "wss:");
 const IYZICO = "https://*.iyzipay.com";
 const CSP = [
   "default-src 'self'",
-  `script-src 'self' 'unsafe-inline' https://www.googletagmanager.com ${IYZICO}`,
+  // Google Analytics 4: Google'ın önerdiği CSP listesi (support.google.com/tagmanager → CSP)
+  `script-src 'self' 'unsafe-inline' https://*.googletagmanager.com ${IYZICO}`,
   `style-src 'self' 'unsafe-inline' ${IYZICO}`,
-  `img-src 'self' data: blob: ${SUPABASE_ORIGIN} https://ewnuurgmxhksbjixbian.supabase.co https://images.unsplash.com https://img.youtube.com https://*.google-analytics.com https://www.googletagmanager.com ${IYZICO}`,
+  `img-src 'self' data: blob: ${SUPABASE_ORIGIN} https://ewnuurgmxhksbjixbian.supabase.co https://images.unsplash.com https://img.youtube.com https://*.google-analytics.com https://*.googletagmanager.com ${IYZICO}`,
   `font-src 'self' data: ${IYZICO}`,
-  `connect-src 'self' ${SUPABASE_ORIGIN} ${SUPABASE_WS} https://*.google-analytics.com https://*.analytics.google.com https://www.googletagmanager.com ${IYZICO}`,
+  `connect-src 'self' ${SUPABASE_ORIGIN} ${SUPABASE_WS} https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com ${IYZICO}`,
   `media-src 'self' blob: ${SUPABASE_ORIGIN}`,
   `frame-src 'self' ${IYZICO} https://www.youtube.com https://www.youtube-nocookie.com`,
   "frame-ancestors 'self'",

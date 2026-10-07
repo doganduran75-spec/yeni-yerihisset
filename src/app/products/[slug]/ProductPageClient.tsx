@@ -68,7 +68,11 @@ type Product = {
   product_variants: Variant[] | null;
 };
 
-export default function ProductPageClient({ product, initialSize = null }: { product: Product; initialSize?: string | null }) {
+export default function ProductPageClient({ product, initialSize = null, ratingSummary = null }: {
+  product: Product;
+  initialSize?: string | null;
+  ratingSummary?: { avg: number; count: number } | null; // gerçek yorumlardan; yoksa yıldız gösterilmez
+}) {
   const images =
     product.images && product.images.length > 0
       ? product.images
@@ -274,7 +278,8 @@ export default function ProductPageClient({ product, initialSize = null }: { pro
       {/* ── Sepete Eklendi Toast ─────────────────────────────── */}
       <div
         className={cn(
-          "fixed top-6 right-4 md:right-6 z-[200] flex items-center gap-4 bg-white rounded-2xl shadow-2xl shadow-slate-200 border border-slate-100 px-5 py-4 max-w-sm transition-all duration-300",
+          // Telefon: ekran genişliğinde (taşıp sayfayı yana kaydırmasın); masaüstü: sağ üstte dar kutu
+          "fixed top-4 left-3 right-3 md:top-6 md:left-auto md:right-6 z-[200] flex items-center gap-3 md:gap-4 bg-white rounded-2xl shadow-2xl shadow-slate-200 border border-slate-100 px-3 py-3 md:px-5 md:py-4 md:max-w-sm transition-all duration-300",
           toast
             ? "opacity-100 translate-y-0 pointer-events-auto"
             : "opacity-0 -translate-y-4 pointer-events-none"
@@ -298,13 +303,14 @@ export default function ProductPageClient({ product, initialSize = null }: { pro
         </div>
         <Link
           href="/sepet"
-          className="flex-shrink-0 text-sm font-bold text-olive-600 hover:text-olive-800 whitespace-nowrap border border-olive-200 rounded-full px-4 py-2 hover:bg-olive-50 transition-colors"
+          className="flex-shrink-0 text-sm font-bold text-olive-600 hover:text-olive-800 whitespace-nowrap border border-olive-200 rounded-full px-3 md:px-4 py-2 hover:bg-olive-50 transition-colors"
         >
           Sepete Git →
         </Link>
         <button
           onClick={() => setToast(false)}
-          className="absolute -top-2 -right-2 w-5 h-5 bg-slate-200 hover:bg-slate-300 rounded-full flex items-center justify-center transition-colors"
+          className="absolute -top-2 -right-2 w-7 h-7 md:w-5 md:h-5 bg-slate-200 hover:bg-slate-300 rounded-full flex items-center justify-center transition-colors"
+          aria-label="Kapat"
         >
           <X size={10} />
         </button>
@@ -417,14 +423,14 @@ export default function ProductPageClient({ product, initialSize = null }: { pro
                 <Badge variant="outline" className="text-olive-600 border-olive-100 bg-olive-50/50">
                   {product.categories?.name}
                 </Badge>
-                <div className="flex items-center text-yellow-500 text-sm font-bold">
-                  <Star size={16} fill="currentColor" />
-                  <Star size={16} fill="currentColor" />
-                  <Star size={16} fill="currentColor" />
-                  <Star size={16} fill="currentColor" />
-                  <Star size={16} fill="currentColor" className="text-slate-200" />
-                  <span className="ml-2 text-slate-500">4.0 (12 Değerlendirme)</span>
-                </div>
+                {ratingSummary && ratingSummary.count > 0 && (
+                  <a href="#yorumlar" className="flex items-center text-yellow-500 text-sm font-bold">
+                    {[1, 2, 3, 4, 5].map((i) => (
+                      <Star key={i} size={16} fill="currentColor" className={i <= Math.round(ratingSummary.avg) ? "" : "text-slate-200"} />
+                    ))}
+                    <span className="ml-2 text-slate-500">{ratingSummary.avg.toLocaleString("tr-TR", { minimumFractionDigits: 1 })} ({ratingSummary.count} Değerlendirme)</span>
+                  </a>
+                )}
               </div>
               <h1 className="text-4xl md:text-5xl font-black text-slate-900 leading-tight">
                 {product.title}
@@ -620,7 +626,7 @@ export default function ProductPageClient({ product, initialSize = null }: { pro
             </div>
 
             {/* Müşteri yorumları — sağ sütunda (sol foto sabit kalsın diye) */}
-            <ProductReviews productId={product.id} />
+            <div id="yorumlar" className="scroll-mt-24"><ProductReviews productId={product.id} /></div>
 
             {/* Detaylı açıklama — yorumların altında */}
             {product.description && (

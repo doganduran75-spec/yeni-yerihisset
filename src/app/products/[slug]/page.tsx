@@ -71,6 +71,26 @@ async function getReviewStats(productId: string): Promise<{ ratingValue: number;
   return { ratingValue, reviewCount };
 }
 
+// Ürün sayfasının üstündeki yıldızlar — GERÇEK yorumlardan (onaylı order_reviews; aşağıdaki
+// yorum listesiyle aynı kural: ayar "tüm yorumlar" ise hepsi, değilse bu ürününkiler).
+// Yorum yoksa null → yıldız gösterilmez (eskiden sabit "4.0 (12)" yazıyordu).
+async function getRatingSummary(productId: string): Promise<{ avg: number; count: number } | null> {
+  const supabase = createClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  ) as any;
+  const { data: st } = await supabase.from("settings").select("product_reviews_show_all").limit(1).maybeSingle();
+  let q = supabase.from("order_reviews").select("rating_shipping, rating_quality, rating_communication").eq("is_approved", true);
+  if (st?.product_reviews_show_all === false) q = q.eq("product_id", productId);
+  const { data } = await q;
+  const per = ((data as any[]) ?? []).map((r) => {
+    const nums = [r.rating_shipping, r.rating_quality, r.rating_communication].filter((x) => typeof x === "number") as number[];
+    return nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : null;
+  }).filter((x): x is number => x !== null);
+  if (!per.length) return null;
+  return { avg: Math.round((per.reduce((a, b) => a + b, 0) / per.length) * 10) / 10, count: per.length };
+}
+
 // --- Metadata (Open Graph + SEO) ---
 
 export async function generateMetadata(
@@ -141,7 +161,7 @@ export default async function ProductDetailPage({
 
   if (!product) notFound();
 
-  const reviewStats = await getReviewStats(product.id);
+  const [reviewStats, ratingSummary] = await Promise.all([getReviewStats(product.id), getRatingSummary(product.id)]);
 
   return (
     <>
@@ -155,7 +175,7 @@ export default async function ProductDetailPage({
       />
 
       {/* İnteraktif ürün sayfası (client component) */}
-      <ProductPageClient product={product as any} initialSize={beden ?? null} />
+      <ProductPageClient product={product as any} initialSize={beden ?? null} ratingSummary={ratingSummary} />
     </>
   );
 }

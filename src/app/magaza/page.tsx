@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { getFreeShippingOver } from "@/lib/free-shipping-rule";
 import type { Metadata } from "next";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -21,6 +22,7 @@ function getSupabase() {
 }
 
 export default async function ProductsPage() {
+  const freeOver = await getFreeShippingOver();
   const sb = getSupabase();
 
   const { data: products } = await sb
@@ -45,7 +47,7 @@ export default async function ProductsPage() {
       <main className="min-h-screen bg-background">
         <div className="container mx-auto px-4 py-8 max-w-7xl">
           {/* Ürün grid + numara filtresi */}
-          <SizeFilterGrid products={list} />
+          <SizeFilterGrid products={list} freeOver={freeOver} />
 
           {/* Aradığını bulamadın mı? — talep yakalama */}
           <FeedbackForm source="products" />

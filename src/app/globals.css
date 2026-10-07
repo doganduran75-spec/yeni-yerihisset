@@ -142,3 +142,22 @@ textarea::placeholder {
 .animate-float {
   animation: float 3s ease-in-out infinite;
 }
+
+/* Sayfa hiçbir zaman ekrandan geniş olmasın: kenardan kayarak gelen açılış animasyonları
+   (ör. ürün sayfası "slide-in-from-right") ve ekran dışı bildirimler telefonda sayfayı geçici
+   olarak genişletip yana kaydırıyordu. "clip" kaydırma kutusu oluşturmaz → sticky öğeler bozulmaz. */
+html,
+body {
+  overflow-x: clip;
+}
+
+/* TELEFON: iOS Safari, yazısı 16px'ten küçük form alanına dokununca sayfayı yakınlaştırır
+   (sayfa kayar, kullanıcı geri uzaklaştırmak zorunda kalır). Ziyaretçilerin ~%94'ü mobil →
+   telefonda tüm metin alanları en az 16px. Masaüstü görünümü değişmez. */
+@media (max-width: 767px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}

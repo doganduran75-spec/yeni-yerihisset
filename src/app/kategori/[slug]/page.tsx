@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { getFreeShippingOver } from "@/lib/free-shipping-rule";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -36,6 +37,7 @@ export default async function KategoriPage({
 }: {
   params: Promise<{ slug: string }>;
 }) {
+  const freeOver = await getFreeShippingOver();
   const { slug } = await params;
   const sb = getSupabase();
 
@@ -81,7 +83,7 @@ export default async function KategoriPage({
           </div>
 
           {/* Ürün grid + numara filtresi */}
-          <SizeFilterGrid products={list} categoryName={category.name} />
+          <SizeFilterGrid products={list} categoryName={category.name} freeOver={freeOver} />
         </div>
       </main>
       <Footer />

@@ -337,7 +337,7 @@ function LoginForm() {
                   <button
                     type="button"
                     onClick={() => { setForgot(true); setError(null); setSuccess(null); }}
-                    className="text-[10px] font-bold text-olive-600 hover:underline"
+                    className="text-xs md:text-[10px] font-bold text-olive-600 hover:underline py-2 -my-2 px-1 -mx-1"
                   >
                     Şifremi Unuttum
                   </button>
@@ -358,7 +358,8 @@ function LoginForm() {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-slate-400 hover:text-slate-600 transition-colors"
+                  aria-label={showPassword ? "Şifreyi gizle" : "Şifreyi göster"}
                 >
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
