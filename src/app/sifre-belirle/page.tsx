@@ -20,6 +20,13 @@ import { Card, CardContent } from "@/components/ui/card";
  * otomatik işler ve PASSWORD_RECOVERY / SIGNED_IN olayı fırlatır. Biz de o
  * oturumla updateUser({ password }) çağırırız.
  */
+// E-postadaki bağlantıyla gelindi → adresin sahibi olduğu kanıtlandı; e-postayı doğrulanmış işaretle
+// (sunucu, oturumun gerçekten e-posta bağlantısıyla açıldığını kontrol eder)
+function markEmailVerified(accessToken?: string | null) {
+  if (!accessToken) return;
+  fetch("/api/auth/mark-verified", { method: "POST", headers: { Authorization: `Bearer ${accessToken}` } }).catch(() => {});
+}
+
 export default function SetPasswordPage() {
   const router = useRouter();
   const [ready, setReady] = useState<boolean | null>(null); // recovery oturumu var mı
@@ -38,6 +45,7 @@ export default function SetPasswordPage() {
       if (event === "PASSWORD_RECOVERY" || (session && (event === "SIGNED_IN" || event === "INITIAL_SESSION"))) {
         settled = true;
         setReady(true);
+        if (event === "PASSWORD_RECOVERY") markEmailVerified(session?.access_token);
       }
     });
 
@@ -53,6 +61,7 @@ export default function SetPasswordPage() {
           if (!error && data?.session) {
             settled = true;
             setReady(true);
+            markEmailVerified(data.session.access_token);
             // Token'ı adres çubuğundan temizle
             window.history.replaceState(null, "", "/sifre-belirle");
           } else {

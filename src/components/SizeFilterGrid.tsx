@@ -28,7 +28,7 @@ function sizeValue(v: any): string {
   return (v.variant_options?.value ?? "").trim();
 }
 
-function ProductCard({ product, categoryName, size, outOfStock, onNotify, canQuickBuy, onQuickBuy, priority, freeOver }: {
+function ProductCard({ product, categoryName, size, outOfStock, onNotify, canQuickBuy, onQuickBuy, priority, freeOver, hasGift }: {
   product: any;
   categoryName?: string;
   size?: string | null;          // aktif numara filtresi (varsa linke eklenir)
@@ -38,6 +38,7 @@ function ProductCard({ product, categoryName, size, outOfStock, onNotify, canQui
   onQuickBuy?: (product: any) => void;
   priority?: boolean;            // üst sıra kartları → görsel öncelikli yüklensin
   freeOver?: number | null;      // ücretsiz kargo eşiği (kargo ayarından)
+  hasGift?: boolean;             // kategorisi bir hediye kuralını tetikliyor
 }) {
   const img = product.images?.[0] ?? product.image_url ?? FALLBACK_IMG;
   const minPrice = getMinPrice(product);
@@ -89,6 +90,9 @@ function ProductCard({ product, categoryName, size, outOfStock, onNotify, canQui
           {brand?.name && (
             <span className="px-2 md:px-3 py-0.5 md:py-1 bg-white/90 backdrop-blur-md text-[9px] font-black uppercase tracking-widest rounded-full border border-slate-100 text-slate-900">{brand.name}</span>
           )}
+          {hasGift && (
+            <span className="px-2 md:px-3 py-0.5 md:py-1 bg-amber-400 text-slate-900 text-[9px] font-black uppercase tracking-widest rounded-full shadow-lg">🎁 Hediyeli</span>
+          )}
           {qualifiesFreeShipping(minPrice, freeOver) && (
             <span className="px-2 md:px-3 py-0.5 md:py-1 bg-olive-600 text-white text-[9px] font-black uppercase tracking-widest rounded-full shadow-lg shadow-olive-100">Ücretsiz Kargo</span>
           )}
@@ -110,6 +114,12 @@ export default function SizeFilterGrid({ products: cachedProducts, categoryName,
   // dönüşte varyant stokları DB'den okunup ürünlerin üstüne yazılır; böylece numara
   // filtresi "stokta" / "stokta değil" ayrımını güncel stokla yapar.
   const [liveVariants, setLiveVariants] = useState<Map<string, number> | null>(null);
+  // Hediye kuralı tetikleyen kategoriler → kartta "Hediyeli" rozeti
+  const [giftCats, setGiftCats] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    (supabase as any).from("free_gift_rules").select("trigger_category_id").eq("is_active", true)
+      .then(({ data }: any) => setGiftCats(new Set(((data as any[]) ?? []).map((r) => r.trigger_category_id))));
+  }, []);
   const [stockMsg, setStockMsg] = useState<string | null>(null);
   const productIdsKey = cachedProducts.map((p) => p.id).join(",");
   useEffect(() => {
@@ -349,7 +359,7 @@ export default function SizeFilterGrid({ products: cachedProducts, categoryName,
           <div className="text-center py-20 text-slate-400">Bu kategoride henüz ürün bulunmuyor.</div>
         ) : (
           <div className={gridCls}>
-            {base.map((p, i) => <ProductCard key={p.id} freeOver={freeOver} product={p} categoryName={categoryName} size={size} priority={i < 4} />)}
+            {base.map((p, i) => <ProductCard key={p.id} freeOver={freeOver} hasGift={giftCats.has(p.categories?.id)} product={p} categoryName={categoryName} size={size} priority={i < 4} />)}
           </div>
         )
       ) : (
@@ -363,7 +373,7 @@ export default function SizeFilterGrid({ products: cachedProducts, categoryName,
             {inStock.length === 0 ? (
               <p className="text-slate-400 text-sm py-4">Bu numarada stokta ürün yok.</p>
             ) : (
-              <div className={gridCls}>{inStock.map((p, i) => <ProductCard key={p.id} freeOver={freeOver} product={p} categoryName={categoryName} size={size} canQuickBuy onQuickBuy={quickBuy} priority={i < 4} />)}</div>
+              <div className={gridCls}>{inStock.map((p, i) => <ProductCard key={p.id} freeOver={freeOver} hasGift={giftCats.has(p.categories?.id)} product={p} categoryName={categoryName} size={size} canQuickBuy onQuickBuy={quickBuy} priority={i < 4} />)}</div>
             )}
           </div>
 
@@ -375,7 +385,7 @@ export default function SizeFilterGrid({ products: cachedProducts, categoryName,
                 <h2 className="text-lg font-black text-slate-400 uppercase italic">{size} Numara — Şu An Stokta Değil ({outStock.length})</h2>
               </div>
               <div className={gridCls}>
-                {outStock.map((p) => <ProductCard key={p.id} freeOver={freeOver} product={p} categoryName={categoryName} size={size} outOfStock onNotify={openNotify} />)}
+                {outStock.map((p) => <ProductCard key={p.id} freeOver={freeOver} hasGift={giftCats.has(p.categories?.id)} product={p} categoryName={categoryName} size={size} outOfStock onNotify={openNotify} />)}
               </div>
             </div>
           )}

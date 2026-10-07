@@ -29,6 +29,7 @@ import { cn } from "@/lib/utils";
 import { sortByVariantValue } from "@/lib/variant-sort";
 import ProductReviews from "@/components/products/ProductReviews";
 import StockNotifyModal from "@/components/products/StockNotifyModal";
+import GiftPromo from "@/components/products/GiftPromo";
 import { useCartStore } from "@/store/useCartStore";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -446,6 +447,9 @@ export default function ProductPageClient({ product, initialSize = null, ratingS
                 )}
               </div>
             </div>
+
+            {/* Hediye tanıtımı (bu kategori bir bedelsiz ürün kuralını tetikliyorsa) */}
+            <GiftPromo categoryId={product.category_id} />
 
             <Separator className="bg-slate-100" />
 

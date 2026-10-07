@@ -201,6 +201,9 @@ function CouponSection({
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [loggedIn, setLoggedIn] = useState<boolean | null>(null);
+  // Kod alanı varsayılan KAPALI: kuponu olmayan müşteri "kodum yok" hissine kapılmasın;
+  // kodu olan (ortak / kampanya kodu) küçük bağlantıdan açar
+  const [open, setOpen] = useState(false);
 
   const onAppliedRef = useRef(onApplied);
   onAppliedRef.current = onApplied;
@@ -289,66 +292,92 @@ function CouponSection({
     setError("");
   }
 
-  return (
-    <div>
-      <h4 className="text-xs font-bold mb-3 uppercase tracking-wider flex items-center gap-2 text-slate-500">
-        <Ticket size={14} className="text-olive-600" /> İndirim Kuponu
-      </h4>
+  const codeInput = (
+    <div className="space-y-2">
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={input}
+          autoFocus
+          onChange={(e) => setInput(e.target.value.toUpperCase())}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); apply(); } }}
+          placeholder="Kupon kodu"
+          className="w-full h-12 px-4 rounded-xl border-2 border-slate-200 focus:outline-none focus:border-olive-500 bg-white transition-all font-medium uppercase placeholder:normal-case"
+        />
+        <Button onClick={apply} disabled={loading || !input.trim()} className="h-12 px-6 rounded-xl font-bold bg-slate-900">
+          {loading ? <Loader2 size={16} className="animate-spin" /> : "UYGULA"}
+        </Button>
+      </div>
+    </div>
+  );
 
-      {applied ? (
-        <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-2xl px-4 py-3">
-          <div>
-            <p className="text-xs font-black text-green-800">{applied.name}</p>
-            <p className="text-[10px] text-green-600 font-mono font-bold">
-              {couponCode}
-              {applied.free_shipping
-                ? " · Ücretsiz kargo"
-                : applied.discount > 0
-                ? ` · -₺${applied.discount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`
-                : ""}
-            </p>
-          </div>
-          <button onClick={remove} className="text-green-500 hover:text-red-500 transition-colors p-1">
-            <X size={16} />
-          </button>
+  // Kupon uygulanmış
+  if (applied) {
+    return (
+      <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-2xl px-4 py-3">
+        <div>
+          <p className="text-xs font-black text-green-800 flex items-center gap-1.5"><Ticket size={13} /> {applied.name}</p>
+          <p className="text-[10px] text-green-600 font-mono font-bold">
+            {couponCode}
+            {applied.free_shipping
+              ? " · Ücretsiz kargo"
+              : applied.discount > 0
+              ? ` · -₺${applied.discount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`
+              : ""}
+          </p>
         </div>
+        <button onClick={remove} className="text-green-500 hover:text-red-500 transition-colors p-1" aria-label="Kuponu kaldır">
+          <X size={16} />
+        </button>
+      </div>
+    );
+  }
+
+  // Hesabında kullanılabilir kupon var → doğrudan seçilebilir kartlar
+  if (userCoupons.length > 0) {
+    return (
+      <div className="space-y-2">
+        <h4 className="text-xs font-black uppercase tracking-wider flex items-center gap-2 text-olive-700">
+          <Ticket size={14} className="text-olive-600" /> Kuponların
+        </h4>
+        {userCoupons.map((uc) => (
+          <button
+            key={uc.id}
+            onClick={() => { setError(""); setCouponCode(String(uc.coupons?.code || "").toUpperCase()); }}
+            disabled={loading}
+            className="w-full flex items-center justify-between gap-3 rounded-2xl border-2 border-dashed border-olive-300 bg-olive-50/50 px-4 py-3 text-left hover:bg-olive-50 transition-colors"
+          >
+            <span className="min-w-0">
+              <span className="block text-sm font-bold text-slate-900 truncate">{uc.coupons?.name || uc.coupons?.code}</span>
+              <span className="block text-[11px] font-mono font-bold text-olive-700">{uc.coupons?.code}</span>
+            </span>
+            <span className="shrink-0 text-xs font-black text-white bg-olive-600 rounded-full px-3 py-1.5">Uygula</span>
+          </button>
+        ))}
+        {error && <p className="text-xs text-red-500 font-medium">{error}</p>}
+        {open ? codeInput : (
+          <button onClick={() => setOpen(true)} className="text-xs font-semibold text-slate-500 hover:text-olive-700 underline">
+            Başka bir kodun var mı?
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  // Kuponu yok → yalnız küçük bağlantı (kodu olan açar)
+  return (
+    <div className="space-y-2">
+      {!open ? (
+        <button onClick={() => setOpen(true)} className="text-sm font-semibold text-slate-500 hover:text-olive-700 flex items-center gap-1.5">
+          <Ticket size={14} /> İndirim kodun var mı?
+        </button>
       ) : loggedIn === false ? (
         <p className="text-xs text-slate-500">
-          Kupon kullanmak için{" "}
-          <Link href="/login?redirect=/sepet" className="font-bold text-olive-600 underline">giriş yapın</Link>.
+          İndirim kodunu kullanmak için{" "}
+          <Link href="/login?redirect=/sepet" className="font-bold text-olive-600 underline">giriş yap</Link>.
         </p>
-      ) : (
-        <div className="space-y-2">
-          {userCoupons.length > 0 && (
-            <select
-              className="flex h-12 w-full rounded-xl border-2 border-slate-200 bg-white px-3 text-sm font-bold"
-              value=""
-              onChange={(e) => { if (e.target.value) setInput(e.target.value); }}
-            >
-              <option value="">— Hesabınızdaki kuponlar —</option>
-              {userCoupons.map((uc) => (
-                <option key={uc.id} value={uc.coupons?.code}>
-                  {uc.coupons?.code} — {uc.coupons?.name}
-                </option>
-              ))}
-            </select>
-          )}
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value.toUpperCase())}
-              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); apply(); } }}
-              placeholder="Kupon Kodu"
-              className="w-full h-12 px-4 rounded-xl border-2 border-slate-200 focus:outline-none focus:border-olive-500 bg-white transition-all font-medium uppercase placeholder:lowercase"
-            />
-            <Button onClick={apply} disabled={loading || !input.trim()} className="h-12 px-6 rounded-xl font-bold bg-slate-900">
-              {loading ? <Loader2 size={16} className="animate-spin" /> : "UYGULA"}
-            </Button>
-          </div>
-          {error && <p className="text-xs text-red-500 font-medium">{error}</p>}
-        </div>
-      )}
+      ) : codeInput}
+      {error && <p className="text-xs text-red-500 font-medium">{error}</p>}
     </div>
   );
 }
@@ -385,8 +414,8 @@ function RewardRows({ onPickVariant }: { onPickVariant: (p: PendingGift) => void
 
   return (
     <div className="space-y-3">
-      <h4 className="text-xs font-bold uppercase tracking-wider flex items-center gap-2 text-slate-500">
-        <Gift size={14} className="text-olive-600" /> Ücretsiz Ürünler
+      <h4 className="text-xs font-black uppercase tracking-wider flex items-center gap-2 text-olive-700">
+        <Gift size={14} className="text-olive-600" /> Hediyen
       </h4>
 
       {groups.map((g) => {
@@ -395,9 +424,9 @@ function RewardRows({ onPickVariant }: { onPickVariant: (p: PendingGift) => void
         // ── Seçim yapılmış grup: seçileni öne çıkar, diğerlerini pasif göster ──
         if (chosen) {
           return (
-            <div key={g.key} className="rounded-2xl border border-olive-200 bg-olive-50/60 p-3 space-y-2">
+            <div key={g.key} className="rounded-2xl border-2 border-olive-300 bg-gradient-to-br from-olive-50 to-white p-3 space-y-2">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-white rounded-xl overflow-hidden shrink-0 border border-olive-100 flex items-center justify-center">
+                <div className="w-20 h-20 bg-white rounded-xl overflow-hidden shrink-0 border border-olive-100 flex items-center justify-center">
                   {chosen.image ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <Image src={chosen.image} alt={chosen.title} width={200} height={260} className="w-full h-full object-cover" />
@@ -406,14 +435,16 @@ function RewardRows({ onPickVariant }: { onPickVariant: (p: PendingGift) => void
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-bold text-slate-900 text-sm leading-tight truncate">{chosen.title}</p>
+                  <p className="text-[11px] font-black text-olive-700 uppercase tracking-wide flex items-center gap-1"><Check size={12} className="text-green-600" /> 🎁 Hediyen sepette</p>
+                  <p className="font-bold text-slate-900 text-sm leading-snug line-clamp-2">{chosen.title}</p>
                   {chosen.variant_name && (
                     <p className="text-xs font-semibold text-olive-600">{chosen.variant_name}</p>
                   )}
-                  <div className="flex items-center gap-1.5 mt-0.5">
-                    <Check size={12} className="text-green-600" />
-                    <span className="text-[10px] font-bold text-green-700 uppercase tracking-wide">Sepete eklendi</span>
-                    <Badge className="bg-olive-600 text-white text-[10px] px-1.5 py-0">Ücretsiz</Badge>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    {(chosen.original_price ?? 0) > 0 && (
+                      <span className="text-xs text-slate-400 line-through">₺{(chosen.original_price ?? 0).toLocaleString("tr-TR")}</span>
+                    )}
+                    <Badge className="bg-olive-600 text-white text-[11px] px-2 py-0.5 font-black">ÜCRETSİZ</Badge>
                   </div>
                 </div>
                 <button
@@ -453,8 +484,8 @@ function RewardRows({ onPickVariant }: { onPickVariant: (p: PendingGift) => void
               <p className="text-[10px] font-bold text-olive-600 uppercase tracking-wide">Birini seçin</p>
             )}
             {g.pending.map((p) => (
-              <div key={p.rule_id} className="flex items-center gap-3 rounded-2xl border border-olive-200 bg-white p-3">
-                <div className="w-12 h-12 bg-olive-50 rounded-xl overflow-hidden shrink-0 border border-olive-100 flex items-center justify-center">
+              <div key={p.rule_id} className="flex items-center gap-3 rounded-2xl border-2 border-dashed border-olive-300 bg-olive-50/40 p-3">
+                <div className="w-20 h-20 bg-white rounded-xl overflow-hidden shrink-0 border border-olive-100 flex items-center justify-center">
                   {p.image ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <Image src={p.image} alt={p.title} width={200} height={260} className="w-full h-full object-cover" />
@@ -463,14 +494,15 @@ function RewardRows({ onPickVariant }: { onPickVariant: (p: PendingGift) => void
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-slate-900 text-sm leading-tight truncate">🎁 {p.title}</p>
-                  <div className="flex items-center gap-1.5 mt-0.5">
+                  <p className="text-[11px] font-black text-olive-700 uppercase tracking-wide">🎁 Sana hediye</p>
+                  <p className="font-bold text-slate-900 text-sm leading-snug line-clamp-2">{p.title}</p>
+                  <div className="flex items-center gap-2 mt-0.5">
                     {p.original_price > 0 && (
-                      <span className="text-[10px] text-slate-400 line-through">
+                      <span className="text-xs text-slate-400 line-through">
                         ₺{p.original_price.toLocaleString("tr-TR")}
                       </span>
                     )}
-                    <Badge className="bg-olive-600 text-white text-[10px] px-1.5 py-0">Ücretsiz</Badge>
+                    <Badge className="bg-olive-600 text-white text-[11px] px-2 py-0.5 font-black">ÜCRETSİZ</Badge>
                   </div>
                 </div>
                 <div className="flex flex-col items-end gap-1 shrink-0">
@@ -478,7 +510,7 @@ function RewardRows({ onPickVariant }: { onPickVariant: (p: PendingGift) => void
                     onClick={() => pick(p)}
                     className="text-xs font-bold text-white bg-olive-600 hover:bg-olive-700 rounded-full px-3.5 py-1.5 transition-colors"
                   >
-                    {p.has_variants ? "Renk Seç" : "Ekle"}
+                    {p.has_variants ? "Seç ve ekle" : "Sepete ekle"}
                   </button>
                   <button
                     onClick={() => dismissGift(p.rule_id)}
@@ -509,11 +541,7 @@ function RewardsAndCouponPanel({
   hasRewards: boolean;
 }) {
   return (
-    <Card className="border-none shadow-sm bg-white p-6 rounded-3xl space-y-5">
-      <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
-        <Gift size={16} className="text-olive-600" /> İndirim &amp; Ücretsiz Ürünler
-      </h3>
-
+    <Card className={`border-none shadow-sm bg-white rounded-3xl ${hasRewards ? "p-6 space-y-5" : "px-6 py-4"}`}>
       {hasRewards && (
         <>
           <RewardRows onPickVariant={onPickVariant} />

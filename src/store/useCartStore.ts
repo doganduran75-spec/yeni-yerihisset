@@ -49,8 +49,8 @@ export interface PendingGift {
 
 interface CartStore {
   items: CartItem[];
-  pendingGifts: PendingGift[];  // Varyant seçimi beklenen hediyeler (persist edilmez)
-  dismissedRules: string[];     // Bu oturumda reddedilen kural ID'leri (persist edilmez)
+  pendingGifts: PendingGift[];  // Seçim bekleyen hediyeler (renk/numara ya da "birini seç") — sayfa yenilense de durur
+  dismissedRules: string[];     // Müşterinin "Vazgeç" dediği kurallar
   couponCode: string;           // Sepette seçilen/uygulanan kupon kodu (checkout'a taşınır)
   shippingMethodId: string;     // Sepette seçilen kargo yöntemi (checkout'a taşınır)
 
@@ -132,6 +132,27 @@ export const useCartStore = create<CartStore>()(
 
         // 3) İlgili pendingGift'leri de temizle
         let newPending = pendingGifts;
+        // Hediye kaldırıldı ama tetikleyen ürün hâlâ sepette → teklif kartı olarak geri gelsin
+        // (müşteri fikrini değiştirirse tek dokunuşla geri ekleyebilsin)
+        if (removedItem?.is_gift && removedItem.gift_rule_id) {
+          const stillTriggered = newItems.some((i) => !i.is_gift && (
+            removedItem.trigger_item_id ? i.id === removedItem.trigger_item_id : i.category_id === removedItem.trigger_category_id));
+          if (stillTriggered && !newPending.some((p) => p.rule_id === removedItem.gift_rule_id)) {
+            newPending = [...newPending, {
+              rule_id: removedItem.gift_rule_id,
+              quantity_mode: removedItem.quantity_mode ?? 'per_order',
+              trigger_item_id: removedItem.trigger_item_id,
+              trigger_category_id: removedItem.trigger_category_id ?? '',
+              product_id: removedItem.product_id,
+              title: removedItem.title,
+              image: removedItem.image,
+              original_price: removedItem.original_price ?? 0,
+              variants: removedItem.gift_variants ?? [],
+              has_variants: removedItem.has_variants ?? false,
+              selection_group: removedItem.selection_group ?? null,
+            }];
+          }
+        }
         if (removedItem && !removedItem.is_gift) {
           newPending = pendingGifts.filter((p) => {
             if (p.quantity_mode === 'per_item' && p.trigger_item_id === id) return false;
@@ -198,14 +219,15 @@ export const useCartStore = create<CartStore>()(
         const { data: rules } = await (supabase as any)
           .from('free_gift_rules')
           .select(`
-            id, quantity_mode, selection_group,
+            id, quantity_mode, selection_group, valid_until,
             gift_product:products!gift_product_id (
               id, title, image_url, price, has_variants, stock,
               product_variants ( id, stock, variant_options ( value ) )
             )
           `)
           .eq('trigger_category_id', triggerCategoryId)
-          .eq('is_active', true) as { data: any[] | null };
+          .eq('is_active', true)
+          .or(`valid_until.is.null,valid_until.gte.${new Date().toISOString().slice(0, 10)}`) as { data: any[] | null };
 
         if (!rules?.length) return;
 
@@ -288,6 +310,15 @@ export const useCartStore = create<CartStore>()(
 
         if (newPending.length > 0) {
           set((state) => ({ pendingGifts: [...state.pendingGifts, ...newPending] }));
+          // Seçim gerektirmeyen hediye (renk/numara yok ya da tek seçenek; "birini seç" grubu değil)
+          // OTOMATİK sepete eklenir — müşteri "ekle"ye basmak zorunda kalmasın.
+          const groupCount = (g: string | null | undefined) =>
+            g ? get().pendingGifts.filter((p) => p.selection_group === g).length : 0;
+          for (const p of newPending) {
+            const singleChoice = !p.has_variants || p.variants.length === 1;
+            const noGroupChoice = !p.selection_group || groupCount(p.selection_group) <= 1;
+            if (singleChoice && noGroupChoice) get().confirmGift(p.rule_id, p.has_variants ? p.variants[0] : null);
+          }
         }
       },
 
@@ -379,16 +410,19 @@ export const useCartStore = create<CartStore>()(
     }),
     {
       name: 'shopping-cart',
-      // Yalnızca items persist edilir; pendingGifts ve dismissedRules oturum bazlıdır
-      partialize: (state) => ({ items: state.items, couponCode: state.couponCode, shippingMethodId: state.shippingMethodId }),
+      // Bekleyen hediyeler ve "vazgeç"ler de saklanır → sayfa yenilenince hediye teklifi kaybolmaz
+      partialize: (state) => ({
+        items: state.items, couponCode: state.couponCode, shippingMethodId: state.shippingMethodId,
+        pendingGifts: state.pendingGifts, dismissedRules: state.dismissedRules,
+      }),
       // Merge: localStorage'dan sadece items alınır, geri kalanlar her zaman
       // başlangıç değeriyle başlar. Eski kayıtlarda eksik alan olsa da güvenli.
       merge: (persisted, current) => ({
         ...current,
         items: (persisted as any)?.items ?? [],
         couponCode: (persisted as any)?.couponCode ?? '',
-        pendingGifts: [],
-        dismissedRules: [],
+        pendingGifts: Array.isArray((persisted as any)?.pendingGifts) ? (persisted as any).pendingGifts : [],
+        dismissedRules: Array.isArray((persisted as any)?.dismissedRules) ? (persisted as any).dismissedRules : [],
       }),
     }
   )
