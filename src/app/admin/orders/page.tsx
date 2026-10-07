@@ -20,7 +20,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { supabase } from "@/lib/supabase";
@@ -30,7 +29,7 @@ import { GeoSelect } from "@/components/ui/geo-select";
 import { CITIES, DISTRICTS } from "@/lib/turkey-geo";
 import {
   Eye, MoreVertical, Loader2, Package, Truck, CheckCircle, XCircle,
-  Clock, MapPin, Phone, Mail, ShoppingBag, Copy, ExternalLink,
+  MapPin, Phone, Mail, ShoppingBag, Copy, ExternalLink,
   Landmark, FileText, ChevronDown, AlertCircle, Send, Search, Fingerprint, Building2, UserPlus,
 } from "lucide-react";
 
@@ -742,6 +741,112 @@ export default function OrdersPage() {
     }
   }
 
+  // ── Durum seçenekleri ve kuralları: liste satırı ve sipariş detayı AYNI listeyi kullanır ──
+  const PAYMENT_OPTIONS = [
+    { value: "paid", label: "Ödendi" },
+    { value: "pending", label: "Ödeme Bekleniyor" },
+    { value: "failed", label: "Alınmadı" },
+    { value: "partial_refund", label: "Kısmi iade…" },
+    { value: "refunded", label: "İade edildi…" },
+  ];
+  const shipmentOptions = (o: Order) => [
+    { value: "waiting", label: "Bekleniyor" },
+    { value: "preparing", label: "Hazırlanıyor" },
+    ...(o.kargonomi_tracking_code ? [] : [{ value: "ship_kargonomi", label: "Kargoya Ver (Kargonomi)" }]),
+    { value: "shipped", label: o.kargonomi_tracking_code ? "Kargoya Verildi" : "Kargoya Verildi (elle)" },
+    { value: "delivered", label: "Teslim Edildi" },
+    { value: "returned", label: "İade geldi…" },
+    { value: "cancelled", label: "İptal Edildi…" },
+  ];
+  const INVOICE_OPTIONS = [
+    { value: "invoiced", label: "Faturalandı" },
+    { value: "pending", label: "Bekleniyor" },
+    { value: "return_invoiced", label: "İade faturası kesildi" },
+    { value: "not_required", label: "Gerekmiyor" },
+  ];
+
+  // İptal / iade al / ücret iadesi penceresi detayın içinde açılır → listeden seçilince detayı açıp pencereyi göster
+  async function openAction(o: Order, mode: "cancel" | "return" | "refund") {
+    if (!isDetailsOpen || selectedOrder?.id !== o.id) await handleViewDetails(o);
+    setActionMode(mode);
+  }
+
+  function selectPayment(o: Order, v: string) {
+    const cur = o.payment_status || "pending";
+    const paidNow = cur === "paid" || cur === "partial_refund";
+    if (v === "partial_refund" || v === "refunded") {
+      if (!paidNow) { siteAlert({ message: "Ödemesi alınmamış siparişe ücret iadesi girilemez.", tone: "danger" }); return; }
+      openAction(o, "refund");
+      return;
+    }
+    if (Number(o.refunded_amount || 0) > 0) {
+      siteAlert({ title: "Değiştirilemez", message: "Bu siparişte ücret iadesi kaydı var; ödeme durumu iade kaydıyla belirlenir.", tone: "danger" });
+      return;
+    }
+    if (v === "paid") markPaymentPaid(o.id);
+    else if (v === "pending") updateField(o.id, { payment_status: "pending", status: "awaiting_payment" });
+    else updateField(o.id, { payment_status: "failed" });
+  }
+
+  function selectShipment(o: Order, v: string) {
+    const shippedNow = ["shipped", "delivered", "undelivered", "returned"].includes(o.shipment_status || "");
+    if (v === "cancelled") {
+      if (shippedNow) { siteAlert({ message: "Kargolanmış sipariş iptal edilemez — “İade al” kullan.", tone: "danger" }); return; }
+      openAction(o, "cancel");
+      return;
+    }
+    if (v === "returned") {
+      if (!shippedNow) { siteAlert({ message: "Henüz kargolanmamış sipariş için “Siparişi iptal et” kullan.", tone: "danger" }); return; }
+      openAction(o, "return");
+      return;
+    }
+    if (v === "ship_kargonomi") {
+      setIsDetailsOpen(false);
+      openShipDialog(o);
+      return;
+    }
+    updateField(o.id, { shipment_status: v });
+  }
+
+  function selectInvoice(o: Order, v: string) {
+    const inv = o.invoice_status || "pending";
+    if (v === "return_invoiced" && inv !== "invoiced") {
+      siteAlert({ message: "İade faturası yalnız faturalanmış siparişte işaretlenebilir.", tone: "danger" }); return;
+    }
+    if (v === "not_required" && !(o.status === "cancelled" || o.payment_status === "failed")) {
+      siteAlert({ message: "“Gerekmiyor” yalnız iptal edilmiş ya da ödemesi alınmamış siparişte seçilebilir.", tone: "danger" }); return;
+    }
+    updateField(o.id, { invoice_status: v });
+  }
+
+  // Liste satırındaki küçük durum menüsü (detaydaki StatusCombo ile aynı seçenekler)
+  function StatusMenu({ label, color, options, current, onSelect }: {
+    label: string; color: string; options: { value: string; label: string }[]; current: string; onSelect: (v: string) => void;
+  }) {
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger render={
+          <button className="flex items-center gap-1 group/btn">
+            <StatusBadge label={label} color={color} />
+            <ChevronDown size={11} className="text-muted-foreground opacity-0 group-hover/btn:opacity-100 transition-opacity" />
+          </button>
+        } />
+        <DropdownMenuContent align="start" className="min-w-[11rem]">
+          {options.map((o) => {
+            const isCur = o.value === current;
+            return (
+              <DropdownMenuItem key={o.value} disabled={isCur} onClick={() => { if (!isCur) onSelect(o.value); }}
+                className={`gap-2 text-xs ${isCur ? "font-bold opacity-100" : ""}`}>
+                <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${isCur ? "bg-blue-500" : "bg-slate-300"}`} />
+                {o.label}
+              </DropdownMenuItem>
+            );
+          })}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+  }
+
   function openShipDialog(order: Order) {
     setShipDialogOrder(order);
     setDesi("2");
@@ -1049,25 +1154,8 @@ export default function OrdersPage() {
                         ) : isUpdating ? (
                           <Loader2 size={14} className="animate-spin text-muted-foreground" />
                         ) : (
-                          <DropdownMenu>
-                            <DropdownMenuTrigger render={
-                              <button className="flex items-center gap-1 group/btn">
-                                <StatusBadge label={paymentLabels[pStatus] ?? pStatus} color={paymentColors[pStatus] ?? paymentColors.pending} />
-                                <ChevronDown size={11} className="text-muted-foreground opacity-0 group-hover/btn:opacity-100 transition-opacity" />
-                              </button>
-                            } />
-                            <DropdownMenuContent align="start" className="w-36">
-                              <DropdownMenuItem className="gap-2 text-xs text-green-700" onClick={() => markPaymentPaid(order.id)}>
-                                <CheckCircle size={13} /> Ödendi
-                              </DropdownMenuItem>
-                              <DropdownMenuItem className="gap-2 text-xs text-red-600" onClick={() => updateField(order.id, { payment_status: "failed" })}>
-                                <XCircle size={13} /> Başarısız
-                              </DropdownMenuItem>
-                              <DropdownMenuItem className="gap-2 text-xs text-amber-700" onClick={() => updateField(order.id, { payment_status: "pending" })}>
-                                <Clock size={13} /> Bekleniyor
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                          <StatusMenu label={paymentLabels[pStatus] ?? pStatus} color={paymentColors[pStatus] ?? paymentColors.pending}
+                            options={PAYMENT_OPTIONS} current={pStatus} onSelect={(v) => selectPayment(order, v)} />
                         )}
                       </TableCell>
 
@@ -1086,34 +1174,8 @@ export default function OrdersPage() {
                           <Loader2 size={14} className="animate-spin text-muted-foreground" />
                         ) : (
                           <div className="flex flex-col gap-1">
-                            <DropdownMenu>
-                              <DropdownMenuTrigger render={
-                                <button className="flex items-center gap-1 group/btn">
-                                  <StatusBadge label={shipmentLabels[sStatus] ?? sStatus} color={shipmentColors[sStatus] ?? shipmentColors.waiting} />
-                                  <ChevronDown size={11} className="text-muted-foreground opacity-0 group-hover/btn:opacity-100 transition-opacity" />
-                                </button>
-                              } />
-                              <DropdownMenuContent align="start" className="w-44">
-                                <DropdownMenuItem className="gap-2 text-xs" onClick={() => updateField(order.id, { shipment_status: "preparing" })}>
-                                  <Package size={13} className="text-blue-500" /> Hazırlanıyor
-                                </DropdownMenuItem>
-                                {!order.kargonomi_tracking_code && (
-                                  <DropdownMenuItem className="gap-2 text-xs text-purple-700" onClick={() => openShipDialog(order)}>
-                                    <Send size={13} className="text-purple-500" /> Kargoya Ver (Kargonomi)
-                                  </DropdownMenuItem>
-                                )}
-                                <DropdownMenuItem className="gap-2 text-xs" onClick={() => updateField(order.id, { shipment_status: "shipped" })}>
-                                  <Truck size={13} className="text-purple-500" /> Kargoya Verildi (Manuel)
-                                </DropdownMenuItem>
-                                <DropdownMenuItem className="gap-2 text-xs text-green-700" onClick={() => updateField(order.id, { shipment_status: "delivered" })}>
-                                  <CheckCircle size={13} /> Teslim Edildi
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem className="gap-2 text-xs text-red-600" onClick={() => updateField(order.id, { shipment_status: "cancelled" })}>
-                                  <XCircle size={13} /> İptal Edildi
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
+                            <StatusMenu label={shipmentLabels[sStatus] ?? sStatus} color={shipmentColors[sStatus] ?? shipmentColors.waiting}
+                              options={shipmentOptions(order)} current={sStatus} onSelect={(v) => selectShipment(order, v)} />
                             {order.kargonomi_tracking_code && (
                               <span className="text-[10px] font-mono text-purple-600 flex items-center gap-1">
                                 <Truck size={9} /> {order.kargonomi_tracking_code}
@@ -1128,22 +1190,8 @@ export default function OrdersPage() {
                         {isUpdating ? (
                           <Loader2 size={14} className="animate-spin text-muted-foreground" />
                         ) : (
-                          <DropdownMenu>
-                            <DropdownMenuTrigger render={
-                              <button className="flex items-center gap-1 group/btn">
-                                <StatusBadge label={invoiceLabels[iStatus] ?? iStatus} color={invoiceColors[iStatus] ?? invoiceColors.pending} />
-                                <ChevronDown size={11} className="text-muted-foreground opacity-0 group-hover/btn:opacity-100 transition-opacity" />
-                              </button>
-                            } />
-                            <DropdownMenuContent align="start" className="w-36">
-                              <DropdownMenuItem className="gap-2 text-xs text-teal-700" onClick={() => updateField(order.id, { invoice_status: "invoiced" })}>
-                                <FileText size={13} /> Faturalandı
-                              </DropdownMenuItem>
-                              <DropdownMenuItem className="gap-2 text-xs text-slate-500" onClick={() => updateField(order.id, { invoice_status: "pending" })}>
-                                <Clock size={13} /> Bekleniyor
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                          <StatusMenu label={invoiceLabels[iStatus] ?? iStatus} color={invoiceColors[iStatus] ?? invoiceColors.pending}
+                            options={INVOICE_OPTIONS} current={iStatus} onSelect={(v) => selectInvoice(order, v)} />
                         )}
                       </TableCell>
 
@@ -1420,29 +1468,8 @@ export default function OrdersPage() {
                   current={selectedOrder.payment_status || "pending"}
                   colors={paymentColors}
                   fallback="pending"
-                  options={[
-                    { value: "paid", label: "Ödendi" },
-                    { value: "pending", label: "Ödeme Bekleniyor" },
-                    { value: "failed", label: "Alınmadı" },
-                    { value: "partial_refund", label: "Kısmi iade…" },
-                    { value: "refunded", label: "İade edildi…" },
-                  ]}
-                  onSelect={(v) => {
-                    const cur = selectedOrder.payment_status || "pending";
-                    const paidNow = cur === "paid" || cur === "partial_refund";
-                    if (v === "partial_refund" || v === "refunded") {
-                      if (!paidNow) { siteAlert({ message: "Ödemesi alınmamış siparişe ücret iadesi girilemez.", tone: "danger" }); return; }
-                      setActionMode("refund");
-                      return;
-                    }
-                    if (Number(selectedOrder.refunded_amount || 0) > 0) {
-                      siteAlert({ title: "Değiştirilemez", message: "Bu siparişte ücret iadesi kaydı var; ödeme durumu iade kaydıyla belirlenir.", tone: "danger" });
-                      return;
-                    }
-                    if (v === "paid") markPaymentPaid(selectedOrder.id);
-                    else if (v === "pending") updateField(selectedOrder.id, { payment_status: "pending", status: "awaiting_payment" });
-                    else updateField(selectedOrder.id, { payment_status: "failed" });
-                  }}
+                  options={PAYMENT_OPTIONS}
+                  onSelect={(v) => selectPayment(selectedOrder, v)}
                 />
 
                 {/* Sevkiyat */}
@@ -1452,33 +1479,8 @@ export default function OrdersPage() {
                     current={selectedOrder.shipment_status || "waiting"}
                     colors={shipmentColors}
                     fallback="waiting"
-                    options={[
-                      { value: "waiting", label: "Bekleniyor" },
-                      { value: "preparing", label: "Hazırlanıyor" },
-                      { value: "shipped", label: selectedOrder.kargonomi_tracking_code ? "Kargoya Verildi" : "Kargoya Ver (Kargonomi)" },
-                      { value: "delivered", label: "Teslim Edildi" },
-                      { value: "returned", label: "İade geldi…" },
-                      { value: "cancelled", label: "İptal Edildi…" },
-                    ]}
-                    onSelect={(v) => {
-                      const shippedNow = ["shipped", "delivered", "undelivered", "returned"].includes(selectedOrder.shipment_status || "");
-                      if (v === "cancelled") {
-                        if (shippedNow) { siteAlert({ message: "Kargolanmış sipariş iptal edilemez — “İade al” kullan.", tone: "danger" }); return; }
-                        setActionMode("cancel");
-                        return;
-                      }
-                      if (v === "returned") {
-                        if (!shippedNow) { siteAlert({ message: "Henüz kargolanmamış sipariş için “Siparişi iptal et” kullan.", tone: "danger" }); return; }
-                        setActionMode("return");
-                        return;
-                      }
-                      if (v === "shipped" && !selectedOrder.kargonomi_tracking_code) {
-                        setIsDetailsOpen(false);
-                        openShipDialog(selectedOrder);
-                      } else {
-                        updateField(selectedOrder.id, { shipment_status: v });
-                      }
-                    }}
+                    options={shipmentOptions(selectedOrder)}
+                    onSelect={(v) => selectShipment(selectedOrder, v)}
                   />
                   {selectedOrder.kargonomi_tracking_code && (
                     <div className="flex items-center gap-1 px-1">
@@ -1499,22 +1501,8 @@ export default function OrdersPage() {
                   current={selectedOrder.invoice_status || "pending"}
                   colors={invoiceColors}
                   fallback="pending"
-                  options={[
-                    { value: "invoiced", label: "Faturalandı" },
-                    { value: "pending", label: "Bekleniyor" },
-                    { value: "return_invoiced", label: "İade faturası kesildi" },
-                    { value: "not_required", label: "Gerekmiyor" },
-                  ]}
-                  onSelect={(v) => {
-                    const inv = selectedOrder.invoice_status || "pending";
-                    if (v === "return_invoiced" && inv !== "invoiced") {
-                      siteAlert({ message: "İade faturası yalnız faturalanmış siparişte işaretlenebilir.", tone: "danger" }); return;
-                    }
-                    if (v === "not_required" && !(selectedOrder.status === "cancelled" || selectedOrder.payment_status === "failed")) {
-                      siteAlert({ message: "“Gerekmiyor” yalnız iptal edilmiş ya da ödemesi alınmamış siparişte seçilebilir.", tone: "danger" }); return;
-                    }
-                    updateField(selectedOrder.id, { invoice_status: v });
-                  }}
+                  options={INVOICE_OPTIONS}
+                  onSelect={(v) => selectInvoice(selectedOrder, v)}
                 />
               </div>
 

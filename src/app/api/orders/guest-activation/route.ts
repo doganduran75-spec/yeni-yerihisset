@@ -31,6 +31,13 @@ export async function POST(req: NextRequest) {
     name: profile.first_name ?? null,
     orderLabel: order.order_number ? `YH${order.order_number}` : null,
   });
-  if (res.status !== "sent") return NextResponse.json({ error: "E-posta gönderilemedi, lütfen biraz sonra tekrar dene." }, { status: 500 });
+  if (res.status !== "sent") {
+    console.error("[guest-activation]", order.id, res.error);
+    // Test ortamı: e-posta kilidi bu adresi engellediyse açıkça söyle (canlıda kilit kapalı)
+    if (/E-posta kilidi/i.test(res.error || "")) {
+      return NextResponse.json({ error: "Test ortamı: e-posta kilidi açık ve bu adres izinli listede değil (Ayarlar › Genel › E-posta Kilidi)." }, { status: 403 });
+    }
+    return NextResponse.json({ error: "E-posta gönderilemedi, lütfen biraz sonra tekrar dene." }, { status: 500 });
+  }
   return NextResponse.json({ ok: true });
 }

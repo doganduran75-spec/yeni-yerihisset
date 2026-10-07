@@ -32,6 +32,7 @@ function SiparisTamamInner() {
   const [s, setS] = useState<Summary | null>(null);
   const [loading, setLoading] = useState(true);
   const [activationState, setActivationState] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [activationMsg, setActivationMsg] = useState("");
 
   useEffect(() => {
     clearCart();
@@ -68,6 +69,8 @@ function SiparisTamamInner() {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ orderId }),
       });
+      const j = await res.json().catch(() => ({}));
+      setActivationMsg(res.ok ? "" : j?.error || "");
       setActivationState(res.ok ? "sent" : "error");
     } catch { setActivationState("error"); }
   }
@@ -142,7 +145,7 @@ function SiparisTamamInner() {
               {activationState === "sent" ? (
                 <span className="text-green-700 font-bold">✓ Bağlantıyı tekrar gönderdik.</span>
               ) : activationState === "error" ? (
-                <span className="text-red-600 font-bold">Gönderilemedi, biraz sonra tekrar dene.</span>
+                <span className="text-red-600 font-bold">{activationMsg || "Gönderilemedi, biraz sonra tekrar dene."}</span>
               ) : (
                 <>E-posta gelmedi mi? (Spam klasörüne de bak){" "}
                   <button type="button" onClick={resendActivation} disabled={activationState === "sending"}

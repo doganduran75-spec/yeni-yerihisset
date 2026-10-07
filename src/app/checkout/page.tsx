@@ -68,6 +68,7 @@ export default function CheckoutPage() {
   const [orderNumber, setOrderNumber] = useState<string | null>(null);
   const [successTotal, setSuccessTotal] = useState<number | null>(null); // başarı ekranında ödenecek tutar
   const [activationState, setActivationState] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [activationMsg, setActivationMsg] = useState("");
   const [couponCode, setCouponCode] = useState("");
   const [couponData, setCouponData] = useState<{ name: string; type: string; discount_amount: number; free_shipping: boolean } | null>(null);
   const [couponError, setCouponError] = useState("");
@@ -552,6 +553,8 @@ export default function CheckoutPage() {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ orderId: orderSuccess }),
         });
+        const j = await res.json().catch(() => ({}));
+        setActivationMsg(res.ok ? "" : j?.error || "");
         setActivationState(res.ok ? "sent" : "error");
       } catch { setActivationState("error"); }
     }
@@ -621,7 +624,7 @@ export default function CheckoutPage() {
                 {activationState === "sent" ? (
                   <span className="text-green-700 font-bold">✓ Bağlantıyı tekrar gönderdik.</span>
                 ) : activationState === "error" ? (
-                  <span className="text-red-600 font-bold">Gönderilemedi, biraz sonra tekrar dene.</span>
+                  <span className="text-red-600 font-bold">{activationMsg || "Gönderilemedi, biraz sonra tekrar dene."}</span>
                 ) : (
                   <>E-posta gelmedi mi? (Spam klasörüne de bak){" "}
                     <button type="button" onClick={resendActivation} disabled={activationState === "sending"}
