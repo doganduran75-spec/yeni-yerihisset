@@ -30,7 +30,7 @@ import { CITIES, DISTRICTS } from "@/lib/turkey-geo";
 import {
   Eye, MoreVertical, Loader2, Package, Truck, CheckCircle, XCircle,
   MapPin, Phone, Mail, ShoppingBag, Copy, ExternalLink,
-  Landmark, FileText, ChevronDown, AlertCircle, Send, Search, Fingerprint, Building2, UserPlus,
+  Landmark, FileText, ChevronDown, AlertCircle, Send, Search, Fingerprint, Building2, UserPlus, Trash2,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -586,6 +586,41 @@ export default function OrdersPage() {
       setCreateError("Bağlantı hatası");
     } finally {
       setCreatingOrder(false);
+    }
+  }
+
+  // Test siparişini KALICI sil (yalnız sitede verilmiş, aktarılmamış sipariş)
+  const [deletingOrder, setDeletingOrder] = useState(false);
+  async function deleteOrder(o: Order) {
+    const label = orderLabel(o);
+    const goodsLeft = ["shipped", "delivered", "undelivered", "returned"].includes(o.shipment_status || "");
+    const paid = ["paid", "partial_refund"].includes(o.payment_status || "");
+    const lines = [
+      `${label} ve tüm kayıtları (ürünler, süreç geçmişi, mesajlar, komisyon) KALICI olarak silinir; ciro ve raporlardan düşer. Geri alınamaz.`,
+      goodsLeft ? "Ürün kargolanmış görünüyor → stok geri EKLENMEZ." : "Düşülen stok geri eklenir.",
+      "Kullanılan YeriHisset Kredisi cüzdana döner.",
+      ...(paid ? ["⚠ Ödeme alınmış görünüyor: para iadesi YAPILMAZ."] : []),
+      "Gerçek bir siparişi silme — iptal et.",
+    ];
+    if (!(await siteConfirm({ title: "Sipariş kalıcı olarak silinsin mi?", message: lines.join("\n"), confirmText: "Kalıcı olarak sil", tone: "danger" }))) return;
+    setDeletingOrder(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const r = await fetch("/api/admin/orders/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
+        body: JSON.stringify({ orderId: o.id }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.ok) throw new Error(j.error || "Silinemedi");
+      setIsDetailsOpen(false);
+      setSelectedOrder(null);
+      setOrders((prev) => prev.filter((x) => x.id !== o.id));
+      siteAlert({ message: `${label} silindi${j.restocked ? "; stok geri eklendi" : ""}.`, tone: "success" });
+    } catch (e: any) {
+      siteAlert({ title: "Silinemedi", message: e?.message || "Silinemedi", tone: "danger" });
+    } finally {
+      setDeletingOrder(false);
     }
   }
 
@@ -1737,6 +1772,17 @@ export default function OrdersPage() {
                   }}
                 />
               </div>
+
+              {/* Test siparişini kalıcı sil — yalnız sitede verilmiş, aktarılmamış sipariş */}
+              {!isMarketplace(selectedOrder) && !isImported(selectedOrder) && (
+                <div className="pt-3 border-t flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-[11px] text-muted-foreground">Test siparişi mi? Kalıcı olarak silebilirsin (stok geri eklenir). Gerçek siparişte “Siparişi iptal et”i kullan.</p>
+                  <Button size="sm" variant="outline" disabled={deletingOrder} onClick={() => deleteOrder(selectedOrder)}
+                    className="gap-1.5 text-red-700 border-red-200 hover:bg-red-50">
+                    {deletingOrder ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />} Siparişi sil
+                  </Button>
+                </div>
+              )}
 
             </div>
           )}
