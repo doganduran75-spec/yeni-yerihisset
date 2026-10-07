@@ -165,13 +165,16 @@ export async function POST(req: NextRequest) {
           if (!prof?.email) return;
           const { data: st } = await (supabase as any).rpc("account_password_state", { p_email: prof.email });
           if (st !== "passwordless") return;
-          const { sendGuestActivationEmail } = await import("@/lib/notifications");
+          const { sendGuestActivationEmail, reportCustomerEmailFailure } = await import("@/lib/notifications");
           const r = await sendGuestActivationEmail({
             email: prof.email,
             name: prof.first_name ?? null,
             orderLabel: order.order_number ? `YH${order.order_number}` : null,
           });
-          if (r.status !== "sent") console.error("[guest-activation]", r.error);
+          if (r.status !== "sent") {
+            console.error("[guest-activation]", r.error);
+            await reportCustomerEmailFailure({ orderId: order.id, email: prof.email, kind: "hesap aktivasyonu", reason: r.error });
+          }
         })().catch((e) => console.error("[guest-activation]", e?.message || e));
 
         resolve(NextResponse.redirect(successUrl, 303));

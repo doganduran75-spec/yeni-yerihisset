@@ -4,9 +4,9 @@ import { rateLimited, clientIp, TOO_MANY } from "@/lib/rate-limit";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-// Kartla ödeme sonrası /siparis-tamam ekranı. Misafir oturum açmadığı için siparişi
-// RLS yüzünden kendisi okuyamaz → özet sunucuda okunur. Sipariş kimliği (UUID) yalnız
-// iyzico dönüşünde verilir; yine de son 3 günle sınırlı ve e-posta maskelidir.
+// Sipariş sonrası /siparis-tamam ekranı (kart, havale, krediyle ödeme). Misafir oturum açmadığı için siparişi
+// RLS yüzünden kendisi okuyamaz → özet sunucuda okunur. Sipariş kimliği (UUID) yalnız sipariş
+// sonrası yönlendirmede verilir; yine de son 3 günle sınırlı ve e-posta maskelidir.
 const WINDOW_MS = 3 * 24 * 3600_000;
 
 function maskEmail(e: string): string {
@@ -38,8 +38,15 @@ export async function GET(req: NextRequest) {
     isGuest = st === "passwordless";
   }
 
+  // Havale bekleyen sipariş: banka bilgisi; her durumda müşterinin yazabileceği iletişim adresi
+  const { data: cfg } = await sb.from("settings").select("bank_transfer_info, contact_email").limit(1).maybeSingle();
+  const awaitingTransfer = o.payment_method === "bank_transfer" && o.payment_status === "pending" && o.status !== "cancelled";
+
   return NextResponse.json({
     ok: true,
+    awaitingTransfer,
+    bankInfo: awaitingTransfer ? (cfg?.bank_transfer_info ?? null) : null,
+    contactEmail: cfg?.contact_email ?? null,
     orderNumber: o.order_number ?? null,
     total: Number(o.total_amount),
     shipping: Number(o.shipping_cost ?? 0),

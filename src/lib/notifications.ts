@@ -1254,3 +1254,63 @@ export async function sendAdminSystemAlert(
   }
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
+
+/**
+ * MÜŞTERİYE E-POSTA GİDEMEDİ → sipariş Süreç Takibi'ne not + yöneticiye e-posta.
+ * (Sipariş onayı / hesap aktivasyonu.) Test ortamındaki e-posta kilidi engellemesi
+ * beklenen bir durum → yalnız not düşülür, yöneticiye e-posta atılmaz.
+ */
+export async function reportCustomerEmailFailure(params: {
+  orderId: string;
+  email: string | null;
+  kind: "sipariş onayı" | "hesap aktivasyonu";
+  reason?: string | null;
+}): Promise<void> {
+  try {
+    const supabase = createAdminClient();
+    const reason = (params.reason || "bilinmeyen hata").slice(0, 300);
+    const locked = /E-posta kilidi/i.test(reason);
+    await (supabase as any).from("order_events").insert({
+      order_id: params.orderId,
+      type: "note",
+      note: `⚠ Müşteriye ${params.kind} e-postası gönderilemedi${params.email ? ` (${params.email})` : ""}: ${reason}`,
+    });
+    if (locked) return;
+
+    const { data: settings } = await (supabase.from("settings").select("*").limit(1).maybeSingle() as any) as { data: any };
+    const { data: order } = await (supabase as any).from("orders").select("order_number").eq("id", params.orderId).maybeSingle();
+    const storeName = settings?.store_name || "YeriHisset";
+    const storeUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com";
+    const to = settings?.admin_notify_email || settings?.contact_email || settings?.smtp_from_email || settings?.smtp_user;
+    if (!to) return;
+    const label = order?.order_number ? `YH${order.order_number}` : params.orderId.slice(0, 8).toUpperCase();
+    const html = `
+      <h1 style="font-size:20px;font-weight:800;color:#111827;margin:0 0 8px">⚠️ Müşteriye e-posta gönderilemedi</h1>
+      <p style="font-size:14px;color:#374151;margin:0 0 12px;line-height:1.6">
+        <b>${escapeHtml(label)}</b> numaralı siparişin <b>${escapeHtml(params.kind)}</b> e-postası
+        ${params.email ? `<b>${escapeHtml(params.email)}</b> adresine` : ""} gönderilemedi.
+      </p>
+      <p style="font-size:13px;color:#6b7280;margin:0 0 14px">Sebep: ${escapeHtml(reason)}</p>
+      <p style="font-size:14px;color:#374151;margin:0 0 14px">Sipariş sisteme kaydedildi. Müşteriye telefonla ulaşabilir ya da sipariş detayından durumu kontrol edebilirsin. Hata sürekli tekrarlanıyorsa e-posta (SMTP) ayarlarını kontrol et.</p>
+      <div style="text-align:center;margin:8px 0 0">
+        <a href="${storeUrl}/admin/orders" style="display:inline-block;background:#536430;color:#fff;text-decoration:none;padding:12px 28px;border-radius:12px;font-weight:800;font-size:14px">Siparişleri aç</a>
+      </div>`;
+    const smtpConfig = buildSmtpConfig({
+      smtp_host: settings?.smtp_host || "",
+      smtp_port: settings?.smtp_port,
+      smtp_secure: settings?.smtp_secure,
+      smtp_user: settings?.smtp_user,
+      smtp_password: settings?.smtp_password,
+    });
+    if (!smtpConfig.host || !smtpConfig.auth.user) return;
+    await createMailTransport(smtpConfig).sendMail({
+      from: `"${settings?.smtp_from_name || storeName}" <${settings?.smtp_from_email || smtpConfig.auth.user}>`,
+      to,
+      subject: `Müşteriye e-posta gönderilemedi (${label}) — ${storeName}`,
+      html: buildEmailDocument(html, storeName),
+      text: htmlToText(html),
+    });
+  } catch (e: any) {
+    console.error("[customer-email-failure]", e?.message || e);
+  }
+}

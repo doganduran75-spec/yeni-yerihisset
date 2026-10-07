@@ -1,14 +1,16 @@
 "use client";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// KARTLA ÖDEME SONRASI — iyzico dönüşü buraya yönlenir (/siparis-tamam?id=<sipariş>).
-// Havale başarı ekranıyla (checkout) aynı dil: "Siparişini aldık" + bilgiler + misafir
-// aktivasyon kutusu. Sipariş özeti sunucudan okunur (/api/orders/summary) — misafir
-// oturum açmadığından RLS istemciden okumaya izin vermez.
+// SİPARİŞ SONUÇ SAYFASI — her ödeme yolu buraya gelir (/siparis-tamam?id=<sipariş>):
+// kart (iyzico dönüşü), havale (banka bilgisi + "ödemen ulaşınca"), tamamı krediyle ödenen.
+// Kalıcı sayfa: yenilenebilir, geri tuşuyla dönülebilir. "Siparişini aldık" + bilgiler + misafir
+// aktivasyon kutusu; e-posta gidemezse "tekrar dene" + çözüm yolu (ekibe otomatik bildirilir).
+// Sipariş özeti sunucudan okunur (/api/orders/summary) — misafir oturum açmadığından RLS
+// istemciden okumaya izin vermez.
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { CheckCircle2, CreditCard, Loader2 } from "lucide-react";
+import { CheckCircle2, CreditCard, Landmark, Wallet, Loader2, AlertTriangle } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useCartStore } from "@/store/useCartStore";
@@ -22,6 +24,10 @@ type Summary = {
   cancelled: boolean;
   email: string | null;
   isGuest: boolean;
+  paymentMethod: string | null;
+  awaitingTransfer: boolean;
+  bankInfo: string | null;
+  contactEmail: string | null;
   items: { id: string; title: string; variant_name: string; price: number; quantity: number }[];
 };
 
@@ -85,6 +91,12 @@ function SiparisTamamInner() {
 
   const label = s?.orderNumber ? `YH${s.orderNumber}` : orderId ? `#${orderId.slice(0, 8).toUpperCase()}` : null;
   const isGuest = !!s?.isGuest;
+  const awaiting = !!s?.awaitingTransfer;
+  const method = s?.paymentMethod === "bank_transfer"
+    ? { icon: <Landmark size={14} />, text: "Havale / EFT" }
+    : s?.paymentMethod === "store_credit"
+      ? { icon: <Wallet size={14} />, text: "YeriHisset Kredisi" }
+      : { icon: <CreditCard size={14} />, text: "Kredi / banka kartı" };
 
   return (
     <div className="min-h-screen bg-[#F9FAFB] flex items-center justify-center p-4 py-10">
@@ -95,7 +107,9 @@ function SiparisTamamInner() {
             <CheckCircle2 size={40} className="text-green-600" />
           </div>
           <h2 className="text-3xl font-black text-slate-900">Siparişini aldık!</h2>
-          <p className="text-slate-500 font-medium">Ödemen alındı, siparişini hazırlamaya başladık.</p>
+          <p className="text-slate-500 font-medium">
+            {awaiting ? "Ödemen ulaştığında siparişini hazırlayıp kargoya vereceğiz." : "Ödemen alındı, siparişini hazırlamaya başladık."}
+          </p>
         </div>
 
         {/* Sipariş / ödeme bilgileri */}
@@ -105,15 +119,28 @@ function SiparisTamamInner() {
             {s && (
               <>
                 <div className="flex justify-between gap-3">
-                  <span className="text-slate-500">Ödenen Tutar</span>
+                  <span className="text-slate-500">{awaiting ? "Ödenecek Tutar" : "Ödenen Tutar"}</span>
                   <span className="font-black text-olive-600">₺{s.total.toLocaleString("tr-TR", { minimumFractionDigits: 2 })} <span className="text-[10px] font-medium text-slate-400">KDV dahil</span></span>
                 </div>
                 <div className="flex justify-between gap-3">
                   <span className="text-slate-500">Ödeme</span>
-                  <span className="font-bold text-slate-700 flex items-center gap-1.5"><CreditCard size={14} /> Kredi / banka kartı</span>
+                  <span className="font-bold text-slate-700 flex items-center gap-1.5">{method.icon} {method.text}</span>
                 </div>
               </>
             )}
+          </div>
+        )}
+
+        {/* HAVALE — banka bilgileri */}
+        {awaiting && s?.bankInfo && (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 space-y-2">
+            <p className="text-[10px] font-black text-amber-700 uppercase tracking-widest flex items-center gap-1">
+              <Landmark size={12} /> Havale / EFT Banka Bilgileri
+            </p>
+            <pre className="text-xs text-slate-700 font-medium whitespace-pre-wrap leading-relaxed">{s.bankInfo}</pre>
+            <p className="text-xs font-bold text-amber-800">
+              Açıklama kısmına sipariş numaranı (<span className="font-mono">{label}</span>) yazmayı unutma.
+            </p>
           </div>
         )}
 
@@ -145,7 +172,20 @@ function SiparisTamamInner() {
               {activationState === "sent" ? (
                 <span className="text-green-700 font-bold">✓ Bağlantıyı tekrar gönderdik.</span>
               ) : activationState === "error" ? (
-                <span className="text-red-600 font-bold">{activationMsg || "Gönderilemedi, biraz sonra tekrar dene."}</span>
+                <div className="space-y-2">
+                  <p className="text-red-600 font-bold flex items-start gap-1.5">
+                    <AlertTriangle size={14} className="shrink-0 mt-0.5" /> {activationMsg || "E-postayı şu an gönderemedik."}
+                  </p>
+                  <button type="button" onClick={resendActivation}
+                    className="h-9 px-4 rounded-xl border-2 border-olive-200 bg-white font-bold text-olive-700 hover:bg-olive-50">
+                    Tekrar dene
+                  </button>
+                  <div className="rounded-xl bg-white border border-slate-200 p-3 text-slate-600 leading-relaxed space-y-1">
+                    <p><b>Endişelenme, siparişin bize ulaştı</b>{label ? <> (Sipariş No: <b className="font-mono">{label}</b>)</> : null}. Sorunu ekibimize otomatik bildirdik.</p>
+                    <p>Bu ekranın görüntüsünü almanı öneririz. Şifreni daha sonra giriş ekranındaki <b>“Şifremi unuttum”</b> ile de belirleyebilirsin.</p>
+                    {s?.contactEmail && <p>Bize ulaşmak için: <a href={`mailto:${s.contactEmail}`} className="font-bold text-olive-700 underline">{s.contactEmail}</a></p>}
+                  </div>
+                </div>
               ) : (
                 <>E-posta gelmedi mi? (Spam klasörüne de bak){" "}
                   <button type="button" onClick={resendActivation} disabled={activationState === "sending"}

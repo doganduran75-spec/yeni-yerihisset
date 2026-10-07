@@ -330,11 +330,16 @@ export async function POST(req: NextRequest) {
   // Ödenmemiş havale siparişi rol kazandırmaz; aktarılan/pazaryeri siparişlerinde de aynı kural.
 
   // Sipariş oluşturma bildirimi gönder (non-blocking, doğrudan lib çağrısı)
-  const { sendOrderNotification, sendAdminNewOrderNotification, alertOutOfStockForOrder, sendGuestActivationEmail } = await import("@/lib/notifications");
+  const { sendOrderNotification, sendAdminNewOrderNotification, alertOutOfStockForOrder, sendGuestActivationEmail, reportCustomerEmailFailure } = await import("@/lib/notifications");
   // Misafirse hesap aktivasyonu (şifre belirleme) e-postası, sipariş e-postası
   // GİTTİKTEN SONRA gönderilir (önce sipariş/ödeme bilgisi, sonra şifre bağlantısı)
   const guestEmail = !authUser && guest?.email ? guest.email.trim().toLowerCase() : null;
   sendOrderNotification("order_placed", { orderId: order.id, userId: userId })
+    .then((r) => {
+      if (r?.channel === "email" && r.status === "failed") {
+        return reportCustomerEmailFailure({ orderId: order.id, email: guestEmail ?? authUser?.email ?? null, kind: "sipariş onayı", reason: r.error });
+      }
+    })
     .catch(() => {})
     .then(() => {
       if (!guestEmail) return;
@@ -342,7 +347,12 @@ export async function POST(req: NextRequest) {
         email: guestEmail,
         name: address?.first_name ?? null,
         orderLabel: (order as any).order_number ? `YH${(order as any).order_number}` : null,
-      }).then((r) => { if (r.status !== "sent") console.error("[guest-activation]", r.error); });
+      }).then((r) => {
+        if (r.status !== "sent") {
+          console.error("[guest-activation]", r.error);
+          return reportCustomerEmailFailure({ orderId: order.id, email: guestEmail, kind: "hesap aktivasyonu", reason: r.error });
+        }
+      });
     })
     .catch((e) => console.error("[guest-activation]", e?.message || e));
   // Admin'e "yeni sipariş geldi" bildirimi (sonucu logla — teşhis için)

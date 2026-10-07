@@ -26,7 +26,7 @@ import {
   PackageX,
   Pencil,
 } from "lucide-react";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -65,10 +65,6 @@ export default function CheckoutPage() {
   const [loading, setLoading] = useState(true);
   const [placing, setPlacing] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState<string | null>(null);
-  const [orderNumber, setOrderNumber] = useState<string | null>(null);
-  const [successTotal, setSuccessTotal] = useState<number | null>(null); // başarı ekranında ödenecek tutar
-  const [activationState, setActivationState] = useState<"idle" | "sending" | "sent" | "error">("idle");
-  const [activationMsg, setActivationMsg] = useState("");
   const [couponCode, setCouponCode] = useState("");
   const [couponData, setCouponData] = useState<{ name: string; type: string; discount_amount: number; free_shipping: boolean } | null>(null);
   const [couponError, setCouponError] = useState("");
@@ -289,6 +285,15 @@ export default function CheckoutPage() {
     track("checkout_step", { step: "odeme" });
   }
 
+  // Sipariş alındı → kalıcı sonuç sayfası (/siparis-tamam). Satın alma olayı burada gönderildi;
+  // sonuç sayfası tekrar saymasın diye işaretlenir.
+  function goToSuccess(orderId: string) {
+    try { sessionStorage.setItem(`yh_purchase_tracked_${orderId}`, "1"); } catch { /* yok say */ }
+    setOrderSuccess(orderId);
+    clearCart();
+    router.replace(`/siparis-tamam?id=${encodeURIComponent(orderId)}`);
+  }
+
   async function handlePlaceOrder() {
     // ── Eksik alan doğrulaması ─────────────────────────────────────────────
     const e: Record<string, boolean> = deliveryErrors();
@@ -391,10 +396,7 @@ export default function CheckoutPage() {
           couponCode: couponCode || undefined,
           affiliateCode: affiliateCode || undefined,
         });
-        clearCart();
-        setSuccessTotal(0);
-        setOrderSuccess(data.orderId);
-        setOrderNumber(data.orderNumber ?? null);
+        goToSuccess(data.orderId);
         return;
       }
 
@@ -451,10 +453,7 @@ export default function CheckoutPage() {
         couponCode: couponCode || undefined,
         affiliateCode: affiliateCode || undefined,
       });
-      clearCart();
-      setSuccessTotal(typeof data.totalAmount === "number" ? data.totalAmount : finalTotal);
-      setOrderSuccess(data.orderId);
-      setOrderNumber(data.orderNumber ?? null);
+      goToSuccess(data.orderId);
     } else {
       if (!(await showStockProblemIfAny())) setOrderError(data.error || "Sipariş oluşturulamadı. Lütfen tekrar deneyin.");
     }
@@ -541,115 +540,8 @@ export default function CheckoutPage() {
   if (loading) return <div className="min-h-screen flex items-center justify-center animate-pulse text-olive-600 font-bold">Ödeme Sayfası Hazırlanıyor...</div>;
 
   if (orderSuccess) {
-    // Kredi tüm tutarı karşıladıysa ödeme beklenmez → havale ekranı gösterilmez
-    const isBankTransfer = paymentMethod === "bank_transfer" && (successTotal ?? 1) > 0;
-    const orderLabel = orderNumber ? `YH${orderNumber}` : `#${orderSuccess.slice(0, 8).toUpperCase()}`;
-    const email = personalInfo.email.trim();
-
-    async function resendActivation() {
-      setActivationState("sending");
-      try {
-        const res = await fetch("/api/orders/guest-activation", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ orderId: orderSuccess }),
-        });
-        const j = await res.json().catch(() => ({}));
-        setActivationMsg(res.ok ? "" : j?.error || "");
-        setActivationState(res.ok ? "sent" : "error");
-      } catch { setActivationState("error"); }
-    }
-
-    return (
-      <div className="min-h-screen bg-[#F9FAFB] flex items-center justify-center p-4 py-10">
-        <div className="bg-white rounded-3xl shadow-2xl p-6 sm:p-10 max-w-lg w-full space-y-6">
-          {/* ÜST — Siparişini aldık */}
-          <div className="text-center space-y-3">
-            <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center mx-auto">
-              <CheckCircle2 size={40} className="text-green-600" />
-            </div>
-            <h2 className="text-3xl font-black text-slate-900">Siparişini aldık!</h2>
-            <p className="text-slate-500 font-medium">
-              {isBankTransfer ? "Ödemen ulaştığında siparişini hazırlayıp kargoya vereceğiz." : "Siparişini hazırlamaya başladık."}
-            </p>
-          </div>
-
-          {/* ALT — Sipariş / ödeme bilgileri */}
-          <div className="rounded-2xl border border-slate-100 bg-slate-50/60 p-4 space-y-2 text-sm">
-            <div className="flex justify-between gap-3"><span className="text-slate-500">Sipariş No</span><span className="font-black text-slate-900">{orderLabel}</span></div>
-            {successTotal !== null && (
-              <div className="flex justify-between gap-3">
-                <span className="text-slate-500">{isBankTransfer ? "Ödenecek Tutar" : "Toplam"}</span>
-                <span className="font-black text-olive-600">₺{successTotal.toLocaleString("tr-TR", { minimumFractionDigits: 2 })} <span className="text-[10px] font-medium text-slate-400">KDV dahil</span></span>
-              </div>
-            )}
-          </div>
-
-          {isBankTransfer && bankTransferInfo && (
-            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 space-y-2">
-              <p className="text-[10px] font-black text-amber-700 uppercase tracking-widest flex items-center gap-1">
-                <Landmark size={12} /> Havale / EFT Banka Bilgileri
-              </p>
-              <pre className="text-xs text-slate-700 font-medium whitespace-pre-wrap leading-relaxed">{bankTransferInfo}</pre>
-              <p className="text-xs font-bold text-amber-800">
-                Açıklama kısmına sipariş numaranı (<span className="font-mono">{orderLabel}</span>) yazmayı unutma.
-              </p>
-            </div>
-          )}
-
-          {email && (
-            <p className="text-xs text-slate-500 text-center leading-relaxed">
-              {isBankTransfer ? "Sipariş ve ödeme bilgilerini" : "Sipariş bilgilerini"} <b className="text-slate-700">{email}</b> adresine de gönderdik.
-            </p>
-          )}
-
-          {/* MİSAFİR — hesap aktivasyonu */}
-          {isGuest ? (
-            <div className="rounded-2xl border-2 border-olive-100 bg-olive-50/50 p-5 space-y-3">
-              <p className="font-black text-slate-900">Siparişini takip etmek için hesabını aktifleştir</p>
-              <p className="text-sm text-slate-600 leading-relaxed">
-                Siparişinle birlikte bu e-postaya bir hesap açıldı. <b>E-postana gönderdiğimiz bağlantıdan şifreni belirlemen</b> yeterli.
-              </p>
-              <ul className="text-sm text-slate-600 space-y-1.5">
-                {[
-                  "Sipariş ve kargo takibi",
-                  "İade / değişim talebi ve bizimle yazışma",
-                  "Kayıtlı adresle hızlı alışveriş",
-                  "Favoriler ve “stok gelince haber ver”",
-                  "Satış ortaklığı ile YeriHisset Kredisi",
-                ].map((t) => (
-                  <li key={t} className="flex items-start gap-2"><CheckCircle2 size={15} className="text-olive-600 shrink-0 mt-0.5" /> {t}</li>
-                ))}
-              </ul>
-              <div className="pt-1 text-xs text-slate-500">
-                {activationState === "sent" ? (
-                  <span className="text-green-700 font-bold">✓ Bağlantıyı tekrar gönderdik.</span>
-                ) : activationState === "error" ? (
-                  <span className="text-red-600 font-bold">{activationMsg || "Gönderilemedi, biraz sonra tekrar dene."}</span>
-                ) : (
-                  <>E-posta gelmedi mi? (Spam klasörüne de bak){" "}
-                    <button type="button" onClick={resendActivation} disabled={activationState === "sending"}
-                      className="font-bold text-olive-700 underline disabled:opacity-50">
-                      {activationState === "sending" ? "Gönderiliyor…" : "Tekrar gönder"}
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
-          ) : null}
-
-          <div className="flex flex-col gap-3">
-            {!isGuest && (
-              <Link href="/account?tab=orders" className={cn(buttonVariants({ variant: "default" }), "h-12 rounded-2xl bg-olive-600 font-bold")}>
-                Siparişlerimi Gör
-              </Link>
-            )}
-            <Link href="/magaza" className={cn(buttonVariants({ variant: isGuest ? "default" : "ghost" }), "h-12 rounded-2xl font-bold", isGuest && "bg-olive-600")}>
-              Alışverişe Devam Et
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
+    // Sipariş alındı → kalıcı sonuç sayfasına geçiliyor (/siparis-tamam: yenilenebilir, geri dönülebilir)
+    return <div className="min-h-screen flex items-center justify-center gap-2 text-olive-600 font-bold"><Loader2 size={18} className="animate-spin" /> Siparişin hazırlanıyor…</div>;
   }
 
   if (items.length === 0) {

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { rateLimited, clientIp, TOO_MANY } from "@/lib/rate-limit";
-import { sendGuestActivationEmail } from "@/lib/notifications";
+import { sendGuestActivationEmail, reportCustomerEmailFailure } from "@/lib/notifications";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -33,6 +33,7 @@ export async function POST(req: NextRequest) {
   });
   if (res.status !== "sent") {
     console.error("[guest-activation]", order.id, res.error);
+    await reportCustomerEmailFailure({ orderId: order.id, email: profile.email, kind: "hesap aktivasyonu", reason: res.error });
     // Test ortamı: e-posta kilidi bu adresi engellediyse açıkça söyle (canlıda kilit kapalı)
     if (/E-posta kilidi/i.test(res.error || "")) {
       return NextResponse.json({ error: "Test ortamı: e-posta kilidi açık ve bu adres izinli listede değil (Ayarlar › Genel › E-posta Kilidi)." }, { status: 403 });
