@@ -130,7 +130,7 @@ export default function EmailTemplatesTab() {
         <code className="bg-blue-100 px-1 rounded text-xs">{"{{order_id}}"}</code>{" "}
         <code className="bg-blue-100 px-1 rounded text-xs">{"{{order_total}}"}</code>{" "}
         <code className="bg-blue-100 px-1 rounded text-xs">{"{{order_date}}"}</code>{" "}
-        <code className="bg-blue-100 px-1 rounded text-xs">{"{{order_items_html}}"}</code>{" "}
+        <code className="bg-blue-100 px-1 rounded text-xs">{"{{order_items_html}}"}</code>{" "}<code className="bg-blue-100 px-1 rounded text-xs">{"{{cancel_info_html}}"}</code>{" "}
         <code className="bg-blue-100 px-1 rounded text-xs">{"{{shipping_address}}"}</code>{" "}
         <code className="bg-blue-100 px-1 rounded text-xs">{"{{tracking_html}}"}</code>{" "}
         <code className="bg-blue-100 px-1 rounded text-xs">{"{{store_name}}"}</code>{" "}

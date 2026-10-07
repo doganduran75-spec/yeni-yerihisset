@@ -9,7 +9,10 @@ import { kickMarketplaceSync } from "@/lib/marketplace/sync";
 
 // SİPARİŞ İŞLEMLERİ (iptal / iade / ücret iadesi) — senaryo matrisi (migration 20261020000001).
 // POST { action, orderId, ... }
-//   refund : { amount, method: iyzico|bank_transfer|cash|other, note } → ücret iadesi (stoğa dokunmaz)
+//   refund : { amount, method: iyzico|iyzico_manual|bank_transfer|cash|other, note, confirmed } → ücret iadesi
+//            (stoğa dokunmaz). iyzico = API ile otomatik; iyzico_manual = admin panelden yaptı, yalnız kaydet.
+//            iyzico (otomatik) dışındaki yöntemlerde parayı admin gönderir → confirmed:true şart
+//            (müşteriye "iaden yapıldı" e-postası gider).
 //   cancel : { method?, note } → kargodan ÖNCE iptal; ödeme alınmışsa kalan tutar önce iade edilir,
 //            stok geri eklenir, fatura kesilmediyse "Gerekmiyor"
 //   return : { items: [{item_id, qty, restock}], note, refund?: {amount, method, note} }
@@ -37,10 +40,13 @@ export async function POST(req: NextRequest) {
 
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "127.0.0.1";
 
-  async function doRefund(amount: number, method: string, note?: string): Promise<string | null> {
+  async function doRefund(amount: number, methodIn: string, note?: string): Promise<string | null> {
+    const manual = methodIn === "iyzico_manual";
+    const method = manual ? "iyzico" : methodIn;
     if (!METHODS.has(method)) return "İade yöntemi seçilmedi";
     if (!(amount > 0)) return "İade tutarı girilmedi";
-    if (method === "iyzico") {
+    if ((manual || method !== "iyzico") && body.confirmed !== true) return "İadeyi yaptığını onayla";
+    if (method === "iyzico" && !manual) {
       if (!order.iyzico_payment_id) return "Bu sipariş iyzico ile ödenmemiş; başka bir yöntem seçin";
       const r = await iyzicoRefund(order.iyzico_payment_id, amount, ip, note);
       if (!r.ok) return r.error;

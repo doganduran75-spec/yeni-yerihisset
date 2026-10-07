@@ -12,6 +12,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { supabase } from "@/lib/supabase";
+import { toSlug } from "@/lib/slug";
 import { Plus, Edit, Trash2, Loader2, Video } from "lucide-react";
 import RichTextEditor from "@/components/admin/RichTextEditor";
 
@@ -44,6 +45,10 @@ export default function KBArticlesPage() {
     content: "",
     video_url: "",
   });
+  // Sayfa adresi: yeni makalede başlıktan otomatik; elle değiştirilince ya da kayıtlı
+  // makalede SABİT kalır (başlık düzeltmesi paylaşılmış bağlantıyı bozmasın)
+  const [slug, setSlug] = useState("");
+  const [slugTouched, setSlugTouched] = useState(false);
 
   useEffect(() => {
     fetchArticles();
@@ -73,21 +78,21 @@ export default function KBArticlesPage() {
     }
   }
 
-  const generateSlug = (text: string) =>
-    text
-      .toString()
-      .toLowerCase()
-      .trim()
-      .replace(/\s+/g, "-")
-      .replace(/[^\w-]+/g, "")
-      .replace(/--+/g, "-");
-
   async function handleSave() {
     if (!formData.title || !formData.category_id) return;
     setSaving(true);
     try {
-      const slug = generateSlug(formData.title);
-      const payload = { ...formData, slug, updated_at: new Date().toISOString() };
+      // Adres: Türkçe harfler çevrilir (ğ→g, ş→s…); başka makalede varsa sonuna -2, -3…
+      const base = toSlug(slug || formData.title) || "makale";
+      let finalSlug = base;
+      for (let n = 2; n < 50; n++) {
+        let q = supabase.from("kb_articles").select("id").eq("slug", finalSlug).limit(1);
+        if (editingId) q = q.neq("id", editingId);
+        const { data: clash } = await q;
+        if (!clash?.length) break;
+        finalSlug = `${base}-${n}`;
+      }
+      const payload = { ...formData, slug: finalSlug, updated_at: new Date().toISOString() };
 
       if (editingId) {
         await supabase.from("kb_articles").update(payload).eq("id", editingId);
@@ -106,6 +111,8 @@ export default function KBArticlesPage() {
 
   function resetForm() {
     setFormData({ title: "", category_id: "", content: "", video_url: "" });
+    setSlug("");
+    setSlugTouched(false);
     setEditingId(null);
   }
 
@@ -123,6 +130,8 @@ export default function KBArticlesPage() {
       content: article.content,
       video_url: article.video_url,
     });
+    setSlug(article.slug || "");
+    setSlugTouched(true);
     setIsDialogOpen(true);
   }
 
@@ -175,9 +184,10 @@ export default function KBArticlesPage() {
                 <label className="text-sm font-medium">Başlık</label>
                 <Input
                   value={formData.title}
-                  onChange={(e) =>
-                    setFormData({ ...formData, title: e.target.value })
-                  }
+                  onChange={(e) => {
+                    setFormData({ ...formData, title: e.target.value });
+                    if (!slugTouched) setSlug(toSlug(e.target.value));
+                  }}
                   placeholder="Örn: Siparişimi nasıl takip ederim?"
                 />
               </div>
@@ -198,6 +208,24 @@ export default function KBArticlesPage() {
                   ))}
                 </select>
               </div>
+            </div>
+
+            {/* Sayfa adresi (URL) */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Sayfa adresi (URL)</label>
+              <div className="flex items-center rounded-md border border-input bg-slate-50 overflow-hidden">
+                <span className="px-3 text-xs text-muted-foreground whitespace-nowrap">/bilgi-bankasi/</span>
+                <input
+                  value={slug}
+                  onChange={(e) => { setSlug(e.target.value); setSlugTouched(true); }}
+                  onBlur={() => setSlug(toSlug(slug || formData.title))}
+                  placeholder="dogru-is-icin-dogru-arac"
+                  className="flex-1 h-10 bg-white px-2 text-sm outline-none"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Türkçe harfler otomatik çevrilir (ğ→g, ş→s, ı→i…). Yayındaki makalenin adresini değiştirirsen eski bağlantı çalışmaz.
+              </p>
             </div>
 
             {/* Video URL */}

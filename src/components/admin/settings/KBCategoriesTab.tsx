@@ -7,13 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { supabase } from "@/lib/supabase";
+import { toSlug } from "@/lib/slug";
 import { Plus, Edit, Trash2, Loader2, FolderSearch } from "lucide-react";
 
 type KBCategory = { id: string; name: string; slug: string };
 
-const toSlug = (text: string) =>
-  text.toString().toLowerCase().trim()
-    .replace(/\s+/g, "-").replace(/[^\w-]+/g, "").replace(/--+/g, "-");
 
 export default function KBCategoriesTab() {
   const [categories, setCategories] = useState<KBCategory[]>([]);

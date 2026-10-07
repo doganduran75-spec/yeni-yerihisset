@@ -2213,10 +2213,24 @@ function OrderActionDialog({ mode, order, onClose, onDone }: {
   const retSum = Math.min(remaining, Math.round(items.reduce((a, i) => a + (ret[i.id]?.on ? Number(i.unit_price) * (ret[i.id]?.qty || 0) : 0), 0) * 100) / 100);
   const [retAmount, setRetAmount] = useState<string | null>(null);
 
+  // Para iadesi bu işlemde yapılıyor mu? (iptal/ücret iadesi: ödeme alınmışsa; iade al: işaretliyse)
+  const refundNow = paidNow && (mode === "cancel" ? remaining > 0 : mode === "refund" ? true : withRefund);
+  // iyzico (otomatik) dışındaki yöntemlerde parayı admin gönderir → "yaptım" onayı istenir;
+  // müşteriye giden e-posta "iaden yapıldı" der, bu yüzden gerçekten yapılmış olmalı
+  const needsConfirm = refundNow && method !== "iyzico";
+  const [confirmed, setConfirmed] = useState(false);
+  const confirmText: Record<string, string> = {
+    iyzico_manual: "Kart iadesini iyzico panelinden yaptım",
+    bank_transfer: "Parayı müşterinin banka hesabına gönderdim",
+    cash: "Nakit iadeyi yaptım",
+    other: "İadeyi yaptım",
+  };
+
   async function submit() {
     setBusy(true); setErr(null);
     try {
-      const body: any = { action: mode, orderId: order.id, note: note.trim() || undefined };
+      if (needsConfirm && !confirmed) throw new Error("Önce iadeyi yaptığını onayla.");
+      const body: any = { action: mode, orderId: order.id, note: note.trim() || undefined, confirmed: needsConfirm ? true : undefined };
       if (mode === "refund") { body.amount = Number(String(amount).replace(",", ".")); body.method = method; }
       if (mode === "cancel") body.method = method;
       if (mode === "return") {
@@ -2245,11 +2259,19 @@ function OrderActionDialog({ mode, order, onClose, onDone }: {
     <label className="block space-y-1">
       <span className="text-xs font-semibold">İade yöntemi</span>
       <select value={method} onChange={(e) => setMethod(e.target.value)} className={sel}>
-        {iyzicoOk && <option value="iyzico">iyzico — kartına otomatik iade edilir</option>}
-        <option value="bank_transfer">Havale/EFT — parayı ben gönderdim / göndereceğim</option>
+        {iyzicoOk && <option value="iyzico">Kart — iyzico'dan şimdi otomatik iade et (önerilen)</option>}
+        {iyzicoOk && <option value="iyzico_manual">Kart — iadeyi iyzico panelinden kendim yaptım (yalnız kaydet)</option>}
+        <option value="bank_transfer">Havale/EFT — parayı müşterinin hesabına ben gönderdim</option>
         <option value="cash">Kapıda / nakit</option>
-        <option value="other">Diğer (ör. iyzico panelinden elle)</option>
+        <option value="other">Diğer</option>
       </select>
+      {method === "iyzico" && <span className="block text-[11px] text-muted-foreground">Tutar müşterinin kartına iyzico üzerinden hemen iade edilir; ayrıca bir şey yapmana gerek yok.</span>}
+    </label>
+  );
+  const confirmBox = needsConfirm && (
+    <label className="flex items-start gap-2 rounded-lg border-2 border-amber-200 bg-amber-50 p-2.5 text-xs font-semibold text-amber-900">
+      <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} className="mt-0.5" />
+      <span>{confirmText[method] ?? "İadeyi yaptım"} — müşteriye “iaden yapıldı” e-postası gidecek.</span>
     </label>
   );
   const title = mode === "cancel" ? "Siparişi iptal et" : mode === "return" ? "İade al (ürün geri geldi)" : "Ücret iadesi yap";
@@ -2270,9 +2292,10 @@ function OrderActionDialog({ mode, order, onClose, onDone }: {
                 {paidNow
                   ? <li>Ödeme alınmış: <b>₺{remaining.toFixed(2)}</b> ücret iadesi yapılır, ödeme <b>İade edildi</b> olur; kullanılan YeriHisset Kredisi cüzdana döner.</li>
                   : <li>Ödeme alınmamış: ödeme <b>Alınmadı</b> olur.</li>}
-                <li>Müşteriye iptal e-postası gider.</li>
+                <li>Müşteriye iptal e-postası gider (ödeme alındıysa iadenin nasıl yapıldığını da yazar).</li>
               </ul>
               {paidNow && methodSelect}
+              {confirmBox}
             </>
           )}
 
@@ -2283,6 +2306,7 @@ function OrderActionDialog({ mode, order, onClose, onDone }: {
                 <input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" className={sel} />
               </label>
               {methodSelect}
+              {confirmBox}
               <p className="text-[11px] text-muted-foreground">Ücret iadesi stoğa ve kargoya dokunmaz. Tamamı iade edilirse ödeme “İade edildi”, bir kısmıysa “Kısmi iade” olur; ciro buna göre düşer.</p>
             </>
           )}
@@ -2332,6 +2356,7 @@ function OrderActionDialog({ mode, order, onClose, onDone }: {
                         <input value={retAmount ?? String(retSum)} onChange={(e) => setRetAmount(e.target.value)} inputMode="decimal" className={sel} />
                       </label>
                       {methodSelect}
+                      {confirmBox}
                     </>
                   )}
                   {!withRefund && <p className="text-[11px] text-muted-foreground">Ücret iadesini sonra “Ücret iadesi yap” ile girebilirsin; o zamana kadar sipariş “İade geldi, ücret iade edilmedi” filtresinde görünür.</p>}
@@ -2348,7 +2373,7 @@ function OrderActionDialog({ mode, order, onClose, onDone }: {
         </div>
         <div className="flex justify-end gap-2 px-5 py-3 border-t bg-slate-50 rounded-b-2xl">
           <Button variant="outline" size="sm" onClick={onClose} disabled={busy}>Vazgeç</Button>
-          <Button size="sm" onClick={submit} disabled={busy} className={mode === "cancel" ? "bg-red-600 hover:bg-red-700" : ""}>
+          <Button size="sm" onClick={submit} disabled={busy || (needsConfirm && !confirmed)} className={mode === "cancel" ? "bg-red-600 hover:bg-red-700" : ""}>
             {busy ? <Loader2 size={14} className="animate-spin" /> : title}
           </Button>
         </div>

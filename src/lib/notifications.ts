@@ -241,6 +241,45 @@ function formatAddressHtml(raw: any): string { // eslint-disable-line @typescrip
 
 // --- Ana fonksiyon ---
 
+/** İptal e-postasındaki açıklama kutusu — ödeme / iade durumuna göre (senaryo matrisi). */
+function buildCancelInfoHtml(order: any, storeUrl: string): string {
+  const money = (n: number) => `₺${n.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const refunded = Number(order.refunded_amount || 0);
+  const credit = Number(order.credit_used || 0);
+  const lines: string[] = [];
+  let tone: "green" | "slate" = "slate";
+
+  if (refunded > 0) {
+    tone = "green";
+    const m = String(order.refund_method || "");
+    if (m === "iyzico") {
+      lines.push(`<b>${money(refunded)}</b> tutarındaki kart ödemen iade edildi. Tutar, bankana bağlı olarak genellikle <b>1–14 iş günü</b> içinde kartına yansır.`);
+    } else if (m === "bank_transfer") {
+      lines.push(`<b>${money(refunded)}</b> tutarındaki ödemen banka hesabına havale/EFT ile iade edildi. Bankana bağlı olarak genellikle <b>1–3 iş günü</b> içinde hesabında görünür.`);
+    } else if (m === "cash") {
+      lines.push(`<b>${money(refunded)}</b> tutarındaki ödemen nakit olarak iade edildi.`);
+    } else {
+      lines.push(`<b>${money(refunded)}</b> tutarındaki ödemen iade edildi.`);
+    }
+  }
+  if (credit > 0) {
+    tone = "green";
+    lines.push(`Siparişte kullandığın <b>${money(credit)}</b> YeriHisset Kredisi hesabına geri yüklendi.`);
+  }
+  if (!lines.length) {
+    lines.push(order.auto_expired
+      ? "Ödemen belirtilen süre içinde bize ulaşmadığı için sipariş iptal edildi. Senden herhangi bir ödeme alınmadı."
+      : "Bu sipariş için senden herhangi bir ödeme alınmadı; bir iade işlemi gerekmiyor.");
+    lines.push(`Ürünler hâlâ ilgini çekiyorsa <a href="${storeUrl}/magaza" style="color:#4d7c0f;font-weight:700">mağazadan</a> tekrar sipariş verebilirsin.`);
+  }
+  const c = tone === "green"
+    ? { bg: "#f0fdf4", border: "#bbf7d0", text: "#166534" }
+    : { bg: "#f8fafc", border: "#e2e8f0", text: "#334155" };
+  return `<div style="background:${c.bg};border:1px solid ${c.border};border-radius:8px;padding:14px 16px;margin:0 0 20px">
+    ${lines.map((l) => `<p style="margin:0 0 6px;color:${c.text};font-size:14px;line-height:1.6">${l}</p>`).join("")}
+  </div>`;
+}
+
 export async function sendOrderNotification(
   trigger: NotificationTrigger,
   context: NotificationContext
@@ -250,7 +289,7 @@ export async function sendOrderNotification(
   // 1. Sipariş + ilişkileri EMBED'SİZ getir (self-host PostgREST embed kırılgan)
   const { data: order, error: orderError } = await (supabase
     .from("orders")
-    .select("id, order_number, total_amount, status, created_at, shipping_address, payment_method, user_id, channel")
+    .select("id, order_number, total_amount, status, created_at, shipping_address, payment_method, user_id, channel, payment_status, refunded_amount, refund_method, credit_used, auto_expired")
     .eq("id", context.orderId)
     .maybeSingle() as any) as { data: any; error: any };
 
@@ -313,6 +352,10 @@ export async function sendOrderNotification(
 
   const addressHtml = formatAddressHtml((order as any).shipping_address);
 
+  // İPTAL e-postası: siparişin GERÇEK durumuna göre açıklama (eskiden şablonda sabit
+  // "Ödeme yapıldıysa 3-5 iş günü içinde iadeniz…" yazıyordu)
+  const cancelInfoHtml = trigger === "order_cancelled" ? buildCancelInfoHtml(order, storeUrl) : "";
+
   const vars: Record<string, string> = {
     customer_name: customerName,
     order_id: shortId,
@@ -322,6 +365,7 @@ export async function sendOrderNotification(
     shipping_address: addressHtml,
     tracking_html: trackingHtml,
     bank_info_html: bankInfoHtml,
+    cancel_info_html: cancelInfoHtml,
     store_name: storeName,
     store_email: storeEmail,
     store_url: storeUrl,
@@ -340,6 +384,16 @@ export async function sendOrderNotification(
   if (template?.is_active) {
     subject = replaceVariables(template.subject, vars, false);
     bodyHtml = addUtmTracking(replaceVariables(template.body_html, vars), trigger);
+    // Şablon {{cancel_info_html}} içermiyorsa (elle düzenlenmiş eski şablon) açıklamayı sona ekle
+    if (cancelInfoHtml && !template.body_html.includes("{{cancel_info_html}}")) bodyHtml += cancelInfoHtml;
+  } else if (trigger === "order_cancelled") {
+    subject = `${storeName} — Siparişin iptal edildi ${shortId}`;
+    bodyHtml = `
+      <h1 style="font-size:22px;font-weight:800;color:#111827;margin:0 0 12px">Siparişin iptal edildi</h1>
+      <p style="font-size:15px;color:#374151;line-height:1.6;margin:0 0 16px">Merhaba ${customerName}, <b>${shortId}</b> numaralı siparişin iptal edildi.</p>
+      ${cancelInfoHtml}
+      ${buildOrderItemsHtml(orderItems)}
+      <p style="font-size:13px;color:#64748b;margin:16px 0 0">Sorun olursa ${storeEmail ? `<a href="mailto:${storeEmail}">${storeEmail}</a>` : "bize"} yazabilirsin.</p>`;
   } else {
     const addrBlock = addressHtml
       ? `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;margin:0 0 20px;font-size:13px;color:#475569"><b>Teslimat Adresi</b><br>${addressHtml}</div>`
