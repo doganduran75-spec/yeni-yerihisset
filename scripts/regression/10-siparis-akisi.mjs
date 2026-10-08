@@ -304,6 +304,8 @@ export default {
         ok(sh.status < 300 && ord(O.ret).shipment_status === "shipped", "Yönetici 'Kargoya Verildi (elle)' yapabiliyor", `HTTP ${sh.status} → ${ord(O.ret).shipment_status}`);
         const c = await api("/api/admin/orders/action", { token: F.admin.token, body: { action: "cancel", orderId: O.ret, method: "bank_transfer", confirmed: true } });
         ok(c.status === 400 && ord(O.ret).status !== "cancelled", "Kargolanmış sipariş iptal edilemiyor ('İade al' kullanılmalı)", why(c));
+        ok(ord(O.ret).payment_status === "paid" && eq(ord(O.ret).refunded_amount || 0, 0), "Reddedilen iptal parayı iade etmiyor",
+          `ödeme ${ord(O.ret).payment_status}, iade ${ord(O.ret).refunded_amount} — iptal reddedildiği halde ücret iadesi kaydedildi (iyzico'da para gerçekten iade edilir)`);
         await patch({ shipment_status: "delivered" });
         ok(ord(O.ret).shipment_status === "delivered", "Yönetici 'Teslim Edildi' yapabiliyor", ord(O.ret).shipment_status);
 

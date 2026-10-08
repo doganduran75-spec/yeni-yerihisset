@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
   if (!orderId) return NextResponse.json({ error: "orderId gerekli" }, { status: 400 });
 
   const { data: order } = await sb.from("orders")
-    .select("id, user_id, channel, import_source, total_amount, refunded_amount, payment_status, payment_method, iyzico_payment_id")
+    .select("id, user_id, channel, import_source, status, shipment_status, total_amount, refunded_amount, payment_status, payment_method, iyzico_payment_id")
     .eq("id", orderId).maybeSingle();
   if (!order) return NextResponse.json({ error: "Sipariş bulunamadı" }, { status: 404 });
 
@@ -68,6 +68,14 @@ export async function POST(req: NextRequest) {
     const err = await doRefund(Number(body.amount), String(body.method || ""), body.note);
     if (err) return NextResponse.json({ error: err }, { status: 400 });
   } else if (action === "cancel") {
+    // İptal edilemeyecek siparişte para İADE EDİLMEDEN dur (order_mark_cancelled'daki kuralların aynısı).
+    // Eskiden önce ücret iadesi yapılıyor, iptal sonra reddediliyordu → para iade, sipariş iptal değil.
+    const shippedNow = ["shipped", "delivered", "undelivered", "returned"].includes(order.shipment_status || "waiting");
+    const blocked = order.status === "cancelled" ? "Sipariş zaten iptal edilmiş"
+      : (order.channel || "site") !== "site" && !order.import_source ? "Pazaryeri siparişi pazaryerinden iptal edilir"
+      : shippedNow ? "Kargolanmış sipariş iptal edilemez — \"İade al\" kullanın"
+      : null;
+    if (blocked) return NextResponse.json({ error: blocked }, { status: 400 });
     if (paid && remaining > 0) {
       const err = await doRefund(remaining, String(body.method || ""), body.note);
       if (err) return NextResponse.json({ error: `Ücret iadesi yapılamadı: ${err}` }, { status: 400 });
