@@ -224,6 +224,8 @@ async function main() {
           const { data, error } = await sb.auth.admin.createUser({ email, email_confirm: true, user_metadata: { first_name: p.first, last_name: p.last } });
           if (error || !data?.user?.id) { cStat.failed++; console.log(`  ! hesap açılamadı (${error?.message || "?"})`); continue; }
           id = data.user.id;
+          // Supabase Auth şifresiz açılan hesaba rastgele şifre koyar → sil (yoksa hesap "şifreli üye" sanılır)
+          await sb.rpc("mark_account_passwordless", { p_user: id });
           authByEmail.set(email, id);
           const prof = { id, email, first_name: p.first, last_name: p.last, phone: p.phone, import_source: site.source, ...(p.since ? { created_at: p.since } : {}) };
           const { error: pErr } = await sb.from("profiles").upsert(prof, { onConflict: "id" });

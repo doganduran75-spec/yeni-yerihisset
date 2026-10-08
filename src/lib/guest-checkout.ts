@@ -68,6 +68,8 @@ export async function resolveGuest(
     return { ok: false, error: "Misafir kaydı oluşturulamadı.", code: 500 };
   }
   const userId = created.user.id;
+  // Supabase Auth şifresiz açılan hesaba rastgele şifre koyar → sil (yoksa hesap "şifreli üye" sanılır)
+  await (supabase as any).rpc("mark_account_passwordless", { p_user: userId });
 
   // Profil satırını garanti et (auth trigger'ı profil oluşturmuyorsa)
   await (supabase as any).from("profiles").upsert(

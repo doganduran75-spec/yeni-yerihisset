@@ -154,6 +154,7 @@ async function main() {
     ["20261023 Amazon", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='settings' AND column_name='amazon_enabled')"],
     ["20261024 bot koruması", "SELECT to_regclass('public.bot_blocks') IS NOT NULL"],
     ["20261025 iptal e-postası şablonu", "SELECT NOT EXISTS(SELECT 1 FROM public.email_templates WHERE trigger='order_cancelled' AND body_html LIKE '%Ödeme yapıldıysa%')"],
+    ["20261026 şifresiz hesaplar", "SELECT to_regprocedure('public.mark_account_passwordless(uuid)') IS NOT NULL"],
   ];
   for (const [name, q] of MIG) {
     try { one(q) === "t" ? add("ok", name) : add("fail", name, "UYGULANMAMIŞ — migration dosyasını çalıştır"); }
@@ -254,6 +255,8 @@ async function main() {
   noImg ? add("warn", "Görselsiz aktif ürün", `${noImg} ürün`) : add("ok", "Tüm aktif ürünlerin görseli var");
   const noSku = num("SELECT count(*) FROM public.product_variants v JOIN public.products p ON p.id=v.product_id WHERE p.is_active AND coalesce(v.is_active,true) AND coalesce(btrim(v.sku),'')=''");
   noSku ? add("warn", "SKU'su boş aktif numara", `${noSku} adet (pazaryeriyle eşleşmez)`) : add("ok", "Aktif numaraların SKU'su dolu");
+  const impPw = num("SELECT count(*) FROM auth.users u JOIN public.profiles p ON p.id = u.id WHERE p.import_source IS NOT NULL AND u.last_sign_in_at IS NULL AND coalesce(u.encrypted_password, '') <> ''");
+  impPw ? add("fail", "Aktarılan müşteri hesabı şifreli görünüyor", `${impPw} hesap — misafir siparişinde bilmediği şifreyle "giriş yapın" denir (20261026 migration'ı / woo-import)`) : add("ok", "Aktarılan müşteriler şifresiz (misafir olarak sipariş verebilir)");
   const empty = num("SELECT count(*) FROM public.orders o WHERE coalesce(o.channel,'site')='site' AND o.import_source IS NULL AND NOT EXISTS (SELECT 1 FROM public.order_items i WHERE i.order_id=o.id)");
   empty ? add("fail", "Ürünsüz site siparişi", `${empty} sipariş`) : add("ok", "Ürünsüz sipariş yok");
   const stale = num("SELECT count(*) FROM public.orders WHERE payment_status='pending' AND status <> 'cancelled' AND coalesce(channel,'site')='site' AND import_source IS NULL AND created_at < now() - interval '2 days'");

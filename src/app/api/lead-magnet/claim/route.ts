@@ -83,6 +83,8 @@ export async function POST(req: NextRequest) {
   }
 
   const userId = created.user.id;
+  // Supabase Auth şifresiz açılan hesaba rastgele şifre koyar → sil (yoksa hesap "şifreli üye" sanılır)
+  await (supabase as any).rpc("mark_account_passwordless", { p_user: userId });
   // Profil garantiye al (trigger yoksa)
   await supabase.from("profiles").upsert({ id: userId, email } as any, { onConflict: "id", ignoreDuplicates: true });
   await grantCoupon(userId);

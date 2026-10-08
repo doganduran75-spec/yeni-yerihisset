@@ -212,10 +212,19 @@ export default {
         if (!O.guest) return add("fail", "Misafir siparişi oluşturulamadı", why(r));
         ok(r.json?.isGuest === true, "Misafir olarak işaretlendi", JSON.stringify(r.json).slice(0, 120));
         const s = await api(`/api/orders/summary?id=${O.guest}`, { method: "GET", headers: H });
-        ok(s.status === 200 && s.json?.awaitingTransfer === true && s.json?.isGuest === true && eq(s.json?.total, 1000 + S1000),
-          "Sipariş sonucu sayfası verisi (havale bekliyor, banka bilgisi)", `${why(s)} ${JSON.stringify(s.json || {}).slice(0, 140)}`);
+        const sj = s.json || {};
+        const sBad = [
+          s.status !== 200 && why(s),
+          sj.awaitingTransfer !== true && "havale bekliyor görünmüyor",
+          !sj.bankInfo && "banka bilgisi yok",
+          sj.isGuest !== true && "misafir sayılmadı (hesap aktivasyon kutusu çıkmaz — hesap şifreli görünüyor)",
+          !eq(sj.total, 1000 + S1000) && `tutar ${sj.total} (beklenen ${1000 + S1000})`,
+        ].filter(Boolean);
+        ok(!sBad.length, "Sipariş sonucu sayfası verisi (havale bekliyor, banka bilgisi, aktivasyon)", sBad.join("; "));
         const e1 = await api("/api/checkout/email-check", { headers: H, body: { email: guest.email } });
-        ok(e1.json?.exists === false && e1.json?.known === true, "Misafir e-postası tekrar siparişe açık (şifresiz hesap)", JSON.stringify(e1.json));
+        ok(e1.json?.exists === false && e1.json?.known === true, "Misafir e-postası tekrar siparişe açık (şifresiz hesap)", `${JSON.stringify(e1.json)} — misafir hesabı şifreli görünüyor; ikinci siparişte "giriş yapın" denir`);
+        const r1b = await api("/api/orders/create", { headers: H, body });
+        ok(r1b.status === 200, "Aynı misafir ikinci siparişi verebiliyor", why(r1b));
         const e2 = await api("/api/checkout/email-check", { headers: H, body: { email: F.member.email } });
         ok(e2.json?.exists === true, "Üye e-postasıyla misafir siparişinde giriş isteniyor", JSON.stringify(e2.json));
         const r2 = await api("/api/orders/create", { headers: H, body: { ...body, guest: { ...guest, email: F.member.email } } });
