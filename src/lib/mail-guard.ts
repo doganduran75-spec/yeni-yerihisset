@@ -14,10 +14,16 @@ import { createAdminClient } from "./supabase-admin";
 
 export class EmailLockedError extends Error {
   code = "EMAIL_LOCKED";
-  constructor(recipients: string[]) {
-    super(`E-posta kilidi açık: ${recipients.join(", ")} izinli listede değil, gönderilmedi (Ayarlar › Genel › E-posta kilidi).`);
+  constructor(recipients: string[], testAddress = false) {
+    super(testAddress
+      ? `E-posta kilidi (test adresi): ${recipients.join(", ")} test adresi — e-posta hiçbir zaman gönderilmez.`
+      : `E-posta kilidi açık: ${recipients.join(", ")} izinli listede değil, gönderilmedi (Ayarlar › Genel › E-posta kilidi).`);
   }
 }
+
+// TEST ADRESLERİ: otomatik regresyon testlerinin müşterileri (@yerihisset.test vb.). Bu adreslere
+// kilit kapalı olsa da (canlıda) ASLA e-posta gönderilmez; test siparişleri yöneticiye bildirim de üretmez.
+export const isTestEmail = (e?: string | null) => /@[^@\s]*\.(test|invalid)$/i.test(String(e || "").trim());
 
 type LockState = { at: number; locked: boolean; allow: Set<string> };
 let cache: LockState | null = null;
@@ -56,6 +62,8 @@ export function createMailTransport(config: any) {
   const transport = nodemailer.createTransport(config);
   return {
     async sendMail(opts: SendMailOptions) {
+      const testRcpt = [opts.to, opts.cc, opts.bcc].flatMap(addresses).filter((e) => isTestEmail(e));
+      if (testRcpt.length) throw new EmailLockedError(testRcpt, true);
       const st = await lockState();
       if (st.locked) {
         const blocked = [opts.to, opts.cc, opts.bcc].flatMap(addresses).filter((e) => !st.allow.has(e));

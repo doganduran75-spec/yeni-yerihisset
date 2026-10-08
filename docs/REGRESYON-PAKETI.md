@@ -5,7 +5,7 @@ cevaplamak. Üç katman var; sıkça yapılan kısım otomatik, elle yapılanlar
 
 | Katman | Ne zaman | Süre | Kim |
 |---|---|---|---|
-| **1. Otomatik kontrol** | Her deploy'un sonunda kendiliğinden | ~1 dk | Sunucu |
+| **1. Otomatik kontrol** | Her deploy'un sonunda kendiliğinden | ~1-2 dk | Sunucu |
 | **2. Kısa tur** | Her geliştirmeden sonra (deploy bitince) | ~10 dk | Sen (telefonla) |
 | **3. Tam tur** | Canlıya geçmeden önce + büyük değişikliklerden sonra | ~40 dk | Sen |
 
@@ -28,7 +28,13 @@ node scripts/regression.mjs --canli
 **Çıktı:** her bölüm tek satır. Sorun yoksa `PASS`; varsa ✗ HATA / ! uyarı, açıklamasıyla.
 En altta `SONUÇ: ✓ PASS` ya da `✗ N HATA`. **HATA varsa çıktıyı Claude'a ilet.** Uyarılar acil değildir.
 
-Neleri kontrol eder (hiçbir veriyi değiştirmez):
+Acele varsa yalnız duman kontrolleri (fonksiyonel senaryolar atlanır):
+
+```bash
+node scripts/regression.mjs --hizli
+```
+
+### 1a. Duman kontrolleri — her şey yerinde mi (yalnız okur)
 - **Veritabanı güncellemeleri:** 26 migration'ın her biri uygulanmış mı (unutulan migration'ı yakalar).
 - **Sayfalar:** 25+ müşteri ve admin sayfası açılıyor mu, hata metni var mı, 3 sn'den yavaş mı; gerçek bir ürün mağazada listeleniyor mu; olmayan sayfa 404 mü.
 - **Uç noktalar ve yetki:** cron'lar şifresiz çalışmıyor, admin uçları girişsiz çalışmıyor, bot koruması devrede, kart ödeme ucu yanıt veriyor.
@@ -36,6 +42,22 @@ Neleri kontrol eder (hiçbir veriyi değiştirmez):
 - **Veri tutarlılığı:** eksi stok, kategorisiz/görselsiz/SKU'suz ürün, ürünsüz sipariş, süresi dolmuş ödenmemiş sipariş, bozuk bilgi bankası adresi, aktif kargo yöntemi, pazaryeri ve e-posta kuyruğu hataları.
 - **Ayarlar ve ortam:** SMTP, iletişim/bildirim e-postası, havale bilgisi, Google Analytics, site adresi, CRON_SECRET, yönetici sayısı (`--canli` ile: e-posta kilidi, iyzico, arama motoru engeli).
 - **Arka plan işleri:** gece yedeği (<26 sa), sunucu sağlık kontrolü, pazaryeri senkronu (açıksa).
+
+### 1b. Fonksiyonel senaryolar — iş akışları doğru çalışıyor mu (`scripts/regression/`)
+
+Gerçek uçlara gerçek istek atar, sonucu veritabanında doğrular. Kendi test verisini kurar ve
+sonunda siler: pasif `REGRESYON-TEST` ürünleri (mağazada görünmez, pazaryerine gitmez), `RGT…`
+kuponları, `@yerihisset.test` üyeleri (bu adreslere e-posta **hiç** gitmez, yöneticiye "yeni sipariş"
+bildirimi düşmez). Tek iz: sipariş numaraları birkaç numara atlar.
+
+| Bölüm | Neyi kanıtlar |
+|---|---|
+| Sipariş: fiyat, stok, kargo, hediye | İstekte fiyat değiştirilse de veritabanı fiyatı alınır; tutar = ürün + kargo; stok düşer; stoktan fazlası reddedilir; hediye 0 TL ve stoğu düşer; tetikleyicisiz hediye reddedilir |
+| Kupon kuralları | Yüzde / sabit / ücretsiz kargo: sepetteki indirim = siparişteki indirim, kullanım sayılır. Alt limit, süresi dolmuş, başlamamış, başkasına özel, olmayan kupon ve kişi başı limit **hem sepette hem doğrudan sipariş isteğinde** reddedilir |
+| Misafir siparişi | Bot isteği reddedilir; misafir siparişi açılır; sonuç sayfası verisi (havale bekliyor); e-posta kontrolü; üyenin e-postasıyla misafir siparişi reddedilir |
+| Yetki | Üye yönetici işlemi / silme yapamaz, başkasının siparişini göremez, kendi siparişini "ödendi" yapamaz |
+| Ödeme onayı, iade, iptal | Ödenmemiş iptal (stok geri, fatura "gerekmiyor"); yönetici "Ödendi" → üye **Müşteri** rolü; onaysız iade reddedilir; kısmi iade; ödenmiş sipariş iptali (kalan iade, stok geri); çift iptal reddedilir |
+| Silme ve süre dolumu | "Siparişi sil" (stok geri, kupon sayısı düzelir); 24 saat ödenmeyen havale siparişi iptal olur, stok geri |
 
 Raporlar: `/opt/yerihisset-app/.regression-report/`
 
@@ -79,7 +101,28 @@ Tam tur bitince test siparişlerini **Siparişi sil** ile temizle.
 
 ---
 
-## Yeni bir özellik eklenince
+## Yeni bir geliştirme teste nasıl dahil edilir (kural)
 
-Claude, özelliği yazarken otomatik kontrole yeni bir madde ekler (ör. yeni sayfa, yeni migration
-işareti). Elle doğrulanması gereken bir şeyse bu dosyadaki tam tura bir satır eklenir.
+Her geliştirme **aynı commit'te** teste eklenir; Claude bunu kendiliğinden yapar ve teslim
+mesajında "**Regresyona eklenen:** …" satırıyla söyler. Neyin nereye ekleneceği:
+
+| Geliştirme | Teste eklenen |
+|---|---|
+| Yeni migration | 1a › Veritabanı güncellemeleri listesine bir işaret (tablo/kolon/fonksiyon var mı) |
+| Yeni sayfa | 1a › Sayfalar listesine adres |
+| Yeni API ucu | Yetki: girişsiz / yetkisiz → 401/403 (1a) ve **asıl işi** yapan senaryo (1b) |
+| İş kuralı (fiyat, kupon, stok, kargo, hediye, kredi, iade…) | 1b › ilgili modüle senaryo: hem **izin verilen** hem **reddedilen** durum, sonuç veritabanında doğrulanır |
+| Hata düzeltmesi | Hatayı yeniden üreten senaryo (bir daha geri gelirse yakalansın) |
+| Yeni herkese açık form | Bot koruması → 429 kontrolü |
+| Ayar / ortam değişkeni | 1a › Ayarlar ve ortam (canlıda şartsa `--canli` kontrolü) |
+| Ekranda görünmesi gereken şey (görsel, mobil düzen, e-posta içeriği) | Otomatik test edilemez → kısa tur ya da tam tura satır |
+
+Senaryo modülü yazım kuralları (`scripts/regression/NN-konu.mjs`, numara sırasıyla çalışır):
+- `export default { name, async run(t) { await t.part("Bölüm", async () => { … t.add("ok"|"fail"|"warn", ad, açıklama) }) } }`
+- `t` içinde: `sql / one / num / lit` (veritabanı), `api` (site uçları), `rest` (tarayıcı gibi, RLS geçerli), `auth` (test üyesi), `sleep`.
+- Test verisi yalnız işaretli adlarla: ürün `REGRESYON-TEST…`, kupon `RGT…`, üye `…@yerihisset.test`. Modül başta ve sonda kendi verisini siler.
+- Gerçek müşteriye / pazaryerine / yöneticiye dokunan hiçbir şey tetiklenmez (SKU/barkodsuz ürün, test e-posta alanı).
+- Hata açıklaması "ne bekleniyordu, ne geldi"yi söyler.
+
+Mevcut modüller: `10-siparis-akisi.mjs` (havale siparişi, kupon, stok, hediye, misafir, yetki, iade/iptal, silme, süre dolumu).
+Sıradaki adaylar: kart ödeme (iyzico sandbox açılınca), YeriHisset Kredisi, satış ortaklığı, stok bildirimi.

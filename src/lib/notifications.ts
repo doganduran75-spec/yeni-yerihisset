@@ -1,4 +1,4 @@
-import { createMailTransport } from "./mail-guard";
+import { createMailTransport, isTestEmail } from "./mail-guard";
 import { createAdminClient } from "./supabase-admin";
 import { buildSmtpConfig } from "./smtp-config";
 
@@ -240,6 +240,13 @@ function formatAddressHtml(raw: any): string { // eslint-disable-line @typescrip
 }
 
 // --- Ana fonksiyon ---
+
+/** Regresyon test siparişi mi? (müşterinin e-postası @…test) → yöneticiye bildirim/uyarı üretilmez */
+async function isTestOrder(supabase: any, userId?: string | null): Promise<boolean> {
+  if (!userId) return false;
+  const { data } = await supabase.from("profiles").select("email").eq("id", userId).maybeSingle();
+  return isTestEmail(data?.email);
+}
 
 /** İptal e-postasındaki açıklama kutusu — ödeme / iade durumuna göre (senaryo matrisi). */
 function buildCancelInfoHtml(order: any, storeUrl: string): string {
@@ -816,6 +823,8 @@ export async function sendAdminOutOfStockAlert(
  */
 export async function alertOutOfStockForOrder(orderId: string): Promise<void> {
   const supabase = createAdminClient();
+  const { data: ord } = await (supabase as any).from("orders").select("user_id").eq("id", orderId).maybeSingle();
+  if (await isTestOrder(supabase, ord?.user_id)) return; // regresyon test siparişi — uyarı yok
   const { data: oi } = await (supabase as any).from("order_items")
     .select("product_id, variant_id").eq("order_id", orderId);
   const items = (oi as any[]) || [];
@@ -881,6 +890,7 @@ export async function sendAdminNewOrderNotification(
     .maybeSingle() as any) as { data: any };
 
   if (!order) return { status: "skipped", error: "Sipariş bulunamadı" };
+  if (await isTestOrder(supabase, order.user_id)) return { status: "skipped", error: "Test siparişi (regresyon) — bildirim yok" };
 
   const { data: settings } = await (supabase.from("settings").select("*").limit(1).maybeSingle() as any) as { data: any };
   const storeName = settings?.store_name || "YeriHisset";

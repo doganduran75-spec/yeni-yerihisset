@@ -1,17 +1,24 @@
 #!/usr/bin/env node
 // REGRESYON PAKETİ — OTOMATİK KISIM. Her deploy'un SONUNDA kendiliğinden çalışır
-// (scripts/deploy.sh); elle de çalıştırılabilir. Hiçbir veriyi DEĞİŞTİRMEZ (yalnız okur; bot
-// korumasını denemek için bot_blocks'a 1 kayıt düşer). ~1 dakika.
+// (scripts/deploy.sh); elle de çalıştırılabilir. ~1-2 dakika.
+//   A) Duman kontrolleri (bu dosya): migration, sayfalar, yetki, veri güvenliği, tutarlılık, ayarlar,
+//      arka plan işleri — yalnız okur (bot korumasını denemek için bot_blocks'a 1 kayıt düşer).
+//   B) Fonksiyonel senaryolar (scripts/regression/NN-*.mjs): gerçek uçlarla uçtan uca iş akışı
+//      (sipariş, kupon, stok, hediye, iptal/iade, silme...). Kendi test verisini kurar
+//      (REGRESYON-TEST ürünleri, RGT kuponları, @yerihisset.test üyeleri — mağazada görünmez,
+//      e-posta gitmez, yöneticiye bildirim düşmez) ve sonunda SİLER.
 // Çıktı: geçen bölüm yalnız "PASS"; HATA / uyarı açıklamasıyla. Rehber + elle kısım: docs/REGRESYON-PAKETI.md
 //
 //   node scripts/regression.mjs           # geliştirme sonrası (test sitesi)
+//   node scripts/regression.mjs --hizli   # yalnız A (fonksiyonel senaryolar atlanır)
 //   node scripts/regression.mjs --canli   # canlıya geçiş kontrolü: e-posta kilidi kapalı, iyzico canlı,
 //                                         # arama motoru engeli kalkmış olmalı (yoksa HATA)
 //
 // Ortam: .env.local'dan okur. APP_URL (varsayılan http://127.0.0.1:3000 — Caddy şifresi
 // atlanır), DB_CONTAINER (varsayılan supabase-db).
-import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { readFileSync, mkdirSync, writeFileSync, readdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
+import { pathToFileURL, fileURLToPath } from "node:url";
 
 for (const name of [".env.local", ".env", ".env.production.local", ".env.production"]) {
   try {
@@ -27,7 +34,10 @@ const DB = process.env.DB_CONTAINER || "supabase-db";
 const SB_URL = (process.env.NEXT_PUBLIC_SUPABASE_URL || "").replace(/\/+$/, "");
 const ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 
+const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+
 const LIVE = process.argv.includes("--canli");
+const QUICK = process.argv.includes("--hizli") || process.env.SKIP_FUNCTIONAL === "1";
 const results = [];
 let section = "";
 // Geçenler sessiz; bölüm bitince tek satır: PASS ya da hata/uyarı sayısı + açıklamalar
@@ -49,9 +59,9 @@ async function part(t, fn) {
 // Test sitesinde beklenen durum: normalde bilgi, --canli modunda HATA
 const liveOnly = (okNow, name, detail) => add(okNow ? "ok" : LIVE ? "fail" : "ok", name, detail);
 
-// ── Veritabanı (docker exec psql; yalnız okuma) ──
+// ── Veritabanı (docker exec psql) ──
 function sql(query) {
-  const out = execFileSync("docker", ["exec", "-i", DB, "psql", "-U", "postgres", "-d", "postgres", "-At", "-F", "\t", "-v", "ON_ERROR_STOP=1"],
+  const out = execFileSync("docker", ["exec", "-i", DB, "psql", "-U", "postgres", "-d", "postgres", "-qAt", "-F", "\t", "-v", "ON_ERROR_STOP=1"],
     { input: query, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] });
   return out.split("\n").filter((l) => l.length).map((l) => l.split("\t"));
 }
@@ -60,6 +70,8 @@ const one = (q) => (sql(q)[0] || [])[0];
 let settingsCache = null;
 const SETTINGS = () => settingsCache ??= JSON.parse(one("SELECT row_to_json(s) FROM public.settings s ORDER BY id LIMIT 1") || "{}");
 const num = (q) => Number(one(q) || 0);
+// SQL değişmezi (test modülleri veri kurarken)
+const lit = (v) => v === null || v === undefined ? "NULL" : typeof v === "boolean" || typeof v === "number" ? String(v) : `'${String(v).replace(/'/g, "''")}'`;
 
 // ── HTTP ──
 async function get(path, opts = {}) {
@@ -73,6 +85,42 @@ async function get(path, opts = {}) {
   }
 }
 const BROKEN = /Application error|Internal Server Error|Unhandled Runtime Error|NEXT_NOT_FOUND|digest:/i;
+const parse = (s) => { try { return JSON.parse(s); } catch { return null; } };
+// Uygulama ucu (JSON). token → "Authorization: Bearer" (üye/yönetici oturumu)
+async function api(path, { method = "POST", token, body, headers = {} } = {}) {
+  const r = await get(path, {
+    method,
+    headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}), ...headers },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+  return { ...r, json: parse(r.text) };
+}
+// Supabase REST (PostgREST) — anon anahtar + kullanıcı oturumu: tarayıcının yaptığının aynısı (RLS geçerli)
+async function rest(path, { token, method = "GET", body, headers = {} } = {}) {
+  try {
+    const r = await fetch(`${SB_URL}/rest/v1/${path}`, {
+      method, signal: AbortSignal.timeout(20000),
+      headers: { apikey: ANON, Authorization: `Bearer ${token || ANON}`, "Content-Type": "application/json", ...headers },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+    const text = await r.text();
+    return { status: r.status, text, json: parse(text) };
+  } catch (e) { return { status: 0, text: String(e?.message || e), json: null }; }
+}
+// Supabase Auth (GoTrue). service:true → yönetici anahtarıyla (test üyesi oluşturma)
+async function auth(path, { method = "GET", body, service = false } = {}) {
+  const key = service ? SERVICE : ANON;
+  try {
+    const r = await fetch(`${SB_URL}/auth/v1/${path}`, {
+      method, signal: AbortSignal.timeout(20000),
+      headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+    const text = await r.text();
+    return { status: r.status, text, json: parse(text) };
+  } catch (e) { return { status: 0, text: String(e?.message || e), json: null }; }
+}
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function main() {
   console.log(`== REGRESYON${LIVE ? " (CANLIYA GEÇİŞ)" : ""} — ${new Date().toLocaleString("tr-TR")} ==`);
@@ -178,6 +226,8 @@ async function main() {
       } catch (e) { return { status: 0, body: String(e) }; }
     };
     const p = await rest("profiles?select=email,phone&limit=5");
+    // Ulaşılamıyorsa (HTTP 0) "açık" sanılmasın
+    if (p.status === 0) { add("fail", "Supabase'e ulaşılamadı", `${SB_URL} — ${p.body.slice(0, 100)}`); return; }
     const rows = (() => { try { return JSON.parse(p.body); } catch { return null; } })();
     Array.isArray(rows) && rows.length > 0 ? add("fail", "Üye e-posta/telefonları dışarıya AÇIK", `anon anahtarla ${rows.length} kayıt okunabildi — güvenlik migration'ı (20260927) uygulanmamış`) : add("ok", "Üye e-posta/telefonları dışarıya kapalı");
     const s = await rest("settings?select=smtp_password&limit=1");
@@ -260,6 +310,27 @@ async function main() {
   if (mktOn) beatM < 10 ? add("ok", "Pazaryeri senkronu", `${beatM.toFixed(0)} dk önce`) : add("fail", "Pazaryeri senkronu durmuş", `${beatM >= 9999 ? "hiç" : beatM.toFixed(0) + " dk önce"}`);
   else add("ok", "Pazaryeri senkronu", "pazaryerleri kapalı");
   });
+
+  // 8) Fonksiyonel senaryolar — scripts/regression/NN-*.mjs (numara sırasıyla). Her modül:
+  //    export default { name, async run(t) { await t.part("Bölüm", async () => { ... t.add(...) }) } }
+  //    Yeni geliştirme → ilgili modüle senaryo ya da yeni modül (kural: docs/REGRESYON-PAKETI.md).
+  if (QUICK) {
+    head("Fonksiyonel senaryolar"); add("ok", "atlandı (--hizli)");
+  } else if (!SB_URL || !ANON || !SERVICE) {
+    head("Fonksiyonel senaryolar"); add("fail", "Çalıştırılamadı", "NEXT_PUBLIC_SUPABASE_URL / ANON_KEY / SUPABASE_SERVICE_ROLE_KEY okunamadı");
+  } else {
+    const dir = fileURLToPath(new URL("./regression/", import.meta.url));
+    let files = [];
+    try { files = readdirSync(dir).filter((f) => /^\d+-.*\.mjs$/.test(f)).sort(); } catch { /* klasör yok */ }
+    const t = { APP, SB_URL, LIVE, sql, one, num, lit, add, part, api, rest, auth, sleep };
+    for (const f of files) {
+      let mod;
+      try { mod = (await import(pathToFileURL(dir + f).href)).default; }
+      catch (e) { head(`Senaryo dosyası ${f}`); add("fail", "Yüklenemedi", String(e?.message || e).split("\n")[0]); continue; }
+      try { await mod.run(t); }
+      catch (e) { head(`${mod?.name || f}`); add("fail", "Senaryo yarıda kaldı", String(e?.message || e).split("\n")[0]); }
+    }
+  }
 
   flush();
   // Özet

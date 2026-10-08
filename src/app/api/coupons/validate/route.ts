@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { getAuthUserFromRequest } from "@/lib/auth-from-request";
+import { evaluateCoupon } from "@/lib/coupon-rules";
 
 export async function POST(req: NextRequest) {
   // Oturum localStorage'da tutulduğundan Bearer token ile doğrulanır
@@ -12,82 +13,12 @@ export async function POST(req: NextRequest) {
   if (!code) return NextResponse.json({ error: "Kupon kodu gerekli" }, { status: 400 });
 
   const supabase = createAdminClient();
-
-  // Kuponu bul
-  const { data: coupon } = await supabase
-    .from("coupons")
-    .select("*")
-    .eq("code", code.trim().toUpperCase())
-    .eq("is_active", true)
-    .single();
-
-  if (!coupon) return NextResponse.json({ error: "Geçersiz veya pasif kupon kodu" }, { status: 404 });
-
-  // Geçerlilik tarihi kontrolü
-  if (coupon.expires_at && new Date(coupon.expires_at) < new Date()) {
-    return NextResponse.json({ error: "Bu kupon süresi dolmuş" }, { status: 400 });
-  }
-  if (coupon.starts_at && new Date(coupon.starts_at) > new Date()) {
-    return NextResponse.json({ error: "Bu kupon henüz aktif değil" }, { status: 400 });
-  }
-
-  // Toplam kullanım limiti
-  if (coupon.max_uses !== null && coupon.used_count >= coupon.max_uses) {
-    return NextResponse.json({ error: "Bu kupon kullanım limitine ulaşmış" }, { status: 400 });
-  }
-
-  // Minimum sipariş tutarı
-  if (cartTotal < coupon.min_order_amount) {
-    return NextResponse.json({
-      error: `Bu kupon için minimum sipariş tutarı ₺${coupon.min_order_amount.toLocaleString("tr-TR")}`,
-    }, { status: 400 });
-  }
-
-  // Kişiye özel kupon: bu kullanıcıya atanmış mı?
-  if (coupon.is_personal) {
-    const { data: uc } = await supabase
-      .from("user_coupons")
-      .select("id, use_count, max_uses")
-      .eq("user_id", user.id)
-      .eq("coupon_id", coupon.id)
-      .maybeSingle();
-    if (!uc) return NextResponse.json({ error: "Bu kupon size özel değil veya atanmamış" }, { status: 403 });
-    // Kişiye tanınan hak (max_uses) varsa onu, yoksa kupon per_user_limit'ini kullan
-    const limit = (uc as any).max_uses ?? coupon.per_user_limit;
-    if (uc.use_count >= limit) {
-      return NextResponse.json({ error: "Bu kuponu zaten kullandınız" }, { status: 400 });
-    }
-  } else {
-    // Evrensel kupon: kullanıcı daha önce kullanmış mı?
-    const { data: uc } = await supabase
-      .from("user_coupons")
-      .select("id, use_count, max_uses")
-      .eq("user_id", user.id)
-      .eq("coupon_id", coupon.id)
-      .maybeSingle();
-    const limit = (uc as any)?.max_uses ?? coupon.per_user_limit;
-    if (uc && uc.use_count >= limit) {
-      return NextResponse.json({ error: "Bu kuponu daha önce kullandınız" }, { status: 400 });
-    }
-  }
-
-  // İndirim tutarını hesapla
-  let discountAmount = 0;
-  let freeShipping = false;
-
-  if (coupon.type === "percentage") {
-    discountAmount = (cartTotal * coupon.amount) / 100;
-    if (coupon.max_discount_amount !== null) {
-      discountAmount = Math.min(discountAmount, coupon.max_discount_amount);
-    }
-  } else if (coupon.type === "fixed") {
-    discountAmount = Math.min(coupon.amount, cartTotal);
-  } else if (coupon.type === "free_shipping") {
-    freeShipping = true;
-    discountAmount = 0;
-  }
-
-  discountAmount = Math.round(discountAmount * 100) / 100;
+  // Kupon kuralları tek yerde (src/lib/coupon-rules.ts) — siparişte de aynısı uygulanır
+  const cr = await evaluateCoupon(supabase, { code, userId: user.id, productTotal: Number(cartTotal) || 0 });
+  if (!cr.ok) return NextResponse.json({ error: cr.error }, { status: cr.status });
+  const coupon = cr.coupon;
+  const discountAmount = cr.discount;
+  const freeShipping = cr.freeShipping;
 
   return NextResponse.json({
     valid: true,

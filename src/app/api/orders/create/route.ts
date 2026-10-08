@@ -3,6 +3,7 @@ import { kickMarketplaceSync } from "@/lib/marketplace/sync";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { getAuthUserFromRequest } from "@/lib/auth-from-request";
 import { validateCartPricing } from "@/lib/order-pricing";
+import { evaluateCoupon } from "@/lib/coupon-rules";
 import { resolveCreditApply, deductCreditForOrder } from "@/lib/store-credit";
 import { resolveGuest, type GuestInput } from "@/lib/guest-checkout";
 import { rateLimited, clientIp, TOO_MANY } from "@/lib/rate-limit";
@@ -108,43 +109,15 @@ export async function POST(req: NextRequest) {
   let validatedCoupon: any = null;
 
   if (couponCode) {
-    const { data: coupon } = await supabase
-      .from("coupons")
-      .select("*")
-      .eq("code", couponCode.trim().toUpperCase())
-      .eq("is_active", true)
-      .single();
-
-    if (coupon && !(coupon.expires_at && new Date(coupon.expires_at) < new Date())) {
-      // Kişi başı limit kontrolü
-      const { data: uc } = await supabase
-        .from("user_coupons")
-        .select("use_count, max_uses")
-        .eq("user_id", userId)
-        .eq("coupon_id", coupon.id)
-        .maybeSingle();
-      const useCount = uc?.use_count ?? 0;
-      const perUserLimit = (uc as any)?.max_uses ?? coupon.per_user_limit;
-
-      if (
-        (coupon.max_uses === null || coupon.used_count < coupon.max_uses) &&
-        useCount < perUserLimit
-      ) {
-        couponId = coupon.id;
-        validatedCoupon = coupon;
-
-        const productTotal0 = pricing.productTotal;
-        if (coupon.type === "percentage") {
-          couponDiscount = (productTotal0 * coupon.amount) / 100;
-          if (coupon.max_discount_amount !== null) couponDiscount = Math.min(couponDiscount, coupon.max_discount_amount);
-        } else if (coupon.type === "fixed") {
-          couponDiscount = Math.min(coupon.amount, productTotal0);
-        } else if (coupon.type === "free_shipping") {
-          freeShipping = true;
-        }
-        couponDiscount = Math.round(couponDiscount * 100) / 100;
-      }
+    // Kupon kuralları tek yerde (src/lib/coupon-rules.ts) — sepetteki doğrulamayla aynı
+    const cr = await evaluateCoupon(supabase, { code: couponCode, userId, productTotal: pricing.productTotal });
+    if (!cr.ok) {
+      return NextResponse.json({ error: `Kupon uygulanamadı: ${cr.error}. Kuponu kaldırıp tekrar deneyin.` }, { status: 400 });
     }
+    couponId = cr.coupon.id;
+    validatedCoupon = cr.coupon;
+    couponDiscount = cr.discount;
+    freeShipping = cr.freeShipping;
   }
 
   // Toplam tutarı hesapla (doğrulanmış fiyatlardan)
