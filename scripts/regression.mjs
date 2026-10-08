@@ -251,8 +251,8 @@ async function main() {
   neg ? add("fail", "Eksi stok", `${neg} ürün/numara`) : add("ok", "Eksi stok yok");
   const noCat = sql("SELECT title FROM public.products WHERE is_active AND category_id IS NULL ORDER BY title LIMIT 10").map((r) => r[0]);
   noCat.length ? add("warn", "Kategorisiz aktif ürün (mağazada görünmez)", noCat.join(", ")) : add("ok", "Tüm aktif ürünlerin kategorisi var");
-  const noImg = num("SELECT count(*) FROM public.products WHERE is_active AND coalesce(image_url,'')='' AND coalesce(array_length(images,1),0)=0");
-  noImg ? add("warn", "Görselsiz aktif ürün", `${noImg} ürün`) : add("ok", "Tüm aktif ürünlerin görseli var");
+  const noImg = sql("SELECT title FROM public.products WHERE is_active AND coalesce(image_url,'')='' AND coalesce(array_length(images,1),0)=0 ORDER BY title LIMIT 10").map((r) => r[0]);
+  noImg.length ? add("warn", "Görselsiz aktif ürün", noImg.join(", ")) : add("ok", "Tüm aktif ürünlerin görseli var");
   const noSku = num("SELECT count(*) FROM public.product_variants v JOIN public.products p ON p.id=v.product_id WHERE p.is_active AND coalesce(v.is_active,true) AND coalesce(btrim(v.sku),'')=''");
   noSku ? add("warn", "SKU'su boş aktif numara", `${noSku} adet (pazaryeriyle eşleşmez)`) : add("ok", "Aktif numaraların SKU'su dolu");
   const impPw = num("SELECT count(*) FROM auth.users u JOIN public.profiles p ON p.id = u.id WHERE p.import_source IS NOT NULL AND u.last_sign_in_at IS NULL AND coalesce(u.encrypted_password, '') <> ''");
@@ -283,8 +283,9 @@ async function main() {
     lock: String(S.email_lock_enabled !== false),
   };
   st.smtp === "true" ? add("ok", "E-posta (SMTP) ayarlı") : add("fail", "E-posta (SMTP) ayarlı değil");
-  st.contact ? add("ok", "İletişim e-postası", st.contact) : add("warn", "İletişim e-postası boş");
-  st.notify ? add("ok", "Yönetici bildirim e-postası", st.notify) : add("warn", "Yönetici bildirim e-postası boş", "yeni sipariş bildirimi iletişim adresine gider");
+  // Yönetici bildirimleri (yeni sipariş, stok bitti…) iletişim e-postasına gider (ayrı alan yok)
+  st.contact || st.notify ? add("ok", "İletişim / bildirim e-postası", st.notify || st.contact)
+    : add("fail", "İletişim e-postası boş", "yönetici bildirimleri gidecek adres yok → Ayarlar › Genel");
   st.bank === "true" ? add("ok", "Havale bilgisi") : add("fail", "Havale açık ama banka bilgisi boş");
   st.ga ? add("ok", "Google Analytics kimliği", st.ga) : add("warn", "Google Analytics kimliği boş");
   liveOnly(st.lock !== "true", "E-posta kilidi açık", "canlıda müşterilere e-posta gitmez → Ayarlar › Genel › E-posta Kilidi'ni kapat");
