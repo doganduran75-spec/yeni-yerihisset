@@ -57,6 +57,9 @@ bildirimi düşmez). Tek iz: sipariş numaraları birkaç numara atlar.
 | Misafir siparişi | Bot isteği reddedilir; misafir siparişi açılır; sonuç sayfası verisi (havale bekliyor); e-posta kontrolü; üyenin e-postasıyla misafir siparişi reddedilir |
 | Yetki | Üye yönetici işlemi / silme yapamaz, başkasının siparişini göremez, kendi siparişini "ödendi" yapamaz |
 | Ödeme onayı, iade, iptal | Ödenmemiş iptal (stok geri, fatura "gerekmiyor"); yönetici "Ödendi" → üye **Müşteri** rolü; onaysız iade reddedilir; kısmi iade; ödenmiş sipariş iptali (kalan iade, stok geri); çift iptal reddedilir |
+| Kargo → teslim → iade al | "Kargoya Verildi (elle)" ve "Teslim Edildi"; kargolanmış sipariş iptal edilemez; kargolanmamışta "İade al" reddedilir; iade gelen ürün stoğa, ücret iadesi kaydı, aynı ürün iki kez stoğa eklenmez |
+| Satış ortaklığı | Ortak linkiyle sipariş ortağa yazılır; ortağın kendi alışverişi, askıya alınmış ortak ve olmayan kod sayılmaz (sipariş yine verilir) |
+| Stok bildirimi | Bot kaydı reddedilir; misafir kaydı + Kişiler; çift kayıt olmaz; üye kaydı; üye "stok geldi" gönderemez; gönderilemeyen bildirim "bekliyor" kalır |
 | Silme ve süre dolumu | "Siparişi sil" (stok geri, kupon sayısı düzelir); 24 saat ödenmeyen havale siparişi iptal olur, stok geri |
 
 Raporlar: `/opt/yerihisset-app/.regression-report/`
@@ -88,11 +91,11 @@ Kısa turu yap, ardından:
 | T1 | Üye siparişi + kupon | Giriş yap → sepette "Kuponların"dan kupon uygula → havale | İndirim düştü; admin'de kupon satırı |
 | T2 | Ödeme onayı | Admin'de T1 siparişinin ödemesini "Ödendi" yap | Üyede **Müşteri** rozeti + etiketler; ciro arttı |
 | T3 | İptal | T1'i "Siparişi iptal et" (iade onay kutusu) | Ödeme "İade edildi", stok geri; e-posta "banka hesabına iade edildi" |
-| T4 | Kargo → iade | Bir siparişi "Kargoya Verildi (elle)" → "Teslim Edildi" → "İade al" (stoğa ekle) | Kargo "İade geldi", stok +1 |
+| T4 | İade e-postası | Bir siparişin iadesinde müşteriye giden e-posta | Tutar ve yöntem doğru (akışın kendisi otomatik testte) |
 | T5 | Şifre | Çıkış → "Şifremi unuttum" → e-postadaki bağlantı → yeni şifre | Giriş oldu; admin'de e-posta "doğrulandı" |
 | T6 | Hediye | Hediyeli ürünü sepete ekle → sayfayı yenile → hediyeyi kaldır | Hediye otomatik geldi, kaybolmadı, "Sana hediye" olarak geri döndü |
-| T7 | Stok bildirimi | Tükenmiş bir numarada "Stoğa girince haber ver" → e-posta | Kayıt alındı, onay e-postası geldi |
-| T8 | Satış ortaklığı | Ortağın linkiyle (gizli pencere) sipariş | Admin detayında ortak kodu |
+| T7 | Stok bildirimi e-postaları | Tükenmiş numarada "Stoğa girince haber ver" → stok gir → "Stok geldi" gönder | Onay ve "stok geldi" e-postaları geldi, görünüm düzgün (kayıt akışı otomatik testte) |
+| T8 | Satış ortağı linki | Ortağın linkini gizli pencerede aç → sipariş ver | Link kodu sepete taşınıyor (tarayıcı kısmı; sipariş tarafı otomatik testte) |
 | T9 | Pazaryeri (açıksa) | Bir ürünün stoğunu değiştir | Senkron geçmişinde Trendyol/Hepsiburada ✓ |
 | T10 | İçerik | Bilgi bankası makalesi, Fırsatlar, İletişim, sözleşmeler (telefonda) | Açılıyor, okunuyor |
 | T11 | Kart (iyzico açıksa) | Test kartıyla ödeme; başarısız kart; iade | Başarı sayfası; hata mesajı; iyzico iadesi |
@@ -124,5 +127,5 @@ Senaryo modülü yazım kuralları (`scripts/regression/NN-konu.mjs`, numara sı
 - Gerçek müşteriye / pazaryerine / yöneticiye dokunan hiçbir şey tetiklenmez (SKU/barkodsuz ürün, test e-posta alanı).
 - Hata açıklaması "ne bekleniyordu, ne geldi"yi söyler.
 
-Mevcut modüller: `10-siparis-akisi.mjs` (havale siparişi, kupon, stok, hediye, misafir, yetki, iade/iptal, silme, süre dolumu).
-Sıradaki adaylar: kart ödeme (iyzico sandbox açılınca), YeriHisset Kredisi, satış ortaklığı, stok bildirimi.
+Mevcut modüller: `10-siparis-akisi.mjs` (havale siparişi, kupon, stok, hediye, misafir, yetki, iade/iptal, kargo → iade al, satış ortaklığı, stok bildirimi, silme, süre dolumu).
+Sıradaki adaylar: kart ödeme (iyzico sandbox açılınca), YeriHisset Kredisi.

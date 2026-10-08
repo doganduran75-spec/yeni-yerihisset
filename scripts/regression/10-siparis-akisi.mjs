@@ -1,6 +1,7 @@
 // FONKSİYONEL SENARYOLAR — SİPARİŞ AKIŞI (havale). Gerçek uçlarla, gerçek veritabanında uçtan uca:
 // fiyat doğrulama, stok düşümü/iadesi, kargo, kuponların TÜM kuralları, hediye, misafir siparişi,
-// yetki, ödeme onayı → Müşteri rolü, ücret iadesi, iptal, silme, süresi dolan sipariş.
+// yetki, ödeme onayı → Müşteri rolü, ücret iadesi, iptal, kargo → teslim → iade al, satış ortaklığı,
+// stok bildirimi, silme, süresi dolan sipariş.
 //
 // Test verisi: kategori "regresyon-test", pasif ürünler "REGRESYON-TEST …" (mağazada görünmez,
 // SKU/barkod yok → pazaryerine gitmez), kuponlar "RGT…", üyeler "rgt-…@yerihisset.test"
@@ -36,6 +37,8 @@ export default {
         END $$;
         DELETE FROM public.profiles WHERE email ILIKE '%@${DOMAIN}';
         DELETE FROM auth.users WHERE email ILIKE '%@${DOMAIN}';
+        DELETE FROM public.affiliate_profiles WHERE code LIKE 'RGT%';
+        DELETE FROM public.stock_notifications WHERE product_id IN (${prods}) OR email ILIKE '%@${DOMAIN}';
         DELETE FROM public.free_gift_rules WHERE name LIKE 'REGRESYON-TEST%';
         DELETE FROM public.products WHERE title LIKE 'REGRESYON-TEST%';
         DELETE FROM public.categories WHERE slug = 'regresyon-test';
@@ -50,7 +53,7 @@ export default {
       cleanup(); // önceki çalıştırmadan kalan (yarıda kesildiyse)
       F.cat = insert("categories", { name: "REGRESYON-TEST", slug: "regresyon-test" });
       F.prod = insert("products", { title: "REGRESYON-TEST Ayakkabı", slug: `regresyon-test-urun-${RUN}`, price: 1000, stock: 0, is_active: false, category_id: F.cat });
-      F.var = insert("product_variants", { product_id: F.prod, price: 1000, stock: 10, is_active: true });
+      F.var = insert("product_variants", { product_id: F.prod, price: 1000, stock: 30, is_active: true });
       F.gift = insert("products", { title: "REGRESYON-TEST Hediye", slug: `regresyon-test-hediye-${RUN}`, price: 200, stock: 5, is_active: false });
       insert("free_gift_rules", { name: "REGRESYON-TEST hediye", trigger_category_id: F.cat, gift_product_id: F.gift, is_active: true });
       const coupon = (sfx, o) => insert("coupons", {
@@ -85,6 +88,14 @@ export default {
         user_id: F.member.id, address_name: "Ev", first_name: "Regresyon", last_name: "Uye", phone: "5550000000",
         address_detail: "Moda Caddesi No 12 Daire 3", district: "Kadıköy", city: "İstanbul",
       });
+      // Satış ortakları: başka üyenin (yönetici test hesabı), siparişi veren üyenin kendisinin, askıya alınmış
+      F.affCode = `RGT${RUN.toUpperCase()}ORT`;
+      F.aff = insert("affiliate_profiles", { user_id: F.admin.id, code: F.affCode, status: "active", commission_rate: 10 });
+      F.affSelf = `RGT${RUN.toUpperCase()}KENDI`;
+      insert("affiliate_profiles", { user_id: F.member.id, code: F.affSelf, status: "active", commission_rate: 10 });
+      F.affOff = `RGT${RUN.toUpperCase()}PASIF`;
+      F.affOffUser = (await mkUser("ortak", false)).id;
+      insert("affiliate_profiles", { user_id: F.affOffUser, code: F.affOff, status: "suspended", commission_rate: 10 });
       F.ship = row("SELECT fee, free_over FROM public.shipping_methods WHERE is_active ORDER BY sort_order LIMIT 1");
       F.ip = `10.254.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}`; // misafir hız sınırı her çalıştırmada temiz
       add("ok", "Test verisi kuruldu");
@@ -283,6 +294,79 @@ export default {
         ok(again.status === 400, "İptal edilmiş sipariş tekrar iptal edilemiyor", why(again));
       });
 
+      await part("Kargo → teslim → iade al", async () => {
+        const r = await order([MAIN(1)]);
+        O.ret = r.json?.orderId;
+        if (!O.ret) return add("fail", "İade senaryosu için sipariş oluşturulamadı", why(r));
+        const patch = (body) => rest(`orders?id=eq.${O.ret}`, { token: F.admin.token, method: "PATCH", headers: { Prefer: "return=representation" }, body });
+        await patch({ payment_status: "paid", status: "processing", shipment_status: "preparing" });
+        const sh = await patch({ shipment_status: "shipped" });
+        ok(sh.status < 300 && ord(O.ret).shipment_status === "shipped", "Yönetici 'Kargoya Verildi (elle)' yapabiliyor", `HTTP ${sh.status} → ${ord(O.ret).shipment_status}`);
+        const c = await api("/api/admin/orders/action", { token: F.admin.token, body: { action: "cancel", orderId: O.ret, method: "bank_transfer", confirmed: true } });
+        ok(c.status === 400 && ord(O.ret).status !== "cancelled", "Kargolanmış sipariş iptal edilemiyor ('İade al' kullanılmalı)", why(c));
+        await patch({ shipment_status: "delivered" });
+        ok(ord(O.ret).shipment_status === "delivered", "Yönetici 'Teslim Edildi' yapabiliyor", ord(O.ret).shipment_status);
+
+        if (O.lim) {
+          const early = await api("/api/admin/orders/action", { token: F.admin.token, body: { action: "return", orderId: O.lim, items: [] } });
+          ok(early.status === 400, "Kargolanmamış siparişte 'İade al' reddediliyor", why(early));
+        }
+        const item = row(`SELECT id FROM public.order_items WHERE order_id = ${lit(O.ret)}`);
+        const s0 = stock();
+        const total = Number(ord(O.ret).total_amount);
+        const rr = await api("/api/admin/orders/action", {
+          token: F.admin.token,
+          body: { action: "return", orderId: O.ret, items: [{ item_id: item?.id, qty: 1, restock: true }], note: "regresyon", refund: { amount: 1000, method: "bank_transfer" }, confirmed: true },
+        });
+        const o = ord(O.ret);
+        ok(rr.status === 200 && o.shipment_status === "returned", "İade al → kargo durumu 'İade geldi'", `${why(rr)} → ${o.shipment_status}`);
+        ok(stock() === s0 + 1, "İade gelen sağlam ürün stoğa eklendi", `stok ${s0} → ${stock()}`);
+        const wantPay = total > 1000 ? "partial_refund" : "refunded";
+        ok(eq(o.refunded_amount, 1000) && o.payment_status === wantPay, "İadeyle birlikte ücret iadesi kaydedildi", `iade ${o.refunded_amount}, ödeme ${o.payment_status} (beklenen 1000 / ${wantPay})`);
+        const ri = row(`SELECT restocked_qty FROM public.order_items WHERE id = ${lit(item?.id)}`);
+        ok(ri && Number(ri.restocked_qty) === 1, "Kalemde stoğa eklenen adet işlendi", JSON.stringify(ri));
+        const twice = await api("/api/admin/orders/action", { token: F.admin.token, body: { action: "return", orderId: O.ret, items: [{ item_id: item?.id, qty: 1, restock: true }] } });
+        ok(stock() === s0 + 1, "Aynı ürün iki kez stoğa eklenmiyor", `${why(twice)}; stok ${s0 + 1} → ${stock()}`);
+      });
+
+      await part("Satış ortaklığı", async () => {
+        const affOf = (r) => (r.json?.orderId ? ord(r.json.orderId)?.affiliate_id : "sipariş yok");
+        const r1 = await order([MAIN(1)], { affiliateCode: F.affCode });
+        if (!r1.json?.orderId) return add("fail", "Ortak linkiyle sipariş oluşturulamadı", why(r1));
+        ok(affOf(r1) === F.aff, "Ortak linkiyle gelen sipariş ortağa yazıldı", `affiliate_id ${affOf(r1)}`);
+        const r2 = await order([MAIN(1)], { affiliateCode: F.affSelf });
+        ok(!!r2.json?.orderId && !affOf(r2), "Ortak kendi linkiyle alınca sayılmıyor", `${why(r2)} affiliate_id ${affOf(r2)}`);
+        const r3 = await order([MAIN(1)], { affiliateCode: F.affOff });
+        ok(!!r3.json?.orderId && !affOf(r3), "Askıya alınmış ortağın linki sayılmıyor (sipariş yine verilir)", `${why(r3)} affiliate_id ${affOf(r3)}`);
+        const r4 = await order([MAIN(1)], { affiliateCode: "RGTOLMAYANKOD" });
+        ok(!!r4.json?.orderId && !affOf(r4), "Olmayan ortak kodu siparişi bozmuyor", `${why(r4)} affiliate_id ${affOf(r4)}`);
+      });
+
+      await part("Stok bildirimi (Stoğa girince haber ver)", async () => {
+        const H = { "x-forwarded-for": F.ip };
+        const email = `rgt-bildirim-${RUN}@${DOMAIN}`;
+        const base = { productId: F.prod, variantId: F.var, contact: email, _hp: "", _t: 6000 };
+        const pending = () => num(`SELECT count(*) FROM public.stock_notifications WHERE product_id = ${lit(F.prod)} AND status = 'pending'`);
+        const b = await api("/api/stock-notify", { headers: H, body: { ...base, _t: undefined } });
+        ok(b.status === 429 && pending() === 0, "Formsuz (bot) kayıt reddediliyor", why(b));
+        const g = await api("/api/stock-notify", { headers: H, body: base });
+        const gRow = row(`SELECT status, contact_id FROM public.stock_notifications WHERE email = ${lit(email)}`);
+        ok(g.status === 200 && gRow?.status === "pending", "Misafir kaydı alındı", `${why(g)} kayıt ${JSON.stringify(gRow)}`);
+        ok(!!gRow?.contact_id, "Misafir Kişiler listesine eklendi", "contact_id boş");
+        const d = await api("/api/stock-notify", { headers: H, body: base });
+        ok(d.json?.alreadyRegistered === true && pending() === 1, "Aynı kişi iki kez kaydolmuyor", `${JSON.stringify(d.json)}; bekleyen ${pending()}`);
+        const m = await api("/api/stock-notify", { token: F.member.token, body: { productId: F.prod, variantId: F.var } });
+        const mRow = row(`SELECT email FROM public.stock_notifications WHERE user_id = ${lit(F.member.id)}`);
+        ok(m.status === 200 && mRow?.email === F.member.email, "Üye kaydı (e-postası hesaptan)", `${why(m)} ${JSON.stringify(mRow)}`);
+        const nm = await api("/api/stock-notify/dispatch", { token: F.member.token, body: { productId: F.prod, variantId: F.var } });
+        ok(nm.status === 403, "Üye 'stok geldi' gönderimini başlatamıyor", why(nm));
+        // Test adreslerine e-posta gitmez → gönderim başarısız sayılır, kayıtlar "bekliyor" kalır (sonra tekrar denenebilir)
+        const ds = await api("/api/stock-notify/dispatch", { token: F.admin.token, body: { productId: F.prod, variantId: F.var } });
+        ok(ds.status === 200 && ds.json?.ok === true, "Yönetici 'stok geldi' gönderimini başlatabiliyor", why(ds));
+        ok(ds.json?.sent === 0 && pending() === 2, "Gönderilemeyen bildirim 'bekliyor' kalıyor (test adresine e-posta gitmedi)",
+          `gönderilen ${ds.json?.sent}, başarısız ${ds.json?.failed}, bekleyen ${pending()}`);
+      });
+
       await part("Sipariş silme ve süresi dolan sipariş", async () => {
         if (O.del) {
           const s0 = stock();
@@ -309,6 +393,7 @@ export default {
         const left = num(`SELECT (SELECT count(*) FROM auth.users WHERE email ILIKE '%@${DOMAIN}')
           + (SELECT count(*) FROM public.products WHERE title LIKE 'REGRESYON-TEST%')
           + (SELECT count(*) FROM public.coupons WHERE code LIKE 'RGT%')
+          + (SELECT count(*) FROM public.affiliate_profiles WHERE code LIKE 'RGT%')
           + (SELECT count(*) FROM public.categories WHERE slug = 'regresyon-test')`);
         ok(left === 0, "Test verisi silindi", `${left} kayıt kaldı — bir sonraki çalıştırma yeniden dener`);
       });
