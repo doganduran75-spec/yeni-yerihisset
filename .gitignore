@@ -48,3 +48,4 @@ zap-rapor.json
 /.cleanup-report/
 /.temizlik-kalsin.txt
 /.temizlik-sil.txt
+/.regression-report/

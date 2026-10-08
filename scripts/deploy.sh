@@ -65,3 +65,10 @@ for path in "/" "/products" "/firsatlar"; do
 done
 
 echo "✓ Dağıtım tamam."
+
+# REGRESYON (otomatik kontrol): her deploy'dan sonra ~1 dk. Hata olsa da dağıtım geri alınmaz;
+# sonucu okuyup HATA varsa Claude'a ilet. Atlamak için: SKIP_REGRESSION=1 bash scripts/deploy.sh
+if [ "${SKIP_REGRESSION:-0}" != "1" ]; then
+  echo
+  node scripts/regression.mjs || true
+fi
