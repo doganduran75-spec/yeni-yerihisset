@@ -53,6 +53,19 @@ type OrderItem = {
   products: { title: string } | null;
 };
 
+// Siparişin geldiği reklam/kampanya (orders.attribution.source — src/lib/ad-context.ts)
+function adSourceLabel(o: { attribution?: { source?: Record<string, unknown> } | null }): string | null {
+  const s = o.attribution?.source;
+  if (!s) return null;
+  const src = String(s.utm_source || "").toLowerCase();
+  const base = s.fbclid || /instagram|facebook|^fb$|^ig$|meta/.test(src)
+    ? (/instagram|^ig$/.test(src) ? "Instagram reklamı" : /facebook|^fb$/.test(src) ? "Facebook reklamı" : "Meta reklamı")
+    : s.gclid ? "Google reklamı"
+    : s.utm_source ? String(s.utm_source) : null;
+  if (!base) return null;
+  return [base, s.utm_campaign, s.utm_content].filter(Boolean).join(" · ");
+}
+
 type Order = {
   id: string;
   order_number?: number | null;
@@ -77,6 +90,7 @@ type Order = {
   coupon_discount?: number | null;
   credit_used?: number | null;
   affiliate_profiles?: { code: string } | null;
+  attribution?: { source?: Record<string, unknown>; capi?: { status?: string; error?: string; reason?: string; test?: boolean } } | null;
   // Pazaryeri siparişi (Trendyol / Hepsiburada)
   channel?: string | null;
   external_order_number?: string | null;
@@ -1704,6 +1718,12 @@ export default function OrdersPage() {
                           {credit > 0 && <div className="flex justify-between"><span>YeriHisset Kredisi</span><span className="text-red-600">−{fmt(credit)}</span></div>}
                           {o.affiliate_profiles?.code && (
                             <div className="flex justify-between text-xs pt-1"><span>Satış ortağı (komisyon)</span><span className="font-mono font-semibold text-olive-700">{o.affiliate_profiles.code}</span></div>
+                          )}
+                          {adSourceLabel(o) && (
+                            <div className="flex justify-between gap-3 text-xs pt-1"><span>Kaynak</span><span className="font-semibold text-indigo-700 text-right">{adSourceLabel(o)}</span></div>
+                          )}
+                          {o.attribution?.capi?.status && (
+                            <div className="flex justify-between gap-3 text-xs"><span>Meta (sunucu bildirimi)</span><span className={o.attribution.capi.status === "failed" ? "text-red-600 text-right" : "text-muted-foreground text-right"}>{o.attribution.capi.status === "sent" ? (o.attribution.capi.test ? "gönderildi (test)" : "gönderildi") : o.attribution.capi.status === "failed" ? `hata: ${o.attribution.capi.error || "?"}` : `gönderilmedi (${o.attribution.capi.reason || "—"})`}</span></div>
                           )}
                         </div>
                         <div className="bg-muted/50 mt-3 p-3 flex justify-between items-center border-t">

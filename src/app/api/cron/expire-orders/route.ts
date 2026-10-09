@@ -94,6 +94,13 @@ async function run(req: NextRequest) {
     console.error("[cron/expire-orders] recovery mail hata:", e?.message || e);
   }
 
+  // Ödenmeyen kart siparişlerinde bekleyen Meta bilgisini (IP/tarayıcı) 2 gün sonra sil (KVKK)
+  try {
+    await (supabase as any).rpc("strip_order_ad_meta");
+  } catch (e: any) {
+    console.error("[cron/expire-orders] reklam bilgisi temizliği:", e?.message || e);
+  }
+
   return NextResponse.json(data);
 }
 

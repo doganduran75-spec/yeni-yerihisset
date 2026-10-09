@@ -49,6 +49,11 @@ type Settings = {
   kargonomi_warehouse_id: string;
   // GA
   ga_measurement_id: string;
+  // Meta (Instagram / Facebook reklamları)
+  meta_pixel_id: string;
+  meta_domain_verification: string;
+  meta_capi_token: string;
+  meta_test_event_code: string;
   // GMC
   gmc_merchant_id: string;
   gmc_target_country: string;
@@ -83,6 +88,10 @@ const DEFAULT_SETTINGS: Settings = {
   kargonomi_api_token: "",
   kargonomi_warehouse_id: "",
   ga_measurement_id: "",
+  meta_pixel_id: "",
+  meta_domain_verification: "",
+  meta_capi_token: "",
+  meta_test_event_code: "",
   gmc_merchant_id: "",
   gmc_target_country: "TR",
   gmc_content_language: "tr",
@@ -519,6 +528,50 @@ function SettingsPageInner() {
               <p><strong>Email linklerine eklenen UTM parametreleri:</strong></p>
               <code className="block">utm_source=email · utm_medium=transactional · utm_campaign=[tetikleyici]</code>
               <p className="text-muted-foreground">Örnek: <code>utm_campaign=order_shipped</code></p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Meta (Instagram / Facebook) reklamları */}
+        <Card className="shadow-sm border-muted">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 size={20} className="text-indigo-600" /> Meta (Instagram / Facebook) Reklamları
+            </CardTitle>
+            <CardDescription>
+              Katalog reklamları (“Şimdi Alışveriş Yap”) için Pixel ve Conversions API. Pixel yalnız ziyaretçi
+              çerezlere “Kabul Et” derse yüklenir; satın alma sunucudan da bildirilir (aynı satış iki kez sayılmaz).
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Katalog besleme adresi (Commerce Manager › Veri kaynakları)</label>
+              <div className="font-mono text-xs bg-slate-50 border rounded-md px-3 py-2.5 text-slate-600 break-all">
+                {`${process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com"}/feed/meta`}
+                {settings.gmc_feed_secret ? `?secret=${settings.gmc_feed_secret}` : ""}
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Pixel ID (Veri kümesi kimliği)</label>
+                <Input value={settings.meta_pixel_id || ""} onChange={(e) => set({ meta_pixel_id: e.target.value.replace(/\D/g, "") })} placeholder="123456789012345" />
+                <p className="text-xs text-muted-foreground">Events Manager › Veri kaynakları › Pixel</p>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Alan adı doğrulama kodu</label>
+                <Input value={settings.meta_domain_verification || ""} onChange={(e) => set({ meta_domain_verification: e.target.value.replace(/.*content="([^"]+)".*/, "$1").trim() })} placeholder="abc123xyz..." />
+                <p className="text-xs text-muted-foreground">Business ayarları › Alan adları › Meta etiketi (yalnız content değeri ya da etiketin tamamı)</p>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Conversions API erişim anahtarı</label>
+                <Input type="password" autoComplete="off" value={settings.meta_capi_token || ""} onChange={(e) => set({ meta_capi_token: e.target.value.trim() })} placeholder="EAAG..." />
+                <p className="text-xs text-muted-foreground">Events Manager › Pixel › Ayarlar › Conversions API › Erişim anahtarı oluştur. Gizli tutulur.</p>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Test olay kodu (opsiyonel)</label>
+                <Input value={settings.meta_test_event_code || ""} onChange={(e) => set({ meta_test_event_code: e.target.value.trim() })} placeholder="TEST12345" />
+                <p className="text-xs text-muted-foreground">Doluyken satışlar Events Manager › “Test olayları”nda görünür, reklamlara sayılmaz. Denemeden sonra BOŞALT.</p>
+              </div>
             </div>
           </CardContent>
         </Card>

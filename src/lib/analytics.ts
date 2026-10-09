@@ -1,7 +1,10 @@
 /**
  * GA4 e-ticaret event yardımcıları
  * Tüm fonksiyonlar sadece client-side (window.gtag mevcutsa) çalışır.
- * Her biri aynı anda first-party analitiğe (src/lib/track.ts) de yazar.
+ * Her biri aynı anda first-party analitiğe (src/lib/track.ts) ve Meta Pixel'e de yazar.
+ * Meta: content_ids = ürün kimliği, content_type = "product_group" → katalogdaki item_group_id
+ * ile eşleşir (feed: src/app/feed/google-merchant). Pixel yalnız çerez onayıyla yüklenir
+ * (MarketingTags); yüklenmemişse fbq çağrıları sessizce atlanır.
  */
 import { track } from "./track";
 
@@ -20,6 +23,15 @@ function gtag(command: string, ...args: unknown[]) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (window.gtag as any)(command, ...args);
 }
+
+// Meta Pixel (onay yoksa window.fbq tanımsız → hiçbir şey gönderilmez)
+function fbq(...args: unknown[]) {
+  if (typeof window === "undefined") return;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const f = (window as any).fbq;
+  if (typeof f === "function") f(...args);
+}
+const uniq = (ids: string[]) => [...new Set(ids.filter(Boolean))];
 
 // ─── Sayfa görüntüleme ────────────────────────────────────────────────────────
 export function trackPageView(url: string, title?: string) {
@@ -48,6 +60,10 @@ export function trackViewItem(params: {
         quantity: 1,
       } satisfies GtagItem,
     ],
+  });
+  fbq("track", "ViewContent", {
+    content_ids: [params.productId], content_type: "product_group", content_name: params.productName,
+    content_category: params.category, value: params.price, currency: params.currency ?? "TRY",
   });
   track("view_item", { product_id: params.productId, name: params.productName, category: params.category, brand: params.brand, price: params.price });
 }
@@ -78,6 +94,11 @@ export function trackAddToCart(params: {
       } satisfies GtagItem,
     ],
   });
+  fbq("track", "AddToCart", {
+    content_ids: [params.productId], content_type: "product_group", content_name: params.productName,
+    contents: [{ id: params.productId, quantity: params.quantity, item_price: params.price }],
+    value: params.price * params.quantity, currency: params.currency ?? "TRY",
+  });
   track("add_to_cart", { product_id: params.productId, name: params.productName, variant: params.variantName, category: params.category, price: params.price, quantity: params.quantity });
 }
 
@@ -105,6 +126,12 @@ export function trackBeginCheckout(params: {
       price: item.price,
       quantity: item.quantity,
     })),
+  });
+  fbq("track", "InitiateCheckout", {
+    content_ids: uniq(params.items.map((i) => i.id)), content_type: "product_group",
+    contents: params.items.map((i) => ({ id: i.id, quantity: i.quantity, item_price: i.price })),
+    num_items: params.items.reduce((n, i) => n + i.quantity, 0),
+    value: params.total, currency: params.currency ?? "TRY",
   });
   track("begin_checkout", { value: params.total, coupon: params.couponCode, item_count: params.items.length });
 }
@@ -140,6 +167,13 @@ export function trackPurchase(params: {
       quantity: item.quantity,
     })),
   });
+  // eventID = Conversions API'deki event_id (src/lib/meta-capi.ts) → Meta aynı satışı iki kez saymaz
+  fbq("track", "Purchase", {
+    content_ids: uniq(params.items.map((i) => i.id)), content_type: "product_group",
+    contents: params.items.map((i) => ({ id: i.id, quantity: i.quantity, item_price: i.price })),
+    num_items: params.items.reduce((n, i) => n + i.quantity, 0),
+    value: params.total, currency: params.currency ?? "TRY",
+  }, { eventID: `purchase_${params.orderId}` });
   track("purchase", { order_id: params.orderId, value: params.total, shipping: params.shipping, coupon: params.couponCode, affiliate: params.affiliateCode, item_count: params.items.length });
 }
 

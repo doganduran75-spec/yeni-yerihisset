@@ -6,6 +6,7 @@ import ScrollToTop from "@/components/ScrollToTop";
 import VisitTracker from "@/components/VisitTracker";
 import GlobalStructuredData from "@/components/GlobalStructuredData";
 import GoogleAnalytics from "@/components/GoogleAnalytics";
+import MarketingSetup from "@/components/MarketingSetup";
 import MobileTabBar from "@/components/MobileTabBar";
 import CookieBanner from "@/components/CookieBanner";
 import FormValidationMessages from "@/components/FormValidationMessages";
@@ -113,6 +114,7 @@ export default function RootLayout({
       <head>
         <GlobalStructuredData />
         <GoogleAnalytics />
+        <MarketingSetup />
       </head>
       <body className="font-sans bg-background text-foreground selection:bg-olive-100 selection:text-olive-800 pb-16 md:pb-0" suppressHydrationWarning>
         <TooltipProvider>

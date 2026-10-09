@@ -1,6 +1,10 @@
 /**
- * Google Merchant Center Ürün Beslemesi
- * URL: /feed/google-merchant
+ * Ürün Beslemesi — Google Merchant Center + Meta (Instagram/Facebook) kataloğu
+ * URL: /feed/google-merchant  (Meta için aynısı: /feed/meta)
+ *
+ * Meta katalog reklamı: Commerce Manager › Katalog › Veri kaynakları › "Planlı besleme" → bu URL.
+ * item_group_id = ürün kimliği → Pixel olaylarındaki content_ids (content_type "product_group")
+ * ile eşleşir (src/lib/analytics.ts). Numara → g:size, barkod → g:gtin, eski fiyat → g:sale_price.
  *
  * GMC'de "Veri Kaynakları > Birincil Besleme" bölümünde bu URL'yi girin.
  * Opsiyonel gizlilik: ?secret=XXXX  (Ayarlar > GMC > Feed Secret)
@@ -21,6 +25,32 @@ function esc(str: string | null | undefined): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&apos;");
+}
+
+// Açıklama: HTML etiketleri ve fazla boşluk temizlenmiş düz metin (Meta/GMC düz metin ister)
+function plain(html: string | null | undefined, max = 4900): string {
+  if (!html) return "";
+  return html
+    .replace(/<(br|\/p|\/li|\/h\d)[^>]*>/gi, " ")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, max);
+}
+
+// Varyant grubu → besleme alanı (ayakkabıda "Numara" → size)
+function attrTag(groupName: string): "size" | "color" | null {
+  const g = groupName.toLocaleLowerCase("tr-TR");
+  if (/numara|beden|size|ölçü|olcu/.test(g)) return "size";
+  if (/renk|color/.test(g)) return "color";
+  return null;
+}
+
+// Geçerli GTIN (barkod): 8/12/13/14 hane
+function gtin(barcode: string | null | undefined): string | null {
+  const d = String(barcode || "").replace(/\s/g, "");
+  return /^(\d{8}|\d{12,14})$/.test(d) ? d : null;
 }
 
 // Stok durumunu GMC formatına çevir
@@ -53,11 +83,11 @@ export async function GET(request: NextRequest) {
   const { data: products, error } = await supabase
     .from("products")
     .select(`
-      id, title, description, slug, price, stock, images, image_url, has_variants, tags,
+      id, title, description, short_description, slug, price, stock, images, image_url, has_variants, tags,
       brands (name),
       categories (name),
       product_variants (
-        id, sku, price, stock, is_active,
+        id, sku, barcode, price, compare_at_price, stock, is_active,
         variant_options (
           value,
           variant_groups (name)
@@ -81,6 +111,7 @@ export async function GET(request: NextRequest) {
     const additionalImages = ((product.images as string[] | null) ?? []).slice(1);
     const brandName = esc((product.brands as any)?.name || defaultBrand);
     const categoryName = esc((product.categories as any)?.name || "");
+    const description = esc(plain(product.description) || plain(product.short_description) || product.title);
 
     const activeVariants = ((product.product_variants as any[]) ?? []).filter(
       (v: any) => v.is_active
@@ -90,28 +121,34 @@ export async function GET(request: NextRequest) {
       // Her varyant ayrı item — item_group_id ile gruplandır
       for (const variant of activeVariants) {
         const variantValue = esc(variant.variant_options?.value ?? "");
-        const groupName = esc(variant.variant_options?.variant_groups?.name ?? "");
+        const tag = attrTag(variant.variant_options?.variant_groups?.name ?? "");
         const variantTitle = `${esc(product.title)} - ${variantValue}`;
-        const variantUrl = `${productUrl}?variant=${variant.id}`;
-        const variantPrice = `${Number(variant.price).toFixed(2)} ${currency}`;
+        const variantUrl = `${productUrl}?variant=${variant.id}`; // ürün sayfası bu numarayı seçili açar
+        const onSale = variant.compare_at_price != null && Number(variant.compare_at_price) > Number(variant.price);
+        const listPrice = `${Number(onSale ? variant.compare_at_price : variant.price).toFixed(2)} ${currency}`;
+        const code = gtin(variant.barcode);
 
         items.push(`
     <item>
       <g:id>${esc(product.id)}_${esc(variant.id)}</g:id>
       <g:item_group_id>${esc(product.id)}</g:item_group_id>
       <g:title>${variantTitle}</g:title>
-      <g:description>${esc(product.description || product.title)}</g:description>
+      <g:description>${description}</g:description>
       <g:link>${esc(variantUrl)}</g:link>
       ${primaryImage ? `<g:image_link>${esc(primaryImage)}</g:image_link>` : ""}
       ${additionalImages.map((img: string) => `<g:additional_image_link>${esc(img)}</g:additional_image_link>`).join("\n      ")}
       <g:availability>${availability(variant.stock)}</g:availability>
-      <g:price>${variantPrice}</g:price>
+      <g:price>${listPrice}</g:price>
+      ${onSale ? `<g:sale_price>${Number(variant.price).toFixed(2)} ${currency}</g:sale_price>` : ""}
       <g:brand>${brandName}</g:brand>
       <g:condition>${esc(condition)}</g:condition>
       ${categoryName ? `<g:product_type>${categoryName}</g:product_type>` : ""}
+      ${categoryName ? `<g:custom_label_0>${categoryName}</g:custom_label_0>` : ""}
       ${defaultCategory ? `<g:google_product_category>${esc(defaultCategory)}</g:google_product_category>` : ""}
-      ${variant.sku ? `<g:mpn>${esc(variant.sku)}</g:mpn>` : "<g:identifier_exists>no</g:identifier_exists>"}
-      ${groupName ? `<g:${groupName.toLowerCase() === "renk" ? "color" : groupName.toLowerCase() === "beden" ? "size" : "material"}>${variantValue}</g:${groupName.toLowerCase() === "renk" ? "color" : groupName.toLowerCase() === "beden" ? "size" : "material"}>` : ""}
+      ${code ? `<g:gtin>${code}</g:gtin>` : ""}
+      ${variant.sku ? `<g:mpn>${esc(variant.sku)}</g:mpn>` : ""}
+      ${!code && !variant.sku ? "<g:identifier_exists>no</g:identifier_exists>" : ""}
+      ${tag && variantValue ? `<g:${tag}>${variantValue}</g:${tag}>` : ""}
     </item>`);
       }
     } else {
@@ -121,8 +158,9 @@ export async function GET(request: NextRequest) {
       items.push(`
     <item>
       <g:id>${esc(product.id)}</g:id>
+      <g:item_group_id>${esc(product.id)}</g:item_group_id>
       <g:title>${esc(product.title)}</g:title>
-      <g:description>${esc(product.description || product.title)}</g:description>
+      <g:description>${description}</g:description>
       <g:link>${esc(productUrl)}</g:link>
       ${primaryImage ? `<g:image_link>${esc(primaryImage)}</g:image_link>` : ""}
       ${additionalImages.map((img: string) => `<g:additional_image_link>${esc(img)}</g:additional_image_link>`).join("\n      ")}
@@ -131,6 +169,7 @@ export async function GET(request: NextRequest) {
       <g:brand>${brandName}</g:brand>
       <g:condition>${esc(condition)}</g:condition>
       ${categoryName ? `<g:product_type>${categoryName}</g:product_type>` : ""}
+      ${categoryName ? `<g:custom_label_0>${categoryName}</g:custom_label_0>` : ""}
       ${defaultCategory ? `<g:google_product_category>${esc(defaultCategory)}</g:google_product_category>` : ""}
       <g:identifier_exists>no</g:identifier_exists>
     </item>`);

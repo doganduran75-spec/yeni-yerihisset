@@ -155,6 +155,7 @@ async function main() {
     ["20261024 bot koruması", "SELECT to_regclass('public.bot_blocks') IS NOT NULL"],
     ["20261025 iptal e-postası şablonu", "SELECT NOT EXISTS(SELECT 1 FROM public.email_templates WHERE trigger='order_cancelled' AND body_html LIKE '%Ödeme yapıldıysa%')"],
     ["20261026 şifresiz hesaplar", "SELECT to_regprocedure('public.mark_account_passwordless(uuid)') IS NOT NULL"],
+    ["20261027 Meta reklamları", "SELECT to_regprocedure('public.strip_order_ad_meta()') IS NOT NULL AND EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='orders' AND column_name='attribution')"],
   ];
   for (const [name, q] of MIG) {
     try { one(q) === "t" ? add("ok", name) : add("fail", name, "UYGULANMAMIŞ — migration dosyasını çalıştır"); }
@@ -217,6 +218,45 @@ async function main() {
 
   // 4) Dışarıdan veri erişimi (anon anahtarla, Supabase üzerinden)
   });
+  await part("Ürün beslemesi ve reklam etiketleri (Google / Meta)", async () => {
+    const S = SETTINGS();
+    const q = S.gmc_feed_secret ? `?secret=${encodeURIComponent(S.gmc_feed_secret)}` : "";
+    const f = await get(`/feed/meta${q}`);
+    if (f.status !== 200 || !f.text.includes("<rss")) { add("fail", "Meta katalog beslemesi açılmıyor", `HTTP ${f.status} (/feed/meta)`); return; }
+    const g = await get(`/feed/google-merchant${q}`);
+    g.status === 200 ? add("ok", "Google beslemesi") : add("fail", "Google beslemesi açılmıyor", `HTTP ${g.status}`);
+    if (S.gmc_feed_secret) {
+      const nos = await get("/feed/meta");
+      nos.status === 401 ? add("ok", "Besleme gizli anahtarsız açılmıyor") : add("fail", "Besleme gizli anahtarsız açılıyor", `HTTP ${nos.status}`);
+    }
+    const items = f.text.split("<item>").slice(1);
+    const want = num(`SELECT coalesce(sum(CASE WHEN p.has_variants AND n > 0 THEN n ELSE 1 END), 0) FROM public.products p
+      CROSS JOIN LATERAL (SELECT count(*) AS n FROM public.product_variants v WHERE v.product_id = p.id AND v.is_active) c WHERE p.is_active`);
+    items.length === want ? add("ok", "Beslemedeki ürün sayısı", `${want}`) : add("fail", "Besleme ürün sayısı tutmuyor", `beslemede ${items.length}, veritabanında ${want} aktif ürün/numara`);
+    const noGroup = items.filter((i) => !i.includes("<g:item_group_id>")).length;
+    noGroup ? add("fail", "Beslemede grup kimliği eksik", `${noGroup} ürün — Meta Pixel olaylarıyla eşleşmez`) : add("ok", "Tüm ürünlerde grup kimliği (Pixel eşleşmesi)");
+    /<g:description>[^<]*<[a-z]/i.test(f.text) ? add("warn", "Besleme açıklamasında HTML kaldı") : add("ok", "Açıklamalar düz metin");
+    const sized = num("SELECT count(*) FROM public.product_variants v JOIN public.products p ON p.id = v.product_id JOIN public.variant_options o ON o.id = v.variant_option_id JOIN public.variant_groups g ON g.id = o.group_id WHERE p.is_active AND v.is_active AND g.name ~* '(numara|beden)'");
+    const sizeTags = (f.text.match(/<g:size>/g) || []).length;
+    sized && sizeTags < sized ? add("fail", "Numara beslemeye 'size' olarak gitmiyor", `${sizeTags}/${sized}`) : add("ok", "Numaralar 'size' alanında", `${sizeTags}`);
+    // Fiyat: örnek bir numaranın beslemedeki satış fiyatı = veritabanı fiyatı
+    const v = sql("SELECT p.id, v.id, v.price, coalesce(v.compare_at_price, 0) FROM public.product_variants v JOIN public.products p ON p.id = v.product_id WHERE p.is_active AND p.has_variants AND v.is_active ORDER BY v.updated_at DESC NULLS LAST LIMIT 1")[0];
+    if (v) {
+      const it = items.find((i) => i.includes(`<g:id>${v[0]}_${v[1]}</g:id>`)) || "";
+      const sale = Number(v[3]) > Number(v[2]);
+      const shown = Number((it.match(sale ? /<g:sale_price>([\d.]+)/ : /<g:price>([\d.]+)/) || [])[1]);
+      Math.abs(shown - Number(v[2])) < 0.01 ? add("ok", "Beslemedeki fiyat = sitedeki fiyat") : add("fail", "Beslemedeki fiyat sitedekiyle aynı değil", `beslemede ${shown}, veritabanında ${v[2]}`);
+      const pg = await get(`/products/${one(`SELECT slug FROM public.products WHERE id = '${v[0]}'`)}?variant=${v[1]}`);
+      pg.status === 200 ? add("ok", "Reklam bağlantısı (?variant=) ürün sayfasını açıyor") : add("fail", "Reklam bağlantısı açılmıyor", `HTTP ${pg.status}`);
+    }
+    const home = await get("/");
+    /<script[^>]+connect\.facebook\.net/.test(home.text) ? add("fail", "Meta Pixel onaysız yükleniyor (KVKK)", "ana sayfa HTML'inde fbevents") : add("ok", "Meta Pixel onay olmadan yüklenmiyor");
+    if (S.meta_domain_verification) {
+      home.text.includes("facebook-domain-verification") ? add("ok", "Meta alan adı doğrulama etiketi") : add("fail", "Meta alan adı doğrulama etiketi sayfada yok", "Ayarlar › Meta");
+    }
+    if (S.meta_pixel_id && !S.meta_capi_token) add("warn", "Meta Conversions API anahtarı boş", "Pixel var ama sunucu bildirimi kapalı (iOS satışları eksik sayılır) → Ayarlar › Meta");
+    liveOnly(!S.meta_test_event_code, "Meta test olay kodu dolu", "satışlar reklamlara SAYILMIYOR → Ayarlar › Meta › Test olay kodu'nu boşalt");
+  });
   await part("Veri güvenliği (dışarıdan erişim)", async () => {
   if (!SB_URL || !ANON) add("warn", "Supabase anon kontrolleri", "NEXT_PUBLIC_SUPABASE_URL / ANON_KEY okunamadı");
   else {
@@ -233,6 +273,10 @@ async function main() {
     Array.isArray(rows) && rows.length > 0 ? add("fail", "Üye e-posta/telefonları dışarıya AÇIK", `anon anahtarla ${rows.length} kayıt okunabildi — güvenlik migration'ı (20260927) uygulanmamış`) : add("ok", "Üye e-posta/telefonları dışarıya kapalı");
     const s = await rest("settings?select=smtp_password&limit=1");
     s.status >= 400 ? add("ok", "Gizli ayarlar (SMTP şifresi) dışarıya kapalı") : add("fail", "Gizli ayarlar (SMTP şifresi) dışarıya AÇIK", `HTTP ${s.status} — 20260926 migration'ı uygulanmamış`);
+    const capi = await rest("settings?select=meta_capi_token&limit=1");
+    capi.status >= 400 ? add("ok", "Meta Conversions API anahtarı dışarıya kapalı") : add("fail", "Meta Conversions API anahtarı dışarıya AÇIK", `HTTP ${capi.status} — 20261027 migration'ı`);
+    const px = await rest("settings?select=meta_pixel_id&limit=1");
+    px.status === 200 ? add("ok", "Meta Pixel kimliği okunabiliyor") : add("fail", "Meta Pixel kimliği okunamıyor", `HTTP ${px.status} — Pixel yüklenemez (GRANT eksik, 20261027)`);
     const o = await rest("orders?select=id&limit=1");
     const orows = (() => { try { return JSON.parse(o.body); } catch { return null; } })();
     Array.isArray(orows) && orows.length > 0 ? add("fail", "Siparişler dışarıya AÇIK", "anon sipariş okuyabiliyor") : add("ok", "Siparişler dışarıya kapalı");

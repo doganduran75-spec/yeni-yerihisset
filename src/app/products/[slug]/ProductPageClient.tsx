@@ -69,9 +69,10 @@ type Product = {
   product_variants: Variant[] | null;
 };
 
-export default function ProductPageClient({ product, initialSize = null, ratingSummary = null }: {
+export default function ProductPageClient({ product, initialSize = null, initialVariantId = null, ratingSummary = null }: {
   product: Product;
   initialSize?: string | null;
+  initialVariantId?: string | null;
   ratingSummary?: { avg: number; count: number } | null; // gerçek yorumlardan; yoksa yıldız gösterilmez
 }) {
   const images =
@@ -87,8 +88,10 @@ export default function ProductPageClient({ product, initialSize = null, ratingS
   // Listeden numara filtresiyle gelindiyse (?beden=40) o numarayı önseç — stokta
   // olmasa da; müşteri doğru numaranın "haber ver" butonunu görür. Eşleşme yoksa
   // ilk (en küçük) varyanta düşer.
+  // Katalog/reklam bağlantısı (?variant=<id>) önce gelir: reklamdaki numara seçili açılır.
   const initialVariant =
-    (initialSize && activeVariants.find((v) => (v.variant_options?.value ?? "").trim() === initialSize.trim()))
+    (initialVariantId && activeVariants.find((v) => v.id === initialVariantId))
+    || (initialSize && activeVariants.find((v) => (v.variant_options?.value ?? "").trim() === initialSize.trim()))
     || (activeVariants.length > 0 ? activeVariants[0] : null);
 
   const [selectedImage, setSelectedImage] = useState<string>(images[0]);

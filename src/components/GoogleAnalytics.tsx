@@ -42,6 +42,10 @@ export default async function GoogleAnalytics() {
         {`
           window.dataLayer = window.dataLayer || [];
           function gtag(){dataLayer.push(arguments);}
+          // KVKK: çerez onayı yoksa GA çerezsiz çalışır (consent mode); "Kabul Et" → MarketingTags "granted" yapar
+          var yhc = null; try { yhc = localStorage.getItem('yh:cookie-consent'); } catch (e) {}
+          var yhg = yhc === 'accepted' ? 'granted' : 'denied';
+          gtag('consent', 'default', { analytics_storage: yhg, ad_storage: yhg, ad_user_data: yhg, ad_personalization: yhg });
           gtag('js', new Date());
           gtag('config', '${measurementId}', {
             send_page_view: true,

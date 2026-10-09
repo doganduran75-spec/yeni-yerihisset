@@ -153,10 +153,10 @@ export default async function ProductDetailPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ beden?: string }>;
+  searchParams: Promise<{ beden?: string; variant?: string }>;
 }) {
   const { slug } = await params;
-  const { beden } = await searchParams;
+  const { beden, variant } = await searchParams; // ?variant= : katalog/reklam bağlantısı (feed)
   const product = await getProduct(slug);
 
   if (!product) notFound();
@@ -175,7 +175,7 @@ export default async function ProductDetailPage({
       />
 
       {/* İnteraktif ürün sayfası (client component) */}
-      <ProductPageClient product={product as any} initialSize={beden ?? null} ratingSummary={ratingSummary} />
+      <ProductPageClient product={product as any} initialSize={beden ?? null} initialVariantId={variant ?? null} ratingSummary={ratingSummary} />
     </>
   );
 }

@@ -1,7 +1,7 @@
 // FONKSİYONEL SENARYOLAR — SİPARİŞ AKIŞI (havale). Gerçek uçlarla, gerçek veritabanında uçtan uca:
 // fiyat doğrulama, stok düşümü/iadesi, kargo, kuponların TÜM kuralları, hediye, misafir siparişi,
 // yetki, ödeme onayı → Müşteri rolü, ücret iadesi, iptal, kargo → teslim → iade al, satış ortaklığı,
-// stok bildirimi, silme, süresi dolan sipariş.
+// reklam kaynağı + Meta Conversions API (test siparişi gönderilmez), stok bildirimi, silme, süresi dolan sipariş.
 //
 // Test verisi: kategori "regresyon-test", pasif ürünler "REGRESYON-TEST …" (mağazada görünmez,
 // SKU/barkod yok → pazaryerine gitmez), kuponlar "RGT…", üyeler "rgt-…@yerihisset.test"
@@ -342,6 +342,28 @@ export default {
         ok(!!r3.json?.orderId && !affOf(r3), "Askıya alınmış ortağın linki sayılmıyor (sipariş yine verilir)", `${why(r3)} affiliate_id ${affOf(r3)}`);
         const r4 = await order([MAIN(1)], { affiliateCode: "RGTOLMAYANKOD" });
         ok(!!r4.json?.orderId && !affOf(r4), "Olmayan ortak kodu siparişi bozmuyor", `${why(r4)} affiliate_id ${affOf(r4)}`);
+      });
+
+      await part("Reklamdan gelen sipariş (kaynak + Meta bildirimi)", async () => {
+        // Tarayıcının gönderdiği bağlam (src/lib/ad-context.ts › getAdContext) — Instagram reklamı, çerez onaylı
+        const adContext = {
+          consent: true,
+          source: { utm_source: "instagram", utm_medium: "paid", utm_campaign: "rgt-reels", fbclid: "1", ts: Date.now() },
+          meta: { fbp: "fb.1.1700000000000.1234567890", fbc: "fb.1.1700000000000.RGTtest", url: "https://yerihisset.test/checkout" },
+        };
+        const r = await order([MAIN(1)], { adContext });
+        if (!r.json?.orderId) return add("fail", "Reklam kaynaklı sipariş oluşturulamadı", why(r));
+        let a = null;
+        for (let i = 0; i < 12; i++) { a = ord(r.json.orderId)?.attribution; if (a?.capi) break; await sleep(500); }
+        ok(a?.source?.utm_source === "instagram" && a?.source?.utm_campaign === "rgt-reels" && a?.source?.fbclid === true,
+          "Siparişe reklam kaynağı yazıldı (admin: Kaynak)", JSON.stringify(a));
+        ok(a?.capi?.status === "skipped" && !a?.meta, "Meta bildirimi: test siparişi gönderilmiyor, geçici bilgi (IP/tarayıcı) silindi",
+          `${JSON.stringify(a)} — Conversions API bağlantısı (sipariş → src/lib/meta-capi.ts) çalışmıyor olabilir`);
+        const r2 = await order([MAIN(1)], { adContext: { ...adContext, consent: false } });
+        const a2 = r2.json?.orderId ? ord(r2.json.orderId)?.attribution : null;
+        ok(!!r2.json?.orderId && a2?.source?.utm_source === "instagram" && !a2?.meta, "Çerez onayı yoksa Meta bilgisi hiç saklanmıyor", `${why(r2)} ${JSON.stringify(a2)}`);
+        const r3 = await order([MAIN(1)], { adContext: { consent: "evet", source: "<script>", meta: { fbp: "x" } } });
+        ok(!!r3.json?.orderId && !ord(r3.json.orderId)?.attribution, "Bozuk reklam bilgisi siparişi bozmuyor, kaydedilmiyor", `${why(r3)} ${JSON.stringify(r3.json?.orderId ? ord(r3.json.orderId)?.attribution : null)}`);
       });
 
       await part("Stok bildirimi (Stoğa girince haber ver)", async () => {

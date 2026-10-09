@@ -38,6 +38,7 @@ import { fetchLiveStocks } from "@/lib/live-stock";
 import { shipFee } from "@/lib/shipping-fee";
 import CheckoutStepper from "@/components/CheckoutStepper";
 import { track } from "@/lib/track";
+import { getAdContext } from "@/lib/ad-context";
 
 function getCookie(name: string): string | null {
   if (typeof document === "undefined") return null;
@@ -374,6 +375,7 @@ export default function CheckoutPage() {
           couponCode: couponCode || undefined,
           identityNumber: identityNumber.replace(/\D/g, ""),
           creditApply: creditApplied,
+          adContext: getAdContext(), // reklam kaynağı + (onay varsa) Meta Conversions API
         }),
       });
 
@@ -432,6 +434,7 @@ export default function CheckoutPage() {
         couponCode: couponCode || undefined,
         paymentMethod,
         creditApply: creditApplied,
+        adContext: getAdContext(), // reklam kaynağı + (onay varsa) Meta Conversions API
       }),
     });
 

@@ -18,6 +18,7 @@ export default function CerezPolitikasiPage() {
       <ul>
         <li><b>Zorunlu çerezler:</b> sepet, oturum gibi sitenin çalışması için gerekli.</li>
         <li><b>Analitik çerezler:</b> Google Analytics + kendi ziyaret analizimiz (onaya bağlı).</li>
+        <li><b>Reklam çerezleri:</b> Meta Pixel (Instagram / Facebook reklam ölçümü; onaya bağlı — reddedilirse hiç yüklenmez).</li>
       </ul>
       <h2>Çerez Tercihleriniz</h2>
       <p>(Yer tutucu — çerezleri tarayıcıdan yönetme + site çerez banner'ından onay/ret.)</p>

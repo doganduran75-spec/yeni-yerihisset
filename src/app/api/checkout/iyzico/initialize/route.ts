@@ -10,6 +10,7 @@ import { resolveGuest, type GuestInput } from "@/lib/guest-checkout";
 import { rateLimited, clientIp, TOO_MANY } from "@/lib/rate-limit";
 import { botVerdict, botResponse } from "@/lib/bot-guard";
 import { resolveShipping } from "@/lib/shipping";
+import { readAdContext } from "@/lib/meta-capi";
 
 type CartItem = {
   product_id: string;
@@ -206,6 +207,7 @@ export async function POST(req: NextRequest) {
       shipment_status: fullyCredited ? "preparing" : "waiting",
       invoice_status: "pending",
       iyzico_conversation_id: conversationId,
+      attribution: readAdContext(body, req), // reklam kaynağı; Conversions API ödeme onayında (callback) gider
     } as any)
     .select()
     .single() as any) as { data: any; error: any };
@@ -269,6 +271,10 @@ export async function POST(req: NextRequest) {
   // Kredi tüm tutarı karşıladı → iyzico'ya gitmeden sipariş tamamlandı.
   // (Sipariş zaten paid/processing oluşturuldu, stok rezerve edildi, kredi düşüldü.)
   if (fullyCredited) {
+    // Meta Conversions API (çerez onayı varsa; test siparişinde gönderilmez) — src/lib/meta-capi.ts
+    if ((order as any).attribution?.meta) {
+      import("@/lib/meta-capi").then((m) => m.sendMetaPurchaseFromOrder(order.id)).catch((e) => console.error("[meta-capi]", e?.message || e));
+    }
     return NextResponse.json({
       ok: true,
       fullyCredited: true,

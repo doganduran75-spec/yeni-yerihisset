@@ -114,6 +114,8 @@ export async function POST(req: NextRequest) {
 
         // Bildirim (non-blocking)
         Promise.allSettled([
+          // Meta Conversions API — satın alma (çerez onayı varsa; src/lib/meta-capi.ts)
+          import("@/lib/meta-capi").then(({ sendMetaPurchaseFromOrder }) => sendMetaPurchaseFromOrder(order.id)),
           // Müşteri rolü + etiketler: ödeme işlenince veritabanı tetikleyicisi atar (20261015000001)
           import("@/lib/notifications").then(({ sendOrderNotification }) =>
             sendOrderNotification("order_placed", { orderId: order.id, userId: order.user_id })

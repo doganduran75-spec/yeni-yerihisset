@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { Cookie, X } from "lucide-react";
+import { CONSENT_KEY, setConsent } from "@/lib/consent";
 
 // KVKK çerez onay banner'ı. İlk ziyarette görünür; seçim localStorage'da tutulur.
 // "Çerez Politikası" → sayfadan AYRILMADAN aynı popup içinde politika metnini açar;
 // altındaki Onayla/Reddet ile ziyaret kesintisiz sürer.
 // "Reddet" seçilirse first-party analitiğimiz (src/lib/track.ts) devre dışı kalır.
-const KEY = "yh:cookie-consent"; // "accepted" | "rejected"
+const KEY = CONSENT_KEY; // "accepted" | "rejected" (src/lib/consent.ts)
 
 export default function CookieBanner() {
   const [show, setShow] = useState(false);
@@ -22,11 +23,7 @@ export default function CookieBanner() {
   }, []);
 
   function choose(value: "accepted" | "rejected") {
-    try {
-      localStorage.setItem(KEY, value);
-    } catch {
-      /* yut */
-    }
+    setConsent(value); // kaydeder + "yh:consent" olayı → Meta Pixel / GA (MarketingTags) hemen açılır
     setShow(false);
   }
 
@@ -82,6 +79,13 @@ export default function CookieBanner() {
                 çerezleri devreye girmez.
               </p>
             </div>
+            <div>
+              <h3 className="font-black text-slate-900 mb-1">Reklam çerezleri</h3>
+              <p>
+                Instagram ve Facebook reklamlarımızın sonuçlarını ölçmek ve size ilgili ürünleri göstermek için
+                Meta Pixel kullanılır. <b>Reddet</b> derseniz Meta Pixel hiç yüklenmez.
+              </p>
+            </div>
             <p className="text-slate-500">
               Tercihinizi istediğiniz zaman tarayıcı ayarlarınızdan da yönetebilirsiniz.
             </p>
@@ -102,7 +106,7 @@ export default function CookieBanner() {
             <Cookie size={20} />
           </div>
           <p className="text-sm text-slate-600 leading-relaxed">
-            Deneyimini iyileştirmek ve ziyaret istatistiklerini analiz etmek için çerezler kullanıyoruz.
+            Deneyimini iyileştirmek, ziyaret istatistiklerini analiz etmek ve reklamlarımızı ölçmek için çerezler kullanıyoruz.
             Ayrıntılar için{" "}
             <button onClick={() => setExpanded(true)} className="text-olive-700 font-bold underline">
               Çerez Politikası
