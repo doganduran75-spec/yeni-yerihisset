@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { sendMessageNotification } from "@/lib/notifications";
+import { createAdminClient } from "@/lib/supabase-admin";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -18,6 +19,16 @@ export async function POST(req: NextRequest) {
   const orderId = String(body.orderId || "");
   const senderRole = body.senderRole === "admin" ? "admin" : body.senderRole === "user" ? "user" : null;
   if (!orderId || !senderRole) return NextResponse.json({ error: "Eksik parametre" }, { status: 400 });
+  // GÜVENLİK: yalnız siparişin sahibi (müşteri mesajı) ya da yönetici (yönetici mesajı) tetikleyebilir —
+  // aksi halde herhangi bir hesap başkasının siparişi için "yeni mesaj" e-postası gönderebiliyordu.
+  const sb = createAdminClient() as any;
+  const [{ data: ord }, { data: me }] = await Promise.all([
+    sb.from("orders").select("user_id").eq("id", orderId).maybeSingle(),
+    sb.from("profiles").select("role").eq("id", user.id).maybeSingle(),
+  ]);
+  if (!ord) return NextResponse.json({ error: "Sipariş bulunamadı" }, { status: 404 });
+  const allowed = senderRole === "admin" ? me?.role === "admin" : ord.user_id === user.id;
+  if (!allowed) return NextResponse.json({ error: "Yetkisiz" }, { status: 403 });
 
   // Bildirim kritik değil — hata olsa da mesaj zaten kaydedildi.
   try {

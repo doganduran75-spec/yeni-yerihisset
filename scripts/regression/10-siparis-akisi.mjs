@@ -1,7 +1,8 @@
 // FONKSİYONEL SENARYOLAR — SİPARİŞ AKIŞI (havale). Gerçek uçlarla, gerçek veritabanında uçtan uca:
 // fiyat doğrulama, stok düşümü/iadesi, kargo, kuponların TÜM kuralları, hediye, misafir siparişi,
 // yetki, ödeme onayı → Müşteri rolü, ücret iadesi, iptal, kargo → teslim → iade al, satış ortaklığı,
-// reklam kaynağı + Meta Conversions API (test siparişi gönderilmez), stok bildirimi, silme, süresi dolan sipariş.
+// reklam kaynağı + Meta Conversions API (test siparişi gönderilmez), üyelik durumu + e-posta doğrulama +
+// Fırsat/iş ortaklığı ayrıcalığı, stok bildirimi, silme, süresi dolan sipariş.
 //
 // Test verisi: kategori "regresyon-test", pasif ürünler "REGRESYON-TEST …" (mağazada görünmez,
 // SKU/barkod yok → pazaryerine gitmez), kuponlar "RGT…", üyeler "rgt-…@yerihisset.test"
@@ -42,6 +43,7 @@ export default {
         DELETE FROM public.free_gift_rules WHERE name LIKE 'REGRESYON-TEST%';
         DELETE FROM public.products WHERE title LIKE 'REGRESYON-TEST%';
         DELETE FROM public.categories WHERE slug = 'regresyon-test';
+        DELETE FROM public.partner_opportunities WHERE title LIKE 'REGRESYON-TEST%';
         DELETE FROM public.coupons WHERE code LIKE 'RGT%';
       `);
     }
@@ -366,6 +368,64 @@ export default {
         ok(!!r3.json?.orderId && !ord(r3.json.orderId)?.attribution, "Bozuk reklam bilgisi siparişi bozmuyor, kaydedilmiyor", `${why(r3)} ${JSON.stringify(r3.json?.orderId ? ord(r3.json.orderId)?.attribution : null)}`);
       });
 
+      await part("Üyelik durumu ve e-posta doğrulama", async () => {
+        const st = (uid) => one(`SELECT public.member_account_state(${lit(uid)})`);
+        const lvl = (uid) => num(`SELECT public.member_level(${lit(uid)})`);
+        const hasUye = (uid) => num(`SELECT count(*) FROM public.user_roles ur JOIN public.roles r ON r.id = ur.role_id WHERE ur.user_id = ${lit(uid)} AND r.slug = 'uye'`) === 1;
+        const token = () => one(`SELECT email_verify_token FROM public.profiles WHERE id = ${lit(F.member.id)}`) || "";
+
+        // Misafir (şifresiz) hesap: "Üye" değil, ayrıcalık seviyesi 0
+        const guestId = one(`SELECT id FROM auth.users WHERE email = ${lit(`rgt-misafir-${RUN}@${DOMAIN}`)}`);
+        if (guestId) ok(st(guestId) === "guest" && !hasUye(guestId) && lvl(guestId) === 0, "Misafir hesabı 'Üye' sayılmıyor", `${st(guestId)}, Üye rolü ${hasUye(guestId)}, seviye ${lvl(guestId)}`);
+
+        // Kayıtlı ama doğrulanmamış üye (ödenmiş siparişi olduğu halde) → seviye 0, ayrıcalık kapalı
+        ok(st(F.member.id) === "unverified" && !hasUye(F.member.id) && lvl(F.member.id) === 0, "Doğrulanmamış üye: 'Üye' rolü yok, seviye 0",
+          `${st(F.member.id)}, Üye rolü ${hasUye(F.member.id)}, seviye ${lvl(F.member.id)}`);
+        const tk1 = token();
+        ok(tk1.length >= 32, "Sipariş e-postasında doğrulama bağlantısı üretildi", "profiles.email_verify_token boş — sipariş e-postasına doğrulama kutusu eklenmiyor");
+
+        // Fırsat (Üye seviyesi, kupon) — doğrulamadan alınamaz
+        const oc = insert("coupons", { code: `RGT${RUN.toUpperCase()}FRS`, name: "REGRESYON-TEST fırsat", type: "percentage", amount: 5, min_order_amount: 0, per_user_limit: 1, is_active: true, is_personal: true, auto_assign_on_signup: false });
+        const opp = insert("partner_opportunities", { title: "REGRESYON-TEST fırsat", partner_name: "REGRESYON-TEST", kind: "coupon", coupon_id: oc, tier_level: 1, claim_limit: 1, is_active: true });
+        const oppHigh = insert("partner_opportunities", { title: "REGRESYON-TEST müdavim fırsatı", partner_name: "REGRESYON-TEST", kind: "coupon", coupon_id: oc, tier_level: 9, claim_limit: 1, is_active: true });
+        const c1 = await api("/api/opportunity/claim", { token: F.member.token, body: { opportunityId: opp } });
+        ok(c1.status === 403 && c1.json?.needVerify === true, "Doğrulanmamış üye Fırsat kuponu alamıyor", why(c1));
+        const a1 = await api("/api/affiliate/apply", { token: F.member.token, body: { answers: {} } });
+        ok(a1.status === 403, "Doğrulanmamış üye iş ortağı olamıyor", why(a1));
+
+        // Yeniden gönder → yeni bağlantı; eskisi geçersiz; yenisiyle doğrulanır
+        const rs = await api("/api/auth/resend-verification", { token: F.member.token, body: {} });
+        const tk2 = token();
+        ok(rs.status === 200 && tk2 && tk2 !== tk1, "Doğrulama e-postası yeniden istenebiliyor (yeni bağlantı)", why(rs));
+        const old = await api("/api/auth/verify-email", { body: { token: tk1 } });
+        ok(old.status === 400 && st(F.member.id) === "unverified", "Eski doğrulama bağlantısı geçersiz", why(old));
+        const v = await api("/api/auth/verify-email", { body: { token: tk2 } });
+        ok(v.status === 200 && st(F.member.id) === "member", "Bağlantıyla e-posta doğrulandı", `${why(v)} → ${st(F.member.id)}`);
+        ok(hasUye(F.member.id) && lvl(F.member.id) >= 2, "Doğrulanınca 'Üye' oldu; ödenmiş siparişi olduğu için seviye Müşteri", `Üye rolü ${hasUye(F.member.id)}, seviye ${lvl(F.member.id)}`);
+        const welcome = num("SELECT count(*) FROM public.coupons WHERE auto_assign_on_signup AND is_active");
+        if (welcome) {
+          const got = num(`SELECT count(*) FROM public.user_coupons uc JOIN public.coupons c ON c.id = uc.coupon_id WHERE uc.user_id = ${lit(F.member.id)} AND c.auto_assign_on_signup`);
+          ok(got === welcome, "Doğrulanınca hoş geldin kuponları atandı", `${got}/${welcome}`);
+        }
+
+        // Doğrulanmış üye: seviyesi yetiyorsa alır, yetmiyorsa sunucu reddeder
+        const c2 = await api("/api/opportunity/claim", { token: F.member.token, body: { opportunityId: opp } });
+        ok(c2.status === 200, "Doğrulanmış üye Fırsat kuponunu alıyor", why(c2));
+        const c3 = await api("/api/opportunity/claim", { token: F.member.token, body: { opportunityId: oppHigh } });
+        ok(c3.status === 403 && !!c3.json?.needLevel, "Üst seviye fırsatı doğrudan istekle alınamıyor", `${why(c3)} — seviye kontrolü yalnız sayfada`);
+        const a2 = await api("/api/affiliate/apply", { token: F.member.token, body: { answers: {} } });
+        ok(a2.status !== 403, "Doğrulanınca iş ortaklığı başvurusu açılıyor", why(a2));
+        const fp = await api("/firsatlar", { method: "GET" });
+        ok(!fp.text.includes("REGRESYON-TEST"), "Test fırsatı Fırsatlar sayfasında görünmüyor", "REGRESYON-TEST fırsatı sitede listelendi");
+
+        // Mesaj bildirimi: başkasının siparişi için tetiklenemez
+        if (O.guest) {
+          const m1 = await api("/api/messages/notify", { token: F.member.token, body: { orderId: O.guest, senderRole: "user" } });
+          const m2 = await api("/api/messages/notify", { token: F.member.token, body: { orderId: O.guest, senderRole: "admin" } });
+          ok(m1.status === 403 && m2.status === 403, "Üye başkasının siparişi için mesaj e-postası tetikleyemiyor", `${why(m1)} / ${why(m2)}`);
+        }
+      });
+
       await part("Stok bildirimi (Stoğa girince haber ver)", async () => {
         const H = { "x-forwarded-for": F.ip };
         const email = `rgt-bildirim-${RUN}@${DOMAIN}`;
@@ -418,6 +478,7 @@ export default {
           + (SELECT count(*) FROM public.products WHERE title LIKE 'REGRESYON-TEST%')
           + (SELECT count(*) FROM public.coupons WHERE code LIKE 'RGT%')
           + (SELECT count(*) FROM public.affiliate_profiles WHERE code LIKE 'RGT%')
+          + (SELECT count(*) FROM public.partner_opportunities WHERE title LIKE 'REGRESYON-TEST%')
           + (SELECT count(*) FROM public.categories WHERE slug = 'regresyon-test')`);
         ok(left === 0, "Test verisi silindi", `${left} kayıt kaldı — bir sonraki çalıştırma yeniden dener`);
       });

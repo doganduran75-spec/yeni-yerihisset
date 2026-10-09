@@ -1,3 +1,4 @@
+import { randomBytes } from "crypto";
 import { createMailTransport, isTestEmail } from "./mail-guard";
 import { createAdminClient } from "./supabase-admin";
 import { buildSmtpConfig } from "./smtp-config";
@@ -248,6 +249,28 @@ async function isTestOrder(supabase: any, userId?: string | null): Promise<boole
   return isTestEmail(data?.email);
 }
 
+/**
+ * Doğrulanmamış üye için doğrulama kutusu (yoksa ""). Mevcut doğrulama bağlantısı varsa onu kullanır
+ * (önceki e-postadaki bağlantı geçersiz olmasın); yoksa yenisini üretir. Misafir (şifresiz) hesaba
+ * gösterilmez — onlar hesap aktivasyonuyla (şifre belirleme) doğrulanır.
+ */
+async function buildVerifyBoxHtml(supabase: any, userId: string, storeUrl: string): Promise<string> { // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data: state } = await supabase.rpc("member_account_state", { p_user: userId });
+  if (state !== "unverified") return "";
+  const { data: p } = await supabase.from("profiles").select("email_verify_token").eq("id", userId).maybeSingle();
+  let token: string | null = p?.email_verify_token ?? null;
+  if (!token) {
+    token = randomBytes(32).toString("hex");
+    await supabase.from("profiles").update({ email_verify_token: token, email_verify_sent_at: new Date().toISOString() }).eq("id", userId);
+  }
+  const url = `${storeUrl}/eposta-onay?token=${token}`;
+  return `
+    <div style="margin:22px 0 4px;padding:14px 16px;border:1px solid #fde68a;background:#fffbeb;border-radius:12px">
+      <p style="margin:0 0 8px;font-size:14px;color:#78350f;line-height:1.5"><b>E-posta adresini doğrula</b> — hoş geldin kuponun, Fırsatlar ve satış ortaklığı açılsın. Tek tık yeterli:</p>
+      <a href="${url}" style="display:inline-block;background:#d97706;color:#fff;text-decoration:none;padding:10px 20px;border-radius:10px;font-weight:700;font-size:14px">Adresimi doğrula</a>
+    </div>`;
+}
+
 /** İptal e-postasındaki açıklama kutusu — ödeme / iade durumuna göre (senaryo matrisi). */
 function buildCancelInfoHtml(order: any, storeUrl: string): string {
   const money = (n: number) => `₺${n.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -427,6 +450,12 @@ export async function sendOrderNotification(
     bodyHtml += `
       <p style="font-size:14px;color:#374151;margin:20px 0 8px"><b>Ödemeni tamamlamak için</b> aşağıdaki hesaba havale/EFT yapabilirsin. Ödemen onaylanınca siparişin hazırlanır.</p>
       ${bankInfoHtml}`;
+  }
+
+  // E-postası doğrulanmamış üye (şifreli hesap): sipariş e-postasında tek tıkla doğrulama kutusu.
+  // E-postayı aldıysa adres onundur → bağlantıya tıklaması yeterli (ayrı e-posta gitmez).
+  if (uid && ["order_placed", "order_paid", "order_shipped"].includes(trigger)) {
+    bodyHtml += await buildVerifyBoxHtml(supabase, uid, storeUrl).catch(() => "");
   }
 
   // --- Push bildirimi ---

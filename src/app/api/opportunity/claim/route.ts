@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { getAuthUserFromRequest } from "@/lib/auth-from-request";
+import { getMemberStatus, VERIFY_REQUIRED_MSG } from "@/lib/member-status";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -20,13 +21,27 @@ export async function POST(req: NextRequest) {
 
   const { data: opp } = await supabase
     .from("partner_opportunities")
-    .select("id, kind, coupon_id, claim_limit, is_active")
+    .select("id, kind, coupon_id, claim_limit, is_active, tier_level, valid_until")
     .eq("id", opportunityId)
     .maybeSingle();
 
   if (!opp || !(opp as any).is_active) return NextResponse.json({ error: "Fırsat bulunamadı" }, { status: 404 });
   if ((opp as any).kind !== "coupon" || !(opp as any).coupon_id) {
     return NextResponse.json({ error: "Bu fırsat kupon fırsatı değil" }, { status: 400 });
+  }
+
+  // GÜVENLİK: seviye SUNUCUDA denetlenir (eskiden yalnız sayfada gizleniyordu → yeni açılmış
+  // herhangi bir hesap doğrudan istekle Müdavim fırsatının kuponunu alabiliyordu).
+  // Ayrıcalık yalnız e-postası doğrulanmış üyede (seviye: Üye 1, Müşteri 2, Müdavim 3).
+  const tier = Number((opp as any).tier_level ?? 0);
+  if (tier > 0) {
+    const ms = await getMemberStatus(user.id);
+    if (ms.state !== "member") return NextResponse.json({ error: VERIFY_REQUIRED_MSG, needVerify: true }, { status: 403 });
+    if (ms.level < tier) return NextResponse.json({ error: "Bu fırsat daha üst bir seviyeye özel.", needLevel: tier }, { status: 403 });
+  }
+
+  if ((opp as any).valid_until && new Date((opp as any).valid_until) < new Date()) {
+    return NextResponse.json({ error: "Bu fırsatın süresi doldu" }, { status: 410 });
   }
 
   const couponId = (opp as any).coupon_id as string;

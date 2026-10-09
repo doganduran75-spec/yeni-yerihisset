@@ -23,7 +23,7 @@ export default async function FirsatlarPage() {
   const sb = getSupabase();
 
   const [{ data: opps }, { data: roles }] = await Promise.all([
-    sb.from("partner_opportunities").select("*").eq("is_active", true).order("created_at", { ascending: false }),
+    sb.from("partner_opportunities").select("*").eq("is_active", true).not("title", "like", "REGRESYON-TEST%").order("created_at", { ascending: false }), // regresyon test fırsatları gösterilmez
     sb.from("roles").select("id, name, slug, level").order("level", { ascending: true }),
   ]);
 

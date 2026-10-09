@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
+import { assignSignupCoupons } from "@/lib/member-status";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -28,6 +29,8 @@ export async function POST(req: NextRequest) {
     email_verified_at: new Date().toISOString(),
     email_verify_token: null,
   }).eq("id", profile.id);
+  // Doğrulanınca "Üye" olur (tetikleyici) → hoş geldin kuponları şimdi atanır
+  await assignSignupCoupons(profile.id).catch((e) => console.error("[verify-email] kupon:", e?.message || e));
 
   return NextResponse.json({ ok: true });
 }

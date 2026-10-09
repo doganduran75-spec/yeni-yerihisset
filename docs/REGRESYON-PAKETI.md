@@ -40,6 +40,7 @@ node scripts/regression.mjs --hizli
 - **Uç noktalar ve yetki:** cron'lar şifresiz çalışmıyor, admin uçları girişsiz çalışmıyor, bot koruması devrede, kart ödeme ucu yanıt veriyor.
 - **Veri güvenliği:** dışarıdan (anon anahtarla) üye e-postası/telefonu, gizli ayarlar, siparişler okunamıyor; sahte sipariş eklenemiyor.
 - **Veri tutarlılığı:** eksi stok, kategorisiz/görselsiz/SKU'suz ürün, ürünsüz sipariş, süresi dolmuş ödenmemiş sipariş, bozuk bilgi bankası adresi, aktif kargo yöntemi, pazaryeri ve e-posta kuyruğu hataları.
+- **Üyelik:** 'Üye' rolü yalnız şifreli + e-postası doğrulanmış hesaplarda (model: `docs/UYELIK-MODELI.md`).
 - **Ayarlar ve ortam:** SMTP, iletişim e-postası (yönetici bildirimleri buraya gider), havale bilgisi, Google Analytics, site adresi, CRON_SECRET, yönetici sayısı (`--canli` ile: e-posta kilidi, iyzico, arama motoru engeli).
 - **Ürün beslemesi ve reklam etiketleri:** Google/Meta katalog beslemesi açılıyor, ürün sayısı ve fiyatı veritabanıyla aynı, numaralar `size` alanında, reklam bağlantısı (`?variant=`) çalışıyor, Meta Pixel onaysız yüklenmiyor, Conversions API anahtarı dışarıya kapalı (`--canli`: test olay kodu dolu → HATA).
 - **Arka plan işleri:** gece yedeği (<26 sa), sunucu sağlık kontrolü, pazaryeri senkronu (açıksa).
@@ -61,6 +62,7 @@ bildirimi düşmez). Tek iz: sipariş numaraları birkaç numara atlar.
 | Kargo → teslim → iade al | "Kargoya Verildi (elle)" ve "Teslim Edildi"; kargolanmış sipariş iptal edilemez; kargolanmamışta "İade al" reddedilir; iade gelen ürün stoğa, ücret iadesi kaydı, aynı ürün iki kez stoğa eklenmez |
 | Satış ortaklığı | Ortak linkiyle sipariş ortağa yazılır; ortağın kendi alışverişi, askıya alınmış ortak ve olmayan kod sayılmaz (sipariş yine verilir) |
 | Reklamdan gelen sipariş | Instagram reklamı kaynağı siparişe yazılır; test siparişi Meta'ya gönderilmez ve geçici IP/tarayıcı bilgisi silinir; çerez onayı yoksa Meta bilgisi hiç saklanmaz; bozuk bilgi siparişi bozmaz |
+| Üyelik durumu ve e-posta doğrulama | Misafir ve doğrulanmamış hesap "Üye" sayılmaz (seviye 0); sipariş e-postasında doğrulama bağlantısı üretilir; yeniden gönderim, eski bağlantı geçersiz, yenisiyle doğrulama → Üye + Müşteri seviyesi + hoş geldin kuponları; Fırsat kuponu ve iş ortaklığı doğrulamadan alınamaz; üst seviye fırsatı doğrudan istekle alınamaz; test fırsatı sitede görünmez; başkasının siparişi için mesaj e-postası tetiklenemez |
 | Stok bildirimi | Bot kaydı reddedilir; misafir kaydı + Kişiler; çift kayıt olmaz; üye kaydı; üye "stok geldi" gönderemez; gönderilemeyen bildirim "bekliyor" kalır |
 | Silme ve süre dolumu | "Siparişi sil" (stok geri, kupon sayısı düzelir); 24 saat ödenmeyen havale siparişi iptal olur, stok geri |
 

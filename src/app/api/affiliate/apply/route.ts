@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { getAuthUserFromRequest } from "@/lib/auth-from-request";
+import { getMemberStatus, VERIFY_REQUIRED_MSG } from "@/lib/member-status";
 
 function generateCode(firstName: string): string {
   const base = (firstName || "user")
@@ -14,6 +15,10 @@ function generateCode(firstName: string): string {
 export async function POST(req: NextRequest) {
   const user = await getAuthUserFromRequest(req);
   if (!user) return NextResponse.json({ error: "Giriş gerekli" }, { status: 401 });
+  // Para (kredi/hakediş) söz konusu → yalnız e-postası doğrulanmış üye (anında onaylanır)
+  if ((await getMemberStatus(user.id)).state !== "member") {
+    return NextResponse.json({ error: VERIFY_REQUIRED_MSG, needVerify: true }, { status: 403 });
+  }
 
   const supabase = createAdminClient();
 

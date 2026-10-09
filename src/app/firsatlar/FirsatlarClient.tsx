@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { Building2, CalendarDays, ExternalLink, Lock, Loader2, Gift, Check, Ticket, ArrowRight } from "lucide-react";
+import VerifyEmailNotice from "@/components/VerifyEmailNotice";
 
 type Opportunity = {
   id: string;
@@ -44,9 +45,9 @@ export default function FirsatlarClient({ opps, allRoles }: Props) {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         setUserId(user.id);
-        const { data } = await (supabase as any).from("user_roles").select("roles(level)").eq("user_id", user.id);
-        const levels = (data || []).map((r: any) => Number(r.roles?.level ?? 0));
-        setUserLevel(levels.length ? Math.max(...levels) : 1); // üye en az 1
+        // Seviye sunucuda hesaplanır: e-postası doğrulanmamış hesap 0 (Ziyaretçi) sayılır (migration 20261028000001)
+        const { data: ms } = await (supabase as any).rpc("my_member_status");
+        setUserLevel(Number(ms?.level ?? 0));
 
         const couponIds = [...new Set(opps.filter((o) => o.kind === "coupon" && o.coupon_id).map((o) => o.coupon_id!))];
         if (couponIds.length) {
@@ -122,6 +123,7 @@ export default function FirsatlarClient({ opps, allRoles }: Props) {
 
   return (
     <div className="space-y-4">
+      <VerifyEmailNotice reason="Doğrulayınca seviyene göre fırsatlar açılır." />
       {/* İlerleme başlığı */}
       <div className="flex items-center gap-2 text-sm text-slate-500">
         <span className="font-black text-slate-700">Seviyen:</span>

@@ -49,6 +49,7 @@ type Member = {
   last_active_at: string | null;
   import_source?: string | null;
   order_count?: number;
+  account_state?: "guest" | "unverified" | "member" | "none" | null; // hesap durumu (20261028000001)
   roleIds: string[];
   tagOptionIds: string[];
 };
@@ -415,7 +416,7 @@ export default function MembersPage() {
                 {filtered.map(row => {
                   if (row.kind === "member") {
                     const member = row.member;
-                    const memberRoles = allRoles.filter(r => r.slug !== "uye" && member.roleIds.includes(r.id)); // "Üye" rozeti zaten sabit
+                    const memberRoles = allRoles.filter(r => r.slug !== "uye" && member.roleIds.includes(r.id)); // "Üye" hesap durumu rozetinde
                     const memberTags  = member.tagOptionIds.map(id => allOptionsById.get(id)).filter(Boolean);
                     return (
                       <TableRow key={"m" + member.id} className="group cursor-pointer hover:bg-slate-50/60" onClick={() => router.push(`/admin/members/${member.id}`)}>
@@ -426,14 +427,18 @@ export default function MembersPage() {
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-wrap gap-1">
-                            <Badge className="text-[10px] font-semibold border px-1.5 py-0 bg-green-50 text-green-700 border-green-200">Üye</Badge>
+                            {/* Hesap durumu: Misafir (şifresiz) · Doğrulanmamış · Üye — alışveriş seviyesi (Müşteri/Müdavim) roller olarak yanında */}
+                            {member.account_state === "guest" ? (
+                              <Badge className="text-[10px] font-semibold border px-1.5 py-0 bg-slate-100 text-slate-600 border-slate-200" title="Şifresiz hesap (misafir siparişi / eski siteden aktarım) — şifre belirleyince Üye olur">Misafir</Badge>
+                            ) : member.account_state === "unverified" ? (
+                              <Badge className="text-[10px] font-semibold border px-1.5 py-0 bg-amber-100 text-amber-800 border-amber-200" title="Şifresi var ama e-postasını doğrulamadı — ayrıcalıklar (kupon, Fırsatlar, iş ortaklığı) kapalı">Doğrulanmamış</Badge>
+                            ) : (
+                              <Badge className="text-[10px] font-semibold border px-1.5 py-0 bg-green-50 text-green-700 border-green-200">Üye</Badge>
+                            )}
                             {member.import_source && (
                               <Badge className="text-[10px] font-semibold border px-1.5 py-0 bg-slate-100 text-slate-600 border-slate-200" title="Eski siteden aktarıldı">
                                 {member.import_source === "woo_attipas" ? "Attipas" : "Eski site"}
                               </Badge>
-                            )}
-                            {member.email_verified === false && (
-                              <Badge className="text-[10px] font-semibold border px-1.5 py-0 bg-amber-100 text-amber-800 border-amber-200" title="Bu üye e-posta adresini henüz doğrulamadı">E-posta ✗</Badge>
                             )}
                             {memberRoles.map(r => (
                               <Badge key={r.id} className={cn("text-[10px] font-semibold border px-1.5 py-0", roleColor(r.slug))}>{r.name}</Badge>

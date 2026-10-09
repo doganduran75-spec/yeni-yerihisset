@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { getAuthUserFromRequest } from "@/lib/auth-from-request";
 import { issueEmailVerification } from "@/lib/email-verify";
+import { rateLimited, TOO_MANY } from "@/lib/rate-limit";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -9,6 +10,7 @@ import { issueEmailVerification } from "@/lib/email-verify";
 export async function POST(req: NextRequest) {
   const user = await getAuthUserFromRequest(req);
   if (!user) return NextResponse.json({ error: "Giriş yapmalısınız" }, { status: 401 });
+  if (rateLimited("resend-verification", user.id, 5, 3600000)) return NextResponse.json(TOO_MANY, { status: 429 });
 
   const supabase = createAdminClient();
   const { data: p } = await (supabase as any)

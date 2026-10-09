@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase-admin";
+import { assignSignupCoupons } from "@/lib/member-status";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -30,7 +31,11 @@ export async function POST(req: NextRequest) {
 
   const sb = createAdminClient() as any;
   const { data: p } = await sb.from("profiles").select("email, email_verified").eq("id", user.id).maybeSingle();
-  if (!p || p.email_verified) return NextResponse.json({ ok: true, already: !!p?.email_verified });
+  // Şifre belirlendi + e-posta kanıtlandı → "Üye" (hoş geldin kuponları; aktarılan müşteriye verilmez)
+  if (!p || p.email_verified) {
+    if (p) await assignSignupCoupons(user.id).catch(() => {});
+    return NextResponse.json({ ok: true, already: !!p?.email_verified });
+  }
   // Profildeki adres, bağlantının gittiği (oturumdaki) adresle aynı olmalı
   if (String(p.email || "").toLowerCase() !== user.email.toLowerCase()) return NextResponse.json({ ok: false, reason: "email-mismatch" });
 
@@ -39,5 +44,6 @@ export async function POST(req: NextRequest) {
     email_verified_at: new Date().toISOString(),
     email_verify_token: null,
   }).eq("id", user.id);
+  await assignSignupCoupons(user.id).catch((e) => console.error("[mark-verified] kupon:", e?.message || e));
   return NextResponse.json({ ok: true });
 }

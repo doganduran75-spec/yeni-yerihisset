@@ -48,6 +48,7 @@ import OrderMessagesModal from "@/components/account/OrderMessagesModal";
 import ReturnRequestModal, { RETURN_MARK } from "@/components/account/ReturnRequestModal";
 import { siteAlert, siteConfirm } from "@/components/ui/site-dialog";
 import { trAuthError } from "@/lib/auth-errors";
+import VerifyEmailNotice from "@/components/VerifyEmailNotice";
 
 type TabType = "orders" | "addresses" | "profile" | "security" | "affiliate" | "coupons" | "messages";
 // Akordiyon bölüm anahtarları (tek akordiyon; üst menü yok)
@@ -482,6 +483,9 @@ function AccountPageInner() {
     setAffiliateLoading(false);
   }
 
+  // Hesap durumu (guest / unverified / member) — iş ortaklığı yalnız doğrulanmış üyede açılır
+  const [memberState, setMemberState] = useState<string | null>(null);
+
   async function handleAffiliateApply(e: React.FormEvent) {
     e.preventDefault();
     setAffiliateApplying(true);
@@ -727,6 +731,7 @@ function AccountPageInner() {
       <main className="container mx-auto px-4 py-8 md:py-12">
         {/* Tek akordiyon — üst menü kutusu yok, her bölüm katlanır */}
         <div className="max-w-3xl mx-auto flex flex-col gap-4">
+          <VerifyEmailNotice className="order-first" onState={setMemberState} />
 
             {/* ── Kuponlarım ── */}
             <AccSection title="Kuponlarım" icon={Ticket} color={ACC_COLORS.coupons} isOpen={openSection === "coupons"} onToggle={() => setOpenSection(openSection === "coupons" ? null : "coupons")} className="order-2">
@@ -1358,6 +1363,9 @@ function AccountPageInner() {
                       </p>
                     </div>
                     <CardContent className="p-8">
+                      {memberState === "unverified" ? (
+                        <VerifyEmailNotice reason="Satış ortaklığı e-posta adresini doğruladığında açılır; doğrulayınca bu formu doldurup hemen başlayabilirsin." />
+                      ) : (
                       <form onSubmit={handleAffiliateApply} className="space-y-6">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                           <div className="space-y-2">
@@ -1419,6 +1427,7 @@ function AccountPageInner() {
                           {affiliateApplying ? "Başvuruluyor..." : "Satış Ortağı Olmak İstiyorum"}
                         </Button>
                       </form>
+                      )}
                     </CardContent>
                   </Card>
                 ) : (
