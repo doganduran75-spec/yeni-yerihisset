@@ -156,6 +156,7 @@ async function main() {
     ["20261025 iptal e-postası şablonu", "SELECT NOT EXISTS(SELECT 1 FROM public.email_templates WHERE trigger='order_cancelled' AND body_html LIKE '%Ödeme yapıldıysa%')"],
     ["20261026 şifresiz hesaplar", "SELECT to_regprocedure('public.mark_account_passwordless(uuid)') IS NOT NULL"],
     ["20261028 üyelik durumu (misafir/doğrulanmamış/üye)", "SELECT to_regprocedure('public.member_account_state(uuid)') IS NOT NULL AND NOT EXISTS(SELECT 1 FROM pg_trigger WHERE tgname='on_profile_created_assign_role')"],
+    ["20261029 kampanya e-postası izni", "SELECT to_regclass('public.marketing_consent_log') IS NOT NULL AND EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='profiles' AND column_name='marketing_consent')"],
     ["20261027 Meta reklamları", "SELECT to_regprocedure('public.strip_order_ad_meta()') IS NOT NULL AND EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='orders' AND column_name='attribution')"],
   ];
   for (const [name, q] of MIG) {
@@ -177,7 +178,7 @@ async function main() {
     ["/ara?q=barefoot", "Arama"], ["/firsatlar", "Fırsatlar"], ["/bilgi-bankasi", "Bilgi bankası"],
     ...(kb ? [[`/bilgi-bankasi/${kb}`, "Bilgi bankası makalesi"]] : []),
     ["/barefoot-nedir", "Barefoot nedir"], ["/sepet", "Sepet"], ["/checkout", "Ödeme"], ["/siparis-tamam", "Sipariş sonucu"],
-    ["/login", "Giriş"], ["/account", "Hesabım"], ["/sifre-belirle", "Şifre belirle"], ["/iletisim", "İletişim"],
+    ["/login", "Giriş"], ["/account", "Hesabım"], ["/sifre-belirle", "Şifre belirle"], ["/kampanya-izni", "Kampanya izni"], ["/iletisim", "İletişim"],
     ["/iade-degisim", "İade-değişim"], ["/mesafeli-satis", "Mesafeli satış"], ["/kvkk", "KVKK"], ["/gizlilik", "Gizlilik"],
     ["/cerez-politikasi", "Çerez politikası"], ["/admin", "Admin (kabuk)"], ["/sitemap.xml", "Site haritası"], ["/robots.txt", "robots.txt"],
   ];
@@ -278,6 +279,8 @@ async function main() {
     capi.status >= 400 ? add("ok", "Meta Conversions API anahtarı dışarıya kapalı") : add("fail", "Meta Conversions API anahtarı dışarıya AÇIK", `HTTP ${capi.status} — 20261027 migration'ı`);
     const px = await rest("settings?select=meta_pixel_id&limit=1");
     px.status === 200 ? add("ok", "Meta Pixel kimliği okunabiliyor") : add("fail", "Meta Pixel kimliği okunamıyor", `HTTP ${px.status} — Pixel yüklenemez (GRANT eksik, 20261027)`);
+    const mcl = await rest("marketing_consent_log?select=email&limit=1");
+    mcl.status >= 400 || (Array.isArray(mcl.json) && mcl.json.length === 0) ? add("ok", "Kampanya izin kayıtları dışarıya kapalı") : add("fail", "Kampanya izin kayıtları dışarıya AÇIK", `HTTP ${mcl.status}`);
     const o = await rest("orders?select=id&limit=1");
     const orows = (() => { try { return JSON.parse(o.body); } catch { return null; } })();
     Array.isArray(orows) && orows.length > 0 ? add("fail", "Siparişler dışarıya AÇIK", "anon sipariş okuyabiliyor") : add("ok", "Siparişler dışarıya kapalı");

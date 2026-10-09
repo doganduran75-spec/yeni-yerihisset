@@ -65,6 +65,17 @@ export default function CheckoutPage() {
   const [isSameAsShipping, setIsSameAsShipping] = useState(true);
   const [loading, setLoading] = useState(true);
   const [placing, setPlacing] = useState(false);
+  // Kampanya e-postası izni (ödeme sayfasındaki kutu) — üye zaten izinliyse kutu gösterilmez
+  const [marketingOptIn, setMarketingOptIn] = useState(false);
+  const [marketingAlready, setMarketingAlready] = useState(false);
+  useEffect(() => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!session) return;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data } = await (supabase as any).from("profiles").select("marketing_consent").eq("id", session.user.id).maybeSingle();
+      if (data?.marketing_consent) setMarketingAlready(true);
+    }).catch(() => {});
+  }, []);
   const [orderSuccess, setOrderSuccess] = useState<string | null>(null);
   const [couponCode, setCouponCode] = useState("");
   const [couponData, setCouponData] = useState<{ name: string; type: string; discount_amount: number; free_shipping: boolean } | null>(null);
@@ -376,6 +387,7 @@ export default function CheckoutPage() {
           identityNumber: identityNumber.replace(/\D/g, ""),
           creditApply: creditApplied,
           adContext: getAdContext(), // reklam kaynağı + (onay varsa) Meta Conversions API
+          marketingConsent: marketingOptIn || undefined,
         }),
       });
 
@@ -435,6 +447,7 @@ export default function CheckoutPage() {
         paymentMethod,
         creditApply: creditApplied,
         adContext: getAdContext(), // reklam kaynağı + (onay varsa) Meta Conversions API
+        marketingConsent: marketingOptIn || undefined,
       }),
     });
 
@@ -1186,6 +1199,13 @@ export default function CheckoutPage() {
                       Ödeme adımına geç <ArrowRight size={22} className="ml-2 group-hover:translate-x-2 transition-transform" />
                     </Button>
                     ) : (<>
+                    {/* Kampanya e-postası izni (ticari ileti) — işaretsiz gelir; zaten izinliyse gösterilmez */}
+                    {!marketingAlready && (
+                      <label className="flex items-start gap-2.5 px-2 text-xs text-slate-600 cursor-pointer select-none">
+                        <input type="checkbox" checked={marketingOptIn} onChange={(e) => setMarketingOptIn(e.target.checked)} className="mt-0.5 h-4 w-4 shrink-0 accent-olive-600" />
+                        <span>Kampanya ve indirimlerden e-posta ile haberdar olmak istiyorum.</span>
+                      </label>
+                    )}
                     <Button
                       onClick={handlePlaceOrder}
                       disabled={placing}

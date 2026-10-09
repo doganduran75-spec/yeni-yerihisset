@@ -11,6 +11,7 @@ import { rateLimited, clientIp, TOO_MANY } from "@/lib/rate-limit";
 import { botVerdict, botResponse } from "@/lib/bot-guard";
 import { resolveShipping } from "@/lib/shipping";
 import { readAdContext } from "@/lib/meta-capi";
+import { setMarketingConsent } from "@/lib/marketing-consent";
 
 type CartItem = {
   product_id: string;
@@ -266,6 +267,11 @@ export async function POST(req: NextRequest) {
       { error: soldOut ? "Üzgünüz, sepetinizdeki bir ürün az önce tükendi. Lütfen sepetinizi güncelleyin." : "Stok rezervasyonu başarısız." },
       { status: 409 }
     );
+  }
+
+  // Kampanya e-postası izni (ödeme sayfasındaki kutu işaretliyse) — src/lib/marketing-consent.ts
+  if (body?.marketingConsent === true) {
+    await setMarketingConsent(userId, true, "checkout").catch((e) => console.error("[marketing-consent]", e?.message || e));
   }
 
   // Kredi tüm tutarı karşıladı → iyzico'ya gitmeden sipariş tamamlandı.

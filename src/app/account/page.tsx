@@ -49,6 +49,7 @@ import ReturnRequestModal, { RETURN_MARK } from "@/components/account/ReturnRequ
 import { siteAlert, siteConfirm } from "@/components/ui/site-dialog";
 import { trAuthError } from "@/lib/auth-errors";
 import VerifyEmailNotice from "@/components/VerifyEmailNotice";
+import MarketingConsentToggle from "@/components/account/MarketingConsentToggle";
 
 type TabType = "orders" | "addresses" | "profile" | "security" | "affiliate" | "coupons" | "messages";
 // Akordiyon bölüm anahtarları (tek akordiyon; üst menü yok)
@@ -1122,6 +1123,7 @@ function AccountPageInner() {
                      </CardContent>
                   </Card>
 
+                  <MarketingConsentToggle />
                   {/* Tehlikeli alan — KVKK hesap kapatma */}
                   <div className="mt-6 rounded-2xl border-2 border-red-100 bg-red-50/40 p-5">
                     <h4 className="font-black text-red-700 uppercase tracking-tight text-sm">Hesabı Kapat</h4>

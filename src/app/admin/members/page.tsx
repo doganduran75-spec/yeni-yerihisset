@@ -50,6 +50,7 @@ type Member = {
   import_source?: string | null;
   order_count?: number;
   account_state?: "guest" | "unverified" | "member" | "none" | null; // hesap durumu (20261028000001)
+  marketing_consent?: boolean; // kampanya e-postası izni (20261029000001)
   roleIds: string[];
   tagOptionIds: string[];
 };
@@ -149,15 +150,17 @@ export default function MembersPage() {
         if (error) throw error;
         const rows = (data as any[]) || [];
         const ids = rows.map((r) => r.id);
-        const [ur, ut] = ids.length ? await Promise.all([
+        const [ur, ut, mc] = ids.length ? await Promise.all([
           supabase.from("user_roles").select("user_id, role_id").in("user_id", ids),
           supabase.from("user_tags").select("user_id, tag_option_id").in("user_id", ids),
-        ]) : [{ data: [] }, { data: [] }];
+          (supabase as any).from("profiles").select("id, marketing_consent").in("id", ids),
+        ]) : [{ data: [] }, { data: [] }, { data: [] }];
+        const consent = new Set(((mc.data as any[]) || []).filter((r) => r.marketing_consent).map((r) => r.id));
         const roleMap = new Map<string, string[]>();
         const tagMap  = new Map<string, string[]>();
         ((ur.data as any[]) || []).forEach((r) => roleMap.set(r.user_id, [...(roleMap.get(r.user_id) || []), r.role_id]));
         ((ut.data as any[]) || []).forEach((t) => tagMap.set(t.user_id, [...(tagMap.get(t.user_id) || []), t.tag_option_id]));
-        setMembers(rows.map((r) => ({ ...r, order_count: Number(r.order_count), roleIds: roleMap.get(r.id) || [], tagOptionIds: tagMap.get(r.id) || [] })));
+        setMembers(rows.map((r) => ({ ...r, order_count: Number(r.order_count), roleIds: roleMap.get(r.id) || [], tagOptionIds: tagMap.get(r.id) || [], marketing_consent: consent.has(r.id) })));
         setTotal(rows.length ? Number(rows[0].total) : 0);
       } else {
         let qy = (supabase as any).from("contacts").select("*", { count: "exact" }).is("linked_user_id", null)
@@ -439,6 +442,9 @@ export default function MembersPage() {
                               <Badge className="text-[10px] font-semibold border px-1.5 py-0 bg-slate-100 text-slate-600 border-slate-200" title="Eski siteden aktarıldı">
                                 {member.import_source === "woo_attipas" ? "Attipas" : "Eski site"}
                               </Badge>
+                            )}
+                            {member.marketing_consent && (
+                              <Badge className="text-[10px] font-semibold border px-1.5 py-0 bg-sky-50 text-sky-700 border-sky-200" title="Kampanya e-postası almaya izin verdi">Kampanya izni</Badge>
                             )}
                             {memberRoles.map(r => (
                               <Badge key={r.id} className={cn("text-[10px] font-semibold border px-1.5 py-0", roleColor(r.slug))}>{r.name}</Badge>

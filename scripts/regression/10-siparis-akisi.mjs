@@ -2,13 +2,13 @@
 // fiyat doğrulama, stok düşümü/iadesi, kargo, kuponların TÜM kuralları, hediye, misafir siparişi,
 // yetki, ödeme onayı → Müşteri rolü, ücret iadesi, iptal, kargo → teslim → iade al, satış ortaklığı,
 // reklam kaynağı + Meta Conversions API (test siparişi gönderilmez), üyelik durumu + e-posta doğrulama +
-// Fırsat/iş ortaklığı ayrıcalığı, stok bildirimi, silme, süresi dolan sipariş.
+// Fırsat/iş ortaklığı ayrıcalığı, kampanya e-postası izni, stok bildirimi, silme, süresi dolan sipariş.
 //
 // Test verisi: kategori "regresyon-test", pasif ürünler "REGRESYON-TEST …" (mağazada görünmez,
 // SKU/barkod yok → pazaryerine gitmez), kuponlar "RGT…", üyeler "rgt-…@yerihisset.test"
 // (bu adreslere e-posta asla gitmez, yöneticiye "yeni sipariş" bildirimi düşmez).
 // Başta önceki çalıştırmadan kalan, sonda bu çalıştırmanın verisi silinir.
-import { randomBytes } from "node:crypto";
+import { randomBytes, createHmac } from "node:crypto";
 
 const DOMAIN = "yerihisset.test";
 
@@ -33,6 +33,7 @@ export default {
         DELETE FROM public.orders WHERE user_id IN (${users}) OR id IN (SELECT order_id FROM public.order_items WHERE product_id IN (${prods}));
         DELETE FROM public.notification_log WHERE recipient ILIKE '%@${DOMAIN}' OR user_id IN (${users});
         DELETE FROM public.email_queue WHERE recipient_email ILIKE '%@${DOMAIN}';
+        DELETE FROM public.marketing_consent_log WHERE email ILIKE '%@${DOMAIN}' OR user_id IN (${users});
         DO $$ BEGIN
           IF to_regclass('public.contacts') IS NOT NULL THEN DELETE FROM public.contacts WHERE email ILIKE '%@${DOMAIN}'; END IF;
         END $$;
@@ -424,6 +425,43 @@ export default {
           const m2 = await api("/api/messages/notify", { token: F.member.token, body: { orderId: O.guest, senderRole: "admin" } });
           ok(m1.status === 403 && m2.status === 403, "Üye başkasının siparişi için mesaj e-postası tetikleyemiyor", `${why(m1)} / ${why(m2)}`);
         }
+      });
+
+      await part("Kampanya e-postası izni", async () => {
+        const mc = (uid) => row(`SELECT marketing_consent AS c, marketing_consent_source AS s FROM public.profiles WHERE id = ${lit(uid)}`) || {};
+        const logs = (uid) => num(`SELECT count(*) FROM public.marketing_consent_log WHERE user_id = ${lit(uid)}`);
+        // E-postadaki bağlantının imzası (src/lib/marketing-consent.ts ile aynı kural)
+        const tok = (uid) => `${uid}.${createHmac("sha256", `marketing-consent:${process.env.SUPABASE_SERVICE_ROLE_KEY || ""}`).update(uid).digest("base64url").slice(0, 32)}`;
+
+        ok(mc(F.member.id).c === false, "Varsayılan: izin yok", JSON.stringify(mc(F.member.id)));
+        const anon = await api("/api/marketing-consent", { body: { granted: true } });
+        ok(anon.status === 401, "Girişsiz ve bağlantısız izin verilemiyor", why(anon));
+        const a = await api("/api/marketing-consent", { token: F.member.token, body: { granted: true } });
+        ok(a.status === 200 && mc(F.member.id).c === true && mc(F.member.id).s === "account" && logs(F.member.id) === 1, "Hesabım'dan izin verildi + ispat kaydı", `${why(a)} ${JSON.stringify(mc(F.member.id))}, kayıt ${logs(F.member.id)}`);
+        const p = await rest(`profiles?id=eq.${F.member.id}`, { token: F.member.token, method: "PATCH", headers: { Prefer: "return=representation" }, body: { marketing_consent: false } });
+        ok(mc(F.member.id).c === true, "İzin tarayıcıdan doğrudan değiştirilemiyor (kayıtsız)", `HTTP ${p.status} — profiles.marketing_consent istemciye açık`);
+
+        const g = await api(`/api/marketing-consent?t=${encodeURIComponent(tok(F.member.id))}`, { method: "GET" });
+        ok(g.status === 200 && g.json?.granted === true && /•/.test(g.json?.email || ""), "E-posta bağlantısı durumu okuyor (adres maskeli)", `${why(g)} ${JSON.stringify(g.json)}`);
+        const out = await api("/api/marketing-consent", { body: { t: tok(F.member.id), granted: false } });
+        ok(out.status === 200 && mc(F.member.id).c === false && mc(F.member.id).s === "email_link" && logs(F.member.id) === 2, "E-posta bağlantısıyla kampanyadan çıkış", `${why(out)} ${JSON.stringify(mc(F.member.id))}`);
+        const bad = await api("/api/marketing-consent", { body: { t: tok(F.member.id).slice(0, -2) + "xx", granted: true } });
+        ok(bad.status === 400 && mc(F.member.id).c === false, "Değiştirilmiş bağlantı reddediliyor", why(bad));
+        const page = await api(`/kampanya-izni?t=${encodeURIComponent(tok(F.member.id))}`, { method: "GET" });
+        ok(page.status === 200, "Kampanya izni sayfası açılıyor", `HTTP ${page.status}`);
+
+        // Ödeme sayfasındaki kutu: üye ve misafir siparişinde izin kaydedilir
+        const r = await order([MAIN(1)], { marketingConsent: true });
+        ok(!!r.json?.orderId && mc(F.member.id).c === true && mc(F.member.id).s === "checkout", "Siparişte işaretlenen kutu izni kaydetti", `${why(r)} ${JSON.stringify(mc(F.member.id))}`);
+        const r0 = await order([MAIN(1)]);
+        ok(!!r0.json?.orderId && mc(F.member.id).c === true, "Kutu işaretlenmeden verilen sipariş izni geri almıyor", JSON.stringify(mc(F.member.id)));
+        const ge = `rgt-izin-${RUN}@${DOMAIN}`;
+        const gr = await api("/api/orders/create", {
+          headers: { "x-forwarded-for": F.ip },
+          body: { items: [MAIN(1)], guest: { email: ge, firstName: "Elif", lastName: "Deneme", phone: "5551234568", city: "İstanbul", district: "Kadıköy", addressDetail: "Moda Caddesi No 14 Daire 2" }, paymentMethod: "bank_transfer", _hp: "", _t: 6000, marketingConsent: true },
+        });
+        const gid = one(`SELECT id FROM public.profiles WHERE email = ${lit(ge)}`);
+        ok(gr.status === 200 && gid && mc(gid).c === true, "Misafir siparişinde izin kaydedildi", `${why(gr)} ${gid ? JSON.stringify(mc(gid)) : "profil yok"}`);
       });
 
       await part("Stok bildirimi (Stoğa girince haber ver)", async () => {

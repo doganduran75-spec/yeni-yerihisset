@@ -1,5 +1,6 @@
 import { randomBytes } from "crypto";
 import { createMailTransport, isTestEmail } from "./mail-guard";
+import { consentUrl } from "./marketing-consent";
 import { createAdminClient } from "./supabase-admin";
 import { buildSmtpConfig } from "./smtp-config";
 
@@ -336,7 +337,7 @@ export async function sendOrderNotification(
   let profile: any = null;
   if (uid) {
     const { data: p } = await (supabase as any).from("profiles")
-      .select("first_name, last_name, email").eq("id", uid).maybeSingle();
+      .select("first_name, last_name, email, marketing_consent").eq("id", uid).maybeSingle();
     profile = p ?? null;
   }
   const customerName = [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") || "Değerli Müşterimiz";
@@ -456,6 +457,12 @@ export async function sendOrderNotification(
   // E-postayı aldıysa adres onundur → bağlantıya tıklaması yeterli (ayrı e-posta gitmez).
   if (uid && ["order_placed", "order_paid", "order_shipped"].includes(trigger)) {
     bodyHtml += await buildVerifyBoxHtml(supabase, uid, storeUrl).catch(() => "");
+  }
+  // Kampanya e-postası izni yoksa sipariş onayında kısa davet (izin, açılan sayfadaki düğmeyle verilir)
+  if (uid && trigger === "order_placed" && profile && profile.marketing_consent === false) {
+    bodyHtml += `
+    <p style="margin:18px 0 0;font-size:13px;color:#64748b;line-height:1.5">Kampanya ve indirimlerden ilk sen haberdar olmak ister misin?
+      <a href="${consentUrl(uid)}" style="color:#4d7c0f;font-weight:700">Evet, kampanya e-postası almak istiyorum</a></p>`;
   }
 
   // --- Push bildirimi ---
