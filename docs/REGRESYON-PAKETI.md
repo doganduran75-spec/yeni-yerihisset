@@ -100,7 +100,7 @@ Kısa turu yap, ardından:
 | T3 | İptal | T1'i "Siparişi iptal et" (iade onay kutusu) | Ödeme "İade edildi", stok geri; e-posta "banka hesabına iade edildi" |
 | T4 | İade e-postası | Bir siparişin iadesinde müşteriye giden e-posta | Tutar ve yöntem doğru (akışın kendisi otomatik testte) |
 | T5 | Şifre | Çıkış → "Şifremi unuttum" → e-postadaki bağlantı → yeni şifre | Giriş oldu; admin'de e-posta "doğrulandı" |
-| T6 | Hediye | Hediyeli ürünü sepete ekle → sayfayı yenile → hediyeyi kaldır | Hediye otomatik geldi, kaybolmadı, "Sana hediye" olarak geri döndü |
+| T6 | Hediye | Hediyeli ürünü sepete ekle → sayfayı yenile → hediyeyi kaldır | Hediye sepet listesinde ürünlerin altında, ürün kartı boyutunda; otomatik geldi, kaybolmadı, "Sana hediye" olarak geri döndü |
 | T7 | Stok bildirimi e-postaları | Tükenmiş numarada "Stoğa girince haber ver" → stok gir → "Stok geldi" gönder | Onay ve "stok geldi" e-postaları geldi, görünüm düzgün (kayıt akışı otomatik testte) |
 | T8 | Satış ortağı linki | Ortağın linkini gizli pencerede aç → sipariş ver | Link kodu sepete taşınıyor (tarayıcı kısmı; sipariş tarafı otomatik testte) |
 | T9 | Pazaryeri (açıksa) | Bir ürünün stoğunu değiştir | Senkron geçmişinde Trendyol/Hepsiburada ✓ |

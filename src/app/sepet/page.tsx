@@ -414,9 +414,6 @@ function RewardRows({ onPickVariant }: { onPickVariant: (p: PendingGift) => void
 
   return (
     <div className="space-y-3">
-      <h4 className="text-xs font-black uppercase tracking-wider flex items-center gap-2 text-olive-700">
-        <Gift size={14} className="text-olive-600" /> Hediyen
-      </h4>
 
       {groups.map((g) => {
         const chosen = g.confirmed[0];
@@ -424,9 +421,9 @@ function RewardRows({ onPickVariant }: { onPickVariant: (p: PendingGift) => void
         // ── Seçim yapılmış grup: seçileni öne çıkar, diğerlerini pasif göster ──
         if (chosen) {
           return (
-            <div key={g.key} className="rounded-2xl border-2 border-olive-300 bg-gradient-to-br from-olive-50 to-white p-3 space-y-2">
-              <div className="flex items-center gap-3">
-                <div className="w-20 h-20 bg-white rounded-xl overflow-hidden shrink-0 border border-olive-100 flex items-center justify-center">
+            <div key={g.key} className="rounded-xl bg-white shadow-sm ring-2 ring-olive-200 p-4 md:p-6 space-y-2">
+              <div className="flex items-center gap-4 md:gap-6">
+                <div className="w-24 h-32 md:w-32 md:h-40 bg-olive-50 rounded-2xl overflow-hidden shrink-0 border border-olive-100 flex items-center justify-center">
                   {chosen.image ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <Image src={chosen.image} alt={chosen.title} width={200} height={260} className="w-full h-full object-cover" />
@@ -436,7 +433,7 @@ function RewardRows({ onPickVariant }: { onPickVariant: (p: PendingGift) => void
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-[11px] font-black text-olive-700 uppercase tracking-wide flex items-center gap-1"><Check size={12} className="text-green-600" /> 🎁 Hediyen sepette</p>
-                  <p className="font-bold text-slate-900 text-sm leading-snug line-clamp-2">{chosen.title}</p>
+                  <p className="font-bold text-slate-900 md:text-lg leading-snug line-clamp-2">{chosen.title}</p>
                   {chosen.variant_name && (
                     <p className="text-xs font-semibold text-olive-600">{chosen.variant_name}</p>
                   )}
@@ -484,8 +481,8 @@ function RewardRows({ onPickVariant }: { onPickVariant: (p: PendingGift) => void
               <p className="text-[10px] font-bold text-olive-600 uppercase tracking-wide">Birini seçin</p>
             )}
             {g.pending.map((p) => (
-              <div key={p.rule_id} className="flex items-center gap-3 rounded-2xl border-2 border-dashed border-olive-300 bg-olive-50/40 p-3">
-                <div className="w-20 h-20 bg-white rounded-xl overflow-hidden shrink-0 border border-olive-100 flex items-center justify-center">
+              <div key={p.rule_id} className="flex items-center gap-4 md:gap-6 rounded-xl border-2 border-dashed border-olive-300 bg-olive-50/40 p-4 md:p-6">
+                <div className="w-24 h-32 md:w-32 md:h-40 bg-white rounded-2xl overflow-hidden shrink-0 border border-olive-100 flex items-center justify-center">
                   {p.image ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <Image src={p.image} alt={p.title} width={200} height={260} className="w-full h-full object-cover" />
@@ -495,7 +492,7 @@ function RewardRows({ onPickVariant }: { onPickVariant: (p: PendingGift) => void
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-[11px] font-black text-olive-700 uppercase tracking-wide">🎁 Sana hediye</p>
-                  <p className="font-bold text-slate-900 text-sm leading-snug line-clamp-2">{p.title}</p>
+                  <p className="font-bold text-slate-900 md:text-lg leading-snug line-clamp-2">{p.title}</p>
                   <div className="flex items-center gap-2 mt-0.5">
                     {p.original_price > 0 && (
                       <span className="text-xs text-slate-400 line-through">
@@ -532,23 +529,13 @@ function RewardRows({ onPickVariant }: { onPickVariant: (p: PendingGift) => void
 function RewardsAndCouponPanel({
   cartTotal,
   onApplied,
-  onPickVariant,
-  hasRewards,
 }: {
   cartTotal: number;
   onApplied: (discount: number, freeShipping: boolean) => void;
-  onPickVariant: (p: PendingGift) => void;
-  hasRewards: boolean;
 }) {
   return (
-    <Card className={`border-none shadow-sm bg-white rounded-3xl ${hasRewards ? "p-6 space-y-5" : "px-6 py-4"}`}>
-      {hasRewards && (
-        <>
-          <RewardRows onPickVariant={onPickVariant} />
-          <Separator className="bg-slate-100" />
-        </>
-      )}
-
+    // Hediyeler artık sepet listesinde ürünlerin altında (kullanıcı notu 6); burada yalnız kupon
+    <Card className="border-none shadow-sm bg-white rounded-3xl px-6 py-4">
       <CouponSection cartTotal={cartTotal} onApplied={onApplied} />
     </Card>
   );
@@ -780,7 +767,7 @@ export default function CartPage() {
               </div>
             )}
 
-            {/* Yalnızca satın alınan ürünler; hediyeler sağdaki panelde yönetilir */}
+            {/* Satın alınan ürünler + hemen altında hediyeler (aynı listede, aynı kart görünümü) */}
             <div className="space-y-3">
               {regularItems.map((item) => (
                 <CartCard
@@ -790,6 +777,7 @@ export default function CartPage() {
                   onUpdateQty={(qty) => updateQuantity(item.id, qty)}
                 />
               ))}
+              {hasRewards && <RewardRows onPickVariant={(p) => setActivePending(p.rule_id)} />}
             </div>
 
             <Link href="/magaza" className="inline-flex items-center gap-2 text-sm font-bold text-olive-600 hover:gap-3 transition-all pt-4">
@@ -802,8 +790,6 @@ export default function CartPage() {
             {/* Birleşik panel: ücretsiz ürünler + indirim kuponu */}
             <RewardsAndCouponPanel
               cartTotal={totalPrice}
-              hasRewards={hasRewards}
-              onPickVariant={(p) => setActivePending(p.rule_id)}
               onApplied={(d, fs) => { setCouponDiscount(d); setCouponFreeShip(fs); }}
             />
 
