@@ -100,6 +100,17 @@ export async function POST(req: NextRequest) {
     const { data, error } = await sb.rpc("order_receive_return", { p_order: orderId, p_items: items, p_note: body.note || null, p_actor: user.id });
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
     if (Number(data?.restocked) > 0) kickMarketplaceSync(500);
+    // Satış sonrası talep (src/lib/after-sale.ts): iade geldi → talep kapanır.
+    // Değişimde geri gelen (tutulmayan) ürün → değişim tamam, sipariş "oldu" (fatura sırası).
+    const { data: openCase } = await sb.from("order_cases").select("id, kind, status").eq("order_id", orderId).is("closed_at", null).maybeSingle();
+    if (openCase) {
+      const done = new Date().toISOString();
+      const exchangeDone = openCase.kind === "exchange" && ["keep_chosen", "label_sent"].includes(openCase.status);
+      if (openCase.kind === "return" || exchangeDone) {
+        await sb.from("order_cases").update({ status: exchangeDone ? "resolved" : "received", closed_at: done, updated_at: done }).eq("id", openCase.id);
+        if (exchangeDone) await sb.from("orders").update({ fit_status: "ok" }).eq("id", orderId);
+      }
+    }
     if (body.refund && Number(body.refund.amount) > 0) {
       const err = await doRefund(Number(body.refund.amount), String(body.refund.method || ""), body.refund.note || body.note);
       if (err) return NextResponse.json({ error: `İade kaydedildi ama ücret iadesi yapılamadı: ${err}` }, { status: 400 });

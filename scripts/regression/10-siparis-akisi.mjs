@@ -57,6 +57,7 @@ export default {
       F.cat = insert("categories", { name: "REGRESYON-TEST", slug: "regresyon-test" });
       F.prod = insert("products", { title: "REGRESYON-TEST Ayakkabı", slug: `regresyon-test-urun-${RUN}`, price: 1000, stock: 0, is_active: false, category_id: F.cat });
       F.var = insert("product_variants", { product_id: F.prod, price: 1000, stock: 30, is_active: true });
+      F.var2 = insert("product_variants", { product_id: F.prod, price: 1000, stock: 5, is_active: true }); // değişim alternatifi
       F.gift = insert("products", { title: "REGRESYON-TEST Hediye", slug: `regresyon-test-hediye-${RUN}`, price: 200, stock: 5, is_active: false });
       insert("free_gift_rules", { name: "REGRESYON-TEST hediye", trigger_category_id: F.cat, gift_product_id: F.gift, is_active: true });
       const coupon = (sfx, o) => insert("coupons", {
@@ -338,6 +339,95 @@ export default {
           const rf = await api("/api/admin/orders/action", { token: F.admin.token, body: { action: "refund", orderId: O.ret, amount: remain, method: "bank_transfer", confirmed: true, note: "regresyon kargo" } });
           ok(rf.status === 200 && ord(O.ret).payment_status === "refunded", "İade gelen siparişte kalan tutar iade edilebiliyor", `${why(rf)} → ${ord(O.ret).payment_status}`);
         }
+      });
+
+      await part("Satış sonrası: oldu / değişim / iade", async () => {
+        // Müşteri bağlantısının imzası (src/lib/after-sale.ts ile aynı kural)
+        const asTok = (id) => `${id}.${createHmac("sha256", `after-sale:${process.env.SUPABASE_SERVICE_ROLE_KEY || ""}`).update(id).digest("base64url").slice(0, 32)}`;
+        const caseOf = (id) => row(`SELECT * FROM public.order_cases WHERE order_id = ${lit(id)} ORDER BY created_at DESC LIMIT 1`);
+        const adminCase = (orderId, body) => api("/api/admin/orders/case", { token: F.admin.token, body: { orderId, ...body } });
+        const cust = (orderId, body) => api("/api/after-sale", { body: { r: asTok(orderId), ...body } });
+        const stock2 = () => num(`SELECT stock FROM public.product_variants WHERE id = ${lit(F.var2)}`);
+        // Teslim edilmiş site siparişi (yönetici panelinin yaptığı gibi tarayıcıdan durum güncellemesi)
+        const delivered = async () => {
+          const r = await order([MAIN(1)]);
+          const id = r.json?.orderId;
+          if (!id) throw new Error(`sipariş oluşturulamadı: ${why(r)}`);
+          const patch = (b) => rest(`orders?id=eq.${id}`, { token: F.admin.token, method: "PATCH", headers: { Prefer: "return=minimal" }, body: b });
+          await patch({ payment_status: "paid", status: "processing", shipment_status: "preparing" });
+          await patch({ shipment_status: "shipped" });
+          await patch({ shipment_status: "delivered" });
+          return id;
+        };
+
+        // Teslim edilmemiş sipariş → cevap verilemez
+        const pend = await order([MAIN(1)]);
+        if (pend.json?.orderId) {
+          const n0 = await cust(pend.json.orderId, { action: "ok" });
+          ok(n0.status === 400, "Teslim edilmemiş siparişte 'oldu' denemiyor", why(n0));
+        }
+
+        // ── Oldu ──
+        const A = await delivered();
+        const oa = ord(A);
+        ok(oa.fit_status === "trial" && !!oa.delivered_at, "Teslim edilince 'müşteri deniyor' + teslim tarihi", `${oa.fit_status} / ${oa.delivered_at}`);
+        const g = await api(`/api/after-sale?r=${encodeURIComponent(asTok(A))}`, { method: "GET" });
+        ok(g.status === 200 && g.json?.canAnswer === true && g.json?.items?.length === 1, "Müşteri sayfası açılıyor (imzalı bağlantı)", `${why(g)} ${JSON.stringify(g.json || {}).slice(0, 120)}`);
+        const bad = await api(`/api/after-sale?r=${encodeURIComponent(asTok(A).slice(0, -2) + "xx")}`, { method: "GET" });
+        ok(bad.status === 400, "Değiştirilmiş bağlantı reddediliyor", why(bad));
+        const mine = await api(`/api/after-sale?order=${A}`, { method: "GET", token: F.member.token });
+        const notMine = await api(`/api/after-sale?order=${A}`, { method: "GET", token: F.admin.token });
+        ok(mine.status === 200 && notMine.status === 400, "Hesabım'dan yalnız kendi siparişi açılıyor", `${why(mine)} / ${why(notMine)}`);
+        const k = await cust(A, { action: "ok" });
+        ok(k.status === 200 && ord(A).fit_status === "ok", "Müşteri 'oldu' dedi → fatura sırası", `${why(k)} → ${ord(A).fit_status}`);
+        const k2 = await cust(A, { action: "ok" });
+        ok(k2.status === 400, "Cevap ikinci kez verilemiyor", why(k2));
+
+        // ── Değişim döngüsü ──
+        const B = await delivered();
+        const itB = row(`SELECT id FROM public.order_items WHERE order_id = ${lit(B)} AND unit_price > 0`);
+        const ex = await cust(B, { action: "exchange", reason: "small", items: [{ order_item_id: itB.id, variant_id: F.var2 }] });
+        ok(ex.status === 200 && caseOf(B)?.status === "requested" && ord(B).fit_status === "exchange", "Değişim talebi açıldı", `${why(ex)} → ${caseOf(B)?.status}`);
+        const ex2 = await cust(B, { action: "return", items: [itB.id], method: "surat" });
+        ok(ex2.status === 400, "Açık talep varken ikinci talep açılamıyor", why(ex2));
+        const mem = await api("/api/admin/orders/case", { token: F.member.token, body: { orderId: B, op: "fit_ok" } });
+        ok(mem.status === 403, "Üye yönetici talep işlemi yapamıyor", why(mem));
+        const s2 = stock2();
+        const sh = await adminCase(B, { op: "ship_alt", tracking: "RGT-TAKIP-1" });
+        const altItem = row(`SELECT id, unit_price FROM public.order_items WHERE order_id = ${lit(B)} AND exchange_of = ${lit(itB.id)}`);
+        ok(sh.status === 200 && caseOf(B)?.status === "alt_shipped" && !!altItem && stock2() === s2 - 1, "Alternatif gönderildi (siparişe eklendi, stoğu düştü)", `${why(sh)} → ${caseOf(B)?.status}, stok ${s2} → ${stock2()}`);
+        ok(altItem && eq(altItem.unit_price, 1000) && eq(ord(B).total_amount, 1000 + S1000), "Alternatif ek ücret yaratmıyor (tutar aynı)", `kalem ${altItem?.unit_price}, tutar ${ord(B).total_amount}`);
+        const ad = await adminCase(B, { op: "alt_delivered" });
+        ok(ad.status === 200 && caseOf(B)?.status === "alt_delivered", "Alternatif teslim edildi → müşteriye 'hangisi oldu?'", why(ad));
+        const kp = await cust(B, { action: "keep", keep_item_id: altItem?.id, method: "surat" });
+        ok(kp.status === 200 && caseOf(B)?.status === "keep_chosen" && caseOf(B)?.keep_item_id === altItem?.id, "Müşteri tuttuğunu seçti", `${why(kp)} → ${caseOf(B)?.status}`);
+        const lb = await adminCase(B, { op: "send_label", method: "surat", code: "RGT123" });
+        ok(lb.status === 200 && caseOf(B)?.status === "label_sent" && caseOf(B)?.return_code === "RGT123", "Geri gönderim kodu gönderildi", why(lb));
+        const s1 = stock();
+        const rb = await api("/api/admin/orders/action", { token: F.admin.token, body: { action: "return", orderId: B, items: [{ item_id: itB.id, qty: 1, restock: true }], note: "regresyon değişim" } });
+        const cB = caseOf(B);
+        ok(rb.status === 200 && cB?.status === "resolved" && !!cB?.closed_at && ord(B).fit_status === "ok", "Tutulmayan ürün geldi → değişim tamam, sipariş 'oldu'", `${why(rb)} → ${cB?.status}, ${ord(B).fit_status}`);
+        ok(stock() === s1 + 1 && ord(B).shipment_status === "delivered" && Number(ord(B).refunded_amount || 0) === 0, "Değişimde geri gelen stoğa eklendi, para iadesi yok", `stok ${s1} → ${stock()}, kargo ${ord(B).shipment_status}, iade ${ord(B).refunded_amount}`);
+
+        // ── İade (havale → IBAN) ──
+        const C = await delivered();
+        const itC = row(`SELECT id FROM public.order_items WHERE order_id = ${lit(C)} AND unit_price > 0`);
+        const noIban = await cust(C, { action: "return", items: [itC.id], method: "ups" });
+        ok(noIban.status === 400, "Havalede IBAN'sız iade talebi reddediliyor", why(noIban));
+        const wrong = await cust(C, { action: "return", items: [itC.id], method: "ups", iban: "TR000000000000000000000000" });
+        ok(wrong.status === 400, "Geçersiz IBAN reddediliyor", why(wrong));
+        const bban = "0006100519786457841326";
+        let rem = 0; for (const d of bban + "292700") rem = (rem * 10 + Number(d)) % 97;
+        const iban = `TR${String(98 - rem).padStart(2, "0")}${bban}`;
+        const rt = await cust(C, { action: "return", items: [itC.id], method: "ups", iban, reason: "Beğenmedim" });
+        const cC = caseOf(C);
+        ok(rt.status === 200 && cC?.kind === "return" && cC?.return_method === "ups" && cC?.iban === iban, "İade talebi (UPS + IBAN) kaydedildi", `${why(rt)} ${JSON.stringify(cC || {}).slice(0, 120)}`);
+        const view = await api(`/api/after-sale?r=${encodeURIComponent(asTok(C))}`, { method: "GET" });
+        ok(!String(view.text).includes(bban), "IBAN müşteri sayfasında açık görünmüyor", "IBAN tam hâliyle dönüyor");
+        const lc = await adminCase(C, { op: "send_label", method: "aras", code: "RGT456" });
+        ok(lc.status === 200 && caseOf(C)?.return_method === "aras", "Yönetici kargo yolunu değiştirip kod gönderebiliyor (UPS almadı → Aras)", why(lc));
+        const rc = await api("/api/admin/orders/action", { token: F.admin.token, body: { action: "return", orderId: C, items: [{ item_id: itC.id, qty: 1, restock: true }], refund: { amount: Number(ord(C).total_amount), method: "bank_transfer" }, confirmed: true, note: "regresyon iade" } });
+        ok(rc.status === 200 && caseOf(C)?.status === "received" && !!caseOf(C)?.closed_at && ord(C).payment_status === "refunded", "İade geldi → talep kapandı, ödeme iade edildi", `${why(rc)} → ${caseOf(C)?.status}, ${ord(C).payment_status}`);
       });
 
       await part("Satış ortaklığı", async () => {

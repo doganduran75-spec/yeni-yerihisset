@@ -1,6 +1,7 @@
 import { randomBytes } from "crypto";
 import { createMailTransport, isTestEmail } from "./mail-guard";
 import { consentUrl } from "./marketing-consent";
+import { fitBoxHtml } from "./after-sale";
 import { createAdminClient } from "./supabase-admin";
 import { buildSmtpConfig } from "./smtp-config";
 
@@ -140,7 +141,7 @@ async function fetchOrderLineItems(
 }
 
 /** Tam email HTML dokümanı (wrapper) */
-function buildEmailDocument(bodyHtml: string, storeName: string): string {
+export function buildEmailDocument(bodyHtml: string, storeName: string): string {
   return `<!DOCTYPE html>
 <html lang="tr">
 <head>
@@ -195,7 +196,7 @@ function buildEmailDocument(bodyHtml: string, storeName: string): string {
  * HTML-only mailler spam filtresinde puan kaybeder; text alternatifi eklemek
  * teslim edilebilirliği artırır.
  */
-function htmlToText(html: string): string {
+export function htmlToText(html: string): string {
   return html
     .replace(/<style[\s\S]*?<\/style>/gi, "")
     .replace(/<head[\s\S]*?<\/head>/gi, "")
@@ -244,7 +245,7 @@ function formatAddressHtml(raw: any): string { // eslint-disable-line @typescrip
 // --- Ana fonksiyon ---
 
 /** Regresyon test siparişi mi? (müşterinin e-postası @…test) → yöneticiye bildirim/uyarı üretilmez */
-async function isTestOrder(supabase: any, userId?: string | null): Promise<boolean> {
+export async function isTestOrder(supabase: any, userId?: string | null): Promise<boolean> {
   if (!userId) return false;
   const { data } = await supabase.from("profiles").select("email").eq("id", userId).maybeSingle();
   return isTestEmail(data?.email);
@@ -320,7 +321,7 @@ export async function sendOrderNotification(
   // 1. Sipariş + ilişkileri EMBED'SİZ getir (self-host PostgREST embed kırılgan)
   const { data: order, error: orderError } = await (supabase
     .from("orders")
-    .select("id, order_number, total_amount, status, created_at, shipping_address, payment_method, user_id, channel, payment_status, refunded_amount, refund_method, credit_used, auto_expired")
+    .select("id, order_number, total_amount, status, created_at, shipping_address, payment_method, user_id, channel, payment_status, refunded_amount, refund_method, credit_used, auto_expired, import_source")
     .eq("id", context.orderId)
     .maybeSingle() as any) as { data: any; error: any };
 
@@ -457,6 +458,10 @@ export async function sendOrderNotification(
   // E-postayı aldıysa adres onundur → bağlantıya tıklaması yeterli (ayrı e-posta gitmez).
   if (uid && ["order_placed", "order_paid", "order_shipped"].includes(trigger)) {
     bodyHtml += await buildVerifyBoxHtml(supabase, uid, storeUrl).catch(() => "");
+  }
+  // Teslim edildi: "acele yok, evde dene — oldu mu?" + Oldu / Değişim / İade (site siparişi; src/lib/after-sale.ts)
+  if (trigger === "order_delivered" && (order.channel || "site") === "site" && !order.import_source) {
+    bodyHtml += fitBoxHtml(order.id);
   }
   // Kampanya e-postası izni yoksa sipariş onayında kısa davet (izin, açılan sayfadaki düğmeyle verilir)
   if (uid && trigger === "order_placed" && profile && profile.marketing_consent === false) {

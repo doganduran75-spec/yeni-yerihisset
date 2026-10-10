@@ -919,7 +919,15 @@ function AccountPageInner() {
                                 )}
                               </Button>
                               {/* İade / Değişim — yalnız ödemesi alınmış siparişte; talep gönderildiyse yazışmayı açar */}
-                              {order.payment_status === "paid" && order.status !== "cancelled" && (
+                              {/* Teslim edilmiş site siparişi → yeni "oldu mu? / değişim / iade" sayfası (src/app/deneme-sonucu) */}
+                              {order.payment_status === "paid" && order.status !== "cancelled" && order.shipment_status === "delivered" && (order.channel || "site") === "site" && !order.import_source ? (
+                                <Link
+                                  href={`/deneme-sonucu?siparis=${order.id}`}
+                                  className="inline-flex items-center font-bold text-xs gap-1.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 h-9 px-3"
+                                >
+                                  <RotateCcw size={14} /> Oldu mu? · Değişim / İade
+                                </Link>
+                              ) : order.payment_status === "paid" && order.status !== "cancelled" && (
                                 returnRequested.has(order.id) ? (
                                   <Button
                                     variant="outline" size="sm"

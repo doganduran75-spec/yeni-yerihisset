@@ -9,7 +9,9 @@
 
 export type NextActionKey =
   | "mark_paid" | "cancel" | "ship_kargonomi" | "ship_manual" | "mark_delivered"
-  | "return" | "refund" | "invoice" | "return_invoice" | "mp_restock";
+  | "return" | "refund" | "invoice" | "return_invoice" | "mp_restock"
+  // satış sonrası (B aşaması — src/lib/after-sale.ts)
+  | "fit_ok" | "case_link" | "ship_alt" | "alt_delivered" | "send_label" | "close_case";
 
 export type NextAction = { key: NextActionKey; label: string; kind: "primary" | "danger" };
 
@@ -25,7 +27,14 @@ export type OrderLike = {
   kargonomi_tracking_code?: string | null;
   mp_restocked_at?: string | null;
   order_items?: { quantity: number; returned_qty?: number | null }[] | null;
+  fit_status?: string | null;      // trial · ok · exchange · return
+  delivered_at?: string | null;
+  open_case?: { kind: string; status: string; return_method?: string | null; label_sent_at?: string | null } | null;
 };
+
+export const TRIAL_DAYS = 14;
+export const UPS_WAIT_DAYS = 5;
+const daysSince = (iso?: string | null) => (iso ? (Date.now() - new Date(iso).getTime()) / 86400000 : 0);
 
 export type NextStep = {
   stage: string;          // ekranda gösterilecek aşama adı
@@ -94,6 +103,26 @@ function coreNextStep(o: OrderLike): NextStep {
     ], needsAction: true };
   }
 
+  // Satış sonrası açık talep (değişim / iade) — kargodan sonra her şeyden önce
+  const c = o.open_case;
+  if (c) {
+    const upsLate = c.status === "label_sent" && c.return_method === "ups" && daysSince(c.label_sent_at) > UPS_WAIT_DAYS;
+    const upsHint = upsLate ? `UPS ${UPS_WAIT_DAYS} gündür almadı — Sürat ya da Aras için yeni kod gönder.` : undefined;
+    const close: NextAction = { key: "close_case", label: "Talebi kapat", kind: "danger" };
+    if (c.kind === "return") {
+      if (c.status === "requested") return { stage: "İade talebi", hint: "Kargonomi'den etiket oluştur, kodu gir — müşteriye e-postayla gider.", actions: [{ key: "send_label", label: "İade kodunu gönder", kind: "primary" }, close], needsAction: true };
+      return { stage: "İade yolda", hint: upsHint ?? "Ürün gelince “İade geldi”.", actions: [{ key: "return", label: "İade geldi", kind: "danger" }, { key: "send_label", label: "Kodu değiştir / yeniden gönder", kind: "primary" }], needsAction: upsLate };
+    }
+    switch (c.status) {
+      case "requested": return { stage: "Değişim talebi", hint: "İstenen numarayı gönder.", actions: [{ key: "ship_alt", label: "Alternatifi gönder", kind: "primary" }, close], needsAction: true };
+      case "waiting_stock": return { stage: "Değişim — stok bekleniyor", hint: "Müşteri istediği numaranın gelmesini bekliyor.", actions: [{ key: "ship_alt", label: "Alternatifi gönder", kind: "primary" }, close], needsAction: false };
+      case "alt_shipped": return { stage: "Değişim — alternatif kargoda", actions: [{ key: "alt_delivered", label: "Alternatif teslim edildi", kind: "primary" }], needsAction: false };
+      case "alt_delivered": return { stage: "Değişim — müşteri deniyor", hint: "Müşteri hangisinin olduğunu seçecek (e-postayla soruldu).", actions: [{ key: "case_link", label: "Müşteri adına seç", kind: "primary" }], needsAction: false };
+      case "keep_chosen": return { stage: "Değişim — müşteri seçti", hint: "Tutulmayan ürün için kargo kodu gönder.", actions: [{ key: "send_label", label: "Geri gönderim kodunu gönder", kind: "primary" }], needsAction: true };
+      default: return { stage: "Değişim — tutulmayan ürün yolda", hint: upsHint ?? "Ürün gelince “İade geldi” (stoğa ekle, para iadesi yok).", actions: [{ key: "return", label: "İade geldi", kind: "danger" }, { key: "send_label", label: "Kodu değiştir / yeniden gönder", kind: "primary" }], needsAction: upsLate };
+    }
+  }
+
   // Kargodan sonra: iade geldiyse önce para iadesi + iade faturası
   if (someReturned) {
     const acts: NextAction[] = [];
@@ -112,7 +141,16 @@ function coreNextStep(o: OrderLike): NextStep {
     ], needsAction: ship === "undelivered" };
   }
 
-  // Teslim edildi
+  // Teslim edildi — müşteri deniyor ("oldu mu?" e-postası gitti); 14 gün cevap yoksa oldu sayılır
+  if (o.fit_status === "trial" && daysSince(o.delivered_at) < TRIAL_DAYS) {
+    return { stage: "Teslim edildi — müşteri deniyor", hint: `Müşteri ${TRIAL_DAYS} gün içinde “oldu / değişim / iade” diyecek.`, actions: [
+      { key: "fit_ok", label: "Oldu say", kind: "primary" },
+      { key: "case_link", label: "Müşteri adına değişim / iade aç", kind: "primary" },
+      { key: "return", label: "İade al", kind: "danger" },
+    ], needsAction: false };
+  }
+
+  // Teslim edildi (oldu / süre doldu / eski sipariş)
   const acts: NextAction[] = [];
   if (inv === "pending") acts.push(invoiceAction);
   acts.push({ key: "return", label: "İade al", kind: "danger" });

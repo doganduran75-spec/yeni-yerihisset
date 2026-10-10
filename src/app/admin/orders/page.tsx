@@ -54,6 +54,10 @@ type OrderItem = {
   products: { title: string } | null;
 };
 
+// Sıradaki adım + açık satış sonrası talep (order_cases — src/lib/after-sale.ts)
+const openCaseOf = (o: any) => ((o?.order_cases as any[]) || []).find((c) => !c.closed_at) ?? null;
+const nx = (o: any) => orderNextStep({ ...o, open_case: openCaseOf(o) });
+
 // Siparişin geldiği reklam/kampanya (orders.attribution.source — src/lib/ad-context.ts)
 function adSourceLabel(o: { attribution?: { source?: Record<string, unknown> } | null }): string | null {
   const s = o.attribution?.source;
@@ -313,7 +317,7 @@ export default function OrdersPage() {
       for (let from = 0; ; from += 1000) {
         const { data, error } = await supabase
           .from("orders")
-          .select(`*, profiles(first_name, last_name, email, phone, email_verified), affiliate_profiles(code)`)
+          .select(`*, profiles(first_name, last_name, email, phone, email_verified), affiliate_profiles(code), order_cases(*)`)
           .order("created_at", { ascending: false })
           .range(from, from + 999);
         if (error) {
@@ -650,7 +654,7 @@ export default function OrdersPage() {
     try {
       const { data } = await supabase
         .from("order_items")
-        .select("id, quantity, unit_price, product_id, variant_id, sku, variant_name, title, barcode, external_status, stock_applied_at, stock_restored_at, returned_qty, restocked_qty, products(title)")
+        .select("id, quantity, unit_price, product_id, variant_id, sku, variant_name, title, barcode, external_status, stock_applied_at, stock_restored_at, returned_qty, restocked_qty, exchange_of, products(title)")
         .eq("order_id", order.id);
       const items = (data as any[]) ?? [];
       setSelectedOrder(prev => prev ? { ...prev, order_items: items } : null);
@@ -816,6 +820,31 @@ export default function OrdersPage() {
     { value: "not_required", label: "Gerekmiyor" },
   ];
 
+  // Satış sonrası (değişim / iade) yönetici işlemleri → /api/admin/orders/case
+  async function caseOp(o: Order, payload: Record<string, unknown>, refresh = true): Promise<any> {
+    const { data: { session } } = await supabase.auth.getSession();
+    const r = await fetch("/api/admin/orders/case", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
+      body: JSON.stringify({ orderId: o.id, ...payload }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { siteAlert({ message: d.error || "İşlem yapılamadı", tone: "danger" }); return null; }
+    if (refresh) await refreshOrder(o.id);
+    return d;
+  }
+
+  // Tek siparişi (talepleriyle) yeniden oku → liste + detay güncellenir
+  async function refreshOrder(id: string) {
+    const { data } = await (supabase as any).from("orders")
+      .select(`*, profiles(first_name, last_name, email, phone, email_verified), affiliate_profiles(code), order_cases(*)`)
+      .eq("id", id).maybeSingle();
+    if (!data) return;
+    setOrders((prev) => prev.map((x) => (x.id === id ? { ...x, ...data } : x)));
+    if (selectedOrder?.id === id) await handleViewDetails({ ...(selectedOrder as any), ...data });
+    setTimelineTick((t) => t + 1);
+  }
+
   // Sıradaki adım panelindeki düğmeler → mevcut işlemler (kurallar src/lib/order-next-step.ts)
   async function runNextAction(o: Order, key: NextActionKey) {
     switch (key) {
@@ -832,6 +861,18 @@ export default function OrdersPage() {
         if (await siteConfirm({ title: "Fatura kesildi mi?", message: "Faturayı kestiysen işaretle.", confirmText: "Fatura kesildi" })) updateField(o.id, { invoice_status: "invoiced" });
         return;
       case "return_invoice": return updateField(o.id, { invoice_status: "return_invoiced" });
+      case "fit_ok": await caseOp(o, { op: "fit_ok" }); return;
+      case "case_link": {
+        const d = await caseOp(o, { op: "link" }, false);
+        if (d?.url) window.open(d.url, "_blank", "noopener");
+        return;
+      }
+      case "alt_delivered":
+        if (await siteConfirm({ title: "Alternatif teslim edildi mi?", message: "Müşteriye “hangisi oldu?” e-postası gider.", confirmText: "Teslim edildi" })) await caseOp(o, { op: "alt_delivered" });
+        return;
+      case "close_case":
+        if (await siteConfirm({ title: "Talep kapatılsın mı?", message: "Müşteri vazgeçtiyse kapat; sipariş “müşteri deniyor” durumuna döner.", confirmText: "Kapat", tone: "danger" })) await caseOp(o, { op: "close" });
+        return;
       case "mp_restock": {
         if (!(await siteConfirm({ title: "İade geldi mi?", message: "Ürünler depoya döndüyse ve satılabilir durumdaysa stoğa eklenir; yeni stok tüm pazaryerlerine gönderilir.", confirmText: "Stoğa ekle" }))) return;
         const { data: { session } } = await supabase.auth.getSession();
@@ -863,7 +904,7 @@ export default function OrdersPage() {
     if (v === "partial_refund" || v === "refunded") {
       if (!paidNow) { siteAlert({ message: "Ödemesi alınmamış siparişe ücret iadesi girilemez.", tone: "danger" }); return; }
       // Para iadesi yalnız iptalle ya da ürün geri geldikten sonra (İade al) — sıradaki adım kuralı
-      if (!orderNextStep(o as any).actions.some((a) => a.key === "refund")) {
+      if (!nx(o).actions.some((a) => a.key === "refund")) {
         siteAlert({ title: "Önce iade", message: "Ücret iadesi, ürün geri gelince “İade al” penceresinde ya da kargodan önce “Siparişi iptal et” ile yapılır.", tone: "danger" });
         return;
       }
@@ -1028,7 +1069,7 @@ export default function OrdersPage() {
         if (fRet === "any_refund" && !refundedPay) return false;
       }
       if (fMethod !== "all" && (o.payment_method || "credit_card") !== fMethod) return false;
-      if (fTodo && !orderNextStep(o as any).needsAction) return false;
+      if (fTodo && !nx(o).needsAction) return false;
       if (fChannel !== "all" && (o.channel || "site") !== fChannel) return false;
       if (!needle) return true;
       const hay = trNorm([
@@ -1117,7 +1158,7 @@ export default function OrdersPage() {
                 className={`h-9 px-3 rounded-lg border text-sm font-bold transition ${fTodo ? "bg-olive-600 text-white border-olive-600" : "bg-background text-slate-700 hover:bg-slate-50"}`}
                 title="Sıradaki adımı sende olan siparişler (ödeme onayı, kargoya verme, iade, fatura…)"
               >
-                Bekleyen işlerim ({orders.filter((o) => orderNextStep(o as any).needsAction).length})
+                Bekleyen işlerim ({orders.filter((o) => nx(o).needsAction).length})
               </button>
               <div className="relative flex-1 min-w-[220px]">
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -1608,7 +1649,7 @@ export default function OrdersPage() {
               {/* SIRADAKİ ADIM — yalnız bu durumda yapılabilecek işlemler (src/lib/order-next-step.ts) */}
               {(() => {
                 const o = selectedOrder;
-                const step = orderNextStep(o as any);
+                const step = nx(o);
                 const refunded = Number(o.refunded_amount || 0);
                 return (
                   <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3 space-y-2">
@@ -1622,9 +1663,18 @@ export default function OrdersPage() {
                       )}
                     </div>
                     {step.hint && <p className="text-xs text-slate-600">{step.hint}</p>}
+                    {openCaseOf(o) && (
+                      <CaseBox
+                        order={o}
+                        kase={openCaseOf(o)}
+                        canSendLabel={step.actions.some((a) => a.key === "send_label")}
+                        canShipAlt={step.actions.some((a) => a.key === "ship_alt")}
+                        onDone={() => refreshOrder(o.id)}
+                      />
+                    )}
                     {step.actions.length > 0 && (
                       <div className="flex flex-wrap items-center gap-2">
-                        {step.actions.map((a) => (
+                        {step.actions.filter((a) => a.key !== "send_label" && a.key !== "ship_alt").map((a) => (
                           <Button
                             key={a.key}
                             size="sm"
@@ -2481,6 +2531,80 @@ function OrderActionDialog({ mode, order, onClose, onDone }: {
           </Button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── Satış sonrası talep kutusu (değişim / iade) ─────────────────────────────
+// Müşterinin isteği, kargo yöntemi, IBAN; kod / alternatif gönderme girişleri. Kurallar: order-next-step.
+const RETURN_METHODS: Record<string, string> = { ups: "UPS adresten alım", surat: "Sürat şubesine teslim", aras: "Aras şubesine teslim" };
+const CASE_STATUS: Record<string, string> = {
+  requested: "Talep alındı", waiting_stock: "Stok bekleniyor", alt_shipped: "Alternatif kargoda", alt_delivered: "Müşteri deniyor",
+  keep_chosen: "Müşteri seçti", label_sent: "Kargo kodu gönderildi",
+};
+function CaseBox({ order, kase, canSendLabel, canShipAlt, onDone }: {
+  order: Order; kase: any; canSendLabel: boolean; canShipAlt: boolean; onDone: () => void;
+}) {
+  const [method, setMethod] = useState<string>(kase.return_method || "surat");
+  const [code, setCode] = useState("");
+  const [tracking, setTracking] = useState("");
+  const [busy, setBusy] = useState(false);
+  const items: any[] = (order as any).order_items || [];
+  const label = (id: string) => { const i = items.find((x) => x.id === id); return i ? `${i.products?.title ?? i.title ?? "Ürün"}${i.variant_name ? ` (${i.variant_name})` : ""}` : "—"; };
+
+  async function call(payload: Record<string, unknown>) {
+    setBusy(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const r = await fetch("/api/admin/orders/case", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
+        body: JSON.stringify({ orderId: order.id, ...payload }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { siteAlert({ message: d.error || "İşlem yapılamadı", tone: "danger" }); return; }
+      siteAlert({ message: d.email === "failed" ? "Kaydedildi ama müşteriye e-posta gönderilemedi." : "Kaydedildi.", tone: d.email === "failed" ? "danger" : "success" });
+      onDone();
+    } finally { setBusy(false); }
+  }
+
+  return (
+    <div className="rounded-lg border border-purple-200 bg-white p-3 space-y-2 text-xs">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-bold text-purple-800">{kase.kind === "exchange" ? "Değişim talebi" : "İade talebi"}</span>
+        <span className="rounded-full bg-purple-50 text-purple-700 px-2 py-0.5">{CASE_STATUS[kase.status] ?? kase.status}</span>
+        <span className="text-muted-foreground ml-auto">{new Date(kase.created_at).toLocaleString("tr-TR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
+      </div>
+      {kase.reason && <p><span className="text-muted-foreground">Sebep:</span> {kase.reason === "small" ? "Küçük geldi" : kase.reason === "big" ? "Büyük geldi" : kase.reason}</p>}
+      {(kase.items || []).map((x: any, i: number) => (
+        <p key={i}>
+          {label(x.order_item_id)}
+          {kase.kind === "exchange" && <> → <b>{x.want_label || "numara seçmedi"}</b>{x.wait ? <span className="text-amber-700"> · stok bekliyor</span> : null}</>}
+        </p>
+      ))}
+      {kase.keep_item_id && <p><span className="text-muted-foreground">Tuttuğu:</span> <b>{label(kase.keep_item_id)}</b> — diğeri geri gelecek</p>}
+      {kase.return_method && <p><span className="text-muted-foreground">Kargo:</span> {RETURN_METHODS[kase.return_method] ?? kase.return_method}{kase.return_code ? <> · kod <code className="font-mono">{kase.return_code}</code></> : null}</p>}
+      {kase.alt_tracking && <p><span className="text-muted-foreground">Alternatif takip:</span> <code className="font-mono">{kase.alt_tracking}</code></p>}
+      {kase.iban && <p><span className="text-muted-foreground">IBAN (havale iadesi):</span> <code className="font-mono select-all">{kase.iban}</code></p>}
+      {kase.customer_note && <p className="whitespace-pre-wrap"><span className="text-muted-foreground">Müşteri notu:</span> {kase.customer_note}</p>}
+
+      {canShipAlt && (
+        <div className="flex flex-wrap items-center gap-2 pt-1 border-t">
+          <input value={tracking} onChange={(e) => setTracking(e.target.value)} placeholder="Kargo takip no (opsiyonel)" className="h-8 flex-1 min-w-[160px] rounded-md border px-2" />
+          <Button size="sm" disabled={busy} onClick={async () => {
+            if (await siteConfirm({ title: "Alternatif gönderilsin mi?", message: "İstenen numara siparişe eklenir ve stoğu düşer.", confirmText: "Gönder" })) call({ op: "ship_alt", tracking });
+          }}>Alternatifi gönder</Button>
+        </div>
+      )}
+      {canSendLabel && (
+        <div className="flex flex-wrap items-center gap-2 pt-1 border-t">
+          <select value={method} onChange={(e) => setMethod(e.target.value)} className="h-8 rounded-md border px-2 bg-white">
+            {Object.entries(RETURN_METHODS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+          </select>
+          <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="Kargonomi kargo kodu" className="h-8 flex-1 min-w-[140px] rounded-md border px-2 font-mono" />
+          <Button size="sm" disabled={busy || !code.trim()} onClick={() => call({ op: "send_label", method, code })}>Kodu müşteriye gönder</Button>
+        </div>
+      )}
     </div>
   );
 }

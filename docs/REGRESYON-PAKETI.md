@@ -60,6 +60,7 @@ bildirimi düşmez). Tek iz: sipariş numaraları birkaç numara atlar.
 | Yetki | Üye yönetici işlemi / silme yapamaz, başkasının siparişini göremez, kendi siparişini "ödendi" yapamaz |
 | Ödeme onayı, iade, iptal | Ödenmemiş iptal (stok geri, fatura "gerekmiyor"); yönetici "Ödendi" → üye **Müşteri** rolü; ürün gelmeden tek başına ücret iadesi reddedilir (sıra kuralı); ödenmiş sipariş iptali (kalan iade, stok geri); çift iptal reddedilir |
 | Kargo → teslim → iade al | "Kargoya Verildi (elle)" ve "Teslim Edildi"; kargolanmış sipariş iptal edilemez; kargolanmamışta "İade al" reddedilir; iade gelen ürün stoğa, ücret iadesi kaydı, aynı ürün iki kez stoğa eklenmez; iade geldikten sonra kalan tutar iade edilebilir, onay kutusu şart |
+| Satış sonrası: oldu / değişim / iade | Teslim edilince "müşteri deniyor"; imzalı müşteri bağlantısı (değiştirilmiş reddedilir), Hesabım'dan yalnız kendi siparişi; "oldu" bir kez; değişim döngüsü (talep → alternatif gönder, stok düşer, ek ücret yok → teslim → müşteri seçer → kod → tutulmayan gelir, stoğa eklenir, para iadesi yok → sipariş "oldu"); iade: havalede IBAN şart ve geçerli olmalı, IBAN müşteriye açık dönmez, yönetici kargo yolunu değiştirip kod gönderebilir, iade gelince talep kapanır ve ödeme iade edilir; üye yönetici talep işlemi yapamaz |
 | Satış ortaklığı | Ortak linkiyle sipariş ortağa yazılır; ortağın kendi alışverişi, askıya alınmış ortak ve olmayan kod sayılmaz (sipariş yine verilir) |
 | Reklamdan gelen sipariş | Instagram reklamı kaynağı siparişe yazılır; test siparişi Meta'ya gönderilmez ve geçici IP/tarayıcı bilgisi silinir; çerez onayı yoksa Meta bilgisi hiç saklanmaz; bozuk bilgi siparişi bozmaz |
 | Üyelik durumu ve e-posta doğrulama | Misafir ve doğrulanmamış hesap "Üye" sayılmaz (seviye 0); sipariş e-postasında doğrulama bağlantısı üretilir; yeniden gönderim, eski bağlantı geçersiz, yenisiyle doğrulama → Üye + Müşteri seviyesi + hoş geldin kuponları; Fırsat kuponu ve iş ortaklığı doğrulamadan alınamaz; üst seviye fırsatı doğrudan istekle alınamaz; test fırsatı sitede görünmez; başkasının siparişi için mesaj e-postası tetiklenemez |
@@ -104,6 +105,7 @@ Kısa turu yap, ardından:
 | T9 | Pazaryeri (açıksa) | Bir ürünün stoğunu değiştir | Senkron geçmişinde Trendyol/Hepsiburada ✓ |
 | T10 | İçerik | Bilgi bankası makalesi, Fırsatlar, İletişim, sözleşmeler (telefonda) | Açılıyor, okunuyor |
 | T12 | Meta reklamı (canlıda) | Çerezde "Kabul Et" → bir ürüne bak, sepete ekle, sipariş ver; Events Manager › Test olayları | ViewContent, AddToCart, InitiateCheckout, Purchase (tarayıcı + sunucu, tek satış) görünüyor |
+| T13 | Satış sonrası e-postaları (canlı öncesi metin kontrolü) | Bir siparişi "Teslim edildi" yap → e-posta; değişim / iade talebi aç → yöneticiye bildirim; kod gönder → müşteri e-postası | "Acele yok, evde dene" kutusu ve düğmeler; kod e-postası UPS uyarısıyla; metinler onaylandı |
 | T11 | Kart (iyzico açıksa) | Test kartıyla ödeme; başarısız kart; iade | Başarı sayfası; hata mesajı; iyzico iadesi |
 
 Tam tur bitince test siparişlerini **Siparişi sil** ile temizle.
