@@ -331,11 +331,11 @@ export default {
         const twice = await api("/api/admin/orders/action", { token: F.admin.token, body: { action: "return", orderId: O.ret, items: [{ item_id: item?.id, qty: 1, restock: true }] } });
         ok(stock() === s0 + 1, "Aynı ürün iki kez stoğa eklenmiyor", `${why(twice)}; stok ${s0 + 1} → ${stock()}`);
         // İade geldikten sonra kalan tutar (kargo) ayrıca iade edilebilir; onay kutusu şart
-        const rest = Math.round((Number(ord(O.ret).total_amount) - Number(ord(O.ret).refunded_amount || 0)) * 100) / 100;
-        if (rest > 0) {
-          const nc = await api("/api/admin/orders/action", { token: F.admin.token, body: { action: "refund", orderId: O.ret, amount: rest, method: "bank_transfer" } });
+        const remain = Math.round((Number(ord(O.ret).total_amount) - Number(ord(O.ret).refunded_amount || 0)) * 100) / 100;
+        if (remain > 0) {
+          const nc = await api("/api/admin/orders/action", { token: F.admin.token, body: { action: "refund", orderId: O.ret, amount: remain, method: "bank_transfer" } });
           ok(nc.status === 400, "Onay kutusu işaretlenmeden iade kaydedilmiyor", why(nc));
-          const rf = await api("/api/admin/orders/action", { token: F.admin.token, body: { action: "refund", orderId: O.ret, amount: rest, method: "bank_transfer", confirmed: true, note: "regresyon kargo" } });
+          const rf = await api("/api/admin/orders/action", { token: F.admin.token, body: { action: "refund", orderId: O.ret, amount: remain, method: "bank_transfer", confirmed: true, note: "regresyon kargo" } });
           ok(rf.status === 200 && ord(O.ret).payment_status === "refunded", "İade gelen siparişte kalan tutar iade edilebiliyor", `${why(rf)} → ${ord(O.ret).payment_status}`);
         }
       });
