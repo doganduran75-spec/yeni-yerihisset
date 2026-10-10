@@ -55,6 +55,7 @@ bildirimi düşmez). Tek iz: sipariş numaraları birkaç numara atlar.
 | Bölüm | Neyi kanıtlar |
 |---|---|
 | Sipariş: fiyat, stok, kargo, hediye | İstekte fiyat değiştirilse de veritabanı fiyatı alınır; tutar = ürün + kargo; stok düşer; stoktan fazlası reddedilir; hediye 0 TL ve stoğu düşer; tetikleyicisiz hediye reddedilir |
+| Kargo yöntemi (varsayılan) | Üye kargo ayarı değiştiremez; pasif yöntem varsayılan yapılamaz; sepet/ödeme listesinde varsayılan en üstte; pasif yöntem müşteriye görünmez (duman: tam bir varsayılan var ve aktif) |
 | Kupon kuralları | Yüzde / sabit / ücretsiz kargo: sepetteki indirim = siparişteki indirim, kullanım sayılır. Alt limit, süresi dolmuş, başlamamış, başkasına özel, olmayan kupon ve kişi başı limit **hem sepette hem doğrudan sipariş isteğinde** reddedilir |
 | Misafir siparişi | Bot isteği reddedilir; misafir siparişi açılır; sonuç sayfası verisi (havale bekliyor); e-posta kontrolü; üyenin e-postasıyla misafir siparişi reddedilir |
 | Yetki | Üye yönetici işlemi / silme yapamaz, başkasının siparişini göremez, kendi siparişini "ödendi" yapamaz |

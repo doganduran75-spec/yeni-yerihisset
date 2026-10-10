@@ -42,6 +42,7 @@ export default {
         DELETE FROM public.affiliate_profiles WHERE code LIKE 'RGT%';
         DELETE FROM public.stock_notifications WHERE product_id IN (${prods}) OR email ILIKE '%@${DOMAIN}';
         DELETE FROM public.free_gift_rules WHERE name LIKE 'REGRESYON-TEST%';
+        DELETE FROM public.shipping_methods WHERE name LIKE 'REGRESYON-TEST%' AND NOT is_default;
         DELETE FROM public.products WHERE title LIKE 'REGRESYON-TEST%';
         DELETE FROM public.categories WHERE slug = 'regresyon-test';
         DELETE FROM public.partner_opportunities WHERE title LIKE 'REGRESYON-TEST%';
@@ -100,7 +101,8 @@ export default {
       F.affOff = `RGT${RUN.toUpperCase()}PASIF`;
       F.affOffUser = (await mkUser("ortak", false)).id;
       insert("affiliate_profiles", { user_id: F.affOffUser, code: F.affOff, status: "suspended", commission_rate: 10 });
-      F.ship = row("SELECT fee, free_over FROM public.shipping_methods WHERE is_active ORDER BY sort_order LIMIT 1");
+      F.ship = row("SELECT fee, free_over FROM public.shipping_methods WHERE is_active ORDER BY is_default DESC, sort_order LIMIT 1"); // = src/lib/shipping.ts
+      F.shipOff = insert("shipping_methods", { name: "REGRESYON-TEST kargo", fee: 1, is_active: false, sort_order: 999 }); // pasif → müşteri görmez
       F.ip = `10.254.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}`; // misafir hız sınırı her çalıştırmada temiz
       add("ok", "Test verisi kuruldu");
       ready = true;
@@ -160,6 +162,18 @@ export default {
         }
         const r4 = await order([GIFT]);
         ok(r4.status === 400, "Tetikleyici ürün olmadan hediye reddediliyor", `${why(r4)} — bedava ürün açığı`);
+      });
+
+      await part("Kargo yöntemi (varsayılan)", async () => {
+        const sm = (body, token = F.admin.token) => api("/api/admin/shipping-methods", { token, body });
+        const before = one("SELECT id FROM public.shipping_methods WHERE is_default");
+        const m = await sm({ action: "set_default", id: F.shipOff }, F.member.token);
+        ok(m.status === 403, "Üye kargo ayarını değiştiremiyor", why(m));
+        const off = await sm({ action: "set_default", id: F.shipOff });
+        ok(off.status === 400 && one("SELECT id FROM public.shipping_methods WHERE is_default") === before, "Pasif yöntem varsayılan yapılamıyor, varsayılan değişmedi", why(off));
+        const list = await rest("shipping_methods?select=id,is_default&is_active=eq.true&order=is_default.desc,sort_order");
+        ok(Array.isArray(list.json) && list.json[0]?.is_default === true, "Sepet/ödeme listesinde varsayılan en üstte", `HTTP ${list.status} ${list.text.slice(0, 120)}`);
+        ok(Array.isArray(list.json) && !list.json.some((x) => x.id === F.shipOff), "Pasif yöntem müşteriye görünmüyor", "pasif kargo listede");
       });
 
       await part("Kupon kuralları (sepet + sipariş aynı kural)", async () => {
@@ -613,6 +627,7 @@ export default {
           + (SELECT count(*) FROM public.coupons WHERE code LIKE 'RGT%')
           + (SELECT count(*) FROM public.affiliate_profiles WHERE code LIKE 'RGT%')
           + (SELECT count(*) FROM public.partner_opportunities WHERE title LIKE 'REGRESYON-TEST%')
+          + (SELECT count(*) FROM public.shipping_methods WHERE name LIKE 'REGRESYON-TEST%')
           + (SELECT count(*) FROM public.categories WHERE slug = 'regresyon-test')`);
         ok(left === 0, "Test verisi silindi", `${left} kayıt kaldı — bir sonraki çalıştırma yeniden dener`);
       });

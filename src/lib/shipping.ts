@@ -19,7 +19,7 @@ export async function resolveShipping(
   }
   if (!method) {
     const { data } = await (supabase as any)
-      .from("shipping_methods").select("*").eq("is_active", true).order("sort_order").limit(1).maybeSingle();
+      .from("shipping_methods").select("*").eq("is_active", true).order("is_default", { ascending: false }).order("sort_order").limit(1).maybeSingle();
     method = data;
   }
   if (!method) return { name: "Kargo", cost: 0 };

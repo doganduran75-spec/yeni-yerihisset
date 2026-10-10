@@ -552,7 +552,7 @@ export default function OrdersPage() {
   useEffect(() => {
     if (!createOpen) return;
     (async () => {
-      const { data } = await (supabase as any).from("shipping_methods").select("*").eq("is_active", true).order("sort_order");
+      const { data } = await (supabase as any).from("shipping_methods").select("*").eq("is_active", true).order("is_default", { ascending: false }).order("sort_order");
       const list = (data as any[]) || [];
       setShipMethods(list);
       setNewShipMethodId((prev) => (prev && list.some((m) => m.id === prev)) ? prev : (list[0]?.id ?? ""));

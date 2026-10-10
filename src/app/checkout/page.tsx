@@ -128,7 +128,7 @@ export default function CheckoutPage() {
   // Aktif kargo yöntemlerini yükle (checkout'ta seçilecek)
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.from("shipping_methods").select("*").eq("is_active", true).order("sort_order");
+      const { data } = await supabase.from("shipping_methods").select("*").eq("is_active", true).order("is_default", { ascending: false }).order("sort_order");
       const list = (data as any[]) || [];
       setShippingMethods(list);
       setShippingLoaded(true);

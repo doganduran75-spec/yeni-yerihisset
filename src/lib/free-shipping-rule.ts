@@ -9,7 +9,7 @@ export async function getFreeShippingOver(): Promise<number | null> {
   try {
     const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!) as any;
     const { data } = await sb.from("shipping_methods").select("fee, free_over")
-      .eq("is_active", true).order("sort_order").limit(1).maybeSingle();
+      .eq("is_active", true).order("is_default", { ascending: false }).order("sort_order").limit(1).maybeSingle();
     if (!data) return null;
     if (Number(data.fee || 0) === 0) return 0;
     return data.free_over != null ? Number(data.free_over) : null;

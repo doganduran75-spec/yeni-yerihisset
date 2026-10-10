@@ -16,7 +16,7 @@ async function requireAdmin(req: NextRequest) {
 export async function GET(req: NextRequest) {
   const auth = await requireAdmin(req);
   if ("error" in auth) return auth.error;
-  const { data } = await auth.supabase.from("shipping_methods").select("*").order("sort_order");
+  const { data } = await auth.supabase.from("shipping_methods").select("*").order("is_default", { ascending: false }).order("sort_order");
   return NextResponse.json({ ok: true, methods: data || [] });
 }
 
@@ -27,7 +27,20 @@ export async function POST(req: NextRequest) {
   const body = await req.json() as { action?: string; method?: any; id?: string };
 
   if (body.action === "delete" && body.id) {
+    const { data: cur } = await (supabase as any).from("shipping_methods").select("is_default").eq("id", body.id).maybeSingle();
+    if (cur?.is_default) return NextResponse.json({ error: "Varsayılan yöntem silinemez; önce başka bir yöntemi varsayılan yap" }, { status: 400 });
     const { error } = await supabase.from("shipping_methods").delete().eq("id", body.id);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ ok: true });
+  }
+
+  // Varsayılan yap: yalnız bir varsayılan (sepette/ödemede seçili ve en üstte gelir)
+  if (body.action === "set_default" && body.id) {
+    const { data: m } = await supabase.from("shipping_methods").select("id, is_active").eq("id", body.id).maybeSingle();
+    if (!m) return NextResponse.json({ error: "Kargo yöntemi bulunamadı" }, { status: 404 });
+    if (!(m as any).is_active) return NextResponse.json({ error: "Pasif yöntem varsayılan yapılamaz; önce aktif et" }, { status: 400 });
+    await (supabase as any).from("shipping_methods").update({ is_default: false }).eq("is_default", true);
+    const { error } = await (supabase as any).from("shipping_methods").update({ is_default: true }).eq("id", body.id);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ ok: true });
   }
@@ -43,6 +56,10 @@ export async function POST(req: NextRequest) {
       sort_order: Number(m.sort_order) || 0,
     };
     if (!payload.name) return NextResponse.json({ error: "İsim zorunlu" }, { status: 400 });
+    if (m.id && !payload.is_active) {
+      const { data: cur } = await (supabase as any).from("shipping_methods").select("is_default").eq("id", m.id).maybeSingle();
+      if (cur?.is_default) return NextResponse.json({ error: "Varsayılan yöntem pasif yapılamaz; önce başka bir yöntemi varsayılan yap" }, { status: 400 });
+    }
     if (m.id) {
       const { error } = await supabase.from("shipping_methods").update(payload).eq("id", m.id);
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });

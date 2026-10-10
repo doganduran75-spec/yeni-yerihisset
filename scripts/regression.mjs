@@ -156,6 +156,7 @@ async function main() {
     ["20261025 iptal e-postası şablonu", "SELECT NOT EXISTS(SELECT 1 FROM public.email_templates WHERE trigger='order_cancelled' AND body_html LIKE '%Ödeme yapıldıysa%')"],
     ["20261026 şifresiz hesaplar", "SELECT to_regprocedure('public.mark_account_passwordless(uuid)') IS NOT NULL"],
     ["20261028 üyelik durumu (misafir/doğrulanmamış/üye)", "SELECT to_regprocedure('public.member_account_state(uuid)') IS NOT NULL AND NOT EXISTS(SELECT 1 FROM pg_trigger WHERE tgname='on_profile_created_assign_role')"],
+    ["20261101 varsayılan kargo yöntemi", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='shipping_methods' AND column_name='is_default')"],
     ["20261031 satış sonrası (oldu/değişim/iade)", "SELECT to_regclass('public.order_cases') IS NOT NULL AND to_regprocedure('public.exchange_add_item(uuid,uuid,uuid)') IS NOT NULL"],
     ["20261030 sipariş sıradaki adım", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='orders' AND column_name='mp_restocked_at')"],
     ["20261029 kampanya e-postası izni", "SELECT to_regclass('public.marketing_consent_log') IS NOT NULL AND EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='profiles' AND column_name='marketing_consent')"],
@@ -317,6 +318,9 @@ async function main() {
   badSlug ? add("warn", "Bilgi bankası adresi bozuk", `${badSlug} makale`) : add("ok", "Bilgi bankası adresleri düzgün");
   const shipping = num("SELECT count(*) FROM public.shipping_methods WHERE is_active");
   shipping ? add("ok", "Aktif kargo yöntemi var", `${shipping}`) : add("fail", "Aktif kargo yöntemi YOK", "ödeme yapılamaz");
+  const defShip = sql("SELECT name, is_active FROM public.shipping_methods WHERE is_default");
+  defShip.length === 1 && defShip[0][1] === "t" ? add("ok", "Varsayılan kargo yöntemi", defShip[0][0])
+    : add("fail", "Varsayılan kargo yöntemi yok ya da pasif", "Ayarlar › Kargo Yöntemleri › Varsayılan yap");
   const mktFailed = num("SELECT count(*) FROM public.marketplace_stock_sync WHERE status='failed'");
   mktFailed ? add("warn", "Pazaryeri stok gönderim hatası", `${mktFailed} kayıt (Ayarlar › Entegrasyonlar)`) : add("ok", "Pazaryeri stok hatası yok");
   const qFailed = num("SELECT count(*) FROM public.email_queue WHERE status='failed' AND created_at > now() - interval '7 days'");
