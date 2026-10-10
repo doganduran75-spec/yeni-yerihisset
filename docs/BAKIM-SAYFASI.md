@@ -5,7 +5,17 @@ Deploy, derleme süresince siteyi (pm2) durdurur — birkaç dakika. Bu sürede 
 yeniler; site açılınca ziyaretçi kaldığı adrese döner. Sepet tarayıcıda tutulduğu için kaybolmaz.
 Arama motorlarına `503` döner (geçici durum — sıralama etkilenmez).
 
-## Kurulum (bir kez, sunucuda)
+## Kurulum (bir kez, sunucuda) — kolay yol
+
+Betik ayarı kendisi ekler: önce yedek alır, Caddy ayarı doğrulanmazsa yedeği geri koyar.
+
+```bash
+cd /opt/yerihisset-app && bash scripts/setup-maintenance-caddy.sh
+```
+
+Canlıya geçince canlı alan adı için bir kez daha: `bash scripts/setup-maintenance-caddy.sh yerihisset.com`
+
+## Kurulum — elle (betik çalışmazsa)
 
 1. Caddy ayar dosyasını aç:
 

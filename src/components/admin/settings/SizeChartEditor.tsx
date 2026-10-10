@@ -87,7 +87,7 @@ export default function SizeChartEditor({ brand }: { brand: { id: string; name: 
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">
-                Ölçüler <b>mm</b>. “Numara/beden” üründeki varyant değeriyle aynı olmalı (ör. 40 ya da M); “karşılık” varsa o da eşleşir (ör. No 20).
+                Ölçüler <b>mm</b>. “Numara/beden” üründeki varyant değeriyle aynı olmalı (ör. 40, 21,5 ya da M — buçuklu numara virgülle yazılabilir); “karşılık” (ör. beden harfi) varsa o da eşleşir.
                 Pay eklenmez: ayak ölçüsü hangi aralıktaysa o numara önerilir. Büyüme payı &gt; 0 ise ölçü üst sınıra bu kadar yakınken bir üst numara önerilir.
               </p>
               <div className="space-y-2">

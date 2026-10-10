@@ -66,6 +66,11 @@ done
 
 echo "✓ Dağıtım tamam."
 
+# Sağlık kartını tazele: dağıtım sırasında çalışan kontrol "dağıtım sürüyor (0/4)" diye sarı bırakır;
+# işareti kaldırıp kontrolü hemen bir kez çalıştırınca kart 15 dk beklemeden yeşile döner.
+rm -f "$DEPLOY_FLAG"
+bash scripts/server-health.sh --quiet >/dev/null 2>&1 || true
+
 # REGRESYON (otomatik kontrol): her deploy'dan sonra ~1 dk. Hata olsa da dağıtım geri alınmaz;
 # sonucu okuyup HATA varsa Claude'a ilet. Atlamak için: SKIP_REGRESSION=1 bash scripts/deploy.sh
 if [ "${SKIP_REGRESSION:-0}" != "1" ]; then

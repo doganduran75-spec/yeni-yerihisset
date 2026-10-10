@@ -61,7 +61,7 @@ export default function SizeGuide({ chart, variants, onPick }: { chart: SizeChar
                     ) : (
                       <>
                         <p className="text-sm text-slate-700">Ayak ölçün <b>{cm(mm!)} cm</b> →</p>
-                        <p className="text-2xl font-black text-olive-800">{advice.row.label}{advice.row.alt ? <span className="text-base font-bold text-olive-600"> (No {advice.row.alt})</span> : null}</p>
+                        <p className="text-2xl font-black text-olive-800">{advice.row.label}{advice.row.alt ? <span className="text-base font-bold text-olive-600"> ({advice.row.alt})</span> : null}</p>
                         {advice.kind === "grow" && <p className="text-xs text-olive-800">Ölçün {advice.base.label} aralığının üst sınırına yakın; ayak hızlı büyüdüğü için bir üst bedeni öneriyoruz.</p>}
                         {advice.kind === "edge" && <p className="text-xs text-olive-800">Ölçün aralığın üst sınırında. Genelde alıştığın numara uyar; ayağın genişse bir büyüğünü düşünebilirsin.</p>}
                         {advice.row.note && <p className="text-xs text-slate-500">{advice.row.note}</p>}
@@ -100,7 +100,7 @@ export default function SizeGuide({ chart, variants, onPick }: { chart: SizeChar
                       const hit = advice && advice.row.label === r.label;
                       return (
                         <tr key={r.label} className={`border-b border-slate-100 ${hit ? "bg-olive-50 font-bold text-olive-800" : "text-slate-700"}`}>
-                          <td className="py-2">{r.label}{r.alt ? <span className="text-slate-400 font-normal"> · No {r.alt}</span> : null}</td>
+                          <td className="py-2">{r.label}{r.alt ? <span className="text-slate-400 font-normal"> · {r.alt}</span> : null}</td>
                           <td className="py-2">{range(r)}</td>
                           {rows.some((x) => x.note) && <td className="py-2 text-xs text-slate-500">{r.note || ""}</td>}
                         </tr>

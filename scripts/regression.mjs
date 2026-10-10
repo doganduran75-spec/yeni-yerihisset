@@ -157,6 +157,7 @@ async function main() {
     ["20261026 şifresiz hesaplar", "SELECT to_regprocedure('public.mark_account_passwordless(uuid)') IS NOT NULL"],
     ["20261028 üyelik durumu (misafir/doğrulanmamış/üye)", "SELECT to_regprocedure('public.member_account_state(uuid)') IS NOT NULL AND NOT EXISTS(SELECT 1 FROM pg_trigger WHERE tgname='on_profile_created_assign_role')"],
     ["20261102 ölçü tabloları", "SELECT to_regclass('public.size_charts') IS NOT NULL"],
+    ["20261102b Attipas numaraları", "SELECT NOT EXISTS(SELECT 1 FROM public.size_charts s JOIN public.brands b ON b.id = s.brand_id WHERE lower(b.name) LIKE 'attipas%' AND s.rows->0->>'label' = 'S')"],
     ["20261101 varsayılan kargo yöntemi", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='shipping_methods' AND column_name='is_default')"],
     ["20261031 satış sonrası (oldu/değişim/iade)", "SELECT to_regclass('public.order_cases') IS NOT NULL AND to_regprocedure('public.exchange_add_item(uuid,uuid,uuid)') IS NOT NULL"],
     ["20261030 sipariş sıradaki adım", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='orders' AND column_name='mp_restocked_at')"],
