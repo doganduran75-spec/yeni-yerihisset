@@ -108,6 +108,7 @@ Kısa turu yap, ardından:
 | T10 | İçerik | Bilgi bankası makalesi, Fırsatlar, İletişim, sözleşmeler (telefonda) | Açılıyor, okunuyor |
 | T12 | Meta reklamı (canlıda) | Çerezde "Kabul Et" → bir ürüne bak, sepete ekle, sipariş ver; Events Manager › Test olayları | ViewContent, AddToCart, InitiateCheckout, Purchase (tarayıcı + sunucu, tek satış) görünüyor |
 | T14 | Beden tablosu / Numaramı bul (telefonla) | Dodura ürününde 25,3 yaz → 40; Attipas ürününde 107 yaz → M (büyüme payı); önerilen numarayı seç | Öneri doğru, stok durumu doğru, numara seçildi |
+| T15 | Mobil karşılama videosu (telefonla) | Ana sayfayı `?intro=1` ile aç; sonra normal aç | Sayfa önce geliyor, video tam ekran oynuyor, bitince / "Geç" ile ana sayfa kartları; ikinci girişte çıkmıyor |
 | T13 | Satış sonrası e-postaları (canlı öncesi metin kontrolü) | Bir siparişi "Teslim edildi" yap → e-posta; değişim / iade talebi aç → yöneticiye bildirim; kod gönder → müşteri e-postası | "Acele yok, evde dene" kutusu ve düğmeler; kod e-postası UPS uyarısıyla; metinler onaylandı |
 | T11 | Kart (iyzico açıksa) | Test kartıyla ödeme; başarısız kart; iade | Başarı sayfası; hata mesajı; iyzico iadesi |
 

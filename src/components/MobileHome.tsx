@@ -6,6 +6,7 @@ import { GraduationCap, ShoppingBag, ArrowRight, ChevronRight, BadgeCheck, Truck
 import { formatPriceDisplay, getMinPrice } from "@/lib/product-price";
 import { track } from "@/lib/track";
 import { homeContent as HC } from "@/config/homeContent";
+import MobileIntro from "@/components/MobileIntro";
 
 // DESIGN.md ("YeriHisset Grounded Wellness") temelli mobil ana sayfa.
 // Yalnız mobilde gösterilir (page.tsx'te md:hidden). Epilogue başlıklar +
@@ -37,6 +38,8 @@ export default function MobileHome({ products }: { products: any[] }) {
 
   return (
     <div className="md:hidden" style={{ fontFamily: JAK, background: C.base, color: C.ink }}>
+      {/* Karşılama videosu: ilk ziyarette bir kez, sayfa hazırken arka planda yüklenir (MobileIntro) */}
+      <MobileIntro />
       {/* İki cevap kartı */}
       <div className="px-5 pt-5 grid grid-cols-2 gap-3">
         <Link

@@ -156,6 +156,7 @@ async function main() {
     ["20261025 iptal e-postası şablonu", "SELECT NOT EXISTS(SELECT 1 FROM public.email_templates WHERE trigger='order_cancelled' AND body_html LIKE '%Ödeme yapıldıysa%')"],
     ["20261026 şifresiz hesaplar", "SELECT to_regprocedure('public.mark_account_passwordless(uuid)') IS NOT NULL"],
     ["20261028 üyelik durumu (misafir/doğrulanmamış/üye)", "SELECT to_regprocedure('public.member_account_state(uuid)') IS NOT NULL AND NOT EXISTS(SELECT 1 FROM pg_trigger WHERE tgname='on_profile_created_assign_role')"],
+    ["20261103 mobil karşılama videosu", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='settings' AND column_name='intro_video_url')"],
     ["20261102 ölçü tabloları", "SELECT to_regclass('public.size_charts') IS NOT NULL"],
     ["20261102b Attipas numaraları", "SELECT NOT EXISTS(SELECT 1 FROM public.size_charts s JOIN public.brands b ON b.id = s.brand_id WHERE lower(b.name) LIKE 'attipas%' AND s.rows->0->>'label' = 'S')"],
     ["20261101 varsayılan kargo yöntemi", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='shipping_methods' AND column_name='is_default')"],
@@ -363,6 +364,19 @@ async function main() {
   st.bank === "true" ? add("ok", "Havale bilgisi") : add("fail", "Havale açık ama banka bilgisi boş");
   st.ga ? add("ok", "Google Analytics kimliği", st.ga) : add("warn", "Google Analytics kimliği boş");
   liveOnly(st.lock !== "true", "E-posta kilidi açık", "canlıda müşterilere e-posta gitmez → Ayarlar › Genel › E-posta Kilidi'ni kapat");
+  // Mobil karşılama videosu açıksa dosyası açılıyor ve hafif mi (Ayarlar › Genel)
+  if (S.intro_video_enabled && S.intro_video_url) {
+    const u = String(S.intro_video_url);
+    if (u.startsWith("/")) {
+      try {
+        const r = await fetch(APP + u, { method: "HEAD", signal: AbortSignal.timeout(15000) });
+        const size = Number(r.headers.get("content-length") || 0);
+        r.ok && /video/.test(r.headers.get("content-type") || "")
+          ? add(size > 6_000_000 ? "warn" : "ok", "Karşılama videosu", size > 6_000_000 ? `${(size / 1e6).toFixed(1)} MB — telefonda geç yüklenir, 3 MB altı önerilir` : `${(size / 1e6).toFixed(1)} MB`)
+          : add("fail", "Karşılama videosu açılmıyor", `${u} HTTP ${r.status} — Ayarlar › Genel › Mobil karşılama videosu`);
+      } catch (e) { add("warn", "Karşılama videosu kontrol edilemedi", String(e?.message || e)); }
+    } else add("ok", "Karşılama videosu (dış adres)", u);
+  }
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "";
   /^https:\/\//.test(siteUrl) ? add("ok", "Site adresi") : add("fail", "Site adresi (NEXT_PUBLIC_SITE_URL) ayarlı değil / https değil", siteUrl || "boş");
   liveOnly(!/dev\./.test(siteUrl), "Site adresi test sitesini gösteriyor", `${siteUrl} → canlı adres olmalı (iyzico dönüşü, e-posta bağlantıları)`);

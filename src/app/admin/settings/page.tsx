@@ -49,6 +49,9 @@ type Settings = {
   kargonomi_warehouse_id: string;
   // GA
   ga_measurement_id: string;
+  // Mobil karşılama videosu
+  intro_video_enabled: boolean;
+  intro_video_url: string;
   // Meta (Instagram / Facebook reklamları)
   meta_pixel_id: string;
   meta_domain_verification: string;
@@ -88,6 +91,8 @@ const DEFAULT_SETTINGS: Settings = {
   kargonomi_api_token: "",
   kargonomi_warehouse_id: "",
   ga_measurement_id: "",
+  intro_video_enabled: true,
+  intro_video_url: "/intro/intro.mp4",
   meta_pixel_id: "",
   meta_domain_verification: "",
   meta_capi_token: "",
@@ -528,6 +533,27 @@ function SettingsPageInner() {
               <p><strong>Email linklerine eklenen UTM parametreleri:</strong></p>
               <code className="block">utm_source=email · utm_medium=transactional · utm_campaign=[tetikleyici]</code>
               <p className="text-muted-foreground">Örnek: <code>utm_campaign=order_shipped</code></p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Mobil karşılama videosu */}
+        <Card className="shadow-sm border-muted">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2"><BarChart3 size={20} className="text-olive-600" /> Mobil karşılama videosu</CardTitle>
+            <CardDescription>
+              Telefonda ana sayfaya ilk girişte bir kez tam ekran oynar, bitince ana sayfaya döner. Sayfa önce açılır;
+              video arka planda yüklenir, birkaç saniyede hazır olmazsa hiç gösterilmez. Dikey, sessiz, 5–10 sn, tercihen 3 MB altı mp4.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <label className="flex items-center gap-2 text-sm font-medium">
+              <input type="checkbox" checked={!!settings.intro_video_enabled} onChange={(e) => set({ intro_video_enabled: e.target.checked })} /> Karşılama videosunu göster
+            </label>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Video adresi</label>
+              <Input value={settings.intro_video_url || ""} onChange={(e) => set({ intro_video_url: e.target.value.trim() })} placeholder="/intro/intro.mp4 ya da https://…/video.mp4" />
+              <p className="text-xs text-muted-foreground">Kendi telefonunda tekrar görmek için ana sayfa adresinin sonuna <code>?intro=1</code> ekle.</p>
             </div>
           </CardContent>
         </Card>
