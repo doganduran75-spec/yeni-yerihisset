@@ -345,6 +345,14 @@ async function main() {
   /^https:\/\//.test(siteUrl) ? add("ok", "Site adresi") : add("fail", "Site adresi (NEXT_PUBLIC_SITE_URL) ayarlı değil / https değil", siteUrl || "boş");
   liveOnly(!/dev\./.test(siteUrl), "Site adresi test sitesini gösteriyor", `${siteUrl} → canlı adres olmalı (iyzico dönüşü, e-posta bağlantıları)`);
   process.env.CRON_SECRET ? add("ok", "CRON_SECRET tanımlı") : add("fail", "CRON_SECRET yok");
+  // Bakım sayfası: deploy sırasında / çökmede Caddy maintenance/index.html gösterir (docs/BAKIM-SAYFASI.md)
+  let caddy = null;
+  try { caddy = readFileSync("/etc/caddy/Caddyfile", "utf8"); } catch { /* okunamıyor (yetki / yerel) */ }
+  if (caddy !== null) {
+    /maintenance/.test(caddy) && /handle_errors/.test(caddy)
+      ? add("ok", "Bakım sayfası Caddy'de tanımlı")
+      : add("warn", "Bakım sayfası Caddy'de tanımlı değil", "deploy sırasında ziyaretçi hata görür → docs/BAKIM-SAYFASI.md");
+  }
   liveOnly(!!process.env.IYZICO_API_KEY, "iyzico anahtarı yok", "kartla ödeme kapalı");
   liveOnly(!/sandbox/i.test(process.env.IYZICO_BASE_URL || "sandbox"), "iyzico TEST (sandbox) modunda", "IYZICO_BASE_URL=https://api.iyzipay.com + canlı anahtarlar");
   liveOnly(process.env.NEXT_PUBLIC_NOINDEX !== "true", "Arama motoru engeli açık (NEXT_PUBLIC_NOINDEX=true)", "canlıda kaldır, yoksa Google siteyi listelemez");
