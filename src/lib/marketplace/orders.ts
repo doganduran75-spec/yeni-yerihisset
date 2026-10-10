@@ -318,6 +318,7 @@ export async function restockReturnedOrder(orderId: string, supabase: AdminClien
     if (r?.restored) restored += Number(r.restored);
   }
   if (restored > 0) kickMarketplaceSync(500);
+  await sb.from("orders").update({ mp_restocked_at: new Date().toISOString() }).eq("id", orderId); // "Bekleyen işlerim"den düşer
   // Pazaryeri iadesi depoya geldi → kargo "İade geldi", ödeme "İade edildi" (pazaryeri müşteriye iade etti; ciroda 0)
   const { data: o } = await sb.from("orders").select("total_amount, invoice_status, payment_status").eq("id", orderId).maybeSingle();
   if (o && o.payment_status !== "refunded") {

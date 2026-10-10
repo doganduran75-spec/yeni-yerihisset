@@ -65,6 +65,12 @@ export async function POST(req: NextRequest) {
 
   if (action === "refund") {
     if (!paid) return NextResponse.json({ error: "Ödemesi alınmamış siparişe ücret iadesi girilemez" }, { status: 400 });
+    // Sıra kuralı (src/lib/order-next-step.ts): para iadesi ya iptalle ya da ürün geri GELDİKTEN sonra
+    const { data: its } = await sb.from("order_items").select("returned_qty").eq("order_id", orderId);
+    const anyReturned = order.shipment_status === "returned" || ((its as any[]) || []).some((i) => Number(i.returned_qty || 0) > 0);
+    if (order.status !== "cancelled" && !anyReturned) {
+      return NextResponse.json({ error: "Ücret iadesi, ürün geri gelince “İade al” ile ya da kargodan önce “Siparişi iptal et” ile yapılır" }, { status: 400 });
+    }
     const err = await doRefund(Number(body.amount), String(body.method || ""), body.note);
     if (err) return NextResponse.json({ error: err }, { status: 400 });
   } else if (action === "cancel") {

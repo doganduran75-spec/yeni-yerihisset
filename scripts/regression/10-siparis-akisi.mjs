@@ -279,12 +279,10 @@ export default {
         const role = num(`SELECT count(*) FROM public.user_roles ur JOIN public.roles r ON r.id = ur.role_id WHERE ur.user_id = ${lit(F.member.id)} AND r.slug = 'musteri'`);
         ok(role === 1, "Ödenen siparişle üye 'Müşteri' rolü aldı", "refresh_member_auto_tags tetikleyicisi çalışmadı");
 
-        // Kısmi ücret iadesi: onaysız reddedilir, onaylı kaydedilir
-        const r1 = await api("/api/admin/orders/action", { token: F.admin.token, body: { action: "refund", orderId: O.paid, amount: 100, method: "bank_transfer" } });
-        ok(r1.status === 400, "Onay kutusu işaretlenmeden iade kaydedilmiyor", why(r1));
+        // Sıra kuralı: ürün geri gelmeden (ve iptal olmadan) tek başına ücret iadesi yapılamaz
         const r2 = await api("/api/admin/orders/action", { token: F.admin.token, body: { action: "refund", orderId: O.paid, amount: 100, method: "bank_transfer", confirmed: true, note: "regresyon" } });
         const o2 = ord(O.paid);
-        ok(r2.status === 200 && o2.payment_status === "partial_refund" && eq(o2.refunded_amount, 100), "Kısmi ücret iadesi", `${why(r2)} → ${o2.payment_status}, iade ${o2.refunded_amount}`);
+        ok(r2.status === 400 && o2.payment_status === "paid" && eq(o2.refunded_amount || 0, 0), "Ürün gelmeden tek başına ücret iadesi yapılamıyor", `${why(r2)} → ${o2.payment_status}, iade ${o2.refunded_amount}`);
 
         // Ödenmiş siparişi iptal → kalan tutar iade, stok geri
         s0 = stock();
@@ -332,6 +330,14 @@ export default {
         ok(ri && Number(ri.restocked_qty) === 1, "Kalemde stoğa eklenen adet işlendi", JSON.stringify(ri));
         const twice = await api("/api/admin/orders/action", { token: F.admin.token, body: { action: "return", orderId: O.ret, items: [{ item_id: item?.id, qty: 1, restock: true }] } });
         ok(stock() === s0 + 1, "Aynı ürün iki kez stoğa eklenmiyor", `${why(twice)}; stok ${s0 + 1} → ${stock()}`);
+        // İade geldikten sonra kalan tutar (kargo) ayrıca iade edilebilir; onay kutusu şart
+        const rest = Math.round((Number(ord(O.ret).total_amount) - Number(ord(O.ret).refunded_amount || 0)) * 100) / 100;
+        if (rest > 0) {
+          const nc = await api("/api/admin/orders/action", { token: F.admin.token, body: { action: "refund", orderId: O.ret, amount: rest, method: "bank_transfer" } });
+          ok(nc.status === 400, "Onay kutusu işaretlenmeden iade kaydedilmiyor", why(nc));
+          const rf = await api("/api/admin/orders/action", { token: F.admin.token, body: { action: "refund", orderId: O.ret, amount: rest, method: "bank_transfer", confirmed: true, note: "regresyon kargo" } });
+          ok(rf.status === 200 && ord(O.ret).payment_status === "refunded", "İade gelen siparişte kalan tutar iade edilebiliyor", `${why(rf)} → ${ord(O.ret).payment_status}`);
+        }
       });
 
       await part("Satış ortaklığı", async () => {

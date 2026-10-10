@@ -2,6 +2,7 @@
 
 import { orderLabel } from "@/lib/order-label";
 import { useEffect, useState, useCallback } from "react";
+import { orderNextStep, type NextActionKey } from "@/lib/order-next-step";
 import { useSearchParams, useRouter } from "next/navigation";
 import AdminOpsTabs from "@/components/admin/AdminOpsTabs";
 import OrderTimeline from "@/components/admin/OrderTimeline";
@@ -273,6 +274,7 @@ export default function OrdersPage() {
   const [fShip, setFShip] = useState("all");
   const [fInv, setFInv] = useState("all");
   const [fRet, setFRet] = useState("all"); // iade/iptal hazır filtreleri
+  const [fTodo, setFTodo] = useState(false); // "Bekleyen işlerim": sıra yöneticide olanlar (order-next-step)
   const [fMethod, setFMethod] = useState("all");
   const [fChannel, setFChannel] = useState("all"); // sales_channels.code
   const [channels, setChannels] = useState<SalesChannel[]>(CHANNEL_FALLBACK);
@@ -814,6 +816,41 @@ export default function OrdersPage() {
     { value: "not_required", label: "Gerekmiyor" },
   ];
 
+  // Sıradaki adım panelindeki düğmeler → mevcut işlemler (kurallar src/lib/order-next-step.ts)
+  async function runNextAction(o: Order, key: NextActionKey) {
+    switch (key) {
+      case "mark_paid": return markPaymentPaid(o.id);
+      case "cancel": return setActionMode("cancel");
+      case "return": return setActionMode("return");
+      case "refund": return setActionMode("refund");
+      case "ship_kargonomi": setIsDetailsOpen(false); return openShipDialog(o);
+      case "ship_manual":
+        if (await siteConfirm({ title: "Kargoya verildi mi?", message: "Sipariş “Kargoda” olur ve müşteriye kargo e-postası gider.", confirmText: "Kargoya verildi" })) updateField(o.id, { shipment_status: "shipped" });
+        return;
+      case "mark_delivered": return updateField(o.id, { shipment_status: "delivered" });
+      case "invoice":
+        if (await siteConfirm({ title: "Fatura kesildi mi?", message: "Faturayı kestiysen işaretle.", confirmText: "Fatura kesildi" })) updateField(o.id, { invoice_status: "invoiced" });
+        return;
+      case "return_invoice": return updateField(o.id, { invoice_status: "return_invoiced" });
+      case "mp_restock": {
+        if (!(await siteConfirm({ title: "İade geldi mi?", message: "Ürünler depoya döndüyse ve satılabilir durumdaysa stoğa eklenir; yeni stok tüm pazaryerlerine gönderilir.", confirmText: "Stoğa ekle" }))) return;
+        const { data: { session } } = await supabase.auth.getSession();
+        const r = await fetch("/api/admin/orders/marketplace-restock", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
+          body: JSON.stringify({ orderId: o.id }),
+        });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) { siteAlert({ message: d.error || "Stoğa eklenemedi", tone: "danger" }); return; }
+        const patch = { mp_restocked_at: new Date().toISOString(), shipment_status: "returned" } as Partial<Order>;
+        setOrders((prev) => prev.map((x) => (x.id === o.id ? { ...x, ...patch } : x)));
+        setSelectedOrder((prev) => (prev ? { ...prev, ...patch } : prev));
+        siteAlert({ message: `${d.restored ?? 0} adet stoğa eklendi.`, tone: "success" });
+        return;
+      }
+    }
+  }
+
   // İptal / iade al / ücret iadesi penceresi detayın içinde açılır → listeden seçilince detayı açıp pencereyi göster
   async function openAction(o: Order, mode: "cancel" | "return" | "refund") {
     if (!isDetailsOpen || selectedOrder?.id !== o.id) await handleViewDetails(o);
@@ -825,6 +862,11 @@ export default function OrdersPage() {
     const paidNow = cur === "paid" || cur === "partial_refund";
     if (v === "partial_refund" || v === "refunded") {
       if (!paidNow) { siteAlert({ message: "Ödemesi alınmamış siparişe ücret iadesi girilemez.", tone: "danger" }); return; }
+      // Para iadesi yalnız iptalle ya da ürün geri geldikten sonra (İade al) — sıradaki adım kuralı
+      if (!orderNextStep(o as any).actions.some((a) => a.key === "refund")) {
+        siteAlert({ title: "Önce iade", message: "Ücret iadesi, ürün geri gelince “İade al” penceresinde ya da kargodan önce “Siparişi iptal et” ile yapılır.", tone: "danger" });
+        return;
+      }
       openAction(o, "refund");
       return;
     }
@@ -986,6 +1028,7 @@ export default function OrdersPage() {
         if (fRet === "any_refund" && !refundedPay) return false;
       }
       if (fMethod !== "all" && (o.payment_method || "credit_card") !== fMethod) return false;
+      if (fTodo && !orderNextStep(o as any).needsAction) return false;
       if (fChannel !== "all" && (o.channel || "site") !== fChannel) return false;
       if (!needle) return true;
       const hay = trNorm([
@@ -1016,7 +1059,7 @@ export default function OrdersPage() {
   const listPageCount = Math.max(1, Math.ceil(visibleOrders.length / LIST_PAGE));
   const safeListPage = Math.min(listPage, listPageCount - 1);
   const pagedOrders = visibleOrders.slice(safeListPage * LIST_PAGE, safeListPage * LIST_PAGE + LIST_PAGE);
-  const filtersActive = !!q.trim() || fPay !== "all" || fShip !== "all" || fInv !== "all" || fMethod !== "all" || fChannel !== "all" || fRet !== "all";
+  const filtersActive = fTodo || !!q.trim() || fPay !== "all" || fShip !== "all" || fInv !== "all" || fMethod !== "all" || fChannel !== "all" || fRet !== "all";
 
   function toggleSort(k: typeof sortKey) {
     if (sortKey === k) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -1069,6 +1112,13 @@ export default function OrdersPage() {
             <>
             {/* Arama + süzgeçler */}
             <div className="flex flex-wrap items-center gap-2 mb-4">
+              <button
+                onClick={() => { setFTodo((v) => !v); setListPage(0); }}
+                className={`h-9 px-3 rounded-lg border text-sm font-bold transition ${fTodo ? "bg-olive-600 text-white border-olive-600" : "bg-background text-slate-700 hover:bg-slate-50"}`}
+                title="Sıradaki adımı sende olan siparişler (ödeme onayı, kargoya verme, iade, fatura…)"
+              >
+                Bekleyen işlerim ({orders.filter((o) => orderNextStep(o as any).needsAction).length})
+              </button>
               <div className="relative flex-1 min-w-[220px]">
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <input
@@ -1555,48 +1605,39 @@ export default function OrdersPage() {
                 />
               </div>
 
-              {/* Sipariş işlemleri: iptal / iade al / ücret iadesi (senaryo matrisi) */}
+              {/* SIRADAKİ ADIM — yalnız bu durumda yapılabilecek işlemler (src/lib/order-next-step.ts) */}
               {(() => {
                 const o = selectedOrder;
-                const ship = o.shipment_status || "waiting";
-                const pay = o.payment_status || "pending";
-                const shippedNow = ["shipped", "delivered", "undelivered", "returned"].includes(ship);
-                const allReturned = (o.order_items ?? []).length > 0 && (o.order_items ?? []).every((i) => Number(i.returned_qty || 0) >= Number(i.quantity));
-                const canCancel = !isMarketplace(o) && o.status !== "cancelled" && !shippedNow;
-                const canReturn = !isMarketplace(o) && shippedNow && !allReturned;
-                const canRefund = !isMarketplace(o) && (pay === "paid" || pay === "partial_refund");
+                const step = orderNextStep(o as any);
                 const refunded = Number(o.refunded_amount || 0);
-                const warn =
-                  ship === "returned" && pay === "paid" ? "İade geldi, ücret henüz iade edilmedi."
-                  : (pay === "refunded" || pay === "partial_refund") && (o.invoice_status || "pending") === "invoiced" ? "Ücret iade edildi; iade faturası kesilince Fatura’yı “İade faturası kesildi” yap."
-                  : o.status === "cancelled" && (pay === "paid" || pay === "partial_refund") ? "Sipariş iptal ama ücret iadesi kaydı yok."
-                  : null;
-                if (!canCancel && !canReturn && !canRefund && !refunded && !warn) return null;
                 return (
-                  <div className="space-y-2">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3 space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
-                      {canCancel && (
-                        <Button size="sm" variant="outline" className="gap-1.5 text-red-700 border-red-200 hover:bg-red-50" onClick={() => setActionMode("cancel")}>
-                          <XCircle size={14} /> Siparişi iptal et
-                        </Button>
-                      )}
-                      {canReturn && (
-                        <Button size="sm" variant="outline" className="gap-1.5 text-amber-800 border-amber-200 hover:bg-amber-50" onClick={() => setActionMode("return")}>
-                          <Package size={14} /> İade al
-                        </Button>
-                      )}
-                      {canRefund && (
-                        <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setActionMode("refund")}>
-                          <Landmark size={14} /> Ücret iadesi yap
-                        </Button>
-                      )}
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Sıradaki adım</span>
+                      <span className="text-xs font-bold text-slate-800 bg-white border rounded-full px-2.5 py-0.5">{step.stage}</span>
                       {refunded > 0 && (
                         <span className="text-xs text-slate-600 ml-auto">
                           İade edilen: <b>₺{refunded.toFixed(2)}</b>{o.refund_method ? ` (${REFUND_METHOD_LABEL[o.refund_method] ?? o.refund_method})` : ""}
                         </span>
                       )}
                     </div>
-                    {warn && <p className="text-xs font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-center gap-1.5"><AlertCircle size={13} /> {warn}</p>}
+                    {step.hint && <p className="text-xs text-slate-600">{step.hint}</p>}
+                    {step.actions.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-2">
+                        {step.actions.map((a) => (
+                          <Button
+                            key={a.key}
+                            size="sm"
+                            variant={a.kind === "primary" ? "default" : "outline"}
+                            disabled={updatingId === o.id}
+                            className={a.kind === "danger" ? "gap-1.5 text-red-700 border-red-200 hover:bg-red-50" : "gap-1.5"}
+                            onClick={() => runNextAction(o, a.key)}
+                          >
+                            {a.label}
+                          </Button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
               })()}
@@ -2200,12 +2241,8 @@ function MarketplaceOrderPanel({ order, onChange, onRestocked }: {
       )}
 
       {returned ? (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 space-y-2">
-          <p>Bu sipariş pazaryerinde <b>iade</b> durumunda. Ürün depoya döndü ve satılabilir durumdaysa stoğa ekle; yeni stok tüm pazaryerlerine gönderilir.</p>
-          <Button size="sm" className="h-7 text-xs gap-1.5" disabled={busy} onClick={restock}>
-            {busy ? <Loader2 size={12} className="animate-spin" /> : <Package size={12} />} İadeyi stoğa ekle
-          </Button>
-        </div>
+        // Stoğa ekleme "Sıradaki adım" panelinde (tek akış)
+        <p className="text-xs text-amber-800">Bu sipariş pazaryerinde <b>iade</b> durumunda — ürün depoya dönünce yukarıdaki “Sıradaki adım”dan stoğa ekle.</p>
       ) : order.status !== "cancelled" && (
         // Hepsiburada iade bilgisi otomatik gelmiyor → ürün geri geldiyse elle
         <button
