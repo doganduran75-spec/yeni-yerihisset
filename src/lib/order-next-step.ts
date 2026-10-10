@@ -27,6 +27,7 @@ export type OrderLike = {
   kargonomi_tracking_code?: string | null;
   mp_restocked_at?: string | null;
   order_items?: { quantity: number; returned_qty?: number | null }[] | null;
+  created_at?: string | null;
   fit_status?: string | null;      // trial · ok · exchange · return
   delivered_at?: string | null;
   open_case?: { kind: string; status: string; return_method?: string | null; label_sent_at?: string | null } | null;
@@ -51,9 +52,9 @@ export function isMarketplaceOrder(o: OrderLike) {
 
 export function orderNextStep(o: OrderLike): NextStep {
   const r = coreNextStep(o);
-  // Eski siteden (WooCommerce) aktarılan ve kargolanmış siparişler geçmiş kayıttır → bekleyen işlere düşmez
-  // (aktarım geçiş döneminde gelen, henüz kargolanmamış siparişler düşer).
-  if (o.import_source && SHIPPED.includes(o.shipment_status || "waiting")) return { ...r, needsAction: false };
+  // Eski siteden (WooCommerce) aktarılan siparişler: kargolanmışsa ya da 30 günden eskiyse geçmiş kayıttır →
+  // bekleyen işlere düşmez (aktarım geçiş döneminde gelen, yeni ve henüz kargolanmamış olanlar düşer).
+  if (o.import_source && (SHIPPED.includes(o.shipment_status || "waiting") || daysSince(o.created_at) > 30)) return { ...r, needsAction: false };
   return r;
 }
 

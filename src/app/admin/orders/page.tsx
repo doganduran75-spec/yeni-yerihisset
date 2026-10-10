@@ -278,7 +278,7 @@ export default function OrdersPage() {
   const [fShip, setFShip] = useState("all");
   const [fInv, setFInv] = useState("all");
   const [fRet, setFRet] = useState("all"); // iade/iptal hazır filtreleri
-  const [fTodo, setFTodo] = useState(false); // "Bekleyen işlerim": sıra yöneticide olanlar (order-next-step)
+  const [fTodo, setFTodo] = useState(() => searchParams.get("todo") === "1"); // "Bekleyen işlerim" (order-next-step); panodan ?todo=1
   const [fMethod, setFMethod] = useState("all");
   const [fChannel, setFChannel] = useState("all"); // sales_channels.code
   const [channels, setChannels] = useState<SalesChannel[]>(CHANNEL_FALLBACK);

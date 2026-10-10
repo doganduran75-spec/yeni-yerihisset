@@ -3,6 +3,7 @@
 import { orderLabel } from "@/lib/order-label";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { orderNextStep, type NextStep } from "@/lib/order-next-step";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/lib/supabase";
 import BackupStatusCard from "@/components/admin/BackupStatusCard";
@@ -20,21 +21,6 @@ const orderStatusMap: Record<string, { label: string; color: string }> = {
   cancelled:        { label: "İptal Edildi",       color: "bg-red-50 text-red-700 ring-red-500/20" },
   refunded:         { label: "İade Edildi",        color: "bg-slate-100 text-slate-600 ring-slate-400/20" },
   paid:             { label: "Ödendi",             color: "bg-green-50 text-green-700 ring-green-500/20" },
-};
-
-// Sipariş süreç (timeline) olay etiketleri
-const EVENT_LABELS: Record<string, { label: string; color: string }> = {
-  shipped:         { label: "Kargolandı",       color: "bg-blue-50 text-blue-700" },
-  tracking_wrong:  { label: "Kargo no hatalı",   color: "bg-amber-50 text-amber-700" },
-  exchange:        { label: "Değişim",           color: "bg-purple-50 text-purple-700" },
-  reshipped:       { label: "Yeni kargo",        color: "bg-blue-50 text-blue-700" },
-  return_expected: { label: "İade bekleniyor",   color: "bg-orange-50 text-orange-700" },
-  return_received: { label: "İade geldi",        color: "bg-teal-50 text-teal-700" },
-  corrected:       { label: "Düzeltildi",        color: "bg-slate-100 text-slate-600" },
-  refund:          { label: "İade yapıldı",      color: "bg-green-50 text-green-700" },
-  invoiced:        { label: "Fatura kesildi",    color: "bg-indigo-50 text-indigo-700" },
-  closed:          { label: "Kapatıldı",         color: "bg-green-50 text-green-700" },
-  note:            { label: "Not",               color: "bg-slate-50 text-slate-500" },
 };
 
 type PendingMessage = {
@@ -70,11 +56,11 @@ type OpenOrder = {
   profiles: { first_name: string | null; last_name: string | null } | null;
   channel?: string | null;       // site | trendyol | hepsiburada
   customer_name?: string | null; // pazaryeri müşterisi (üye değil)
+  step?: NextStep;               // sıradaki adım (src/lib/order-next-step.ts)
 };
 
 export default function AdminDashboard() {
   const [openOrders, setOpenOrders] = useState<OpenOrder[]>([]);
-  const [openEventMap, setOpenEventMap] = useState<Record<string, string>>({});
   const [manualAlerts, setManualAlerts] = useState<{ id: string; product: string; who: string; channel: string }[]>([]);
   const [pendingMessages, setPendingMessages] = useState<PendingMessage[]>([]);
   const [pendingReviews, setPendingReviews] = useState<PendingReview[]>([]);
@@ -100,30 +86,19 @@ export default function AdminDashboard() {
 
   async function fetchDashboardData() {
     try {
-      // Tamamlanmamış (kapanmamış) siparişler — süreç takibi
+      // BEKLEYEN İŞLERİM — sıradaki adımı yöneticide olan siparişler. Sipariş listesindeki
+      // "Bekleyen işlerim" ile AYNI kural (src/lib/order-next-step.ts): pazaryerinin yönettiği
+      // (kargoda / teslim / faturalı) ve eski aktarılmış siparişler burada görünmez.
       const { data: openData } = await (supabase as any)
         .from('orders')
-        .select('id, order_number, external_order_number, total_amount, status, shipment_status, invoice_status, created_at, channel, customer_name, profiles (first_name, last_name)')
+        .select('id, order_number, external_order_number, total_amount, refunded_amount, status, payment_status, shipment_status, invoice_status, created_at, channel, import_source, customer_name, kargonomi_tracking_code, mp_restocked_at, fit_status, delivered_at, profiles (first_name, last_name), order_cases (kind, status, return_method, label_sent_at, closed_at)')
         .eq('is_closed', false)
-        .not('status', 'in', '(cancelled,refunded)')
         .order('created_at', { ascending: false })
-        .limit(20);
-      setOpenOrders((openData as OpenOrder[]) || []);
-
-      // Her açık siparişin en son süreç olayı (timeline)
-      const openIds = ((openData as OpenOrder[]) || []).map((o) => o.id);
-      if (openIds.length > 0) {
-        const { data: evs } = await (supabase as any)
-          .from("order_events")
-          .select("order_id, type, created_at")
-          .in("order_id", openIds)
-          .order("created_at", { ascending: false });
-        const map: Record<string, string> = {};
-        for (const e of (evs as any[]) || []) {
-          if (!(e.order_id in map)) map[e.order_id] = e.type; // ilk = en yeni
-        }
-        setOpenEventMap(map);
-      }
+        .limit(1000);
+      const todo = ((openData as any[]) || [])
+        .map((o) => ({ ...o, step: orderNextStep({ ...o, open_case: (o.order_cases || []).find((c: any) => !c.closed_at) ?? null }) }))
+        .filter((o) => o.step.needsAction);
+      setOpenOrders(todo as OpenOrder[]);
 
       // Manuel stok uyarısı: e-postası olmayan (Instagram/telefon) bekleyen
       // stok bildirimleri → stok gelince ELDEN bilgilendirilmeli (auto e-posta yok)
@@ -249,14 +224,14 @@ export default function AdminDashboard() {
         <CardHeader className="flex flex-row items-center justify-between pb-3">
           <CardTitle className="flex items-center gap-2">
             <Clock size={18} className="text-amber-500" />
-            Tamamlanmamış Siparişler
+            Bekleyen İşlerim
             {openOrders.length > 0 && (
               <span className="bg-amber-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
                 {openOrders.length}
               </span>
             )}
           </CardTitle>
-          <Link href="/admin/orders" className="text-xs text-muted-foreground hover:text-amber-600 flex items-center gap-1 transition-colors">
+          <Link href="/admin/orders?todo=1" className="text-xs text-muted-foreground hover:text-amber-600 flex items-center gap-1 transition-colors">
             Tümü <ArrowRight size={12} />
           </Link>
         </CardHeader>
@@ -264,11 +239,11 @@ export default function AdminDashboard() {
           {openOrders.length === 0 ? (
             <p className="text-sm text-muted-foreground py-6 text-center flex flex-col items-center gap-2">
               <PackageOpen size={28} className="text-slate-300" />
-              Tüm siparişler tamamlandı. 🎉
+              Bekleyen işin yok. 🎉
             </p>
           ) : (
             <div className="divide-y">
-              {openOrders.map((o) => {
+              {openOrders.slice(0, 20).map((o) => {
                 const st = orderStatusMap[o.status] ?? { label: o.status, color: "bg-slate-50 text-slate-600 ring-slate-400/20" };
                 const invoiced = o.invoice_status === "invoiced";
                 return (
@@ -283,16 +258,11 @@ export default function AdminDashboard() {
                       )}
                       {(o.profiles ? `${o.profiles.first_name ?? ""} ${o.profiles.last_name ?? ""}`.trim() : "") || o.customer_name || "—"}
                     </span>
-                    {/* Süreç durumu — ortadaki boş alanda */}
+                    {/* Sıradaki adım: aşama + yapılacak iş */}
                     <div className="flex-1 flex justify-center min-w-0">
-                      {(() => {
-                        const ev = EVENT_LABELS[openEventMap[o.id]];
-                        return (
-                          <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold ${ev ? ev.color : "bg-slate-50 text-slate-400"}`} title="Süreç durumu">
-                            <Clock size={10} /> {ev ? ev.label : "Süreç başlamadı"}
-                          </span>
-                        );
-                      })()}
+                      <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold bg-amber-50 text-amber-800 truncate" title={o.step?.hint || "Sıradaki adım"}>
+                        <Clock size={10} /> {o.step?.stage}{o.step?.actions?.[0] ? ` → ${o.step.actions[0].label}` : ""}
+                      </span>
                     </div>
                     <span className={`hidden sm:inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset shrink-0 ${st.color}`}>{st.label}</span>
                     <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${invoiced ? "bg-green-50 text-green-700" : "bg-slate-100 text-slate-500"}`}>
