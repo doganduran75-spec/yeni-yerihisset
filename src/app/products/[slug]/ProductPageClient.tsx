@@ -36,6 +36,8 @@ import Footer from "@/components/Footer";
 import { supabase } from "@/lib/supabase";
 import { trackViewItem, trackAddToCart } from "@/lib/analytics";
 import { fetchLiveStocks, fetchItemStock } from "@/lib/live-stock";
+import SizeGuide from "@/components/products/SizeGuide";
+import type { SizeChart } from "@/lib/size-chart";
 
 type Variant = {
   id: string;
@@ -69,10 +71,11 @@ type Product = {
   product_variants: Variant[] | null;
 };
 
-export default function ProductPageClient({ product, initialSize = null, initialVariantId = null, ratingSummary = null }: {
+export default function ProductPageClient({ product, initialSize = null, initialVariantId = null, sizeChart = null, ratingSummary = null }: {
   product: Product;
   initialSize?: string | null;
   initialVariantId?: string | null;
+  sizeChart?: SizeChart | null;
   ratingSummary?: { avg: number; count: number } | null; // gerçek yorumlardan; yoksa yıldız gösterilmez
 }) {
   const images =
@@ -466,9 +469,18 @@ export default function ProductPageClient({ product, initialSize = null, initial
             {/* Variants */}
             {product.has_variants && activeVariants.length > 0 && (
               <div className="space-y-4">
-                <h3 className="font-bold text-slate-900">
-                  {activeVariants[0]?.variant_options?.variant_groups?.name || "Seçenekler"}
-                </h3>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="font-bold text-slate-900">
+                    {activeVariants[0]?.variant_options?.variant_groups?.name || "Seçenekler"}
+                  </h3>
+                  {sizeChart && (
+                    <SizeGuide
+                      chart={sizeChart}
+                      variants={activeVariants.map((v) => ({ id: v.id, value: v.variant_options?.value ?? "", stock: vStock(v) }))}
+                      onPick={(id) => { const v = activeVariants.find((x) => x.id === id); if (v) setSelectedVariant(v); }}
+                    />
+                  )}
+                </div>
                 <div className="flex flex-wrap gap-3">
                   {activeVariants.map((v) => {
                     const hasStock = vStock(v) > 0;

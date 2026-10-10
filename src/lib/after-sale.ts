@@ -4,6 +4,7 @@
 // (teslim e-postasında gelir). Üye Hesabım'dan da açabilir (oturum + kendi siparişi).
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase-admin";
+import { rowMatches, type SizeRow } from "@/lib/size-chart";
 
 import { TRIAL_DAYS, UPS_WAIT_DAYS } from "@/lib/order-next-step"; // 14 gün deneme · UPS 5 gün
 export { TRIAL_DAYS, UPS_WAIT_DAYS };
@@ -85,7 +86,10 @@ export async function exchangeOptions(orderId: string, itemId: string, dir: "up"
   const sb = createAdminClient() as any;
   const { data: it } = await sb.from("order_items").select("id, product_id, variant_id, unit_price, variant_name").eq("id", itemId).eq("order_id", orderId).maybeSingle();
   if (!it) return null;
-  const { data: prod } = await sb.from("products").select("id, title, category_id").eq("id", it.product_id).maybeSingle();
+  const { data: prod } = await sb.from("products").select("id, title, category_id, brand_id").eq("id", it.product_id).maybeSingle();
+  // Markanın ölçü tablosu varsa sıradaki/önceki numara tablodan (harfli bedenler de: S → M)
+  const { data: chart } = prod?.brand_id ? await sb.from("size_charts").select("rows").eq("brand_id", prod.brand_id).maybeSingle() : { data: null };
+  const chartRows: SizeRow[] = Array.isArray(chart?.rows) ? [...chart.rows].sort((a: SizeRow, b: SizeRow) => a.min_mm - b.min_mm) : [];
   const { data: vars } = await sb.from("product_variants")
     .select("id, stock, is_active, price, variant_options(value)").eq("product_id", it.product_id);
   const sizeNum = (v: string) => Number(String(v || "").replace(",", ".").match(/\d+(\.\d+)?/)?.[0] ?? NaN);
@@ -95,19 +99,23 @@ export async function exchangeOptions(orderId: string, itemId: string, dir: "up"
     .filter((v) => v.is_active !== false && v.id !== it.variant_id)
     .map((v) => ({ variant_id: v.id, product_id: it.product_id, title: prod?.title ?? "", size: v.variant_options?.value ?? "", stock: Number(v.stock || 0), price: Number(v.price) }))
     .sort((a, b) => sizeNum(a.size) - sizeNum(b.size));
-  const suggested = same.find((v) => sizeNum(v.size) === target) ?? null;
+  // Tablodan hedef numara: mevcut satırın bir üstü / altı
+  const ci = chartRows.findIndex((r) => rowMatches(r, it.variant_name));
+  const targetRow: SizeRow | null = ci >= 0 ? (chartRows[dir === "up" ? ci + 1 : dir === "down" ? ci - 1 : ci] ?? null) : null;
+  const isTarget = (size: string) => (targetRow ? rowMatches(targetRow, size) : sizeNum(size) === target);
+  const suggested = same.find((v) => isTarget(v.size)) ?? null;
 
   let others: any[] = [];
-  if (Number.isFinite(target) && (!suggested || suggested.stock < 1) && prod?.category_id) {
+  if ((targetRow || Number.isFinite(target)) && (!suggested || suggested.stock < 1) && prod?.category_id) {
     const { data: cand } = await sb.from("product_variants")
       .select("id, stock, price, is_active, product_id, variant_options(value), products!inner(id, title, slug, image_url, images, is_active, category_id)")
       .eq("products.category_id", prod.category_id).eq("products.is_active", true).gt("stock", 0).neq("product_id", it.product_id).limit(200);
     others = ((cand as any[]) || [])
-      .filter((v) => v.is_active !== false && sizeNum(v.variant_options?.value) === target)
+      .filter((v) => v.is_active !== false && isTarget(v.variant_options?.value ?? ""))
       .slice(0, 12)
       .map((v) => ({ variant_id: v.id, product_id: v.product_id, title: v.products?.title ?? "", size: v.variant_options?.value ?? "", stock: Number(v.stock || 0), price: Number(v.price), image: v.products?.image_url || v.products?.images?.[0] || null }));
   }
-  return { current: it.variant_name, target: Number.isFinite(target) ? String(target) : null, suggested, same, others };
+  return { current: it.variant_name, target: targetRow ? targetRow.label : Number.isFinite(target) ? String(target) : null, suggested, same, others };
 }
 
 /**

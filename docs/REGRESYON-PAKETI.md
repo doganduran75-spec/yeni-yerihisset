@@ -40,6 +40,7 @@ node scripts/regression.mjs --hizli
 - **Uç noktalar ve yetki:** cron'lar şifresiz çalışmıyor, admin uçları girişsiz çalışmıyor, bot koruması devrede, kart ödeme ucu yanıt veriyor.
 - **Veri güvenliği:** dışarıdan (anon anahtarla) üye e-postası/telefonu, gizli ayarlar, siparişler okunamıyor; sahte sipariş eklenemiyor.
 - **Veri tutarlılığı:** eksi stok, kategorisiz/görselsiz/SKU'suz ürün, ürünsüz sipariş, süresi dolmuş ödenmemiş sipariş, bozuk bilgi bankası adresi, aktif kargo yöntemi, pazaryeri ve e-posta kuyruğu hataları.
+- **Beden tablosu:** ölçü tabloları okunabiliyor ama dışarıdan değiştirilemiyor; aralıklar geçerli ve çakışmasız; tablolu markanın ürün sayfasında "Numaramı bul" var.
 - **Üyelik:** 'Üye' rolü yalnız şifreli + e-postası doğrulanmış hesaplarda (model: `docs/UYELIK-MODELI.md`).
 - **Ayarlar ve ortam:** SMTP, iletişim e-postası (yönetici bildirimleri buraya gider), havale bilgisi, Google Analytics, site adresi, CRON_SECRET, yönetici sayısı (`--canli` ile: e-posta kilidi, iyzico, arama motoru engeli).
 - **Ürün beslemesi ve reklam etiketleri:** Google/Meta katalog beslemesi açılıyor, ürün sayısı ve fiyatı veritabanıyla aynı, numaralar `size` alanında, reklam bağlantısı (`?variant=`) çalışıyor, Meta Pixel onaysız yüklenmiyor, Conversions API anahtarı dışarıya kapalı (`--canli`: test olay kodu dolu → HATA).
@@ -106,6 +107,7 @@ Kısa turu yap, ardından:
 | T9 | Pazaryeri (açıksa) | Bir ürünün stoğunu değiştir | Senkron geçmişinde Trendyol/Hepsiburada ✓ |
 | T10 | İçerik | Bilgi bankası makalesi, Fırsatlar, İletişim, sözleşmeler (telefonda) | Açılıyor, okunuyor |
 | T12 | Meta reklamı (canlıda) | Çerezde "Kabul Et" → bir ürüne bak, sepete ekle, sipariş ver; Events Manager › Test olayları | ViewContent, AddToCart, InitiateCheckout, Purchase (tarayıcı + sunucu, tek satış) görünüyor |
+| T14 | Beden tablosu / Numaramı bul (telefonla) | Dodura ürününde 25,3 yaz → 40; Attipas ürününde 107 yaz → M (büyüme payı); önerilen numarayı seç | Öneri doğru, stok durumu doğru, numara seçildi |
 | T13 | Satış sonrası e-postaları (canlı öncesi metin kontrolü) | Bir siparişi "Teslim edildi" yap → e-posta; değişim / iade talebi aç → yöneticiye bildirim; kod gönder → müşteri e-postası | "Acele yok, evde dene" kutusu ve düğmeler; kod e-postası UPS uyarısıyla; metinler onaylandı |
 | T11 | Kart (iyzico açıksa) | Test kartıyla ödeme; başarısız kart; iade | Başarı sayfası; hata mesajı; iyzico iadesi |
 

@@ -156,6 +156,7 @@ async function main() {
     ["20261025 iptal e-postası şablonu", "SELECT NOT EXISTS(SELECT 1 FROM public.email_templates WHERE trigger='order_cancelled' AND body_html LIKE '%Ödeme yapıldıysa%')"],
     ["20261026 şifresiz hesaplar", "SELECT to_regprocedure('public.mark_account_passwordless(uuid)') IS NOT NULL"],
     ["20261028 üyelik durumu (misafir/doğrulanmamış/üye)", "SELECT to_regprocedure('public.member_account_state(uuid)') IS NOT NULL AND NOT EXISTS(SELECT 1 FROM pg_trigger WHERE tgname='on_profile_created_assign_role')"],
+    ["20261102 ölçü tabloları", "SELECT to_regclass('public.size_charts') IS NOT NULL"],
     ["20261101 varsayılan kargo yöntemi", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='shipping_methods' AND column_name='is_default')"],
     ["20261031 satış sonrası (oldu/değişim/iade)", "SELECT to_regclass('public.order_cases') IS NOT NULL AND to_regprocedure('public.exchange_add_item(uuid,uuid,uuid)') IS NOT NULL"],
     ["20261030 sipariş sıradaki adım", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='orders' AND column_name='mp_restocked_at')"],
@@ -256,6 +257,12 @@ async function main() {
     }
     const home = await get("/");
     /<script[^>]+connect\.facebook\.net/.test(home.text) ? add("fail", "Meta Pixel onaysız yükleniyor (KVKK)", "ana sayfa HTML'inde fbevents") : add("ok", "Meta Pixel onay olmadan yüklenmiyor");
+    // Beden tablosu: ölçü tablosu olan markanın ürününde "Numaramı bul" görünüyor
+    const scp = sql("SELECT p.slug FROM public.products p JOIN public.size_charts s ON s.brand_id = p.brand_id WHERE p.is_active AND p.has_variants ORDER BY p.created_at DESC LIMIT 1")[0];
+    if (scp) {
+      const pg2 = await get(`/products/${scp[0]}`);
+      pg2.status === 200 && pg2.text.includes("Numaramı bul") ? add("ok", "Ürün sayfasında beden tablosu / Numaramı bul") : add("fail", "Ürün sayfasında 'Numaramı bul' yok", `/products/${scp[0]} HTTP ${pg2.status}`);
+    }
     if (S.meta_domain_verification) {
       home.text.includes("facebook-domain-verification") ? add("ok", "Meta alan adı doğrulama etiketi") : add("fail", "Meta alan adı doğrulama etiketi sayfada yok", "Ayarlar › Meta");
     }
@@ -282,6 +289,10 @@ async function main() {
     capi.status >= 400 ? add("ok", "Meta Conversions API anahtarı dışarıya kapalı") : add("fail", "Meta Conversions API anahtarı dışarıya AÇIK", `HTTP ${capi.status} — 20261027 migration'ı`);
     const px = await rest("settings?select=meta_pixel_id&limit=1");
     px.status === 200 ? add("ok", "Meta Pixel kimliği okunabiliyor") : add("fail", "Meta Pixel kimliği okunamıyor", `HTTP ${px.status} — Pixel yüklenemez (GRANT eksik, 20261027)`);
+    const scr = await rest("size_charts?select=brand_id&limit=1");
+    scr.status === 200 ? add("ok", "Ölçü tabloları okunabiliyor") : add("fail", "Ölçü tabloları okunamıyor", `HTTP ${scr.status} — ürün sayfasında beden tablosu çıkmaz`);
+    const scw = await rest("size_charts", { method: "POST", body: JSON.stringify({ brand_id: "00000000-0000-0000-0000-000000000000", rows: [] }) });
+    scw.status >= 400 ? add("ok", "Ölçü tablosu dışarıdan değiştirilemiyor") : add("fail", "Ölçü tablosu dışarıdan DEĞİŞTİRİLEBİLİYOR", `HTTP ${scw.status}`);
     const mcl = await rest("marketing_consent_log?select=email&limit=1");
     mcl.status >= 400 || (Array.isArray(mcl.json) && mcl.json.length === 0) ? add("ok", "Kampanya izin kayıtları dışarıya kapalı") : add("fail", "Kampanya izin kayıtları dışarıya AÇIK", `HTTP ${mcl.status}`);
     const o = await rest("orders?select=id&limit=1");
@@ -314,6 +325,12 @@ async function main() {
   empty ? add("fail", "Ürünsüz site siparişi", `${empty} sipariş`) : add("ok", "Ürünsüz sipariş yok");
   const stale = num("SELECT count(*) FROM public.orders WHERE payment_status='pending' AND status <> 'cancelled' AND coalesce(channel,'site')='site' AND import_source IS NULL AND created_at < now() - interval '2 days'");
   stale ? add("warn", "2 günden eski ödenmemiş sipariş", `${stale} adet — süresi dolan sipariş iptali (cron) çalışıyor mu?`) : add("ok", "Süresi dolmuş ödenmemiş sipariş yok");
+  // Ölçü tabloları: aralıklar geçerli ve çakışmasız (Ayarlar › Markalar › Ölçü tablosu)
+  for (const [bn, rowsJson] of sql("SELECT b.name, s.rows::text FROM public.size_charts s JOIN public.brands b ON b.id = s.brand_id")) {
+    const rr = (JSON.parse(rowsJson || "[]") || []).slice().sort((a, b) => a.min_mm - b.min_mm);
+    const bad = rr.find((r, i) => !(r.min_mm <= r.max_mm) || (i > 0 && r.min_mm <= rr[i - 1].max_mm));
+    bad ? add("warn", `Ölçü tablosu hatalı: ${bn}`, `“${bad.label}” aralığı hatalı ya da çakışıyor`) : add("ok", `Ölçü tablosu: ${bn}`, `${rr.length} satır`);
+  }
   const badSlug = num("SELECT count(*) FROM public.kb_articles WHERE slug !~ '^[a-z0-9]+(-[a-z0-9]+)*$'");
   badSlug ? add("warn", "Bilgi bankası adresi bozuk", `${badSlug} makale`) : add("ok", "Bilgi bankası adresleri düzgün");
   const shipping = num("SELECT count(*) FROM public.shipping_methods WHERE is_active");

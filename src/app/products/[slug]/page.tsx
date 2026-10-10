@@ -13,6 +13,7 @@ import type { Metadata } from "next";
 import type { Database } from "@/lib/database.types";
 import ProductPageClient from "./ProductPageClient";
 import ProductStructuredData from "@/components/products/ProductStructuredData";
+import type { SizeChart } from "@/lib/size-chart";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com";
 const STORE_NAME = "YeriHisset";
@@ -32,7 +33,7 @@ async function getProduct(slug: string) {
     .from("products")
     .select(`
       id, title, description, short_description, slug, price, stock, images, image_url, has_variants,
-      category_id,
+      category_id, brand_id,
       brands (name, slug),
       categories (name, slug),
       product_variants (
@@ -48,6 +49,14 @@ async function getProduct(slug: string) {
     .single();
 
   return data;
+}
+
+// Markanın ölçü tablosu (Ayarlar › Markalar) — "Beden tablosu · Numaramı bul"
+async function getSizeChart(brandId: string | null | undefined): Promise<SizeChart | null> {
+  if (!brandId) return null;
+  const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+  const { data } = await (supabase as any).from("size_charts").select("title, note, kids, grow_up_mm, rows").eq("brand_id", brandId).maybeSingle();
+  return data && Array.isArray(data.rows) && data.rows.length ? (data as SizeChart) : null;
 }
 
 // Yorum istatistikleri — aggregateRating schema için
@@ -161,7 +170,7 @@ export default async function ProductDetailPage({
 
   if (!product) notFound();
 
-  const [reviewStats, ratingSummary] = await Promise.all([getReviewStats(product.id), getRatingSummary(product.id)]);
+  const [reviewStats, ratingSummary, sizeChart] = await Promise.all([getReviewStats(product.id), getRatingSummary(product.id), getSizeChart((product as any).brand_id)]);
 
   return (
     <>
@@ -175,7 +184,7 @@ export default async function ProductDetailPage({
       />
 
       {/* İnteraktif ürün sayfası (client component) */}
-      <ProductPageClient product={product as any} initialSize={beden ?? null} initialVariantId={variant ?? null} ratingSummary={ratingSummary} />
+      <ProductPageClient product={product as any} initialSize={beden ?? null} initialVariantId={variant ?? null} sizeChart={sizeChart} ratingSummary={ratingSummary} />
     </>
   );
 }

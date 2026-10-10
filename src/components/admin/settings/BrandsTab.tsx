@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { supabase } from "@/lib/supabase";
 import { Plus, Trash2, Loader2, Tag } from "lucide-react";
+import SizeChartEditor from "./SizeChartEditor";
 
 type Brand = { id: string; name: string; slug: string; logo_url: string | null; created_at: string };
 
@@ -122,6 +123,7 @@ export default function BrandsTab() {
                     <TableCell className="text-xs font-mono text-muted-foreground">{brand.slug}</TableCell>
                     <TableCell className="text-sm">{new Date(brand.created_at).toLocaleDateString("tr-TR")}</TableCell>
                     <TableCell className="text-right">
+                      <SizeChartEditor brand={brand} />
                       <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => handleDelete(brand.id)}>
                         <Trash2 size={14} />
                       </Button>
