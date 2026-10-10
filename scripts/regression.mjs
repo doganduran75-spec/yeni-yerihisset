@@ -156,6 +156,7 @@ async function main() {
     ["20261025 iptal e-postası şablonu", "SELECT NOT EXISTS(SELECT 1 FROM public.email_templates WHERE trigger='order_cancelled' AND body_html LIKE '%Ödeme yapıldıysa%')"],
     ["20261026 şifresiz hesaplar", "SELECT to_regprocedure('public.mark_account_passwordless(uuid)') IS NOT NULL"],
     ["20261028 üyelik durumu (misafir/doğrulanmamış/üye)", "SELECT to_regprocedure('public.member_account_state(uuid)') IS NOT NULL AND NOT EXISTS(SELECT 1 FROM pg_trigger WHERE tgname='on_profile_created_assign_role')"],
+    ["20261104 video kovası (media)", "SELECT EXISTS(SELECT 1 FROM storage.buckets WHERE id='media' AND public)"],
     ["20261103 mobil karşılama videosu", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='settings' AND column_name='intro_video_url')"],
     ["20261102 ölçü tabloları", "SELECT to_regclass('public.size_charts') IS NOT NULL"],
     ["20261102b Attipas numaraları", "SELECT NOT EXISTS(SELECT 1 FROM public.size_charts s JOIN public.brands b ON b.id = s.brand_id WHERE lower(b.name) LIKE 'attipas%' AND s.rows->0->>'label' = 'S')"],
@@ -295,6 +296,13 @@ async function main() {
     scr.status === 200 ? add("ok", "Ölçü tabloları okunabiliyor") : add("fail", "Ölçü tabloları okunamıyor", `HTTP ${scr.status} — ürün sayfasında beden tablosu çıkmaz`);
     const scw = await rest("size_charts", { method: "POST", body: JSON.stringify({ brand_id: "00000000-0000-0000-0000-000000000000", rows: [] }) });
     scw.status >= 400 ? add("ok", "Ölçü tablosu dışarıdan değiştirilemiyor") : add("fail", "Ölçü tablosu dışarıdan DEĞİŞTİRİLEBİLİYOR", `HTTP ${scw.status}`);
+    // Video kovası: herkes izler ama dışarıdan yükleme yapılamaz
+    try {
+      const up = await fetch(`${SB_URL}/storage/v1/object/media/regresyon-yetki-denemesi.mp4`, {
+        method: "POST", headers: { apikey: ANON, Authorization: `Bearer ${ANON}`, "Content-Type": "video/mp4" }, body: "x", signal: AbortSignal.timeout(15000),
+      });
+      up.status >= 400 ? add("ok", "Video kovasına dışarıdan yükleme yapılamıyor") : add("fail", "Video kovasına dışarıdan YÜKLENEBİLİYOR", `HTTP ${up.status} — 20261104 migration'ı`);
+    } catch (e) { add("warn", "Video kovası yükleme yetkisi kontrol edilemedi", String(e?.message || e)); }
     const mcl = await rest("marketing_consent_log?select=email&limit=1");
     mcl.status >= 400 || (Array.isArray(mcl.json) && mcl.json.length === 0) ? add("ok", "Kampanya izin kayıtları dışarıya kapalı") : add("fail", "Kampanya izin kayıtları dışarıya AÇIK", `HTTP ${mcl.status}`);
     const o = await rest("orders?select=id&limit=1");
@@ -367,9 +375,9 @@ async function main() {
   // Mobil karşılama videosu açıksa dosyası açılıyor ve hafif mi (Ayarlar › Genel)
   if (S.intro_video_enabled && S.intro_video_url) {
     const u = String(S.intro_video_url);
-    if (u.startsWith("/")) {
+    if (u.startsWith("/") || (SB_URL && u.startsWith(SB_URL))) {
       try {
-        const r = await fetch(APP + u, { method: "HEAD", signal: AbortSignal.timeout(15000) });
+        const r = await fetch(u.startsWith("/") ? APP + u : u, { method: "HEAD", signal: AbortSignal.timeout(15000) });
         const size = Number(r.headers.get("content-length") || 0);
         r.ok && /video/.test(r.headers.get("content-type") || "")
           ? add(size > 6_000_000 ? "warn" : "ok", "Karşılama videosu", size > 6_000_000 ? `${(size / 1e6).toFixed(1)} MB — telefonda geç yüklenir, 3 MB altı önerilir` : `${(size / 1e6).toFixed(1)} MB`)

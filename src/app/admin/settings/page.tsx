@@ -18,6 +18,7 @@ import PopupTab from "@/components/admin/settings/PopupTab";
 import EmailTemplatesTab from "@/components/admin/settings/EmailTemplatesTab";
 import IntegrationsTab from "@/components/admin/settings/IntegrationsTab";
 import ShippingMethodsManager from "@/components/admin/ShippingMethodsManager";
+import IntroVideoUpload from "@/components/admin/settings/IntroVideoUpload";
 import { siteAlert } from "@/components/ui/site-dialog";
 
 type SettingsTab = "general" | "variants" | "roles" | "brands" | "categories" | "kb-categories" | "member-tags" | "popup" | "email-templates" | "integrations";
@@ -544,12 +545,14 @@ function SettingsPageInner() {
             <CardDescription>
               Telefonda ana sayfaya ilk girişte bir kez tam ekran oynar, bitince ana sayfaya döner. Sayfa önce açılır;
               video arka planda yüklenir, birkaç saniyede hazır olmazsa hiç gösterilmez. Dikey, sessiz, 5–10 sn, tercihen 3 MB altı mp4.
+              “Video yükle” ile seçtiğin video hemen yayına girer (Kaydet’e ve deploy’a gerek yok).
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <label className="flex items-center gap-2 text-sm font-medium">
               <input type="checkbox" checked={!!settings.intro_video_enabled} onChange={(e) => set({ intro_video_enabled: e.target.checked })} /> Karşılama videosunu göster
             </label>
+            <IntroVideoUpload currentUrl={settings.intro_video_url || ""} onUploaded={(url) => set({ intro_video_url: url, intro_video_enabled: true })} />
             <div className="space-y-1">
               <label className="text-sm font-medium">Video adresi</label>
               <Input value={settings.intro_video_url || ""} onChange={(e) => set({ intro_video_url: e.target.value.trim() })} placeholder="/intro/intro.mp4 ya da https://…/video.mp4" />
