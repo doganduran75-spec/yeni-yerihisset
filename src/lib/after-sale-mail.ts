@@ -2,9 +2,8 @@
 // SATIŞ SONRASI E-POSTALARI (değişim / iade). Metinler canlıya almadan önce kullanıcıyla gözden geçirilecek.
 // Test siparişlerine (@….test) e-posta gitmez (mail-guard), yöneticiye bildirim düşmez (isTestOrder).
 import { createAdminClient } from "./supabase-admin";
-import { createMailTransport } from "./mail-guard";
-import { buildSmtpConfig } from "./smtp-config";
-import { buildEmailDocument, htmlToText, escapeHtml, isTestOrder } from "./notifications";
+import { escapeHtml, isTestOrder } from "./notifications";
+import { sendSiteMail } from "./site-mail";
 import { afterSaleUrl } from "./after-sale";
 
 export const RETURN_METHOD_LABEL: Record<string, string> = {
@@ -13,23 +12,7 @@ export const RETURN_METHOD_LABEL: Record<string, string> = {
   aras: "Aras Kargo şubesine teslim",
 };
 
-async function send(to: string, subject: string, bodyHtml: string): Promise<{ status: "sent" | "failed"; error?: string }> {
-  const sb = createAdminClient() as any;
-  const { data: st } = await sb.from("settings").select("*").limit(1).maybeSingle();
-  const storeName = st?.store_name || "YeriHisset";
-  const cfg = buildSmtpConfig({ smtp_host: st?.smtp_host || "", smtp_port: st?.smtp_port, smtp_secure: st?.smtp_secure, smtp_user: st?.smtp_user, smtp_password: st?.smtp_password });
-  if (!cfg.host || !cfg.auth.user) return { status: "failed", error: "SMTP ayarları eksik" };
-  try {
-    await createMailTransport(cfg).sendMail({
-      from: `"${st?.smtp_from_name || storeName}" <${st?.smtp_from_email || cfg.auth.user}>`,
-      to, subject: `${storeName} — ${subject}`,
-      html: buildEmailDocument(bodyHtml, storeName), text: htmlToText(bodyHtml),
-    });
-    return { status: "sent" };
-  } catch (e: any) {
-    return { status: "failed", error: e?.message || "E-posta gönderilemedi" };
-  }
-}
+const send = sendSiteMail;
 
 async function orderCustomer(orderId: string) {
   const sb = createAdminClient() as any;

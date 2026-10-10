@@ -102,7 +102,7 @@ Kısa turu yap, ardından:
 | T5 | Şifre | Çıkış → "Şifremi unuttum" → e-postadaki bağlantı → yeni şifre | Giriş oldu; admin'de e-posta "doğrulandı" |
 | T6 | Hediye | Hediyeli ürünü sepete ekle → sayfayı yenile → hediyeyi kaldır | Hediye sepet listesinde ürünlerin altında, ürün kartı boyutunda; otomatik geldi, kaybolmadı, "Sana hediye" olarak geri döndü |
 | T7 | Stok bildirimi e-postaları | Tükenmiş numarada "Stoğa girince haber ver" → stok gir → "Stok geldi" gönder | Onay ve "stok geldi" e-postaları geldi, görünüm düzgün (kayıt akışı otomatik testte) |
-| T8 | Satış ortağı linki | Ortağın linkini gizli pencerede aç → sipariş ver | Link kodu sepete taşınıyor (tarayıcı kısmı; sipariş tarafı otomatik testte) |
+| T8 | Satış ortağı linki + hakediş | Ortağın linkini gizli pencerede aç → sipariş ver; dönem sonunda Admin › Satış ortakları › Hakediş › Hesaba İşle | Link kodu sepete taşınıyor; ortağa "hakedişin hesabına yüklendi" e-postası (tutar + bakiye) |
 | T9 | Pazaryeri (açıksa) | Bir ürünün stoğunu değiştir | Senkron geçmişinde Trendyol/Hepsiburada ✓ |
 | T10 | İçerik | Bilgi bankası makalesi, Fırsatlar, İletişim, sözleşmeler (telefonda) | Açılıyor, okunuyor |
 | T12 | Meta reklamı (canlıda) | Çerezde "Kabul Et" → bir ürüne bak, sepete ekle, sipariş ver; Events Manager › Test olayları | ViewContent, AddToCart, InitiateCheckout, Purchase (tarayıcı + sunucu, tek satış) görünüyor |

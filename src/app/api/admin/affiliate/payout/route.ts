@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { sendSiteMail, mailButton } from "@/lib/site-mail";
+import { escapeHtml } from "@/lib/notifications";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { getAuthUserFromRequest } from "@/lib/auth-from-request";
 
@@ -182,7 +184,8 @@ export async function POST(req: NextRequest) {
     await supabase.from("orders").update({ commission_run_id: runId }).eq("id", r.orderId).is("commission_run_id", null);
   }
 
-  // Affiliate başına cüzdan bakiyesi + ledger
+  // Affiliate başına cüzdan bakiyesi + ledger + bilgilendirme e-postası
+  let emailed = 0;
   for (const g of Object.values(byAff)) {
     const prevBal = Number(affInfo[g.affiliate_id]?.credit_balance || 0);
     const newBal = round2(prevBal + g.total_commission);
@@ -201,7 +204,32 @@ export async function POST(req: NextRequest) {
       run_id: runId,
       note: `${period} dönemi hakedişi (${g.order_count} sipariş)`,
     });
+    // Ortağa "hakedişin hesabına yüklendi" e-postası (kullanıcı notu 8)
+    const email = affInfo[g.affiliate_id]?.profiles?.email;
+    if (email && g.total_commission > 0) {
+      const r = await sendCreditLoadedEmail({ to: email, name: affInfo[g.affiliate_id]?.profiles?.first_name ?? null, amount: g.total_commission, balance: newBal, period, orderCount: g.order_count }).catch(() => ({ status: "failed" }));
+      if (r.status === "sent") emailed++;
+    }
   }
 
-  return NextResponse.json({ ok: true, period, mode, committed: rows.length, grandTotal, runId, summary });
+  return NextResponse.json({ ok: true, period, mode, committed: rows.length, grandTotal, runId, summary, emailed });
+}
+
+// "Hakedişin hesabına yüklendi" — metin canlı öncesi kullanıcıyla gözden geçirilecek (go-live listesi)
+async function sendCreditLoadedEmail(p: { to: string; name: string | null; amount: number; balance: number; period: string; orderCount: number }) {
+  const site = (process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com").replace(/\/$/, "");
+  const tl = (n: number) => `₺${n.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const name = escapeHtml((p.name || "").trim());
+  const body = `
+    <h1 style="font-size:21px;font-weight:800;color:#111827;margin:0 0 12px">Hakedişin hesabına yüklendi 🎉</h1>
+    <p style="font-size:15px;color:#374151;line-height:1.6;margin:0 0 12px">Merhaba${name ? ` ${name}` : ""}, <b>${escapeHtml(p.period)}</b> döneminde paylaşımlarınla gelen <b>${p.orderCount}</b> siparişten kazandığın YeriHisset Kredisi hesabına eklendi.</p>
+    <div style="margin:0 0 14px;padding:16px;border-radius:14px;background:#f7fee7;border:1px solid #d9f99d;text-align:center">
+      <div style="font-size:13px;color:#4d7c0f">Bu dönem kazancın</div>
+      <div style="font-size:28px;font-weight:800;color:#1a2e05;margin:2px 0 6px">${tl(p.amount)}</div>
+      <div style="font-size:13px;color:#4d7c0f">Güncel bakiyen: <b>${tl(p.balance)}</b></div>
+    </div>
+    <p style="font-size:14px;color:#374151;line-height:1.6;margin:0">Bakiyeni bir sonraki alışverişinde ödeme adımında “YeriHisset Kredisi kullan” ile harcayabilirsin.</p>
+    ${mailButton(`${site}/magaza`, "Alışverişe başla")}
+    <p style="font-size:12px;color:#9ca3af;text-align:center;margin:0">Kazanç geçmişini Hesabım › Satış Ortaklığı’nda görebilirsin.</p>`;
+  return sendSiteMail(p.to, "hakedişin hesabına yüklendi", body);
 }

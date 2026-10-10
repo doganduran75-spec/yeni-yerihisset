@@ -76,7 +76,7 @@ export default function AdminAffiliatesPage() {
         setPayoutPreview(data);
         if (!data.summary?.length) setPayoutMsg("Bu dönemde işlenecek hakediş bulunamadı.");
       } else {
-        setPayoutMsg(`✓ ${data.committed} sipariş işlendi, toplam ₺${Number(data.grandTotal).toLocaleString("tr-TR", { minimumFractionDigits: 2 })} hesaplara aktarıldı.`);
+        setPayoutMsg(`✓ ${data.committed} sipariş işlendi, toplam ₺${Number(data.grandTotal).toLocaleString("tr-TR", { minimumFractionDigits: 2 })} hesaplara aktarıldı${data.emailed ? `; ${data.emailed} ortağa e-posta gönderildi` : ""}.`);
         setPayoutPreview(null);
         fetchData();
       }
