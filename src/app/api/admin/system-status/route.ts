@@ -29,14 +29,18 @@ async function requireAdmin(req: NextRequest) {
 }
 
 // POST {action:"test_mail"} → yönetici bildirim adresine deneme e-postası (gerçekten gidiyor mu?)
+// dryRun: true → göndermeden yalnız alıcıyı döndürür (regresyon testi; her deploy'da e-posta atılmasın)
 export async function POST(req: NextRequest) {
   const auth = await requireAdmin(req);
   if ("error" in auth) return auth.error;
   const body = await req.json().catch(() => ({}));
   if (body?.action !== "test_mail") return NextResponse.json({ error: "Geçersiz işlem" }, { status: 400 });
-  const { data: st } = await auth.sb.from("settings").select("admin_notify_email, contact_email, smtp_from_email").limit(1).maybeSingle();
-  const to = st?.admin_notify_email || st?.contact_email || st?.smtp_from_email;
-  if (!to) return NextResponse.json({ error: "Yönetici e-posta adresi ayarlı değil (Ayarlar › Genel)" }, { status: 400 });
+  // select("*"): ayar kolonları kurulumdan kuruluma değişebilir; yoksa sorgu hata verip adres "boş" görünüyordu.
+  // Alıcı sırası yönetici bildirimleriyle aynı (sendAdminSystemAlert): bildirim → iletişim → gönderen adresi.
+  const { data: st } = await auth.sb.from("settings").select("*").limit(1).maybeSingle();
+  const to = st?.admin_notify_email || st?.contact_email || st?.smtp_from_email || st?.smtp_user;
+  if (!to) return NextResponse.json({ error: "Yönetici e-posta adresi ayarlı değil (Ayarlar › Genel › İletişim Bilgileri › E-posta Adresi)" }, { status: 400 });
+  if (body?.dryRun) return NextResponse.json({ ok: true, to, dryRun: true });
   const r = await sendSiteMail(to, "Deneme e-postası", `<p style="font-size:15px">Bu bir deneme e-postasıdır. Geldiyse sitenin e-posta gönderimi çalışıyor.</p><p style="font-size:13px;color:#6b7280">Gönderim: ${new Date().toLocaleString("tr-TR", { timeZone: "Europe/Istanbul" })}</p>`);
   return r.status === "sent" ? NextResponse.json({ ok: true, to }) : NextResponse.json({ error: r.error || "Gönderilemedi" }, { status: 502 });
 }

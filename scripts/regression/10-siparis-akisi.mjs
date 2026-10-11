@@ -609,6 +609,9 @@ export default {
         ok(st.status === 200 && keys === "server,integrations,mail,backup,attacks,access,customer_errors", "Yönetici sistem durumunu görebiliyor (7 kutu, e-posta dahil)", `HTTP ${st.status} · ${keys || why(st)}`);
         const tm = await api("/api/admin/system-status", { token: F.member.token, body: { action: "test_mail" } });
         ok(tm.status === 401 || tm.status === 403, "Üye deneme e-postası gönderemiyor", `HTTP ${tm.status}`);
+        // Göndermeden alıcıyı çöz (dryRun): "Yönetici e-posta adresi ayarlı değil" hatası yakalansın
+        const dr = await api("/api/admin/system-status", { token: F.admin.token, body: { action: "test_mail", dryRun: true } });
+        ok(dr.status === 200 && /@/.test(dr.json?.to || ""), "Deneme e-postasının alıcısı bulunuyor (yönetici adresi)", why(dr));
         const bad = await api("/api/admin/system-status", { token: F.admin.token, body: { action: "yok" } });
         ok(bad.status === 400, "Sistem ucu bilinmeyen işlemi reddediyor", `HTTP ${bad.status}`);
         ok(["ok", "warn", "fail"].includes(st.json?.overall), "Sistem durumu genel sonuç veriyor", `overall=${st.json?.overall}`);
