@@ -47,6 +47,7 @@ export default {
         DELETE FROM public.categories WHERE slug = 'regresyon-test';
         DELETE FROM public.partner_opportunities WHERE title LIKE 'REGRESYON-TEST%';
         DELETE FROM public.coupons WHERE code LIKE 'RGT%';
+        DELETE FROM public.client_errors WHERE message LIKE 'REGRESYON-TEST%';
       `);
     }
 
@@ -597,6 +598,20 @@ export default {
         ok(ds.status === 200 && ds.json?.ok === true, "Yönetici 'stok geldi' gönderimini başlatabiliyor", why(ds));
         ok(ds.json?.sent === 0 && pending() === 2, "Gönderilemeyen bildirim 'bekliyor' kalıyor (test adresine e-posta gitmedi)",
           `gönderilen ${ds.json?.sent}, başarısız ${ds.json?.failed}, bekleyen ${pending()}`);
+      });
+
+      await part("Pano: sistem durumu ve müşteri hata kaydı", async () => {
+        const st = await api("/api/admin/system-status", { method: "GET", token: F.admin.token });
+        const keys = (st.json?.tiles ?? []).map((x) => x.key).join(",");
+        ok(st.status === 200 && keys === "server,integrations,backup,attacks,access,customer_errors", "Yönetici sistem durumunu görebiliyor (6 kutu)", `HTTP ${st.status} · ${keys || why(st)}`);
+        ok(["ok", "warn", "fail"].includes(st.json?.overall), "Sistem durumu genel sonuç veriyor", `overall=${st.json?.overall}`);
+        const mm = await api("/api/admin/system-status", { method: "GET", token: F.member.token });
+        ok(mm.status === 401 || mm.status === 403, "Üye sistem durumunu göremiyor", `HTTP ${mm.status}`);
+        const ce = await api("/api/client-error", { body: { kind: "checkout", message: `REGRESYON-TEST ${RUN}`, path: "/checkout" } });
+        ok(ce.status === 200, "Müşteri hata kaydı ucu çalışıyor", why(ce));
+        await sleep(500);
+        const n = num(`SELECT count(*) FROM public.client_errors WHERE message = ${lit(`REGRESYON-TEST ${RUN}`)}`);
+        ok(n === 1, "Ödeme sayfası hatası kaydedildi (panoda 'Hata alan müşteriler')", `${n} kayıt`);
       });
 
       await part("Sipariş silme ve süresi dolan sipariş", async () => {

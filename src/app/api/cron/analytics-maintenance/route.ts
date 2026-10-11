@@ -24,6 +24,8 @@ async function run(req: NextRequest) {
     console.error("[cron/analytics] prune", prune.error);
     return NextResponse.json({ error: prune.error.message }, { status: 500 });
   }
+  // Müşteri hata kayıtları (pano › Sistem) 90 günden eskiyse sil
+  await (supabase as any).from("client_errors").delete().lt("created_at", new Date(Date.now() - 90 * 86400000).toISOString());
   return NextResponse.json({ ok: true, pruned: prune.data });
 }
 

@@ -68,10 +68,10 @@ export default function DashboardSummary({ children }: { children?: ReactNode })
   ];
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 items-start">
+    <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4 items-stretch">
       {/* Satış özeti */}
-      <Card className="md:col-span-2 shadow-sm border-l-4 border-l-olive-600">
-        <CardHeader className="pb-2">
+      <Card className="md:col-span-2 shadow-sm border-l-4 border-l-olive-600 gap-1 py-3">
+        <CardHeader className="pb-0">
           <CardTitle className="flex items-center gap-2 text-base">
             <BarChart3 size={18} className="text-olive-600" /> Satış Özeti
           </CardTitle>
@@ -80,16 +80,16 @@ export default function DashboardSummary({ children }: { children?: ReactNode })
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-[11px] uppercase tracking-wider text-slate-400 border-b">
-                <th className="py-2 pr-3 font-bold" />
-                {cols.map((c) => <th key={c.key} className="py-2 px-2 text-right font-bold whitespace-nowrap">{c.label}</th>)}
+                <th className="py-1 pr-3 font-bold" />
+                {cols.map((c) => <th key={c.key} className="py-1 px-2 text-right font-bold whitespace-nowrap">{c.label}</th>)}
               </tr>
             </thead>
             <tbody>
               {rows.map((r) => (
                 <tr key={r.label} className="border-b last:border-0">
-                  <td className={`pr-3 whitespace-nowrap ${r.sub ? "py-1 pl-3 text-xs font-semibold text-slate-400" : "py-2.5 font-bold text-slate-600"}`}>{r.label}</td>
+                  <td className={`pr-3 whitespace-nowrap ${r.sub ? "py-0.5 pl-3 text-xs font-semibold text-slate-400" : "py-1.5 font-bold text-slate-600"}`}>{r.label}</td>
                   {cols.map((c) => (
-                    <td key={c.key} className={`px-2 text-right whitespace-nowrap ${r.sub ? "py-1 text-xs font-semibold text-slate-500" : "py-2.5"} ${r.strong ? "font-black text-slate-900 text-base" : r.sub ? "" : "font-bold text-slate-700"}`}>
+                    <td key={c.key} className={`px-2 text-right whitespace-nowrap ${r.sub ? "py-0.5 text-xs font-semibold text-slate-500" : "py-1.5"} ${r.strong ? "font-black text-slate-900 text-base" : r.sub ? "" : "font-bold text-slate-700"}`}>
                       {r.fmt(d.sales[c.key])}
                     </td>
                   ))}
@@ -97,15 +97,15 @@ export default function DashboardSummary({ children }: { children?: ReactNode })
               ))}
             </tbody>
           </table>
-          <p className="text-[11px] text-slate-400 mt-2">
+          <p className="text-[10px] text-slate-400 mt-1">
             Ödemesi alınmış, iptal edilmemiş siparişler · ciro kargo dahil, iadeler düşülmüş · adet ücretsiz hediyeler hariç
           </p>
         </CardContent>
       </Card>
 
       {/* Rollere göre kişi */}
-      <Card className="shadow-sm border-l-4 border-l-teal-600">
-        <CardHeader className="pb-2">
+      <Card className="shadow-sm border-l-4 border-l-teal-600 gap-1 py-3">
+        <CardHeader className="pb-0">
           <CardTitle className="flex items-center gap-2 text-base">
             <Users size={18} className="text-teal-600" /> Kişiler
           </CardTitle>
@@ -114,22 +114,22 @@ export default function DashboardSummary({ children }: { children?: ReactNode })
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-[11px] uppercase tracking-wider text-slate-400 border-b">
-                <th className="py-2 pr-2 font-bold">Rol</th>
-                <th className="py-2 px-2 text-right font-bold">Toplam</th>
-                <th className="py-2 pl-2 text-right font-bold whitespace-nowrap">Son 30 gün</th>
+                <th className="py-1 pr-2 font-bold">Rol</th>
+                <th className="py-1 px-2 text-right font-bold">Toplam</th>
+                <th className="py-1 pl-2 text-right font-bold whitespace-nowrap">Son 30 gün</th>
               </tr>
             </thead>
             <tbody>
               <tr className="border-b">
-                <td className="py-2 pr-2 font-black text-slate-900">Tüm üyeler</td>
-                <td className="py-2 px-2 text-right font-black text-slate-900">{num(d.members.total)}</td>
-                <td className="py-2 pl-2 text-right font-bold text-teal-700">+{num(d.members.new30)}</td>
+                <td className="py-1 pr-2 font-black text-slate-900">Tüm üyeler</td>
+                <td className="py-1 px-2 text-right font-black text-slate-900">{num(d.members.total)}</td>
+                <td className="py-1 pl-2 text-right font-bold text-teal-700">+{num(d.members.new30)}</td>
               </tr>
               {d.roles.map((r: any) => (
                 <tr key={r.slug} className="border-b last:border-0">
-                  <td className="py-2 pr-2 font-bold text-slate-600">{r.name}</td>
-                  <td className="py-2 px-2 text-right font-bold text-slate-800">{num(r.total)}</td>
-                  <td className="py-2 pl-2 text-right font-bold text-teal-700">+{num(r.new30)}</td>
+                  <td className="py-1 pr-2 font-bold text-slate-600">{r.name}</td>
+                  <td className="py-1 px-2 text-right font-bold text-slate-800">{num(r.total)}</td>
+                  <td className="py-1 pl-2 text-right font-bold text-teal-700">+{num(r.new30)}</td>
                 </tr>
               ))}
             </tbody>

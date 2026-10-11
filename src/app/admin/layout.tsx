@@ -7,7 +7,7 @@ export const metadata: Metadata = {
 import { SidebarProvider, Sidebar, SidebarHeader, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarInset, SidebarGroupLabel, SidebarTrigger } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
-import { LayoutDashboard, Settings, Users, ExternalLink, BookOpen, Handshake, MessagesSquare, Link2, Ticket, BellRing, Send, Boxes, Inbox, BarChart3 } from "lucide-react";
+import { LayoutDashboard, Settings, Users, ExternalLink, BookOpen, Handshake, MessagesSquare, Link2, Ticket, BellRing, Send, Boxes, Inbox, BarChart3, ShieldCheck } from "lucide-react";
 import AdminGuard from "@/components/admin/AdminGuard";
 
 export default function AdminLayout({
@@ -39,7 +39,12 @@ export default function AdminLayout({
               <SidebarMenu>
                 <SidebarMenuItem>
                   <SidebarMenuButton 
-                    render={<Link href="/admin"><LayoutDashboard size={18} className="mr-2" /> Dashboard</Link>} 
+                    render={<Link href="/admin"><LayoutDashboard size={18} className="mr-2" /> Pano</Link>}
+                  />
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    render={<Link href="/admin/system"><ShieldCheck size={18} className="mr-2" /> Sistem</Link>}
                   />
                 </SidebarMenuItem>
                 <SidebarMenuItem>

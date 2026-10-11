@@ -156,6 +156,7 @@ async function main() {
     ["20261025 iptal e-postası şablonu", "SELECT NOT EXISTS(SELECT 1 FROM public.email_templates WHERE trigger='order_cancelled' AND body_html LIKE '%Ödeme yapıldıysa%')"],
     ["20261026 şifresiz hesaplar", "SELECT to_regprocedure('public.mark_account_passwordless(uuid)') IS NOT NULL"],
     ["20261028 üyelik durumu (misafir/doğrulanmamış/üye)", "SELECT to_regprocedure('public.member_account_state(uuid)') IS NOT NULL AND NOT EXISTS(SELECT 1 FROM pg_trigger WHERE tgname='on_profile_created_assign_role')"],
+    ["20261105 sistem durumu (müşteri hataları, yönetici girişleri)", "SELECT to_regclass('public.client_errors') IS NOT NULL AND to_regprocedure('public.admin_login_activity(integer)') IS NOT NULL"],
     ["20261104 video kovası (media)", "SELECT EXISTS(SELECT 1 FROM storage.buckets WHERE id='media' AND public)"],
     ["20261103 mobil karşılama videosu", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='settings' AND column_name='intro_video_url')"],
     ["20261102 ölçü tabloları", "SELECT to_regclass('public.size_charts') IS NOT NULL"],
@@ -187,7 +188,7 @@ async function main() {
     ["/barefoot-nedir", "Barefoot nedir"], ["/sepet", "Sepet"], ["/checkout", "Ödeme"], ["/siparis-tamam", "Sipariş sonucu"],
     ["/login", "Giriş"], ["/account", "Hesabım"], ["/sifre-belirle", "Şifre belirle"], ["/kampanya-izni", "Kampanya izni"], ["/deneme-sonucu", "Satış sonrası (oldu mu?)"], ["/iletisim", "İletişim"],
     ["/iade-degisim", "İade-değişim"], ["/mesafeli-satis", "Mesafeli satış"], ["/kvkk", "KVKK"], ["/gizlilik", "Gizlilik"],
-    ["/cerez-politikasi", "Çerez politikası"], ["/admin", "Admin (kabuk)"], ["/sitemap.xml", "Site haritası"], ["/robots.txt", "robots.txt"],
+    ["/cerez-politikasi", "Çerez politikası"], ["/admin", "Admin (kabuk)"], ["/admin/system", "Admin sistem (kabuk)"], ["/sitemap.xml", "Site haritası"], ["/robots.txt", "robots.txt"],
   ];
   for (const [path, name, mustContain] of pages) {
     const r = await get(path);
@@ -211,6 +212,7 @@ async function main() {
     ["Cron (süresi dolan sipariş) şifresiz → 401", "/api/cron/expire-orders", { method: "POST" }, 401],
     ["Cron (sağlık) şifresiz → 401", "/api/cron/server-health", { method: "POST" }, 401],
     ["Admin ayarları girişsiz → 401", "/api/admin/settings", {}, 401],
+    ["Sistem durumu girişsiz → 401", "/api/admin/system-status", {}, 401],
     ["Admin sipariş silme girişsiz → 401", "/api/admin/orders/delete", { method: "POST", body: "{}" }, 401],
     ["Admin sipariş işlemi girişsiz → 401", "/api/admin/orders/action", { method: "POST", body: "{}" }, 401],
     ["Sipariş özeti geçersiz kimlik → 400", "/api/orders/summary?id=gecersiz", {}, 400],
@@ -303,6 +305,8 @@ async function main() {
       });
       up.status >= 400 ? add("ok", "Video kovasına dışarıdan yükleme yapılamıyor") : add("fail", "Video kovasına dışarıdan YÜKLENEBİLİYOR", `HTTP ${up.status} — 20261104 migration'ı`);
     } catch (e) { add("warn", "Video kovası yükleme yetkisi kontrol edilemedi", String(e?.message || e)); }
+    const cer = await rest("client_errors?select=message&limit=1");
+    cer.status >= 400 || (Array.isArray(cer.json) && cer.json.length === 0) ? add("ok", "Müşteri hata kayıtları dışarıya kapalı") : add("fail", "Müşteri hata kayıtları dışarıya AÇIK", `HTTP ${cer.status} — 20261105 migration'ı`);
     const mcl = await rest("marketing_consent_log?select=email&limit=1");
     mcl.status >= 400 || (Array.isArray(mcl.json) && mcl.json.length === 0) ? add("ok", "Kampanya izin kayıtları dışarıya kapalı") : add("fail", "Kampanya izin kayıtları dışarıya AÇIK", `HTTP ${mcl.status}`);
     const o = await rest("orders?select=id&limit=1");

@@ -39,6 +39,7 @@ import { shipFee } from "@/lib/shipping-fee";
 import CheckoutStepper from "@/components/CheckoutStepper";
 import { track } from "@/lib/track";
 import { getAdContext } from "@/lib/ad-context";
+import { reportClientError } from "@/lib/report-error";
 
 function getCookie(name: string): string | null {
   if (typeof document === "undefined") return null;
@@ -397,6 +398,7 @@ export default function CheckoutPage() {
       if (!data.ok) {
         // Stok yarışı (bu arada tükendi) → ürün bazlı uyarı; değilse genel hata kutusu
         if (!(await showStockProblemIfAny())) setOrderError(data.error || "Ödeme başlatılamadı. Lütfen tekrar deneyin.");
+        reportClientError("checkout", `Kart ödemesi başlatılamadı: ${data.error || res.status}`);
         return;
       }
 
@@ -472,6 +474,7 @@ export default function CheckoutPage() {
       goToSuccess(data.orderId);
     } else {
       if (!(await showStockProblemIfAny())) setOrderError(data.error || "Sipariş oluşturulamadı. Lütfen tekrar deneyin.");
+      reportClientError("checkout", `Havale siparişi oluşturulamadı: ${data.error || res.status}`);
     }
   }
 

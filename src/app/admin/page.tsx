@@ -4,24 +4,11 @@ import { orderLabel } from "@/lib/order-label";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { orderNextStep, type NextStep } from "@/lib/order-next-step";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { supabase } from "@/lib/supabase";
-import BackupStatusCard from "@/components/admin/BackupStatusCard";
-import ServerHealthCard from "@/components/admin/ServerHealthCard";
 import DashboardSummary from "@/components/admin/DashboardSummary";
-import MarketplaceSyncCard from "@/components/admin/MarketplaceSyncCard";
-import { Loader2, MessageCircle, ArrowRight, Star, Clock, PackageOpen, BellRing } from "lucide-react";
-
-const orderStatusMap: Record<string, { label: string; color: string }> = {
-  pending:          { label: "Beklemede",         color: "bg-amber-50 text-amber-700 ring-amber-500/20" },
-  awaiting_payment: { label: "Ödeme Bekleniyor",  color: "bg-orange-50 text-orange-700 ring-orange-500/20" },
-  processing:       { label: "Hazırlanıyor",       color: "bg-blue-50 text-blue-700 ring-blue-500/20" },
-  shipped:          { label: "Kargoya Verildi",    color: "bg-purple-50 text-purple-700 ring-purple-500/20" },
-  delivered:        { label: "Teslim Edildi",      color: "bg-green-50 text-green-700 ring-green-500/20" },
-  cancelled:        { label: "İptal Edildi",       color: "bg-red-50 text-red-700 ring-red-500/20" },
-  refunded:         { label: "İade Edildi",        color: "bg-slate-100 text-slate-600 ring-slate-400/20" },
-  paid:             { label: "Ödendi",             color: "bg-green-50 text-green-700 ring-green-500/20" },
-};
+import SystemStatusStrip from "@/components/admin/SystemStatusStrip";
+import { Loader2, MessageCircle, ArrowRight, Star, Clock, PackageOpen } from "lucide-react";
 
 type PendingMessage = {
   user_id: string;
@@ -195,302 +182,107 @@ export default function AdminDashboard() {
     );
   }
 
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
-          <p className="text-muted-foreground">Mağazanızın anlık performans özeti.</p>
-        </div>
-      </div>
+  // TEK EKRAN PANO (≈1600×830): üstte sistem şeridi, ortada satış + kişiler + bugünün işleri,
+  // altta bekleyen işlerim + mesajlar + yorumlar. Liste uzunlukları ekrana sığacak kadar; "Tümü" ile devamı.
+  const tr = (iso: string) => new Date(iso).toLocaleString("tr-TR", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "short" });
+  const CH: Record<string, string> = { trendyol: "TY", hepsiburada: "HB", amazon: "AZ", attipas: "AT" };
+  const head = (icon: React.ReactNode, title: string, n: number, href: string, tone: string) => (
+    <div className="flex items-center justify-between px-4 pt-3 pb-1">
+      <p className="flex items-center gap-2 font-semibold text-sm">
+        {icon} {title}
+        {n > 0 && <span className={`${tone} text-white text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center`}>{n}</span>}
+      </p>
+      <Link href={href} className="text-xs text-muted-foreground hover:text-slate-800 flex items-center gap-1">Tümü <ArrowRight size={12} /></Link>
+    </div>
+  );
 
-      {/* Üst satır: Satış özeti %50 · Kişiler %25 · Sunucu Sağlığı + Yedekleme %25 */}
+  return (
+    <div className="space-y-3">
+      {/* 1) SİSTEM — göz ucuyla (sorun varsa üstte belirgin uyarı; ayrıntı: /admin/system) */}
+      <SystemStatusStrip />
+
+      {/* 2) SATIŞ — özet · kişiler · bugünün işleri */}
       <DashboardSummary>
-        <div className="flex flex-col gap-4">
-          {/* Sunucu sağlığı (15 dk'da bir otomatik kontrol; sorun olursa e-posta) */}
-          <ServerHealthCard />
-          {/* Yedekleme durumu (gece yedeği + haftalık geri yükleme testi) */}
-          <BackupStatusCard />
-        </div>
+        <Card className="shadow-sm border-l-4 border-l-amber-500 gap-1 py-3">
+          <div className="px-4 pb-1 font-semibold text-sm flex items-center gap-2"><Clock size={16} className="text-amber-500" /> Bugünün işleri</div>
+          <div className="px-2 text-sm">
+            {[
+              { n: openOrders.length, label: "Bekleyen sipariş işi", href: "/admin/orders?todo=1" },
+              { n: pendingMessages.length, label: "Cevapsız müşteri mesajı", href: "/admin/messages" },
+              { n: pendingReviews.length, label: "Onay bekleyen yorum", href: "/admin/reviews" },
+              { n: stockTasks.length, label: "Pazaryeri stok görevi", href: "/admin/stock-sync" },
+              { n: manualAlerts.length, label: "Elle bilgilendirilecek stok talebi", href: "/admin/crm/stock-notifications" },
+            ].map((x) => (
+              <Link key={x.label} href={x.href} className={`flex items-center justify-between rounded-lg px-2 py-1.5 hover:bg-slate-50 ${x.n ? "font-semibold text-slate-800" : "text-muted-foreground"}`}>
+                <span>{x.label}</span>
+                <span className={`min-w-[26px] text-center rounded-full px-2 py-0.5 text-xs font-black ${x.n ? "bg-amber-500 text-white" : "bg-slate-100 text-slate-400"}`}>{x.n}</span>
+              </Link>
+            ))}
+          </div>
+        </Card>
       </DashboardSummary>
 
-      <div className="grid gap-6 lg:grid-cols-3 items-start">
-
-      {/* SAĞ — Tamamlanmamış Siparişler (üste dayalı) */}
-      <div className="lg:col-start-2 lg:col-span-2 lg:row-start-1">
-
-      {/* Tamamlanmamış Siparişler (süreç kapanmamış) */}
-      <Card className="shadow-sm border-l-4 border-l-amber-500">
-        <CardHeader className="flex flex-row items-center justify-between pb-3">
-          <CardTitle className="flex items-center gap-2">
-            <Clock size={18} className="text-amber-500" />
-            Bekleyen İşlerim
-            {openOrders.length > 0 && (
-              <span className="bg-amber-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
-                {openOrders.length}
-              </span>
-            )}
-          </CardTitle>
-          <Link href="/admin/orders?todo=1" className="text-xs text-muted-foreground hover:text-amber-600 flex items-center gap-1 transition-colors">
-            Tümü <ArrowRight size={12} />
-          </Link>
-        </CardHeader>
-        <CardContent className="pt-0">
+      {/* 3) YAPILACAKLAR — bekleyen işlerim (geniş) · mesajlar + yorumlar */}
+      <div className="grid gap-3 lg:grid-cols-3 items-start">
+        <Card className="lg:col-span-2 shadow-sm border-l-4 border-l-amber-500 gap-0 py-0 pb-2">
+          {head(<Clock size={16} className="text-amber-500" />, "Bekleyen İşlerim", openOrders.length, "/admin/orders?todo=1", "bg-amber-500")}
           {openOrders.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-6 text-center flex flex-col items-center gap-2">
-              <PackageOpen size={28} className="text-slate-300" />
-              Bekleyen işin yok. 🎉
-            </p>
+            <p className="text-sm text-muted-foreground py-6 text-center flex flex-col items-center gap-1"><PackageOpen size={24} className="text-slate-300" /> Bekleyen işin yok. 🎉</p>
           ) : (
-            <div className="divide-y">
-              {openOrders.slice(0, 20).map((o) => {
-                const st = orderStatusMap[o.status] ?? { label: o.status, color: "bg-slate-50 text-slate-600 ring-slate-400/20" };
-                const invoiced = o.invoice_status === "invoiced";
-                return (
-                  <Link key={o.id} href={`/admin/orders?id=${o.id}`}
-                    className="flex items-center gap-3 py-2.5 px-2 hover:bg-amber-50/50 rounded-lg transition-colors group">
-                    <span className="font-mono text-xs font-bold text-blue-600 w-24 shrink-0 truncate">{orderLabel(o)}</span>
-                    <span className="text-sm font-medium shrink-0 truncate max-w-[150px]">
-                      {o.channel && o.channel !== "site" && (
-                        <span className="mr-1 text-[9px] font-black uppercase px-1 py-0.5 rounded bg-orange-100 text-orange-700">
-                          {({ trendyol: "TY", hepsiburada: "HB", amazon: "AZ", attipas: "AT" } as Record<string, string>)[o.channel] ?? o.channel.slice(0, 2).toUpperCase()}
-                        </span>
-                      )}
-                      {(o.profiles ? `${o.profiles.first_name ?? ""} ${o.profiles.last_name ?? ""}`.trim() : "") || o.customer_name || "—"}
-                    </span>
-                    {/* Sıradaki adım: aşama + yapılacak iş */}
-                    <div className="flex-1 flex justify-center min-w-0">
-                      <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold bg-amber-50 text-amber-800 truncate" title={o.step?.hint || "Sıradaki adım"}>
-                        <Clock size={10} /> {o.step?.stage}{o.step?.actions?.[0] ? ` → ${o.step.actions[0].label}` : ""}
-                      </span>
-                    </div>
-                    <span className={`hidden sm:inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset shrink-0 ${st.color}`}>{st.label}</span>
-                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${invoiced ? "bg-green-50 text-green-700" : "bg-slate-100 text-slate-500"}`}>
-                      {invoiced ? "Faturalı" : "Fatura yok"}
-                    </span>
-                    <span className="text-sm text-slate-500 w-20 text-right shrink-0">₺{o.total_amount.toFixed(0)}</span>
-                    <span className="text-[10px] text-slate-400 w-16 text-right shrink-0 hidden md:block">
-                      {new Date(o.created_at).toLocaleDateString("tr-TR")}
-                    </span>
-                    <ArrowRight size={12} className="text-slate-300 group-hover:text-amber-500 transition-colors shrink-0" />
-                  </Link>
-                );
-              })}
+            <div className="divide-y px-2">
+              {openOrders.slice(0, 7).map((o) => (
+                <Link key={o.id} href={`/admin/orders?id=${o.id}`} className="flex items-center gap-3 py-1.5 px-2 hover:bg-amber-50/50 rounded-lg transition-colors group">
+                  <span className="font-mono text-xs font-bold text-blue-600 w-24 shrink-0 truncate">{orderLabel(o)}</span>
+                  <span className="text-sm font-medium w-40 shrink-0 truncate">
+                    {o.channel && o.channel !== "site" && <span className="mr-1 text-[9px] font-black uppercase px-1 py-0.5 rounded bg-orange-100 text-orange-700">{CH[o.channel] ?? o.channel.slice(0, 2).toUpperCase()}</span>}
+                    {(o.profiles ? `${o.profiles.first_name ?? ""} ${o.profiles.last_name ?? ""}`.trim() : "") || o.customer_name || "—"}
+                  </span>
+                  <span className="flex-1 min-w-0 truncate text-xs font-bold text-amber-800" title={o.step?.hint}>
+                    {o.step?.stage}{o.step?.actions?.[0] ? ` → ${o.step.actions[0].label}` : ""}
+                  </span>
+                  <span className="text-sm text-slate-500 w-16 text-right shrink-0">₺{Number(o.total_amount).toFixed(0)}</span>
+                  <span className="text-[10px] text-slate-400 w-16 text-right shrink-0 hidden md:block">{new Date(o.created_at).toLocaleDateString("tr-TR")}</span>
+                </Link>
+              ))}
+              {openOrders.length > 7 && <Link href="/admin/orders?todo=1" className="block text-center text-xs text-muted-foreground hover:text-slate-800 py-1.5">+{openOrders.length - 7} iş daha</Link>}
             </div>
           )}
-        </CardContent>
-      </Card>
-      </div>{/* SAĞ kapan */}
+        </Card>
 
-      {/* SOL %34 — Yapılacak işler, tek sıra (dikey) */}
-      <div className="lg:col-start-1 lg:col-span-1 lg:row-start-1 flex flex-col gap-6">
-        {/* Yeni Mesajlar */}
-        <Card className="shadow-sm border-l-4 border-l-rose-500">
-          <CardHeader className="flex flex-row items-center justify-between pb-3">
-            <CardTitle className="flex items-center gap-2">
-              <MessageCircle size={18} className="text-rose-500" />
-              Yeni Mesajlar
-              {pendingMessages.length > 0 && (
-                <span className="bg-rose-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
-                  {pendingMessages.length}
-                </span>
-              )}
-            </CardTitle>
-            <Link
-              href="/admin/messages"
-              className="text-xs text-muted-foreground hover:text-rose-600 flex items-center gap-1 transition-colors"
-            >
-              Tümü <ArrowRight size={12} />
-            </Link>
-          </CardHeader>
-          <CardContent className="pt-0">
-            {pendingMessages.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-4 text-center">
-                Bekleyen mesaj yok.
-              </p>
-            ) : (
-              <div className="space-y-1">
-                {pendingMessages.map((msg) => (
-                  <Link
-                    key={msg.order_id}
-                    href={`/admin/messages?order=${msg.order_id}`}
-                    className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-rose-50 transition-colors group"
-                  >
-                    <div className="w-8 h-8 rounded-full bg-rose-100 flex items-center justify-center shrink-0 text-xs font-black text-rose-600 uppercase">
-                      {msg.first_name[0] || "?"}{msg.last_name[0] || ""}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold text-slate-900 leading-none">
-                        <span className="text-blue-600">{msg.order_number ? `YH${msg.order_number}` : "#" + msg.order_id.slice(0,6)}</span> · {msg.first_name} {msg.last_name}
-                      </p>
-                      <p className="text-xs text-slate-400 truncate mt-0.5">{msg.content}</p>
-                    </div>
-                    <div className="flex flex-col items-end gap-1 shrink-0">
-                      <span className="text-[10px] text-slate-400">
-                        {new Date(msg.created_at).toLocaleString("tr-TR", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "short" })}
-                      </span>
-                      <ArrowRight size={12} className="text-slate-300 group-hover:text-rose-500 transition-colors" />
-                    </div>
+        <div className="flex flex-col gap-3">
+          <Card className="shadow-sm border-l-4 border-l-rose-500 gap-0 py-0 pb-2">
+            {head(<MessageCircle size={16} className="text-rose-500" />, "Müşteri mesajları", pendingMessages.length, "/admin/messages", "bg-rose-500")}
+            {pendingMessages.length === 0 ? <p className="text-sm text-muted-foreground py-3 text-center">Cevapsız mesaj yok.</p> : (
+              <div className="px-2">
+                {pendingMessages.slice(0, 3).map((msg) => (
+                  <Link key={msg.order_id} href={`/admin/messages?order=${msg.order_id}`} className="block px-2 py-1.5 rounded-lg hover:bg-rose-50">
+                    <p className="text-sm font-semibold text-slate-900 truncate"><span className="text-blue-600">{msg.order_number ? `YH${msg.order_number}` : "#" + msg.order_id.slice(0, 6)}</span> · {msg.first_name} {msg.last_name} <span className="text-[10px] font-normal text-slate-400">{tr(msg.created_at)}</span></p>
+                    <p className="text-xs text-slate-500 truncate">{msg.content}</p>
                   </Link>
                 ))}
               </div>
             )}
-          </CardContent>
-        </Card>
+          </Card>
 
-        {/* Onay Bekleyen Yorumlar */}
-        <Card className="shadow-sm border-l-4 border-l-amber-400">
-          <CardHeader className="flex flex-row items-center justify-between pb-3">
-            <CardTitle className="flex items-center gap-2">
-              <Star size={18} className="text-amber-500" />
-              Yorumlar
-              {pendingReviews.length > 0 && (
-                <span className="bg-amber-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
-                  {pendingReviews.length}
-                </span>
-              )}
-            </CardTitle>
-            <Link
-              href="/admin/reviews"
-              className="text-xs text-muted-foreground hover:text-amber-600 flex items-center gap-1 transition-colors"
-            >
-              Tümü <ArrowRight size={12} />
-            </Link>
-          </CardHeader>
-          <CardContent className="pt-0">
-            {pendingReviews.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-4 text-center">
-                Onay bekleyen yorum yok.
-              </p>
-            ) : (
-              <div className="space-y-1">
-                {pendingReviews.map((review) => {
+          <Card className="shadow-sm border-l-4 border-l-amber-400 gap-0 py-0 pb-2">
+            {head(<Star size={16} className="text-amber-500" />, "Onay bekleyen yorumlar", pendingReviews.length, "/admin/reviews", "bg-amber-500")}
+            {pendingReviews.length === 0 ? <p className="text-sm text-muted-foreground py-3 text-center">Onay bekleyen yorum yok.</p> : (
+              <div className="px-2">
+                {pendingReviews.slice(0, 3).map((review) => {
                   const avg = ((review.rating_shipping + review.rating_quality + review.rating_communication) / 3).toFixed(1);
                   const name = [review.profiles?.first_name, review.profiles?.last_name].filter(Boolean).join(" ") || "Müşteri";
                   return (
-                    <Link
-                      key={review.id}
-                      href="/admin/reviews"
-                      className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-amber-50 transition-colors group"
-                    >
-                      <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
-                        <Star size={14} className="text-amber-500 fill-amber-400" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <p className="text-sm font-bold text-slate-900 leading-none truncate">{name}</p>
-                          {review.orders?.order_number && (
-                            <span className="text-[10px] font-mono bg-slate-100 text-slate-400 px-1 rounded">
-                              YH{review.orders.order_number}
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs text-slate-400 truncate mt-0.5">
-                          {review.comment || "Yorumsuz değerlendirme"}
-                        </p>
-                      </div>
-                      <div className="flex flex-col items-end gap-1 shrink-0">
-                        <span className="flex items-center gap-0.5 text-xs font-bold text-amber-600">
-                          <Star size={10} className="fill-amber-400 text-amber-400" />
-                          {avg}
-                        </span>
-                        <ArrowRight size={12} className="text-slate-300 group-hover:text-amber-500 transition-colors" />
-                      </div>
+                    <Link key={review.id} href="/admin/reviews" className="block px-2 py-1.5 rounded-lg hover:bg-amber-50">
+                      <p className="text-sm font-semibold text-slate-900 truncate">{name} <span className="text-xs font-bold text-amber-600">★ {avg}</span></p>
+                      <p className="text-xs text-slate-500 truncate">{review.comment || "Yorumsuz değerlendirme"}</p>
                     </Link>
                   );
                 })}
               </div>
             )}
-          </CardContent>
-        </Card>
-
-        {/* Manuel Stok Uyarısı — e-postasız kişiler elden bilgilendirilmeli */}
-        <Card className="shadow-sm border-l-4 border-l-teal-500">
-          <CardHeader className="flex flex-row items-center justify-between pb-3">
-            <CardTitle className="flex items-center gap-2">
-              <BellRing size={18} className="text-teal-500" />
-              Manuel Bilgilendirme
-              {manualAlerts.length > 0 && (
-                <span className="bg-teal-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
-                  {manualAlerts.length}
-                </span>
-              )}
-            </CardTitle>
-            <Link href="/admin/crm/stock-notifications" className="text-xs text-muted-foreground hover:text-teal-600 flex items-center gap-1 transition-colors">
-              Tümü <ArrowRight size={12} />
-            </Link>
-          </CardHeader>
-          <CardContent className="pt-0">
-            {manualAlerts.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-4 text-center">Elden bilgilendirme bekleyen yok.</p>
-            ) : (
-              <>
-                <p className="text-[11px] text-slate-400 mb-2">
-                  E-postası olmayan (Instagram/telefon) stok bildirimleri — stok gelince <b>elden</b> haber verilmeli.
-                </p>
-                <div className="space-y-1">
-                  {manualAlerts.slice(0, 6).map((a) => (
-                    <Link key={a.id} href="/admin/crm/stock-notifications"
-                      className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-teal-50 transition-colors group">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-bold text-slate-900 truncate">{a.product}</p>
-                        <p className="text-xs text-slate-400 truncate">{a.who ? `${a.who} · ` : ""}{a.channel}</p>
-                      </div>
-                      <ArrowRight size={12} className="text-slate-300 group-hover:text-teal-500 transition-colors shrink-0" />
-                    </Link>
-                  ))}
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Pazaryeri stok senkronu (Trendyol/Hepsiburada) — güncellik tek bakışta */}
-        <MarketplaceSyncCard />
-
-        {/* Pazaryeri Stok Görevleri — stok 0 olunca kanalları kapat */}
-        <Card className="order-first shadow-sm border-l-4 border-l-red-500">
-          <CardHeader className="flex flex-row items-center justify-between pb-3">
-            <CardTitle className="flex items-center gap-2">
-              <PackageOpen size={18} className="text-red-500" />
-              Pazaryeri Stok Görevleri
-              {stockTasks.length > 0 && (
-                <span className="bg-red-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
-                  {stockTasks.length}
-                </span>
-              )}
-            </CardTitle>
-            <Link href="/admin/stock-sync" className="text-xs text-muted-foreground hover:text-red-600 flex items-center gap-1 transition-colors">
-              Tümü <ArrowRight size={12} />
-            </Link>
-          </CardHeader>
-          <CardContent className="pt-0">
-            {stockTasks.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-4 text-center">Stok 0 görevi yok. 🎉</p>
-            ) : (
-              <>
-                <p className="text-[11px] text-slate-400 mb-2">
-                  Stoğu 0 olan ürünlerin pazaryeri listelemelerini <b>kapat</b>. Barkod kopyala → kanala git → 0 yap.
-                </p>
-                <div className="space-y-1">
-                  {[...new Map(stockTasks.map((t: any) => [t.variant_id || t.product_id, t])).values()].slice(0, 6).map((t: any) => (
-                    <Link key={t.variant_id || t.product_id} href="/admin/stock-sync"
-                      className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-red-50 transition-colors group">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-bold text-slate-900 truncate">{t.product_title}{t.variant_label ? ` · ${t.variant_label}` : ""}</p>
-                        {t.barcode && <p className="text-xs font-mono text-slate-400 truncate">{t.barcode}</p>}
-                      </div>
-                      <ArrowRight size={12} className="text-slate-300 group-hover:text-red-500 transition-colors shrink-0" />
-                    </Link>
-                  ))}
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
-
-      </div>{/* SOL kolon kapan */}
-      </div>{/* dış 2-kolon grid */}
+          </Card>
+        </div>
+      </div>
     </div>
   );
 }
