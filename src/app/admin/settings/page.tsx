@@ -19,6 +19,7 @@ import EmailTemplatesTab from "@/components/admin/settings/EmailTemplatesTab";
 import IntegrationsTab from "@/components/admin/settings/IntegrationsTab";
 import ShippingMethodsManager from "@/components/admin/ShippingMethodsManager";
 import IntroVideoUpload from "@/components/admin/settings/IntroVideoUpload";
+import TestMailButton from "@/components/admin/TestMailButton";
 import { siteAlert } from "@/components/ui/site-dialog";
 
 type SettingsTab = "general" | "variants" | "roles" | "brands" | "categories" | "kb-categories" | "member-tags" | "popup" | "email-templates" | "integrations";
@@ -505,6 +506,11 @@ function SettingsPageInner() {
                   placeholder="noreply@yerihisset.com"
                 />
               </div>
+            </div>
+
+            {/* Kayıtlı ayarlarla gerçek deneme e-postası (değiştirdiysen önce Kaydet) */}
+            <div className="border-t pt-4">
+              <TestMailButton note="Kayıtlı ayarlarla, İletişim Bilgileri'ndeki e-posta adresine gider. Ayarı değiştirdiysen önce Kaydet. “Gönderildi” sunucunun kabul ettiğini gösterir; asıl kanıt e-postanın gelen kutuna düşmesi." />
             </div>
           </CardContent>
         </Card>

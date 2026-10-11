@@ -8,9 +8,8 @@ import SystemStatusStrip, { type SystemStatus } from "@/components/admin/SystemS
 import ServerHealthCard from "@/components/admin/ServerHealthCard";
 import BackupStatusCard from "@/components/admin/BackupStatusCard";
 import MarketplaceSyncCard from "@/components/admin/MarketplaceSyncCard";
-import { Button } from "@/components/ui/button";
-import { supabase } from "@/lib/supabase";
-import { ShieldAlert, KeyRound, UserX, Server, Plug, DatabaseBackup, Mail, Loader2, Send } from "lucide-react";
+import TestMailButton from "@/components/admin/TestMailButton";
+import { ShieldAlert, KeyRound, UserX, Server, Plug, DatabaseBackup, Mail } from "lucide-react";
 
 // SİSTEM — panodaki şeridin ayrıntısı: sunucu, entegrasyon, yedek, saldırı, yetkisiz giriş,
 // hata alan müşteriler. Veri: /api/admin/system-status (+ mevcut sağlık / yedek / senkron kartları).
@@ -28,20 +27,6 @@ function Section({ id, icon, title, children }: { id: string; icon: React.ReactN
 
 // E-posta: son gönderimler + SMTP doğrulaması + "deneme e-postası gönder" (gerçekten geliyor mu?)
 function MailSection({ m }: { m: any }) {
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  async function sendTest() {
-    setBusy(true); setMsg(null);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const r = await fetch("/api/admin/system-status", {
-        method: "POST", headers: { "Content-Type": "application/json", ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
-        body: JSON.stringify({ action: "test_mail" }),
-      });
-      const j = await r.json();
-      setMsg(r.ok ? { ok: true, text: `Gönderildi → ${j.to}. Gelen kutunu (ve spam klasörünü) kontrol et.` } : { ok: false, text: j.error || `HTTP ${r.status}` });
-    } catch (e: any) { setMsg({ ok: false, text: e?.message || "Gönderilemedi" }); } finally { setBusy(false); }
-  }
   const row = (k: string, v: React.ReactNode) => <tr className="border-b last:border-0"><td className="py-1.5 text-muted-foreground w-56">{k}</td><td className="py-1.5">{v}</td></tr>;
   return (
     <Card className="shadow-sm"><CardContent className="pt-4 text-sm space-y-3">
@@ -54,13 +39,7 @@ function MailSection({ m }: { m: any }) {
           {row("E-posta kilidi", m.lock ? "açık — yalnız yöneticilere / izinli adreslere gider (canlıda kapatılacak)" : "kapalı — müşterilere gidiyor")}
         </tbody></table>
       )}
-      <div className="flex flex-wrap items-center gap-3">
-        <Button size="sm" variant="outline" disabled={busy} onClick={sendTest} className="gap-1.5">
-          {busy ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} Deneme e-postası gönder
-        </Button>
-        {msg && <span className={`text-sm ${msg.ok ? "text-green-700" : "text-red-700"}`}>{msg.text}</span>}
-      </div>
-      <p className="text-xs text-muted-foreground">“Gönderildi” yalnız e-posta sunucusunun kabul ettiğini gösterir; asıl kanıt deneme e-postasının gelen kutuna düşmesidir.</p>
+      <TestMailButton />
     </CardContent></Card>
   );
 }
