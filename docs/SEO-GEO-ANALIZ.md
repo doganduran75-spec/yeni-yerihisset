@@ -283,3 +283,56 @@ Sıklık: haftada 1 kaliteli yazı > haftada 5 zayıf yazı. Toplu yapay zekâ �
 - Ridge vd., *Walking in Minimalist Shoes Is Effective for Strengthening Foot Muscles*, MSSE 2019 — https://pubmed.ncbi.nlm.nih.gov/30113521/
 - Rao & Joseph, *The influence of footwear on the prevalence of flat foot*, JBJS Br 1992 — https://pubmed.ncbi.nlm.nih.gov/1624509/
 - Staheli, *Shoes for children: a review*, Pediatrics 1991 (özet) — https://www.hmpgloballearningnetwork.com/site/podiatry/blogged/how-shoe-choices-children-can-affect-foot-development
+
+---
+
+## Aşama 2 — mevcut içerik için değişiklik listesi (seo-audit, 2026-10-11)
+
+**Ölçüm özeti:** 7 aktif ürün (hepsi Dodura: 4 ayakkabı, 3 bot), 2 kategori, 1 marka, 9 rehber yazısı.
+Attipas ve Denge Barı yeni sitede henüz aktif değil (WooCommerce aktarımıyla gelecek).
+
+### A) Ürünler
+| Bulgu | Değişiklik |
+|---|---|
+| Ayakkabıların 4'ü aynı metin (292 kelime), botların 3'ü aynı metin (357 kelime) — **kopya %100** | Ortak bölüm kalır (teknik + SSS). Her renge **2–3 cümlelik özel özet + 60–100 kelimelik renk paragrafı** (deri dokusu, taban rengi, kombin, mevsim). Taslakları ben yazarım, sen düzeltirsin. |
+| Sayısal bilgi yalnız "%100 deri, 3 mm iç taban" düzeyinde | Teknik tablo: **taban kalınlığı (mm), 42 numara ağırlığı (gr), kalıp genişliği, numara → ayak boyu (mm)**; botlarda konç yüksekliği, astar, su dayanımı. *(Veriler senden.)* |
+| Başlıkta stok kodu: "… (Beyaz-Beyaz) DDRBB01" | Öneri: "Dodura Barefoot Ayakkabı — Beyaz-Beyaz \| Premium Deri" (kod SKU alanında kalır; adres değişmez). *(Karar senden — pazar yeri başlıklarını da etkiler.)* |
+| Gri-Siyah'ta 2 görsel | Ayakta, taban bükülürken, yandan / üstten görsel (en az 4). |
+| Onaylı yorum 0 | Eski sitedeki gerçek yorumlar varsa aktarılsın; canlıdan sonra "oldu" diyen müşteriye yorum daveti (sistem var). |
+
+### B) Kategori ve marka sayfaları
+| Bulgu | Değişiklik |
+|---|---|
+| "Ayakkabı", "Bot", "Dodura" sayfaları yalnız ürün listesi (160–190 kelime, hepsi menü/ürün adı) | Veritabanına **tanıtım metni + SSS** alanları (yönetim panelinden düzenlenir); sayfada üstte 80–150 kelime giriş, altta 3–5 SSS (+ `FAQPage` yapısal verisi). |
+| Kategori adları genel ("Ayakkabı", "Bot") | Görünen ad: "Barefoot Ayakkabı", "Barefoot Bot" (adres aynı kalır). |
+| Dodura marka sayfası boş | "Dodura nedir, nerede üretiliyor, kalıp özellikleri, modeller" — *üretici bilgisi senden.* |
+
+### C) Bilgi bankası (9 yazı)
+| Yazı | Kelime | Karar |
+|---|---|---|
+| Barefoot ayakkabı nedir? | 55 | **Ana rehbere birleşir** (aşağıda) |
+| Neden barefoot ayakkabı giymeliyiz? | 101 | Ana rehbere birleşir |
+| Barefoot ayakkabı özellikleri — Zero Drop | 122 | **Ayrı yazı olarak genişler** ("Zero drop nedir?" ~600 kelime; ayrı bir arama sorusu) |
+| Neden tabanlarımız ince? | 159 | Genişler: **"Barefoot ayakkabı tabanı kaç mm olmalı?"** (sayısal soru; 3–10 mm aralığı, kaynaklı) |
+| Doğru iş için doğru araç | 119 | Sandalye benzetmesi; ana rehbere bir paragraf olarak girer |
+| Barefoot (Yalınayak) Ayakkabı Rehberi: Biyomekanik… | 395 | İyi yapı (7 başlık); kaynak + sayısal veri + ürün bağlantısı eklenir, ana rehberle birleştirilebilir |
+| Bir çıplak ayaklının özgeçmişi | 611 | Hikâye; **alt başlıklar + giriş özeti + ürün bağlantısı** |
+| Çıplak ayaklı yürüme sebepleri | 897 | En uzun; **alt başlıklar**, ilk paragrafa doğrudan cevap, kaynaklar |
+| Postür bozuklukları ve çözümleri | 139 | **3 eski bağlantı** (yerihisset.com/urun/denge-bari) düzeltilir; kaynaksız sağlık ifadeleri ölçülü dile çekilir; Denge Barı aktif olunca bağlanır |
+
+**Ana rehber:** `/barefoot-nedir` (şu an 181 kelime, yer tutucu) ile "Barefoot ayakkabı nedir?" yazısı **aynı soruyu
+yarışarak** cevaplıyor (Google ikisini de zayıf görür). Öneri: tek, güçlü bir **`/barefoot-nedir`** sayfası (~1.200 kelime:
+tanım, 4 özellik, taban kalınlığı, zero drop, kimler için, geçiş planı, çalışmalar, SSS); içerik bilgi bankasından
+yönetilir; eski yazı adresleri ve eski sitenin `/barefoot-ayakkabi-nedir/`, `/neden-barefoot/` adresleri buraya 301.
+
+**Eski siteden henüz gelmeyenler:** "Çocuklarımızın ayakları nasıl gelişiyor?", "Attipas hakkında", SSS, Attipas ölçü
+ve bakım rehberleri, Hakkımızda. Not: "Çocuklarımızın ayakları…" bir podiatristin Instagram içeriğine dayanıyor
+(izin durumu kontrol edilmeli) ve kemik sayısı bilgisi kaynaklarla düzeltilmeli.
+
+**Tüm yazılara:** ilk paragrafta 40–60 kelimelik doğrudan cevap, alt başlıklar, en az 1 kaynak, ilgili ürün/rehber
+bağlantısı, yazar + son güncelleme tarihi, görsel alt metinleri (rehber görsellerinin hepsinde alt metin boş).
+
+### D) Sayfa / teknik
+- `/magaza`'da H1 yok → "Barefoot Ayakkabı Mağazası" başlığı + 2 cümle giriş.
+- Ürün sayfasındaki 3 boş alt metin: gizli ön yükleme görselleri — doğru, değişiklik gerekmez.
+- Ana sayfa (379 kelime, H1 iyi) — varlık tanımı paragrafı eklenebilir (5.4).
