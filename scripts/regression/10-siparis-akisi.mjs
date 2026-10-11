@@ -48,7 +48,9 @@ export default {
         DELETE FROM public.partner_opportunities WHERE title LIKE 'REGRESYON-TEST%';
         DELETE FROM public.coupons WHERE code LIKE 'RGT%';
         DELETE FROM public.client_errors WHERE message LIKE 'REGRESYON-TEST%';
+        DELETE FROM public.consent_log WHERE session_id IN (SELECT session_id FROM public.analytics_sessions WHERE landing_path = '/regresyon-test');
         DELETE FROM public.analytics_sessions WHERE landing_path = '/regresyon-test';
+        DELETE FROM public.analytics_anon_daily WHERE path LIKE '/regresyon-test%';
         DELETE FROM public.search_dismissals WHERE term LIKE 'regresyon-test%';
         DELETE FROM public.feedback WHERE message LIKE '%regresyon-test%';
       `);
@@ -660,6 +662,27 @@ export default {
         sql(`INSERT INTO public.analytics_events (session_id, event_type, path, meta) VALUES ${ev(sid, junk)}`);
         L = await list();
         ok(L.some((x) => x.term === junk && Number(x.cnt) === 1), "Silinen terim yeniden aranınca listeye geri geliyor", mine(L));
+      });
+
+      await part("Çerez onayı: seçim kaydı, reddedince anonimleşme, kimliksiz sayım", async () => {
+        const UA = { "User-Agent": "Mozilla/5.0 (regresyon testi)", "X-Forwarded-For": "203.0.113.7" };
+        const m = await api("/api/track", { method: "GET" });
+        ok(m.status === 200 && typeof m.json?.strict === "boolean", "Çerez modu okunuyor (Ayarlar › Çerez onayı)", `HTTP ${m.status} · strict=${m.json?.strict}`);
+        // Tam kayıt (istatistik izni var): ziyaret satırı IP ile oluşur
+        const sid = one("SELECT gen_random_uuid()");
+        const full = await api("/api/track", { headers: UA, body: { session_id: sid, cs: "1", landing_path: "/regresyon-test", events: [{ type: "page_view", path: "/regresyon-test", ts: Date.now() }] } });
+        const s1 = sql(`SELECT ip, coalesce(consent, '') FROM public.analytics_sessions WHERE session_id = ${lit(sid)}`)[0] || [];
+        ok(full.status === 200 && s1[0] === "203.0.113.7", "İzinli ziyaret IP ile kaydediliyor", `HTTP ${full.status} · ip=${s1[0] ?? "satır yok"}`);
+        // Reddet: seçim satıra yazılır, IP silinir, onay defterine düşer
+        await api("/api/track", { headers: UA, body: { session_id: sid, consent: { stats: false, marketing: false } } });
+        const s2 = sql(`SELECT coalesce(ip, ''), coalesce(consent, '') FROM public.analytics_sessions WHERE session_id = ${lit(sid)}`)[0] || [];
+        ok(s2[1] === "rejected" && s2[0] === "", "Reddedince ziyaret anonimleşiyor (IP silindi, seçim: red)", `consent=${s2[1]} ip=${s2[0] || "yok"}`);
+        const lg = num(`SELECT count(*) FROM public.consent_log WHERE session_id = ${lit(sid)} AND NOT stats AND NOT marketing`);
+        ok(lg === 1, "Çerez seçimi onay defterine yazıldı", `${lg} kayıt`);
+        // Kimliksiz sayım: IP / kimlik olmadan gün · sayfa · kaynak · cihaz
+        const an = await api("/api/track", { headers: UA, body: { anon: true, views: [{ path: "/regresyon-test-anonim", source: "regresyon" }] } });
+        const v = num(`SELECT coalesce(sum(views), 0) FROM public.analytics_anon_daily WHERE path = '/regresyon-test-anonim'`);
+        ok(an.status === 200 && v >= 1, "İzinsiz ziyaret kimliksiz sayılıyor", `HTTP ${an.status} · ${v} görüntüleme`);
       });
 
       await part("Pazaryeri stok görevi: entegre kanala görev açılmaz", async () => {

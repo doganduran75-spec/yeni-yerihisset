@@ -43,9 +43,11 @@ export default async function GoogleAnalytics() {
           window.dataLayer = window.dataLayer || [];
           function gtag(){dataLayer.push(arguments);}
           // KVKK: çerez onayı yoksa GA çerezsiz çalışır (consent mode); "Kabul Et" → MarketingTags "granted" yapar
-          var yhc = null; try { yhc = localStorage.getItem('yh:cookie-consent'); } catch (e) {}
-          var yhg = yhc === 'accepted' ? 'granted' : 'denied';
-          gtag('consent', 'default', { analytics_storage: yhg, ad_storage: yhg, ad_user_data: yhg, ad_personalization: yhg });
+          // Kategoriler: "accepted" = hepsi, "s1m0" = istatistik var / pazarlama yok (src/lib/consent.ts)
+          var yhc = ''; try { yhc = localStorage.getItem('yh:cookie-consent') || ''; } catch (e) {}
+          var yhs = (yhc === 'accepted' || /^s1/.test(yhc)) ? 'granted' : 'denied';
+          var yhm = (yhc === 'accepted' || /m1$/.test(yhc)) ? 'granted' : 'denied';
+          gtag('consent', 'default', { analytics_storage: yhs, ad_storage: yhm, ad_user_data: yhm, ad_personalization: yhm });
           gtag('js', new Date());
           gtag('config', '${measurementId}', {
             send_page_view: true,

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
+import { rateLimited } from "@/lib/rate-limit";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -28,12 +29,69 @@ function deviceFrom(ua: string): string {
   return "desktop";
 }
 
+// Ayarlar › Çerez onayı (settings.cookie_consent_strict): false = deneme modu, true = KVKK modu. 60 sn önbellek.
+let modeCache: { at: number; strict: boolean } | null = null;
+async function strictMode(supabase: any): Promise<boolean> {
+  if (modeCache && Date.now() - modeCache.at < 60_000) return modeCache.strict;
+  const { data, error } = await supabase.from("settings").select("cookie_consent_strict").limit(1).maybeSingle();
+  const strict = error ? true : data?.cookie_consent_strict === true; // okunamazsa güvenli taraf
+  modeCache = { at: Date.now(), strict };
+  return strict;
+}
+
+// Tarayıcı modu öğrenir (src/lib/track.ts) — seçim yapılmamışken tam kayıt mı, kimliksiz sayım mı
+export async function GET() {
+  const strict = await strictMode(createAdminClient());
+  return NextResponse.json({ strict }, { headers: { "Cache-Control": "public, max-age=60" } });
+}
+
 export async function POST(req: NextRequest) {
   let body: any;
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "geçersiz" }, { status: 400 });
+  }
+  const supabase0 = createAdminClient() as any;
+  const ua0 = req.headers.get("user-agent") || "";
+
+  // 1) Çerez seçimi: onay defteri + bu ziyaretin satırında seçim; istatistik reddedildiyse ziyaret anonimleşir
+  if (body?.consent && typeof body.consent === "object") {
+    const stats = body.consent.stats === true, marketing = body.consent.marketing === true;
+    const consent = stats && marketing ? "accepted" : !stats && !marketing ? "rejected" : "custom";
+    const sid = typeof body.session_id === "string" && /^[0-9a-f-]{36}$/i.test(body.session_id) ? body.session_id : null;
+    try {
+      const strict = await strictMode(supabase0);
+      await supabase0.from("consent_log").insert({ session_id: sid, stats, marketing, mode: strict ? "strict" : "open" });
+      if (sid) {
+        const upd: Record<string, unknown> = { consent, consent_at: new Date().toISOString() };
+        if (!stats) Object.assign(upd, { ip: null, user_agent: null, user_id: null, contact_id: null });
+        await supabase0.from("analytics_sessions").update(upd).eq("session_id", sid);
+        if (!stats) await supabase0.from("analytics_events").update({ user_id: null }).eq("session_id", sid);
+      }
+    } catch (e: any) { console.error("[api/track] consent", e?.message || e); }
+    return NextResponse.json({ ok: true });
+  }
+
+  // 2) Kimliksiz sayım (istatistik izni yok): yalnız gün · sayfa · kaynak · cihaz; IP / kimlik saklanmaz
+  if (body?.anon === true) {
+    if (BOT_RE.test(ua0)) return NextResponse.json({ ok: true, bot: true });
+    if (rateLimited("track-anon", clientIp(req) || "?", 300, 600_000)) return NextResponse.json({ ok: true });
+    const views: any[] = Array.isArray(body.views) ? body.views.slice(0, 20) : [];
+    const device = deviceFrom(ua0);
+    for (const v of views) {
+      if (typeof v?.path !== "string") continue;
+      await supabase0.rpc("analytics_anon_hit", { p_path: v.path.slice(0, 200), p_source: String(v.source || "(doğrudan)").slice(0, 80), p_device: device, p_n: 1 }).then(() => {}, () => {});
+    }
+    return NextResponse.json({ ok: true, anon: views.length });
+  }
+
+  // KVKK modunda istatistik izni olmadan tam kayıt yapılmaz (eski / hatalı istemciye karşı sunucu koruması)
+  if (body?.cs !== "1" && await strictMode(supabase0)) {
+    const views = (Array.isArray(body?.events) ? body.events : []).filter((e: any) => e?.type === "page_view" && typeof e.path === "string").slice(0, 20);
+    const device = deviceFrom(ua0);
+    if (!BOT_RE.test(ua0)) for (const v of views) await supabase0.rpc("analytics_anon_hit", { p_path: v.path.slice(0, 200), p_source: "(site içi)", p_device: device, p_n: 1 }).then(() => {}, () => {});
+    return NextResponse.json({ ok: true, anon: views.length });
   }
 
   const sessionId: string | undefined = body?.session_id;

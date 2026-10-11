@@ -43,8 +43,8 @@ export default function GizlilikPage() {
 
       <h2>Çerezler</h2>
       <p>
-        Sitenin çalışması için gerekli olanlar dışındaki çerezler (istatistik ve reklam ölçümü) yalnız onayınızla
-        kullanılır. Ayrıntılar ve tercih değiştirme: <Link href="/cerez-politikasi">Çerez Politikası</Link>.
+        İstatistik ve reklam ölçümü çerezleri için tercihinizi çerez penceresinden yaparsınız; reklam çerezleri
+        (Meta, Google) yalnız onayınızla çalışır. Ayrıntılar ve tercih değiştirme: <Link href="/cerez-politikasi">Çerez Politikası</Link>.
       </p>
 
       <h2>Bilgilerinizi paylaşmıyoruz</h2>

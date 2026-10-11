@@ -3,6 +3,16 @@ import Link from "next/link";
 import LegalPageLayout from "@/components/LegalPageLayout";
 import CookiePreferencesLink from "@/components/CookiePreferencesLink";
 import { COMPANY } from "@/config/company";
+import { createAdminClient } from "@/lib/supabase-admin";
+
+// Metin, Ayarlar › Çerez onayı moduna göre değişir (deneme / KVKK) — 5 dakikada bir tazelenir
+export const revalidate = 300;
+async function strictMode(): Promise<boolean> {
+  try {
+    const { data } = await (createAdminClient() as any).from("settings").select("cookie_consent_strict").limit(1).maybeSingle();
+    return data?.cookie_consent_strict === true;
+  } catch { return true; }
+}
 
 export const metadata: Metadata = {
   alternates: { canonical: "/cerez-politikasi" },
@@ -10,7 +20,8 @@ export const metadata: Metadata = {
   robots: { index: false, follow: true }, // taslak — onaylanınca kaldır
 };
 
-export default function CerezPolitikasiPage() {
+export default async function CerezPolitikasiPage() {
+  const strict = await strictMode();
   return (
     <LegalPageLayout
       title="Çerez Politikası"
@@ -34,7 +45,9 @@ export default function CerezPolitikasiPage() {
           <tr>
             <td><b>İstatistik</b></td>
             <td>Hangi sayfaların ziyaret edildiğini anlamak: kendi ziyaret istatistiğimiz ve Google Analytics.</td>
-            <td>Reddederseniz kullanılmaz</td>
+            <td>{strict
+              ? "Yalnız onayınızla. Onay yoksa ziyaretiniz kimliğinizle ilişkilendirilmeden, IP adresi saklanmadan yalnız sayılır."
+              : "Tercih yapana kadar kendi ziyaret istatistiğimiz çalışır. Reddederseniz o ziyaretin kaydı anonimleşir (IP adresi silinir), sonrası yalnız sayılır. Google Analytics çerezleri yalnız onayınızla."}</td>
           </tr>
           <tr>
             <td><b>Reklam</b></td>
@@ -50,8 +63,8 @@ export default function CerezPolitikasiPage() {
 
       <h2>Tercihinizi nasıl değiştirirsiniz?</h2>
       <p>
-        İlk ziyaretinizde çıkan pencereden <b>Kabul Et</b> ya da <b>Reddet</b> seçebilirsiniz; iki seçenek de eşittir,
-        reddetmek alışverişinizi etkilemez. Kararınızı istediğiniz an değiştirmek için: <CookiePreferencesLink />.
+        İlk ziyaretinizde çıkan pencereden <b>Tümünü Kabul Et</b>, <b>Reddet</b> ya da <b>Tercihler</b> ile kategori
+        bazında seçim yapabilirsiniz; reddetmek alışverişinizi etkilemez. Kararınızı istediğiniz an değiştirmek için: <CookiePreferencesLink />.
         Tarayıcınızın ayarlarından da çerezleri silebilir veya engelleyebilirsiniz.
       </p>
 

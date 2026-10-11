@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
-import { consentState, onConsent } from "@/lib/consent";
+import { consentChoice, onConsent, type ConsentChoice } from "@/lib/consent";
 import { captureAdSource } from "@/lib/ad-context";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -29,10 +29,12 @@ function loadPixel(pixelId: string) {
   w.fbq("track", "PageView");
 }
 
-function grantGa() {
+// İstatistik izni → GA ölçüm çerezleri; pazarlama izni → reklam çerezleri + Meta Pixel
+function updateGa(c: ConsentChoice) {
   const w = window as any;
   if (typeof w.gtag === "function") {
-    w.gtag("consent", "update", { analytics_storage: "granted", ad_storage: "granted", ad_user_data: "granted", ad_personalization: "granted" });
+    const ad = c.marketing ? "granted" : "denied";
+    w.gtag("consent", "update", { analytics_storage: c.stats ? "granted" : "denied", ad_storage: ad, ad_user_data: ad, ad_personalization: ad });
   }
 }
 
@@ -42,9 +44,10 @@ export default function MarketingTags({ pixelId }: { pixelId: string | null }) {
 
   useEffect(() => {
     captureAdSource();
-    const enable = () => { grantGa(); if (pixelId) loadPixel(pixelId); };
-    if (consentState() === "accepted") enable();
-    return onConsent((v) => { if (v === "accepted") enable(); });
+    const apply = (c: ConsentChoice) => { updateGa(c); if (c.marketing && pixelId) loadPixel(pixelId); };
+    const c = consentChoice();
+    if (c) apply(c);
+    return onConsent(apply);
   }, [pixelId]);
 
   // Sayfa geçişlerinde PageView (ilki loadPixel'de)

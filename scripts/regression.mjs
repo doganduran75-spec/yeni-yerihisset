@@ -156,6 +156,7 @@ async function main() {
     ["20261025 iptal e-postası şablonu", "SELECT NOT EXISTS(SELECT 1 FROM public.email_templates WHERE trigger='order_cancelled' AND body_html LIKE '%Ödeme yapıldıysa%')"],
     ["20261026 şifresiz hesaplar", "SELECT to_regprocedure('public.mark_account_passwordless(uuid)') IS NOT NULL"],
     ["20261028 üyelik durumu (misafir/doğrulanmamış/üye)", "SELECT to_regprocedure('public.member_account_state(uuid)') IS NOT NULL AND NOT EXISTS(SELECT 1 FROM pg_trigger WHERE tgname='on_profile_created_assign_role')"],
+    ["20261109 çerez onayı (mod ayarı, onay defteri, kimliksiz sayaç)", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='settings' AND column_name='cookie_consent_strict') AND to_regclass('public.consent_log') IS NOT NULL AND to_regclass('public.analytics_anon_daily') IS NOT NULL AND EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='analytics_sessions' AND column_name='consent')"],
     ["20261108 pazaryeri yardımcı fonksiyonları dışarıya kapalı", "SELECT NOT has_function_privilege('anon', 'public.marketplace_is_listed(text,text)', 'EXECUTE') AND NOT has_function_privilege('authenticated', 'public.marketplace_send_qty(text,uuid,integer)', 'EXECUTE')"],
     ["20261107 yetkili fonksiyonlar dışarıya kapalı", "SELECT NOT has_function_privilege('anon', 'public.link_contacts_for_user(uuid,text)', 'EXECUTE') AND NOT has_function_privilege('authenticated', 'public.link_contacts_for_user(uuid,text)', 'EXECUTE') AND NOT has_function_privilege('anon', 'public.rollup_analytics_daily(date)', 'EXECUTE')"],
     ["20261106 e-posta sağlığı, sonuçsuz arama silme, entegre kanala görev yok", "SELECT to_regclass('public.mail_health') IS NOT NULL AND to_regclass('public.search_dismissals') IS NOT NULL AND to_regprocedure('public.no_result_searches(integer)') IS NOT NULL AND pg_get_functiondef('public.create_stock_sync_tasks()'::regprocedure) LIKE '%integration = ''manual''%'"],
@@ -342,6 +343,10 @@ async function main() {
       });
       up.status >= 400 ? add("ok", "Video kovasına dışarıdan yükleme yapılamıyor") : add("fail", "Video kovasına dışarıdan YÜKLENEBİLİYOR", `HTTP ${up.status} — 20261104 migration'ı`);
     } catch (e) { add("warn", "Video kovası yükleme yetkisi kontrol edilemedi", String(e?.message || e)); }
+    for (const [tbl, label] of [["consent_log", "Çerez onay defteri"], ["analytics_anon_daily", "Kimliksiz ziyaret sayacı"]]) {
+      const r = await rest(`${tbl}?select=*&limit=1`);
+      r.status >= 400 || (Array.isArray(r.json) && r.json.length === 0) ? add("ok", `${label} dışarıya kapalı`) : add("fail", `${label} dışarıya AÇIK`, `HTTP ${r.status} — 20261109 migration'ı`);
+    }
     const mh = await rest("mail_health?select=last_error&limit=1");
     mh.status >= 400 || (Array.isArray(mh.json) && mh.json.length === 0) ? add("ok", "E-posta sağlık kaydı dışarıya kapalı") : add("fail", "E-posta sağlık kaydı dışarıya AÇIK", `HTTP ${mh.status} — 20261106 migration'ı`);
     const cer = await rest("client_errors?select=message&limit=1");

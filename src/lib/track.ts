@@ -3,7 +3,13 @@
  * Event'leri kuyruğa alır, aralıklı + sayfa kapanışında /api/track'e gönderir.
  * Oturum kimliği localStorage'da; 30 dk hareketsizlikten sonra yeni oturum.
  * GA'yı DEVRE DIŞI BIRAKMAZ — ona paralel çalışır (bkz. src/lib/analytics.ts).
+ *
+ * ÇEREZ ONAYI (src/lib/consent.ts + Ayarlar › Çerez onayı):
+ *  - istatistik izni VAR → tam kayıt (oturum kimliği, IP sunucuda, yolculuk)
+ *  - istatistik izni YOK (Reddet) → yalnız kimliksiz sayım (gün · sayfa · kaynak · cihaz); tarayıcıya hiçbir şey yazılmaz
+ *  - seçim YAPILMADI → deneme modunda tam kayıt, KVKK modunda kimliksiz sayım (mod /api/track'ten öğrenilir)
  */
+import { consentFor, type ConsentChoice } from "./consent";
 
 type QueuedEvent = { type: string; path: string; meta?: unknown; ts: number };
 
@@ -104,8 +110,17 @@ function flush(useBeacon = false) {
     flushTimer = null;
   }
   if (typeof window === "undefined" || queue.length === 0) return;
+  // Mod henüz bilinmiyor: sayfa kapanıyorsa kimliksiz say (güvenli taraf), değilse kısa süre bekle
+  if (!mode && consentFor("stats") === null) {
+    if (useBeacon) { flushAnon(queue.splice(0, queue.length), true); return; }
+    loadMode();
+    if (!flushTimer) flushTimer = setTimeout(() => flush(false), 1500);
+    return;
+  }
+  if (!fullTracking()) { flushAnon(queue.splice(0, queue.length), useBeacon); return; }
 
   const payload = {
+    cs: consentFor("stats") === true ? "1" : "", // sunucu KVKK modunda izinsiz tam kaydı kimliksize çevirir
     session_id: getSessionId(),
     user_id: currentUserId,
     referrer: (() => {
@@ -138,22 +153,87 @@ function flush(useBeacon = false) {
   }
 }
 
-// KVKK: çerez banner'ında "Reddet" seçildiyse analitik toplama.
-function consentRejected(): boolean {
+// Ayarlar › Çerez onayı: "open" (deneme modu) / "strict" (KVKK modu). Öğrenilene kadar event'ler bellekte bekler.
+let mode: "open" | "strict" | null = null;
+let modeLoading = false;
+function loadMode() {
+  if (mode || modeLoading) return;
+  modeLoading = true;
+  fetch("/api/track")
+    .then((r) => r.json())
+    .then((d) => { mode = d?.strict ? "strict" : "open"; })
+    .catch(() => { mode = "strict"; }) // öğrenilemezse güvenli taraf: kimliksiz sayım
+    .finally(() => { modeLoading = false; if (queue.length) flush(false); });
+}
+
+/** Tam kayıt mı (oturum + IP), kimliksiz sayım mı? */
+function fullTracking(): boolean {
+  const s = consentFor("stats");
+  if (s !== null) return s;
+  return mode === "open";
+}
+
+// Kimliksiz sayım: sayfa yüklenişinin ilk görüntülemesi dış kaynağıyla, sonrakiler "(site içi)"
+let anonFirst = true;
+function landingSource(): string {
   try {
-    return localStorage.getItem("yh:cookie-consent") === "rejected";
-  } catch {
-    return false;
+    const p = new URLSearchParams(location.search);
+    const utm = p.get("utm_source");
+    if (utm) return utm.slice(0, 60);
+    if (p.get("fbclid")) return "facebook / instagram";
+    if (p.get("gclid")) return "google reklam";
+    const ref = document.referrer ? new URL(document.referrer).hostname.replace(/^www\./, "") : "";
+    if (ref && ref !== location.hostname.replace(/^www\./, "")) return ref;
+  } catch { /* yut */ }
+  return "(doğrudan)";
+}
+
+function flushAnon(events: QueuedEvent[], useBeacon: boolean) {
+  const views = events.filter((e) => e.type === "page_view").map((e) => {
+    const src = anonFirst ? landingSource() : "(site içi)";
+    anonFirst = false;
+    return { path: e.path, source: src };
+  });
+  if (!views.length) return;
+  const body = new Blob([JSON.stringify({ anon: true, views })], { type: "application/json" });
+  try {
+    if (useBeacon && navigator.sendBeacon) navigator.sendBeacon("/api/track", body);
+    else fetch("/api/track", { method: "POST", body, keepalive: true }).catch(() => {});
+  } catch { /* takip kritik değil */ }
+}
+
+/**
+ * Çerez penceresindeki seçimi kaydet (onay defteri + bu ziyaretin satırında "Kabul / Red").
+ * İstatistik reddedildiyse bu ziyaretin o ana kadarki kaydı sunucuda anonimleşir, tarayıcıdaki kimlik silinir.
+ */
+export function sendConsent(choice: ConsentChoice) {
+  if (typeof window === "undefined") return;
+  let sid: string | null = null;
+  try { sid = localStorage.getItem(SID_KEY); } catch { /* yut */ }
+  try {
+    fetch("/api/track", {
+      method: "POST", keepalive: true, headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ consent: choice, session_id: sid || undefined }),
+    }).catch(() => {});
+  } catch { /* yut */ }
+  if (!choice.stats) {
+    try {
+      localStorage.removeItem(SID_KEY); localStorage.removeItem(SID_TS_KEY);
+      sessionStorage.removeItem(UTM_KEY); sessionStorage.removeItem(LANDING_KEY); sessionStorage.removeItem(REF_KEY);
+    } catch { /* yut */ }
+    bootstrapped = false;
   }
 }
 
 /** Bir analitik event'i kuyruğa al. Her yerden güvenle çağrılabilir. */
 export function track(type: string, meta?: unknown) {
   if (typeof window === "undefined") return;
-  if (consentRejected()) return; // onay reddedildiyse toplama yok
   try {
-    bootstrapSession();
-    getSessionId(); // ts tazele
+    loadMode();
+    if (fullTracking()) {
+      bootstrapSession();
+      getSessionId(); // ts tazele
+    }
     queue.push({ type, path: location.pathname, meta, ts: Date.now() });
     if (!flushTimer) flushTimer = setTimeout(() => flush(false), 2500);
     if (queue.length >= 20) flush(false);

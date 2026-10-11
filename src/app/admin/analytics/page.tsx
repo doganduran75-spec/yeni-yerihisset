@@ -47,6 +47,14 @@ const PERIODS = [
 const PAGE_SIZE = 20;
 
 // Event tipini insanca anlat
+// Çerez penceresindeki seçim (analytics_sessions.consent, migration 20261109)
+const CONSENT_LABEL: Record<string, { txt: string; cls: string }> = {
+  accepted: { txt: "çerez: kabul", cls: "bg-green-100 text-green-700" },
+  custom: { txt: "çerez: kısmi", cls: "bg-blue-100 text-blue-700" },
+  rejected: { txt: "çerez: red", cls: "bg-red-100 text-red-700" },
+};
+const consentTxt = (c: string | null | undefined) => (c ? CONSENT_LABEL[c]?.txt.replace("çerez: ", "") ?? c : "seçim yok");
+
 const EVENT_LABEL: Record<string, { txt: string; icon: any }> = {
   page_view: { txt: "sayfa", icon: Globe },
   hero_click: { txt: "karşılama kartı", icon: MousePointerClick },
@@ -148,15 +156,17 @@ export default function AdminAnalyticsPage() {
   // Özet
   const summary = useMemo(() => {
     let purchases = 0, revenue = 0, addToCart = 0, couponApplies = 0, loggedIn = 0;
+    const consent = { accepted: 0, custom: 0, rejected: 0, none: 0 } as Record<string, number>;
     for (const s of humanSessions) {
       if (s.user_id) loggedIn++;
+      consent[s.consent || "none"] = (consent[s.consent || "none"] || 0) + 1;
       for (const e of eventsBySession[s.session_id] || []) {
         if (e.event_type === "purchase") { purchases++; revenue += Number(e.meta?.value || 0); }
         else if (e.event_type === "add_to_cart" || e.event_type === "quick_buy") addToCart++;
         else if (e.event_type === "coupon_apply") couponApplies++;
       }
     }
-    return { total: humanSessions.length, loggedIn, purchases, revenue, addToCart, couponApplies };
+    return { total: humanSessions.length, loggedIn, purchases, revenue, addToCart, couponApplies, consent };
   }, [humanSessions, eventsBySession]);
 
   // Kaynak / kampanya performansı (Instagram sorusunun cevabı)
@@ -213,6 +223,7 @@ export default function AdminAnalyticsPage() {
         { Metrik: "Dönem", Değer: periodLabel },
         { Metrik: "Oturum", Değer: summary.total },
         { Metrik: "Üye girişli", Değer: summary.loggedIn },
+        { Metrik: "Çerez: kabul / kısmi / red / seçim yok", Değer: `${summary.consent.accepted || 0} / ${summary.consent.custom || 0} / ${summary.consent.rejected || 0} / ${summary.consent.none || 0}` },
         { Metrik: "Sepete ekleme", Değer: summary.addToCart },
         { Metrik: "Kupon denemesi", Değer: summary.couponApplies },
         { Metrik: "Satın alma", Değer: summary.purchases },
@@ -234,7 +245,7 @@ export default function AdminAnalyticsPage() {
           "Sepete ekleme": evs.filter((e) => e.event_type === "add_to_cart" || e.event_type === "quick_buy").length,
           "Satın alma": evs.filter((e) => e.event_type === "purchase").length,
           "Ciro (₺)": evs.filter((e) => e.event_type === "purchase").reduce((a, e) => a + Number(e.meta?.value || 0), 0),
-          Cihaz: s.device || "", IP: s.ip || "", Bot: s.is_bot ? "evet" : "",
+          Cihaz: s.device || "", IP: s.ip || (s.consent === "rejected" ? "(reddetti — silindi)" : ""), "Çerez seçimi": consentTxt(s.consent), Bot: s.is_bot ? "evet" : "",
         };
       }), "Ziyaretçiler");
       const steps: any[] = [];
@@ -294,6 +305,10 @@ export default function AdminAnalyticsPage() {
             <Stat icon={CreditCard} label="Satın alma" value={summary.purchases} />
             <Stat icon={CreditCard} label="Ciro" value={fmtTRY(summary.revenue)} />
           </div>
+          <p className="text-xs text-slate-500 -mt-2">
+            Çerez seçimi (bu dönem): kabul <b>{summary.consent.accepted || 0}</b> · kısmi <b>{summary.consent.custom || 0}</b> · red <b>{summary.consent.rejected || 0}</b> · seçim yok <b>{summary.consent.none || 0}</b>
+            {" "}— reddedenler ve izin vermeyenler yalnız kimliksiz sayılır (Ayarlar › Çerez Onayı).
+          </p>
 
           {/* DB'de kapladığı yer */}
           <Card>
@@ -410,10 +425,11 @@ export default function AdminAnalyticsPage() {
                         <div className="flex items-center gap-2 flex-wrap">
                           {name ? <Badge className="bg-olive-100 text-olive-700">{name}</Badge> : <span className="text-xs text-slate-400">anonim</span>}
                           {s.is_bot && <Badge className="bg-amber-100 text-amber-700">bot</Badge>}
+                          <Badge className={CONSENT_LABEL[s.consent]?.cls ?? "bg-slate-100 text-slate-500"}>{CONSENT_LABEL[s.consent]?.txt ?? "çerez: seçim yok"}</Badge>
                           <span className="text-xs text-slate-500">{s.utm_source || s.referrer || "doğrudan"}{s.utm_campaign ? ` · ${s.utm_campaign}` : ""}</span>
                           {bought && <Badge className="bg-green-100 text-green-700">satın aldı</Badge>}
                         </div>
-                        <p className="text-[11px] text-slate-400 truncate">{fmtTime(s.started_at)} · {evs.length} adım · {s.device || "?"} · IP {s.ip || "—"}</p>
+                        <p className="text-[11px] text-slate-400 truncate">{fmtTime(s.started_at)} · {evs.length} adım · {s.device || "?"} · IP {s.ip || (s.consent === "rejected" ? "silindi (reddetti)" : "—")}</p>
                       </div>
                     </button>
                     {isOpen && (
