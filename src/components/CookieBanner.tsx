@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Cookie, X } from "lucide-react";
-import { CONSENT_KEY, setConsent } from "@/lib/consent";
+import { CONSENT_KEY, CONSENT_OPEN_EVENT, consentState, setConsent } from "@/lib/consent";
 
 // KVKK çerez onay banner'ı. İlk ziyarette görünür; seçim localStorage'da tutulur.
 // "Çerez Politikası" → sayfadan AYRILMADAN aynı popup içinde politika metnini açar;
@@ -20,11 +20,18 @@ export default function CookieBanner() {
     } catch {
       /* yut */
     }
+    // "Çerez tercihlerini değiştir" bağlantısı pencereyi yeniden açar
+    const reopen = () => { setExpanded(false); setShow(true); };
+    window.addEventListener(CONSENT_OPEN_EVENT, reopen);
+    return () => window.removeEventListener(CONSENT_OPEN_EVENT, reopen);
   }, []);
 
   function choose(value: "accepted" | "rejected") {
+    const before = consentState();
     setConsent(value); // kaydeder + "yh:consent" olayı → Meta Pixel / GA (MarketingTags) hemen açılır
     setShow(false);
+    // Onay geri alındıysa yüklenmiş reklam/istatistik etiketleri sayfa yenilenince kalkar
+    if (before === "accepted" && value === "rejected") window.location.reload();
   }
 
   if (!show) return null;

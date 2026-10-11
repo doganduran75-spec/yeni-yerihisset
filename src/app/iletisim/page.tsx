@@ -1,19 +1,19 @@
 import type { Metadata } from "next";
 import LegalPageLayout from "@/components/LegalPageLayout";
-import { MapPin, Phone, Mail, Clock } from "lucide-react";
+import { MapPin, Phone, Mail, Clock, Building2 } from "lucide-react";
+import { COMPANY, orTodo } from "@/config/company";
 
 export const metadata: Metadata = {
   title: "İletişim",
-  robots: { index: false, follow: true }, // gerçek bilgiler girilip taslak kalkınca index'e aç
+  robots: { index: false, follow: true }, // telefon + MERSİS + KEP girilince kaldır (src/config/company.ts)
 };
 
-// NOT: Aşağıdaki adres/telefon/e-posta YER TUTUCU'dur — gerçek bilgilerle değiştir.
+// Künye src/config/company.ts'ten (e-ticaret mevzuatı: unvan, adres, iletişim, MERSİS, KEP sitede görünmeli)
 const CONTACT = {
-  company: "YeriHisset",
-  address: "(Adres buraya — mah./cadde/no, ilçe/il)",
-  phone: "(Telefon numarası)",
-  email: "(iletisim@yerihisset.com)",
-  hours: "Hafta içi 09:00 – 18:00",
+  address: COMPANY.address,
+  phone: orTodo(COMPANY.phone),
+  email: COMPANY.email,
+  hours: COMPANY.hours,
 };
 
 export default function IletisimPage() {
@@ -23,10 +23,6 @@ export default function IletisimPage() {
       intro="Sorularınız, siparişleriniz ve iş birlikleri için bize ulaşın."
       draft={false}
     >
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800">
-        <b>Yer tutucu:</b> Aşağıdaki iletişim bilgileri örnektir; gerçek adres/telefon/e-posta ile güncellenmeli
-        (yasal olarak da zorunlu).
-      </div>
 
       <div className="grid sm:grid-cols-2 gap-4 not-prose">
         <div className="flex items-start gap-3 rounded-2xl border border-olive-100 bg-white p-4">
@@ -44,6 +40,15 @@ export default function IletisimPage() {
         <div className="flex items-start gap-3 rounded-2xl border border-olive-100 bg-white p-4">
           <Clock className="text-olive-600 shrink-0" size={20} />
           <div><p className="font-black text-slate-900 text-sm">Çalışma Saatleri</p><p className="text-sm text-slate-600">{CONTACT.hours}</p></div>
+        </div>
+      </div>
+
+      <div className="flex items-start gap-3 rounded-2xl border border-olive-100 bg-white p-4">
+        <Building2 className="text-olive-600 shrink-0" size={20} />
+        <div className="text-sm text-slate-600">
+          <p className="font-black text-slate-900">{COMPANY.title}</p>
+          <p>{COMPANY.taxOffice} V.D. · {COMPANY.taxNumber} · MERSİS: {orTodo(COMPANY.mersis)} · KEP: {orTodo(COMPANY.kep)}</p>
+          <p className="mt-1">Showroom / mağazamız yoktur; satışlarımız yalnız internet üzerindendir.</p>
         </div>
       </div>
     </LegalPageLayout>

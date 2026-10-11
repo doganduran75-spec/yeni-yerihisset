@@ -22,6 +22,13 @@ export function setConsent(value: "accepted" | "rejected") {
   try { window.dispatchEvent(new CustomEvent(CONSENT_EVENT, { detail: value })); } catch { /* yut */ }
 }
 
+// "Çerez tercihlerini değiştir" (alt bilgi / Çerez Politikası) → onay penceresini yeniden aç (KVKK: rıza
+// verildiği kadar kolay geri alınabilmeli)
+export const CONSENT_OPEN_EVENT = "yh:consent-open";
+export function openConsentPreferences() {
+  try { window.dispatchEvent(new Event(CONSENT_OPEN_EVENT)); } catch { /* yut */ }
+}
+
 export function onConsent(cb: (value: "accepted" | "rejected") => void): () => void {
   const h = (e: Event) => cb((e as CustomEvent).detail);
   window.addEventListener(CONSENT_EVENT, h);

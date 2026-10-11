@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import CookiePreferencesLink from "@/components/CookiePreferencesLink";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
@@ -61,6 +62,7 @@ export default function Footer() {
            <Link href="/gizlilik" className="hover:text-slate-900 transition-colors">Gizlilik</Link>
            <Link href="/kvkk" className="hover:text-slate-900 transition-colors">KVKK</Link>
            <Link href="/cerez-politikasi" className="hover:text-slate-900 transition-colors">Çerez Politikası</Link>
+           <CookiePreferencesLink className="hover:text-slate-900 transition-colors uppercase italic font-black tracking-widest">Çerez Tercihleri</CookiePreferencesLink>
            <Link href="/mesafeli-satis" className="hover:text-slate-900 transition-colors">Mesafeli Satış</Link>
            <Link href="/iade-degisim" className="hover:text-slate-900 transition-colors">İade & Değişim</Link>
         </div>

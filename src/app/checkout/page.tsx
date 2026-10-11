@@ -1217,7 +1217,7 @@ export default function CheckoutPage() {
                       {placing ? (paymentMethod === "credit_card" ? "Ödemeye yönlendiriliyor…" : "Sipariş işleniyor…") : <>SİPARİŞİ TAMAMLA <ArrowRight size={24} className="ml-2 group-hover:translate-x-3 transition-transform duration-500" /></>}
                     </Button>
                     <p className="text-[11px] text-slate-500 font-medium leading-relaxed text-center px-2 -mt-1">
-                      “Siparişi Tamamla” butonuna basarak <Link href="/mesafeli-satis" target="_blank" className="font-bold text-olive-600 underline">Mesafeli Satış Sözleşmesi</Link>’ni ve Ön Bilgilendirme Formu’nu kabul etmiş sayılırsınız.
+                      “Siparişi Tamamla” butonuna basarak <Link href="/mesafeli-satis#on-bilgilendirme" target="_blank" className="font-bold text-olive-600 underline">Ön Bilgilendirme Formu</Link>’nu ve <Link href="/mesafeli-satis" target="_blank" className="font-bold text-olive-600 underline">Mesafeli Satış Sözleşmesi</Link>’ni okuduğunuzu, ödeme yükümlülüğü altına girdiğinizi kabul edersiniz. Kişisel verileriniz <Link href="/kvkk" target="_blank" className="font-bold text-olive-600 underline">Aydınlatma Metni</Link> kapsamında işlenir.
                     </p>
                     </>)}
 

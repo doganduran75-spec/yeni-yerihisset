@@ -187,9 +187,9 @@ async function main() {
     ["/ara?q=barefoot", "Arama"], ["/firsatlar", "Fırsatlar"], ["/bilgi-bankasi", "Bilgi bankası"],
     ...(kb ? [[`/bilgi-bankasi/${kb}`, "Bilgi bankası makalesi"]] : []),
     ["/barefoot-nedir", "Barefoot nedir"], ["/sepet", "Sepet"], ["/checkout", "Ödeme"], ["/siparis-tamam", "Sipariş sonucu"],
-    ["/login", "Giriş"], ["/account", "Hesabım"], ["/sifre-belirle", "Şifre belirle"], ["/kampanya-izni", "Kampanya izni"], ["/deneme-sonucu", "Satış sonrası (oldu mu?)"], ["/iletisim", "İletişim"],
-    ["/iade-degisim", "İade-değişim"], ["/mesafeli-satis", "Mesafeli satış"], ["/kvkk", "KVKK"], ["/gizlilik", "Gizlilik"],
-    ["/cerez-politikasi", "Çerez politikası"], ["/admin", "Admin (kabuk)"], ["/admin/system", "Admin sistem (kabuk)"], ["/sitemap.xml", "Site haritası"], ["/robots.txt", "robots.txt"],
+    ["/login", "Giriş"], ["/account", "Hesabım"], ["/sifre-belirle", "Şifre belirle"], ["/kampanya-izni", "Kampanya izni"], ["/deneme-sonucu", "Satış sonrası (oldu mu?)"], ["/iletisim", "İletişim", "Kromozom"],
+    ["/iade-degisim", "İade-değişim", "gün evde deneyin"], ["/mesafeli-satis", "Mesafeli satış + ön bilgilendirme", "on-bilgilendirme"], ["/kvkk", "KVKK", "Kromozom"], ["/gizlilik", "Gizlilik"],
+    ["/cerez-politikasi", "Çerez politikası (tercih değiştirme)", "Çerez tercihlerini değiştir"], ["/admin", "Admin (kabuk)"], ["/admin/system", "Admin sistem (kabuk)"], ["/sitemap.xml", "Site haritası"], ["/robots.txt", "robots.txt"],
   ];
   for (const [path, name, mustContain] of pages) {
     const r = await get(path);
@@ -197,6 +197,13 @@ async function main() {
     if (BROKEN.test(r.text)) { add("fail", name, `sayfada hata metni (${path})`); continue; }
     if (mustContain && !r.text.includes(mustContain)) { add("fail", name, `"${mustContain}" sayfada yok`); continue; }
     add(r.ms > 3000 ? "warn" : "ok", name, r.ms > 3000 ? `yavaş açılıyor: ${r.ms} ms (${path})` : "");
+  }
+  // Hukuki metinler canlıda taslak kalmamalı (docs/HUKUKI-METINLER-NOTLAR.md); künyede boş alan olmamalı
+  for (const path of ["/kvkk", "/gizlilik", "/cerez-politikasi", "/mesafeli-satis", "/iade-degisim", "/iletisim"]) {
+    const r = await get(path);
+    if (r.status !== 200) continue;
+    liveOnly(!r.text.includes("Taslak:") && !r.text.includes("noindex"), `Hukuki metin yayında: ${path}`, "taslak / arama motoruna kapalı — onaydan sonra draft kaldırılmalı");
+    liveOnly(!r.text.includes("(eklenecek)"), `Künye eksiksiz: ${path}`, "telefon / MERSİS / KEP eksik (src/config/company.ts)");
   }
   const nf = await get("/bu-sayfa-kesinlikle-yok-123");
   nf.status === 404 ? add("ok", "Olmayan sayfa → 404") : add("warn", "Olmayan sayfa", `HTTP ${nf.status} (404 beklenirdi)`);
