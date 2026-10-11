@@ -44,6 +44,8 @@ node scripts/regression.mjs --hizli
 - **Üyelik:** 'Üye' rolü yalnız şifreli + e-postası doğrulanmış hesaplarda (model: `docs/UYELIK-MODELI.md`).
 - **Ayarlar ve ortam:** SMTP, iletişim e-postası (yönetici bildirimleri buraya gider), havale bilgisi, Google Analytics, site adresi, CRON_SECRET, yönetici sayısı (`--canli` ile: e-posta kilidi, iyzico, arama motoru engeli).
 - **Ürün beslemesi ve reklam etiketleri:** Google/Meta katalog beslemesi açılıyor, ürün sayısı ve fiyatı veritabanıyla aynı, numaralar `size` alanında, reklam bağlantısı (`?variant=`) çalışıyor, Meta Pixel onaysız yüklenmiyor, Conversions API anahtarı dışarıya kapalı (`--canli`: test olay kodu dolu → HATA).
+- **Veritabanı güvenliği (her deploy):** RLS kapalı tablo, girişsiz yazma, herkesin her satırı değiştirebildiği kural, kişisel veri tablosunda herkese açık okuma, üyenin rol alanını değiştirmesi, gizli ayarlar, dosya deposunda girişsiz yazma, girişsiz çağrılabilen yetkili fonksiyonlar (`scripts/regression/05-veritabani-guvenligi.mjs`).
+- **Hukuki metinler:** künye, ön bilgilendirme, çerez tercih bağlantısı; `--canli` ile taslak / eksik künye HATA.
 - **Pano / Sistem:** sistem durumu ucu girişsiz açılmıyor, müşteri hata kayıtları ve e-posta sağlık kaydı dışarıya kapalı, `/admin/system` açılıyor.
 - **Arka plan işleri:** gece yedeği (<26 sa), sunucu sağlık kontrolü, pazaryeri senkronu (açıksa).
 

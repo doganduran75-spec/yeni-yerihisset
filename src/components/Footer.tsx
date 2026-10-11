@@ -2,8 +2,44 @@
 
 import Link from "next/link";
 import CookiePreferencesLink from "@/components/CookiePreferencesLink";
+import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { useBotTrap } from "@/components/BotTrap";
+
+// Bülten kaydı (ana sayfadaki DesktopFooter ile aynı uç: /api/newsletter + bot tuzağı)
+function NewsletterForm() {
+  const bot = useBotTrap();
+  const [email, setEmail] = useState("");
+  const [state, setState] = useState<"idle" | "loading" | "ok" | "err">("idle");
+  const [msg, setMsg] = useState("");
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (state === "loading") return;
+    setState("loading");
+    try {
+      const res = await fetch("/api/newsletter", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, ...bot.fields() }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (res.ok) { setState("ok"); setMsg("Teşekkürler! Kaydınız alındı."); setEmail(""); }
+      else { setState("err"); setMsg(d.error || "Bir sorun oluştu."); }
+    } catch {
+      setState("err"); setMsg("Bağlantı hatası, tekrar deneyin.");
+    }
+  }
+  return (
+    <form onSubmit={submit} className="flex flex-col gap-3">
+      {bot.trap}
+      <Input type="email" required value={email} onChange={(e) => { setEmail(e.target.value); setState("idle"); }}
+        placeholder="E-posta adresiniz" className="h-14 rounded-2xl bg-white border-slate-200 font-bold italic" />
+      <Button type="submit" disabled={state === "loading"} className="h-14 rounded-2xl bg-olive-700 hover:bg-olive-600 text-white font-black tracking-widest uppercase transition-all shadow-xl shadow-slate-100">
+        {state === "loading" ? "…" : "ABONE OL"}
+      </Button>
+      {msg && <p className={`text-xs font-bold ${state === "ok" ? "text-olive-700" : "text-red-600"}`}>{msg}</p>}
+    </form>
+  );
+}
 
 export default function Footer() {
   return (
@@ -47,10 +83,7 @@ export default function Footer() {
         <div className="space-y-8">
           <h5 className="text-xs font-black uppercase tracking-[0.2em] text-slate-900">Haber Bülteni</h5>
           <p className="text-sm font-medium text-slate-500 italic leading-relaxed">Yeni koleksiyonlar ve özel indirimlerden ilk siz haberdar olun.</p>
-          <div className="flex flex-col gap-3">
-            <Input placeholder="E-posta adresiniz" className="h-14 rounded-2xl bg-white border-slate-200 font-bold italic" />
-            <Button className="h-14 rounded-2xl bg-olive-700 hover:bg-olive-600 text-white font-black tracking-widest uppercase transition-all shadow-xl shadow-slate-100">ABONE OL</Button>
-          </div>
+          <NewsletterForm />
         </div>
       </div>
       
