@@ -44,11 +44,6 @@ export default function AdminLayout({
                 </SidebarMenuItem>
                 <SidebarMenuItem>
                   <SidebarMenuButton
-                    render={<Link href="/admin/system"><ShieldCheck size={18} className="mr-2" /> Sistem</Link>}
-                  />
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton
                     render={<Link href="/admin/orders"><Boxes size={18} className="mr-2" /> Sipariş &amp; Stok Yön.</Link>}
                   />
                 </SidebarMenuItem>
@@ -60,19 +55,6 @@ export default function AdminLayout({
                 <SidebarMenuItem>
                   <SidebarMenuButton
                     render={<Link href="/admin/messages"><MessagesSquare size={18} className="mr-2" /> Mesajlar</Link>}
-                  />
-                </SidebarMenuItem>
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-
-          <SidebarGroup className="py-1">
-            <SidebarGroupLabel>Tanımlar</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    render={<Link href="/admin/partners"><Handshake size={18} className="mr-2" /> İş Ortakları &amp; Fırsatları</Link>}
                   />
                 </SidebarMenuItem>
               </SidebarMenu>
@@ -96,6 +78,11 @@ export default function AdminLayout({
                 <SidebarMenuItem>
                   <SidebarMenuButton
                     render={<Link href="/admin/affiliates"><Link2 size={18} className="mr-2" /> Satış Ortaklığı</Link>}
+                  />
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    render={<Link href="/admin/partners"><Handshake size={18} className="mr-2" /> İş Ortakları &amp; Fırsatları</Link>}
                   />
                 </SidebarMenuItem>
                 <SidebarMenuItem>
@@ -129,6 +116,11 @@ export default function AdminLayout({
                 <SidebarMenuItem>
                   <SidebarMenuButton
                     render={<Link href="/admin/site-content"><BookOpen size={18} className="mr-2" /> Bilgi Bankası</Link>}
+                  />
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    render={<Link href="/admin/system"><ShieldCheck size={18} className="mr-2" /> Sistem</Link>}
                   />
                 </SidebarMenuItem>
                 <SidebarMenuItem>

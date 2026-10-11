@@ -48,6 +48,9 @@ export default {
         DELETE FROM public.partner_opportunities WHERE title LIKE 'REGRESYON-TEST%';
         DELETE FROM public.coupons WHERE code LIKE 'RGT%';
         DELETE FROM public.client_errors WHERE message LIKE 'REGRESYON-TEST%';
+        DELETE FROM public.analytics_sessions WHERE landing_path = '/regresyon-test';
+        DELETE FROM public.search_dismissals WHERE term LIKE 'regresyon-test%';
+        DELETE FROM public.feedback WHERE message LIKE '%regresyon-test%';
       `);
     }
 
@@ -603,7 +606,11 @@ export default {
       await part("Pano: sistem durumu ve müşteri hata kaydı", async () => {
         const st = await api("/api/admin/system-status", { method: "GET", token: F.admin.token });
         const keys = (st.json?.tiles ?? []).map((x) => x.key).join(",");
-        ok(st.status === 200 && keys === "server,integrations,backup,attacks,access,customer_errors", "Yönetici sistem durumunu görebiliyor (6 kutu)", `HTTP ${st.status} · ${keys || why(st)}`);
+        ok(st.status === 200 && keys === "server,integrations,mail,backup,attacks,access,customer_errors", "Yönetici sistem durumunu görebiliyor (7 kutu, e-posta dahil)", `HTTP ${st.status} · ${keys || why(st)}`);
+        const tm = await api("/api/admin/system-status", { token: F.member.token, body: { action: "test_mail" } });
+        ok(tm.status === 401 || tm.status === 403, "Üye deneme e-postası gönderemiyor", `HTTP ${tm.status}`);
+        const bad = await api("/api/admin/system-status", { token: F.admin.token, body: { action: "yok" } });
+        ok(bad.status === 400, "Sistem ucu bilinmeyen işlemi reddediyor", `HTTP ${bad.status}`);
         ok(["ok", "warn", "fail"].includes(st.json?.overall), "Sistem durumu genel sonuç veriyor", `overall=${st.json?.overall}`);
         const mm = await api("/api/admin/system-status", { method: "GET", token: F.member.token });
         ok(mm.status === 401 || mm.status === 403, "Üye sistem durumunu göremiyor", `HTTP ${mm.status}`);
@@ -612,6 +619,58 @@ export default {
         await sleep(500);
         const n = num(`SELECT count(*) FROM public.client_errors WHERE message = ${lit(`REGRESYON-TEST ${RUN}`)}`);
         ok(n === 1, "Ödeme sayfası hatası kaydedildi (panoda 'Hata alan müşteriler')", `${n} kayıt`);
+      });
+
+      await part("Bugünün işleri: sonuçsuz arama → sil / talebe ekle", async () => {
+        // İnsan oturumunda sonuçsuz aramalar + bot oturumunda bir tane (bot sayılmamalı)
+        const term = `regresyon-test ${RUN}`, junk = `regresyon-test-sacma ${RUN}`, botTerm = `regresyon-test-bot ${RUN}`;
+        const sid = one(`INSERT INTO public.analytics_sessions (session_id, landing_path) VALUES (gen_random_uuid(), '/regresyon-test') RETURNING session_id`);
+        const bid = one(`INSERT INTO public.analytics_sessions (session_id, landing_path, is_bot) VALUES (gen_random_uuid(), '/regresyon-test', true) RETURNING session_id`);
+        const ev = (s, t) => `(${lit(s)}, 'search', '/ara', jsonb_build_object('term', ${lit(t)}, 'results_count', 0))`;
+        sql(`INSERT INTO public.analytics_events (session_id, event_type, path, meta) VALUES ${[ev(sid, term), ev(sid, term), ev(sid, junk), ev(bid, botTerm)].join(", ")}`);
+        const mine = (L) => JSON.stringify(L.filter((x) => String(x.term).startsWith("regresyon-test")));
+        const list = async () => {
+          const r = await rest("rpc/no_result_searches", { token: F.admin.token, method: "POST", body: { p_days: 1 } });
+          return Array.isArray(r.json) ? r.json : [];
+        };
+        let L = await list();
+        const hit = L.find((x) => x.term === term);
+        ok(!!hit && Number(hit.cnt) === 2 && L.some((x) => x.term === junk), "Sonuçsuz aramalar listeleniyor (adetle)", mine(L));
+        ok(!L.some((x) => x.term === botTerm), "Bot aramaları sayılmıyor");
+        const an = await rest("rpc/no_result_searches", { method: "POST", body: { p_days: 1 } });
+        ok(an.status >= 400 || (Array.isArray(an.json) && an.json.length === 0), "Sonuçsuz aramalar dışarıya kapalı", `HTTP ${an.status}`);
+        const mem = await rest("rpc/no_result_searches", { token: F.member.token, method: "POST", body: { p_days: 1 } });
+        ok(mem.status >= 400 || (Array.isArray(mem.json) && mem.json.length === 0), "Üye sonuçsuz aramaları göremiyor", `HTTP ${mem.status}`);
+        // Sil (saçma) → listeden düşer
+        const del = await rest("search_dismissals", { token: F.admin.token, method: "POST", headers: { Prefer: "resolution=merge-duplicates" }, body: { term: junk, action: "deleted" } });
+        ok(del.status < 300, "Yönetici sonuçsuz aramayı silebiliyor", `HTTP ${del.status}`);
+        // Talebe ekle → talep kaydı + listeden düşer
+        const fb = await rest("feedback", { token: F.admin.token, method: "POST", body: { message: `Sonuçsuz arama: "${term}"`, source: "search" } });
+        ok(fb.status < 300, "Yönetici talep ekleyebiliyor (Yeni ekle / Talebe ekle)", `HTTP ${fb.status}`);
+        await rest("search_dismissals", { token: F.admin.token, method: "POST", headers: { Prefer: "resolution=merge-duplicates" }, body: { term, action: "to_feedback" } });
+        L = await list();
+        ok(!L.some((x) => x.term === junk || x.term === term), "Silinen / talebe eklenen arama listeden kalktı (sayı azaldı)", mine(L));
+        const mdis = await rest("search_dismissals", { token: F.member.token, method: "POST", body: { term: `regresyon-test-uye ${RUN}` } });
+        ok(mdis.status >= 400, "Üye sonuçsuz arama silemiyor", `HTTP ${mdis.status}`);
+        // Aynı terim silindikten SONRA yeniden aranırsa geri gelir
+        await sleep(1100);
+        sql(`INSERT INTO public.analytics_events (session_id, event_type, path, meta) VALUES ${ev(sid, junk)}`);
+        L = await list();
+        ok(L.some((x) => x.term === junk && Number(x.cnt) === 1), "Silinen terim yeniden aranınca listeye geri geliyor", mine(L));
+      });
+
+      await part("Pazaryeri stok görevi: entegre kanala görev açılmaz", async () => {
+        const parse = (q) => { try { return JSON.parse(one(q)) || []; } catch { return []; } };
+        const chans = parse(`SELECT coalesce(json_agg(json_build_object('id', id, 'name', name, 'api', integration = 'api')), '[]') FROM public.marketplace_channels WHERE is_active`);
+        const s0 = stock();
+        sql(`UPDATE public.product_variants SET stock = 0 WHERE id = ${lit(F.var)}`);
+        const tasks = parse(`SELECT coalesce(json_agg(channel_id), '[]') FROM public.stock_sync_tasks WHERE variant_id = ${lit(F.var)} AND status = 'pending'`);
+        sql(`UPDATE public.product_variants SET stock = ${Number(s0)} WHERE id = ${lit(F.var)}`);
+        sql(`DELETE FROM public.stock_sync_tasks WHERE variant_id = ${lit(F.var)}`);
+        const apiCh = chans.filter((c) => c.api), manCh = chans.filter((c) => !c.api);
+        ok(!tasks.some((id) => apiCh.some((c) => c.id === id)), "Entegrasyonu açık kanala manuel görev açılmıyor", `entegre: ${apiCh.map((c) => c.name).join(", ") || "yok"}`);
+        ok(manCh.every((c) => tasks.includes(c.id)), "Entegrasyonu olmayan aktif kanala görev açılıyor", `manuel: ${manCh.map((c) => c.name).join(", ") || "yok"} · açılan ${tasks.length}`);
+        ok(stock() === s0, "Test stoğu geri alındı", `stok ${stock()} (beklenen ${s0})`);
       });
 
       await part("Sipariş silme ve süresi dolan sipariş", async () => {

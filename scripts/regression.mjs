@@ -156,6 +156,7 @@ async function main() {
     ["20261025 iptal e-postası şablonu", "SELECT NOT EXISTS(SELECT 1 FROM public.email_templates WHERE trigger='order_cancelled' AND body_html LIKE '%Ödeme yapıldıysa%')"],
     ["20261026 şifresiz hesaplar", "SELECT to_regprocedure('public.mark_account_passwordless(uuid)') IS NOT NULL"],
     ["20261028 üyelik durumu (misafir/doğrulanmamış/üye)", "SELECT to_regprocedure('public.member_account_state(uuid)') IS NOT NULL AND NOT EXISTS(SELECT 1 FROM pg_trigger WHERE tgname='on_profile_created_assign_role')"],
+    ["20261106 e-posta sağlığı, sonuçsuz arama silme, entegre kanala görev yok", "SELECT to_regclass('public.mail_health') IS NOT NULL AND to_regclass('public.search_dismissals') IS NOT NULL AND to_regprocedure('public.no_result_searches(integer)') IS NOT NULL AND pg_get_functiondef('public.create_stock_sync_tasks()'::regprocedure) LIKE '%integration = ''manual''%'"],
     ["20261105 sistem durumu (müşteri hataları, yönetici girişleri)", "SELECT to_regclass('public.client_errors') IS NOT NULL AND to_regprocedure('public.admin_login_activity(integer)') IS NOT NULL"],
     ["20261104 video kovası (media)", "SELECT EXISTS(SELECT 1 FROM storage.buckets WHERE id='media' AND public)"],
     ["20261103 mobil karşılama videosu", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='settings' AND column_name='intro_video_url')"],
@@ -305,6 +306,8 @@ async function main() {
       });
       up.status >= 400 ? add("ok", "Video kovasına dışarıdan yükleme yapılamıyor") : add("fail", "Video kovasına dışarıdan YÜKLENEBİLİYOR", `HTTP ${up.status} — 20261104 migration'ı`);
     } catch (e) { add("warn", "Video kovası yükleme yetkisi kontrol edilemedi", String(e?.message || e)); }
+    const mh = await rest("mail_health?select=last_error&limit=1");
+    mh.status >= 400 || (Array.isArray(mh.json) && mh.json.length === 0) ? add("ok", "E-posta sağlık kaydı dışarıya kapalı") : add("fail", "E-posta sağlık kaydı dışarıya AÇIK", `HTTP ${mh.status} — 20261106 migration'ı`);
     const cer = await rest("client_errors?select=message&limit=1");
     cer.status >= 400 || (Array.isArray(cer.json) && cer.json.length === 0) ? add("ok", "Müşteri hata kayıtları dışarıya kapalı") : add("fail", "Müşteri hata kayıtları dışarıya AÇIK", `HTTP ${cer.status} — 20261105 migration'ı`);
     const mcl = await rest("marketing_consent_log?select=email&limit=1");

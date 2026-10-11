@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/lib/supabase";
+import NoResultSearches, { fetchNoResultSearches } from "@/components/admin/NoResultSearches";
 import {
   Activity, Users, ShoppingCart, Ticket, Database, ChevronDown, ChevronRight,
   Globe, Loader2, MousePointerClick, Search, Footprints, Layers, CreditCard, Bot,
@@ -134,19 +135,8 @@ export default function AdminAnalyticsPage() {
           setProfiles(map);
         } else setProfiles({});
 
-        // Sonuçsuz aramalar (talep sinyali) — son 500 arama event'i
-        const { data: searches } = await (supabase as any)
-          .from("analytics_events").select("meta")
-          .eq("event_type", "search").gte("created_at", since.toISOString())
-          .order("created_at", { ascending: false }).limit(1000);
-        const noRes: Record<string, number> = {};
-        for (const e of (searches as any[]) || []) {
-          if (Number(e.meta?.results_count) === 0 && e.meta?.term) {
-            const t = String(e.meta.term).trim().toLocaleLowerCase("tr-TR");
-            noRes[t] = (noRes[t] || 0) + 1;
-          }
-        }
-        setNoResultSearches(Object.entries(noRes).map(([term, count]) => ({ term, count })).sort((a, b) => b.count - a.count).slice(0, 30));
+        // Sonuçsuz aramalar (talep sinyali) — botlar ve silinen / talebe eklenen terimler hariç (Excel için)
+        setNoResultSearches((await fetchNoResultSearches(days)).map((r) => ({ term: r.term, count: r.cnt })));
       } finally {
         setLoading(false);
       }
@@ -371,21 +361,10 @@ export default function AdminAnalyticsPage() {
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-base"><Search size={18} /> Sonuçsuz aramalar</CardTitle>
-              <CardDescription>Ziyaretçiler aradı ama ürün çıkmadı — talep var, stok/ürün yok. En sık istenenleri değerlendir.</CardDescription>
+              <CardDescription>Ziyaretçiler aradı ama ürün çıkmadı — talep var, stok/ürün yok. Saçmaysa Sil; işe yararsa Talebe ekle (Talep &amp; Geri Bildirim).</CardDescription>
             </CardHeader>
             <CardContent>
-              {noResultSearches.length === 0 ? (
-                <p className="text-sm text-slate-400">Sonuçsuz arama kaydı yok.</p>
-              ) : (
-                <div className="flex flex-wrap gap-2">
-                  {noResultSearches.map((s) => (
-                    <span key={s.term} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-50 border border-amber-200 text-sm">
-                      <span className="text-slate-700 font-medium">{s.term}</span>
-                      <span className="text-[11px] font-black text-amber-600 bg-amber-100 rounded-full px-1.5">{s.count}</span>
-                    </span>
-                  ))}
-                </div>
-              )}
+              <NoResultSearches key={period} days={PERIODS.find((p) => p.key === period)?.days ?? 7} />
             </CardContent>
           </Card>
 

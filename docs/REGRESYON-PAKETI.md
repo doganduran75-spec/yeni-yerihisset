@@ -44,7 +44,7 @@ node scripts/regression.mjs --hizli
 - **Üyelik:** 'Üye' rolü yalnız şifreli + e-postası doğrulanmış hesaplarda (model: `docs/UYELIK-MODELI.md`).
 - **Ayarlar ve ortam:** SMTP, iletişim e-postası (yönetici bildirimleri buraya gider), havale bilgisi, Google Analytics, site adresi, CRON_SECRET, yönetici sayısı (`--canli` ile: e-posta kilidi, iyzico, arama motoru engeli).
 - **Ürün beslemesi ve reklam etiketleri:** Google/Meta katalog beslemesi açılıyor, ürün sayısı ve fiyatı veritabanıyla aynı, numaralar `size` alanında, reklam bağlantısı (`?variant=`) çalışıyor, Meta Pixel onaysız yüklenmiyor, Conversions API anahtarı dışarıya kapalı (`--canli`: test olay kodu dolu → HATA).
-- **Pano / Sistem:** sistem durumu ucu girişsiz açılmıyor, müşteri hata kayıtları dışarıya kapalı, `/admin/system` açılıyor.
+- **Pano / Sistem:** sistem durumu ucu girişsiz açılmıyor, müşteri hata kayıtları ve e-posta sağlık kaydı dışarıya kapalı, `/admin/system` açılıyor.
 - **Arka plan işleri:** gece yedeği (<26 sa), sunucu sağlık kontrolü, pazaryeri senkronu (açıksa).
 
 ### 1b. Fonksiyonel senaryolar — iş akışları doğru çalışıyor mu (`scripts/regression/`)
@@ -68,7 +68,9 @@ bildirimi düşmez). Tek iz: sipariş numaraları birkaç numara atlar.
 | Reklamdan gelen sipariş | Instagram reklamı kaynağı siparişe yazılır; test siparişi Meta'ya gönderilmez ve geçici IP/tarayıcı bilgisi silinir; çerez onayı yoksa Meta bilgisi hiç saklanmaz; bozuk bilgi siparişi bozmaz |
 | Üyelik durumu ve e-posta doğrulama | Misafir ve doğrulanmamış hesap "Üye" sayılmaz (seviye 0); sipariş e-postasında doğrulama bağlantısı üretilir; yeniden gönderim, eski bağlantı geçersiz, yenisiyle doğrulama → Üye + Müşteri seviyesi + hoş geldin kuponları; Fırsat kuponu ve iş ortaklığı doğrulamadan alınamaz; üst seviye fırsatı doğrudan istekle alınamaz; test fırsatı sitede görünmez; başkasının siparişi için mesaj e-postası tetiklenemez |
 | Kampanya e-postası izni | Varsayılan izinsiz; girişsiz/bağlantısız izin verilemez; Hesabım'dan izin + ispat kaydı; tarayıcıdan doğrudan değiştirilemez; e-posta bağlantısıyla durum okuma ve çıkış; değiştirilmiş bağlantı reddedilir; ödeme sayfasındaki kutu üye ve misafirde izni kaydeder, işaretsiz sipariş izni geri almaz |
-| Pano: sistem durumu | Yönetici 6 kutuyu (sunucu, entegrasyon, yedek, saldırı, yetkisiz giriş, hata alan müşteriler) görür, üye göremez; ödeme sayfası hatası kaydedilir |
+| Pano: sistem durumu | Yönetici 7 kutuyu (sunucu, entegrasyon, e-posta, yedek, saldırı, yetkisiz giriş, hata alan müşteriler) görür, üye göremez / deneme e-postası gönderemez; ödeme sayfası hatası kaydedilir |
+| Bugünün işleri: sonuçsuz arama | Aramalar adetle listelenir, bot aramaları sayılmaz, dışarıya / üyeye kapalı; Sil ve Talebe ekle listeden kaldırır; silinen terim yeniden aranınca geri gelir |
+| Pazaryeri stok görevi | Stok 0'a düşünce entegrasyonu açık kanala görev açılmaz, entegrasyonu olmayan aktif kanala açılır |
 | Stok bildirimi | Bot kaydı reddedilir; misafir kaydı + Kişiler; çift kayıt olmaz; üye kaydı; üye "stok geldi" gönderemez; gönderilemeyen bildirim "bekliyor" kalır |
 | Silme ve süre dolumu | "Siparişi sil" (stok geri, kupon sayısı düzelir); 24 saat ödenmeyen havale siparişi iptal olur, stok geri |
 
@@ -112,6 +114,7 @@ Kısa turu yap, ardından:
 | T14 | Beden tablosu / Numaramı bul (telefonla) | Dodura ürününde 25,3 yaz → 40; Attipas ürününde 107 yaz → M (büyüme payı); önerilen numarayı seç | Öneri doğru, stok durumu doğru, numara seçildi |
 | T15 | Mobil karşılama videosu (telefonla) | Ayarlar › Genel › Video yükle ile video seç (önizleme görünür); telefonda ana sayfayı `?intro=1` ile aç; sonra normal aç | Sayfa önce geliyor, video tam ekran oynuyor, bitince / "Geç" ile ana sayfa kartları; ikinci girişte çıkmıyor |
 | T16 | Pano tek ekran (bilgisayarda) | Yönetim › Pano'yu aç; bir kutuya tıkla | Sistem şeridi + satış + bugünün işleri + bekleyen işler kaydırmadan görünüyor; kutu Sistem sayfasında ilgili bölüme götürüyor |
+| T17 | E-posta gerçekten gidiyor mu | Sistem › E-posta › “Deneme e-postası gönder” | Yönetici adresine deneme e-postası geldi (spam klasörüne de bak) |
 | T13 | Satış sonrası e-postaları (canlı öncesi metin kontrolü) | Bir siparişi "Teslim edildi" yap → e-posta; değişim / iade talebi aç → yöneticiye bildirim; kod gönder → müşteri e-postası | "Acele yok, evde dene" kutusu ve düğmeler; kod e-postası UPS uyarısıyla; metinler onaylandı |
 | T11 | Kart (iyzico açıksa) | Test kartıyla ödeme; başarısız kart; iade | Başarı sayfası; hata mesajı; iyzico iadesi |
 

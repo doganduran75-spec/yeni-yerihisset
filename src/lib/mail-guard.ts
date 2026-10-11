@@ -57,6 +57,13 @@ function addresses(v: unknown): string[] {
   });
 }
 
+// E-posta sağlığı (Pano › Sistem › E-posta): her GERÇEK gönderim denemesinin sonucu. Kilit / test adresi
+// engeli sayılmaz (bilerek gönderilmedi). Beklenmez; kayıt yazılamazsa gönderimi etkilemez.
+function recordMailResult(ok: boolean, error?: string) {
+  void Promise.resolve((createAdminClient() as any).rpc("mail_health_record", { p_ok: ok, p_error: error ?? null }))
+    .catch(() => { /* kritik değil */ });
+}
+
 /** nodemailer.createTransport yerine: aynı sendMail, kilit kontrolüyle. */
 export function createMailTransport(config: any) {
   const transport = nodemailer.createTransport(config);
@@ -69,7 +76,14 @@ export function createMailTransport(config: any) {
         const blocked = [opts.to, opts.cc, opts.bcc].flatMap(addresses).filter((e) => !st.allow.has(e));
         if (blocked.length) throw new EmailLockedError(blocked);
       }
-      return transport.sendMail(opts);
+      try {
+        const info = await transport.sendMail(opts);
+        recordMailResult(true);
+        return info;
+      } catch (e: any) {
+        recordMailResult(false, e?.message || String(e));
+        throw e;
+      }
     },
   };
 }

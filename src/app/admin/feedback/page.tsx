@@ -6,7 +6,11 @@ import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Check, Mail, MessageSquare, Inbox } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import NoResultSearches from "@/components/admin/NoResultSearches";
+import { Loader2, Check, Mail, MessageSquare, Inbox, Plus, Search } from "lucide-react";
+
+const SOURCE: Record<string, string> = { search: "sonuçsuz aramadan", admin: "elle eklendi" };
 
 type Feedback = {
   id: string;
@@ -22,6 +26,25 @@ export default function FeedbackPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"open" | "all">("open");
   const [busy, setBusy] = useState<string | null>(null);
+  // Yönetici "Yeni ekle": telefonda / Instagram'da / sonuçsuz aramada gördüğü talebi not eder
+  const [adding, setAdding] = useState(false);
+  const [newMsg, setNewMsg] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [addErr, setAddErr] = useState<string | null>(null);
+
+  async function addNew() {
+    if (!newMsg.trim()) return;
+    setSaving(true); setAddErr(null);
+    const { data: { user } } = await supabase.auth.getUser();
+    const { error } = await (supabase as any).from("feedback").insert({
+      message: newMsg.trim(), email: newEmail.trim() || null, source: "admin", created_by: user?.id ?? null,
+    });
+    setSaving(false);
+    if (error) { setAddErr(error.message); return; }
+    setNewMsg(""); setNewEmail(""); setAdding(false);
+    load();
+  }
 
   useEffect(() => { load(); }, []);
 
@@ -50,7 +73,7 @@ export default function FeedbackPage() {
         <p className="text-muted-foreground">Müşterilerin &quot;aradığını bulamadım&quot; notları — ne üreteceğine/stoklayacağına karar için.</p>
       </div>
 
-      <div className="flex gap-2">
+      <div className="flex gap-2 flex-wrap items-center">
         {([["open", `Bekleyen (${openCount})`], ["all", `Hepsi (${rows.length})`]] as const).map(([k, label]) => (
           <button
             key={k}
@@ -60,7 +83,26 @@ export default function FeedbackPage() {
             {label}
           </button>
         ))}
+        <Button size="sm" className="ml-auto gap-1.5" onClick={() => setAdding((v) => !v)}><Plus size={14} /> Yeni ekle</Button>
       </div>
+
+      {adding && (
+        <Card className="shadow-sm border-blue-200">
+          <CardContent className="pt-4 space-y-2">
+            <textarea value={newMsg} onChange={(e) => setNewMsg(e.target.value)} rows={3} autoFocus
+              placeholder="Talep (ör. 'Siyah 44 numara kışlık bot soruluyor')"
+              className="w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+            <div className="flex flex-wrap gap-2 items-center">
+              <Input value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="Dönüş için e-posta (isteğe bağlı)" className="h-9 max-w-xs text-sm" />
+              <Button size="sm" disabled={saving || !newMsg.trim()} onClick={addNew} className="gap-1.5">
+                {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Kaydet
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setAdding(false)}>Vazgeç</Button>
+              {addErr && <span className="text-sm text-red-700">{addErr}</span>}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card className="shadow-sm border-muted">
         <CardHeader className="pb-3">
@@ -93,6 +135,7 @@ export default function FeedbackPage() {
                       <span className="text-[11px] text-slate-400">
                         {new Date(f.created_at).toLocaleString("tr-TR", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
                       </span>
+                      {f.source && SOURCE[f.source] && <span className="text-[11px] text-slate-400">· {SOURCE[f.source]}</span>}
                       {f.is_handled && <Badge className="text-[10px] bg-green-100 text-green-700 border-none hover:bg-green-100">İşlendi</Badge>}
                     </div>
                   </div>
@@ -110,6 +153,16 @@ export default function FeedbackPage() {
               ))}
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      <Card id="aramalar" className="shadow-sm border-muted scroll-mt-20">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2"><Search size={18} /> Sonuçsuz aramalar (son 30 gün)</CardTitle>
+          <CardDescription>Ziyaretçi aradı, ürün çıkmadı. Saçmaysa <b>Sil</b>; işe yararsa <b>Talebe ekle</b> (yukarıdaki notlara eklenir). İkisinde de listeden kalkar.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <NoResultSearches days={30} onChange={load} />
         </CardContent>
       </Card>
     </div>

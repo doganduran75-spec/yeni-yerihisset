@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { getAuthUserFromRequest } from "@/lib/auth-from-request";
+import { sendSiteMail } from "@/lib/site-mail";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 // SİSTEM DURUMU — panonun üst şeridi + /admin/system ayrıntıları (yalnız yönetici).
 // Her kontrol: ok (yeşil, bakmana gerek yok) · warn (sarı) · fail (kırmızı). Kaynaklar:
 //   sunucu sağlığı (server_health_runs, 15 dk'da bir) · entegrasyon (cron_heartbeats + kuyruk hataları) ·
-//   yedek (backup_runs) · saldırı (bot_blocks + SSH denemeleri) · yetkisiz giriş (yönetici girişleri,
+//   e-posta (mail_health: son gönderimler + 15 dk'da bir SMTP girişi) · yedek (backup_runs) · saldırı (bot_blocks + SSH denemeleri) · yetkisiz giriş (yönetici girişleri,
 //   yeni IP'den sunucu girişi) · hata alan müşteriler (client_errors + gönderilemeyen müşteri e-postaları)
 type Status = "ok" | "warn" | "fail";
 type Tile = { key: string; label: string; status: Status; value: string; hint?: string; anchor: string };
@@ -18,25 +19,46 @@ const ago = (iso?: string | null) => {
   return m < 60 ? `${m} dk önce` : m < 48 * 60 ? `${Math.round(m / 60)} sa önce` : `${Math.round(m / 1440)} gün önce`;
 };
 
-export async function GET(req: NextRequest) {
+async function requireAdmin(req: NextRequest) {
   const user = await getAuthUserFromRequest(req);
-  if (!user) return NextResponse.json({ error: "Yetkisiz" }, { status: 401 });
+  if (!user) return { error: NextResponse.json({ error: "Yetkisiz" }, { status: 401 }) };
   const sb = createAdminClient() as any;
   const { data: me } = await sb.from("profiles").select("role").eq("id", user.id).single();
-  if (me?.role !== "admin") return NextResponse.json({ error: "Yetkisiz" }, { status: 403 });
+  if (me?.role !== "admin") return { error: NextResponse.json({ error: "Yetkisiz" }, { status: 403 }) };
+  return { sb };
+}
+
+// POST {action:"test_mail"} → yönetici bildirim adresine deneme e-postası (gerçekten gidiyor mu?)
+export async function POST(req: NextRequest) {
+  const auth = await requireAdmin(req);
+  if ("error" in auth) return auth.error;
+  const body = await req.json().catch(() => ({}));
+  if (body?.action !== "test_mail") return NextResponse.json({ error: "Geçersiz işlem" }, { status: 400 });
+  const { data: st } = await auth.sb.from("settings").select("admin_notify_email, contact_email, smtp_from_email").limit(1).maybeSingle();
+  const to = st?.admin_notify_email || st?.contact_email || st?.smtp_from_email;
+  if (!to) return NextResponse.json({ error: "Yönetici e-posta adresi ayarlı değil (Ayarlar › Genel)" }, { status: 400 });
+  const r = await sendSiteMail(to, "Deneme e-postası", `<p style="font-size:15px">Bu bir deneme e-postasıdır. Geldiyse sitenin e-posta gönderimi çalışıyor.</p><p style="font-size:13px;color:#6b7280">Gönderim: ${new Date().toLocaleString("tr-TR", { timeZone: "Europe/Istanbul" })}</p>`);
+  return r.status === "sent" ? NextResponse.json({ ok: true, to }) : NextResponse.json({ error: r.error || "Gönderilemedi" }, { status: 502 });
+}
+
+export async function GET(req: NextRequest) {
+  const auth = await requireAdmin(req);
+  if ("error" in auth) return auth.error;
+  const { sb } = auth;
 
   const since = new Date(Date.now() - 24 * 3600000).toISOString();
-  const [health, backup, restore, beats, st, mpFailed, bots, logins, errs, mailFails] = await Promise.all([
+  const [health, backup, restore, beats, st, mpFailed, bots, logins, errs, mailFails, mail] = await Promise.all([
     sb.from("server_health_runs").select("status, created_at, checks").order("created_at", { ascending: false }).limit(1).maybeSingle(),
     sb.from("backup_runs").select("created_at, ok, message").eq("kind", "backup").order("created_at", { ascending: false }).limit(1).maybeSingle(),
     sb.from("backup_runs").select("created_at, ok").eq("kind", "restore_test").order("created_at", { ascending: false }).limit(1).maybeSingle(),
     sb.from("cron_heartbeats").select("name, last_run_at, message"),
-    sb.from("settings").select("trendyol_enabled, hepsiburada_enabled, amazon_enabled").limit(1).maybeSingle(),
+    sb.from("settings").select("trendyol_enabled, hepsiburada_enabled, amazon_enabled, email_lock_enabled").limit(1).maybeSingle(),
     sb.from("marketplace_stock_sync").select("id", { count: "exact", head: true }).eq("status", "failed"),
     sb.from("bot_blocks").select("endpoint, reason").gte("created_at", since).limit(5000),
     sb.rpc("admin_login_activity", { p_days: 7 }),
     sb.from("client_errors").select("created_at, kind, message, path, order_id").gte("created_at", since).order("created_at", { ascending: false }).limit(50),
     sb.from("notification_log").select("created_at, trigger, recipient, error_message, order_id").eq("status", "failed").gte("created_at", since).order("created_at", { ascending: false }).limit(50),
+    sb.from("mail_health").select("*").eq("id", 1).maybeSingle(),
   ]);
 
   const tiles: Tile[] = [];
@@ -69,7 +91,25 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  // 3) Yedek
+  // 3) E-posta — gerçekten gidiyor mu? (son gönderimler + SMTP girişi doğrulaması)
+  {
+    const m = mail.data;
+    const vStale = !m?.verify_at || Date.now() - new Date(m.verify_at).getTime() > 40 * 60000;
+    const streak = Number(m?.fail_streak || 0);
+    const lock = st.data?.email_lock_enabled !== false;
+    const status: Status = m?.verify_ok === false || streak >= 3 ? "fail" : streak > 0 || vStale ? "warn" : "ok";
+    tiles.push({
+      key: "mail", label: "E-posta", anchor: "eposta", status,
+      value: m?.verify_ok === false ? `SMTP'ye bağlanılamıyor (${ago(m.verify_at)})`
+        : streak > 0 ? `son ${streak} gönderim başarısız`
+        : `son gönderim ${ago(m?.last_ok_at)}${vStale ? " · bağlantı henüz doğrulanmadı" : ` · bağlantı ✓ ${ago(m?.verify_at)}`}${lock ? " · kilit açık" : ""}`,
+      hint: m?.verify_ok === false ? m.verify_error || "SMTP ayarlarını kontrol et"
+        : streak > 0 ? m?.last_error || "Ayrıntıda hata metni var"
+        : vStale ? "Doğrulama 15 dk'da bir sağlık kontrolüyle yapılır" : undefined,
+    });
+  }
+
+  // 4) Yedek
   {
     const b = backup.data;
     const h = b ? (Date.now() - new Date(b.created_at).getTime()) / 3600000 : 999;
@@ -82,7 +122,7 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  // 4) Saldırı / bot
+  // 5) Saldırı / bot
   {
     const n = ((bots.data as any[]) || []).length;
     const ssh = checks.find((c) => c.key === "ssh_attempts");
@@ -95,7 +135,7 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  // 5) Yetkisiz giriş
+  // 6) Yetkisiz giriş
   {
     const L = ((logins.data as any[]) || []);
     const newIp24 = L.filter((l) => l.new_ip && new Date(l.created_at).getTime() > Date.now() - 24 * 3600000);
@@ -110,7 +150,7 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  // 6) Hata alan müşteriler
+  // 7) Hata alan müşteriler
   const custMail = ((mailFails.data as any[]) || []).filter((m) => !/\.(test|invalid)$/i.test(m.recipient || "") && !/kilidi/i.test(m.error_message || ""));
   {
     const E = ((errs.data as any[]) || []);
@@ -137,6 +177,7 @@ export async function GET(req: NextRequest) {
       errors: ((errs.data as any[]) || []).slice(0, 30),
       mailFails: custMail.slice(0, 20),
       heartbeats: beats.data || [],
+      mail: mail.data ? { ...mail.data, lock: st.data?.email_lock_enabled !== false } : null,
     },
   });
 }

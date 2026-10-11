@@ -192,10 +192,14 @@ function ChannelsTab({ channels, onSaved }: { channels: any[]; onSaved: () => vo
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground flex items-center gap-1.5"><ClipboardList size={14} /> Her kanalın yönetim paneli linkini gir (görevdeki “kanala git” bunu açar). Kullanmadığın kanalı pasif yap.</p>
+      <p className="text-xs text-muted-foreground">Entegrasyonu açık kanala (“otomatik”) stok kendiliğinden gider; o kanal için görev açılmaz. Görev yalnız entegrasyonu olmayan aktif kanallar için çıkar.</p>
       {rows.map((c, i) => (
         <Card key={c.id} className="border-none shadow-sm">
           <CardContent className="p-4 flex flex-wrap items-center gap-3">
-            <span className="font-black text-slate-900 w-28 shrink-0">{c.name}</span>
+            <span className="font-black text-slate-900 w-28 shrink-0">
+              {c.name}
+              {c.integration === "api" && <span className="block text-[10px] font-bold text-green-700">otomatik (API)</span>}
+            </span>
             <Input
               placeholder="https://... (yönetim paneli linki)"
               value={c.manage_url ?? ""}

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { evaluateHealthAlerts } from "@/lib/server-health-alerts";
+import { verifySmtp } from "@/lib/mail-health";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -12,8 +13,11 @@ async function run(req: NextRequest) {
   if (!secret || req.headers.get("x-cron-secret") !== secret) {
     return NextResponse.json({ error: "Yetkisiz" }, { status: 401 });
   }
-  const r = await evaluateHealthAlerts(createAdminClient() as any);
-  return NextResponse.json({ ok: true, ...r });
+  const sb = createAdminClient() as any;
+  // SMTP girişini doğrula (e-posta göndermez) → Pano › Sistem › E-posta
+  const smtp = await verifySmtp(sb).catch((e) => ({ ok: false, error: String(e?.message || e) }));
+  const r = await evaluateHealthAlerts(sb);
+  return NextResponse.json({ ok: true, smtp: smtp.ok, ...r });
 }
 
 export const POST = run;

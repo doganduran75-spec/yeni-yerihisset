@@ -58,7 +58,7 @@ export default function SystemStatusStrip({ onData, linkTo = "/admin/system" }: 
           <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Sistem {problems.length === 0 && <span className="text-green-700 normal-case tracking-normal font-bold">· her şey yolunda</span>}</p>
           <Link href={linkTo} className="text-xs text-muted-foreground hover:text-slate-800 flex items-center gap-0.5">Ayrıntı <ChevronRight size={12} /></Link>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-x-4 gap-y-1.5">
+        <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-x-3 gap-y-1.5">
           {d.tiles.map((t) => (
             <Link key={t.key} href={`${linkTo}#${t.anchor}`} title={t.value} className="flex items-center gap-2 min-w-0 rounded-lg px-1.5 py-1 hover:bg-slate-50">
               {ICON[t.status]}

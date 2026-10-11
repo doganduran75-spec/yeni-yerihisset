@@ -8,7 +8,9 @@ import SystemStatusStrip, { type SystemStatus } from "@/components/admin/SystemS
 import ServerHealthCard from "@/components/admin/ServerHealthCard";
 import BackupStatusCard from "@/components/admin/BackupStatusCard";
 import MarketplaceSyncCard from "@/components/admin/MarketplaceSyncCard";
-import { ShieldAlert, KeyRound, UserX, Server, Plug, DatabaseBackup } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { supabase } from "@/lib/supabase";
+import { ShieldAlert, KeyRound, UserX, Server, Plug, DatabaseBackup, Mail, Loader2, Send } from "lucide-react";
 
 // SİSTEM — panodaki şeridin ayrıntısı: sunucu, entegrasyon, yedek, saldırı, yetkisiz giriş,
 // hata alan müşteriler. Veri: /api/admin/system-status (+ mevcut sağlık / yedek / senkron kartları).
@@ -21,6 +23,45 @@ function Section({ id, icon, title, children }: { id: string; icon: React.ReactN
       <h2 className="text-lg font-bold flex items-center gap-2">{icon} {title}</h2>
       {children}
     </section>
+  );
+}
+
+// E-posta: son gönderimler + SMTP doğrulaması + "deneme e-postası gönder" (gerçekten geliyor mu?)
+function MailSection({ m }: { m: any }) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  async function sendTest() {
+    setBusy(true); setMsg(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const r = await fetch("/api/admin/system-status", {
+        method: "POST", headers: { "Content-Type": "application/json", ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
+        body: JSON.stringify({ action: "test_mail" }),
+      });
+      const j = await r.json();
+      setMsg(r.ok ? { ok: true, text: `Gönderildi → ${j.to}. Gelen kutunu (ve spam klasörünü) kontrol et.` } : { ok: false, text: j.error || `HTTP ${r.status}` });
+    } catch (e: any) { setMsg({ ok: false, text: e?.message || "Gönderilemedi" }); } finally { setBusy(false); }
+  }
+  const row = (k: string, v: React.ReactNode) => <tr className="border-b last:border-0"><td className="py-1.5 text-muted-foreground w-56">{k}</td><td className="py-1.5">{v}</td></tr>;
+  return (
+    <Card className="shadow-sm"><CardContent className="pt-4 text-sm space-y-3">
+      {!m ? <p className="text-muted-foreground">Henüz kayıt yok (ilk gönderim / ilk doğrulamadan sonra dolar).</p> : (
+        <table className="w-full"><tbody>
+          {row("Son başarılı gönderim", m.last_ok_at ? t(m.last_ok_at) : "—")}
+          {row("Son başarısız gönderim", m.last_fail_at ? <>{t(m.last_fail_at)}{m.last_error ? <span className="block text-xs text-red-700">{m.last_error}</span> : null}</> : "—")}
+          {row("Art arda başarısız", String(m.fail_streak ?? 0))}
+          {row("SMTP bağlantısı (15 dk'da bir)", m.verify_at ? <>{m.verify_ok ? "✓ çalışıyor" : "✗ bağlanılamıyor"} · {t(m.verify_at)}{!m.verify_ok && m.verify_error ? <span className="block text-xs text-red-700">{m.verify_error}</span> : null}</> : "henüz doğrulanmadı")}
+          {row("E-posta kilidi", m.lock ? "açık — yalnız yöneticilere / izinli adreslere gider (canlıda kapatılacak)" : "kapalı — müşterilere gidiyor")}
+        </tbody></table>
+      )}
+      <div className="flex flex-wrap items-center gap-3">
+        <Button size="sm" variant="outline" disabled={busy} onClick={sendTest} className="gap-1.5">
+          {busy ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} Deneme e-postası gönder
+        </Button>
+        {msg && <span className={`text-sm ${msg.ok ? "text-green-700" : "text-red-700"}`}>{msg.text}</span>}
+      </div>
+      <p className="text-xs text-muted-foreground">“Gönderildi” yalnız e-posta sunucusunun kabul ettiğini gösterir; asıl kanıt deneme e-postasının gelen kutuna düşmesidir.</p>
+    </CardContent></Card>
   );
 }
 
@@ -47,6 +88,10 @@ export default function SystemPage() {
             {det.heartbeats.map((b: any) => <p key={b.name}><b>{b.name}</b> · son çalışma {t(b.last_run_at)}{b.message ? ` · ${b.message}` : ""}</p>)}
           </CardContent></Card>
         )}
+      </Section>
+
+      <Section id="eposta" icon={<Mail size={18} className="text-slate-500" />} title="E-posta">
+        <MailSection m={det?.mail} />
       </Section>
 
       <Section id="yedek" icon={<DatabaseBackup size={18} className="text-slate-500" />} title="Yedek">

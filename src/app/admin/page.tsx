@@ -8,29 +8,8 @@ import { Card } from "@/components/ui/card";
 import { supabase } from "@/lib/supabase";
 import DashboardSummary from "@/components/admin/DashboardSummary";
 import SystemStatusStrip from "@/components/admin/SystemStatusStrip";
-import { Loader2, MessageCircle, ArrowRight, Star, Clock, PackageOpen } from "lucide-react";
-
-type PendingMessage = {
-  user_id: string;
-  order_id: string;
-  order_number: number | null;
-  content: string;
-  created_at: string;
-  first_name: string;
-  last_name: string;
-};
-
-type PendingReview = {
-  id: string;
-  order_id: string;
-  comment: string | null;
-  rating_shipping: number;
-  rating_quality: number;
-  rating_communication: number;
-  created_at: string;
-  profiles: { first_name: string | null; last_name: string | null } | null;
-  orders: { order_number: number | null } | null;
-};
+import { fetchNoResultSearches } from "@/components/admin/NoResultSearches";
+import { Loader2, ArrowRight, Clock, PackageOpen } from "lucide-react";
 
 type OpenOrder = {
   id: string;
@@ -49,8 +28,10 @@ type OpenOrder = {
 export default function AdminDashboard() {
   const [openOrders, setOpenOrders] = useState<OpenOrder[]>([]);
   const [manualAlerts, setManualAlerts] = useState<{ id: string; product: string; who: string; channel: string }[]>([]);
-  const [pendingMessages, setPendingMessages] = useState<PendingMessage[]>([]);
-  const [pendingReviews, setPendingReviews] = useState<PendingReview[]>([]);
+  const [msgCount, setMsgCount] = useState(0);         // cevapsız müşteri mesajı (sipariş konuşması)
+  const [reviewCount, setReviewCount] = useState(0);   // onay bekleyen yorum
+  const [feedbackCount, setFeedbackCount] = useState(0); // bekleyen talep (Talep & Geri Bildirim)
+  const [searchCount, setSearchCount] = useState(0);   // bakılmamış sonuçsuz arama (30 gün)
   const [stockTasks, setStockTasks] = useState<any[]>([]); // pazaryeri stok görevleri (bekleyen)
   const [loading, setLoading] = useState(true);
 
@@ -117,56 +98,22 @@ export default function AdminDashboard() {
       // Cevaplanmayan mesajlar: SİPARİŞ bazlı — son mesajı 'user' olan konuşmalar
       const { data: allMessages } = await (supabase as any)
         .from('messages')
-        .select('order_id, user_id, content, sender_role, created_at')
+        .select('order_id, sender_role, created_at')
         .not('order_id', 'is', null)
         .order('created_at', { ascending: false });
+      const lastPerOrder = new Map<string, any>();
+      for (const msg of (allMessages as any[]) || []) if (!lastPerOrder.has(msg.order_id)) lastPerOrder.set(msg.order_id, msg);
+      setMsgCount([...lastPerOrder.values()].filter((m) => m.sender_role === 'user').length);
 
-      if (allMessages) {
-        const lastPerOrder = new Map<string, any>();
-        for (const msg of allMessages) {
-          if (!lastPerOrder.has(msg.order_id)) lastPerOrder.set(msg.order_id, msg);
-        }
-        const unanswered = [...lastPerOrder.values()].filter((m) => m.sender_role === 'user').slice(0, 5);
-
-        if (unanswered.length > 0) {
-          const [{ data: profiles }, { data: ords }] = await Promise.all([
-            supabase.from('profiles').select('id, first_name, last_name').in('id', [...new Set(unanswered.map((m) => m.user_id))]),
-            (supabase as any).from('orders').select('id, order_number').in('id', unanswered.map((m) => m.order_id)),
-          ]);
-          const profileMap = new Map((profiles || []).map(p => [p.id, p]));
-          const ordMap = new Map((ords || []).map((o: any) => [o.id, o]));
-          const pending: PendingMessage[] = unanswered.map((msg) => {
-            const p: any = profileMap.get(msg.user_id);
-            const o: any = ordMap.get(msg.order_id);
-            return {
-              user_id: msg.user_id,
-              order_id: msg.order_id,
-              order_number: o?.order_number ?? null,
-              content: msg.content,
-              created_at: msg.created_at,
-              first_name: p?.first_name || "",
-              last_name: p?.last_name || "",
-            };
-          });
-          setPendingMessages(pending);
-        }
-      }
-
-      // Onay bekleyen yorumlar
-      const { data: reviewsData } = await (supabase as any)
-        .from("order_reviews")
-        .select(`
-          id, order_id, comment,
-          rating_shipping, rating_quality, rating_communication,
-          created_at,
-          profiles (first_name, last_name),
-          orders (order_number)
-        `)
-        .eq("is_approved", false)
-        .is("admin_note", null)
-        .order("created_at", { ascending: false })
-        .limit(5);
-      setPendingReviews((reviewsData as PendingReview[]) || []);
+      // Onay bekleyen yorumlar · bekleyen talepler · bakılmamış sonuçsuz aramalar (yalnız sayı; liste kendi sayfasında)
+      const [rv, fb, nrs] = await Promise.all([
+        (supabase as any).from("order_reviews").select("id", { count: "exact", head: true }).eq("is_approved", false).is("admin_note", null),
+        (supabase as any).from("feedback").select("id", { count: "exact", head: true }).eq("is_handled", false),
+        fetchNoResultSearches(30),
+      ]);
+      setReviewCount(rv.count || 0);
+      setFeedbackCount(fb.count || 0);
+      setSearchCount(nrs.length);
     } catch (error) {
       console.error("Dashboard data fetch error:", error);
     } finally {
@@ -183,8 +130,7 @@ export default function AdminDashboard() {
   }
 
   // TEK EKRAN PANO (≈1600×830): üstte sistem şeridi, ortada satış + kişiler + bugünün işleri,
-  // altta bekleyen işlerim + mesajlar + yorumlar. Liste uzunlukları ekrana sığacak kadar; "Tümü" ile devamı.
-  const tr = (iso: string) => new Date(iso).toLocaleString("tr-TR", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "short" });
+  // altta bekleyen işlerim (mesaj / yorum / talep / sonuçsuz arama sayıları "Bugünün işleri"nde). Liste uzunlukları ekrana sığacak kadar; "Tümü" ile devamı.
   const CH: Record<string, string> = { trendyol: "TY", hepsiburada: "HB", amazon: "AZ", attipas: "AT" };
   const head = (icon: React.ReactNode, title: string, n: number, href: string, tone: string) => (
     <div className="flex items-center justify-between px-4 pt-3 pb-1">
@@ -208,12 +154,14 @@ export default function AdminDashboard() {
           <div className="px-2 text-sm">
             {[
               { n: openOrders.length, label: "Bekleyen sipariş işi", href: "/admin/orders?todo=1" },
-              { n: pendingMessages.length, label: "Cevapsız müşteri mesajı", href: "/admin/messages" },
-              { n: pendingReviews.length, label: "Onay bekleyen yorum", href: "/admin/reviews" },
+              { n: msgCount, label: "Cevapsız müşteri mesajı", href: "/admin/messages" },
+              { n: reviewCount, label: "Onay bekleyen yorum", href: "/admin/reviews" },
+              { n: feedbackCount, label: "Talep", href: "/admin/feedback" },
+              { n: searchCount, label: "Sonuçsuz arama", href: "/admin/feedback#aramalar" },
               { n: stockTasks.length, label: "Pazaryeri stok görevi", href: "/admin/stock-sync" },
               { n: manualAlerts.length, label: "Elle bilgilendirilecek stok talebi", href: "/admin/crm/stock-notifications" },
             ].map((x) => (
-              <Link key={x.label} href={x.href} className={`flex items-center justify-between rounded-lg px-2 py-1.5 hover:bg-slate-50 ${x.n ? "font-semibold text-slate-800" : "text-muted-foreground"}`}>
+              <Link key={x.label} href={x.href} className={`flex items-center justify-between rounded-lg px-2 py-1 hover:bg-slate-50 ${x.n ? "font-semibold text-slate-800" : "text-muted-foreground"}`}>
                 <span>{x.label}</span>
                 <span className={`min-w-[26px] text-center rounded-full px-2 py-0.5 text-xs font-black ${x.n ? "bg-amber-500 text-white" : "bg-slate-100 text-slate-400"}`}>{x.n}</span>
               </Link>
@@ -222,67 +170,32 @@ export default function AdminDashboard() {
         </Card>
       </DashboardSummary>
 
-      {/* 3) YAPILACAKLAR — bekleyen işlerim (geniş) · mesajlar + yorumlar */}
-      <div className="grid gap-3 lg:grid-cols-3 items-start">
-        <Card className="lg:col-span-2 shadow-sm border-l-4 border-l-amber-500 gap-0 py-0 pb-2">
-          {head(<Clock size={16} className="text-amber-500" />, "Bekleyen İşlerim", openOrders.length, "/admin/orders?todo=1", "bg-amber-500")}
-          {openOrders.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-6 text-center flex flex-col items-center gap-1"><PackageOpen size={24} className="text-slate-300" /> Bekleyen işin yok. 🎉</p>
-          ) : (
-            <div className="divide-y px-2">
-              {openOrders.slice(0, 7).map((o) => (
-                <Link key={o.id} href={`/admin/orders?id=${o.id}`} className="flex items-center gap-3 py-1.5 px-2 hover:bg-amber-50/50 rounded-lg transition-colors group">
-                  <span className="font-mono text-xs font-bold text-blue-600 w-24 shrink-0 truncate">{orderLabel(o)}</span>
-                  <span className="text-sm font-medium w-40 shrink-0 truncate">
-                    {o.channel && o.channel !== "site" && <span className="mr-1 text-[9px] font-black uppercase px-1 py-0.5 rounded bg-orange-100 text-orange-700">{CH[o.channel] ?? o.channel.slice(0, 2).toUpperCase()}</span>}
-                    {(o.profiles ? `${o.profiles.first_name ?? ""} ${o.profiles.last_name ?? ""}`.trim() : "") || o.customer_name || "—"}
-                  </span>
-                  <span className="flex-1 min-w-0 truncate text-xs font-bold text-amber-800" title={o.step?.hint}>
-                    {o.step?.stage}{o.step?.actions?.[0] ? ` → ${o.step.actions[0].label}` : ""}
-                  </span>
-                  <span className="text-sm text-slate-500 w-16 text-right shrink-0">₺{Number(o.total_amount).toFixed(0)}</span>
-                  <span className="text-[10px] text-slate-400 w-16 text-right shrink-0 hidden md:block">{new Date(o.created_at).toLocaleDateString("tr-TR")}</span>
-                </Link>
-              ))}
-              {openOrders.length > 7 && <Link href="/admin/orders?todo=1" className="block text-center text-xs text-muted-foreground hover:text-slate-800 py-1.5">+{openOrders.length - 7} iş daha</Link>}
-            </div>
-          )}
-        </Card>
-
-        <div className="flex flex-col gap-3">
-          <Card className="shadow-sm border-l-4 border-l-rose-500 gap-0 py-0 pb-2">
-            {head(<MessageCircle size={16} className="text-rose-500" />, "Müşteri mesajları", pendingMessages.length, "/admin/messages", "bg-rose-500")}
-            {pendingMessages.length === 0 ? <p className="text-sm text-muted-foreground py-3 text-center">Cevapsız mesaj yok.</p> : (
-              <div className="px-2">
-                {pendingMessages.slice(0, 3).map((msg) => (
-                  <Link key={msg.order_id} href={`/admin/messages?order=${msg.order_id}`} className="block px-2 py-1.5 rounded-lg hover:bg-rose-50">
-                    <p className="text-sm font-semibold text-slate-900 truncate"><span className="text-blue-600">{msg.order_number ? `YH${msg.order_number}` : "#" + msg.order_id.slice(0, 6)}</span> · {msg.first_name} {msg.last_name} <span className="text-[10px] font-normal text-slate-400">{tr(msg.created_at)}</span></p>
-                    <p className="text-xs text-slate-500 truncate">{msg.content}</p>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </Card>
-
-          <Card className="shadow-sm border-l-4 border-l-amber-400 gap-0 py-0 pb-2">
-            {head(<Star size={16} className="text-amber-500" />, "Onay bekleyen yorumlar", pendingReviews.length, "/admin/reviews", "bg-amber-500")}
-            {pendingReviews.length === 0 ? <p className="text-sm text-muted-foreground py-3 text-center">Onay bekleyen yorum yok.</p> : (
-              <div className="px-2">
-                {pendingReviews.slice(0, 3).map((review) => {
-                  const avg = ((review.rating_shipping + review.rating_quality + review.rating_communication) / 3).toFixed(1);
-                  const name = [review.profiles?.first_name, review.profiles?.last_name].filter(Boolean).join(" ") || "Müşteri";
-                  return (
-                    <Link key={review.id} href="/admin/reviews" className="block px-2 py-1.5 rounded-lg hover:bg-amber-50">
-                      <p className="text-sm font-semibold text-slate-900 truncate">{name} <span className="text-xs font-bold text-amber-600">★ {avg}</span></p>
-                      <p className="text-xs text-slate-500 truncate">{review.comment || "Yorumsuz değerlendirme"}</p>
-                    </Link>
-                  );
-                })}
-              </div>
-            )}
-          </Card>
-        </div>
-      </div>
+      {/* 3) BEKLEYEN İŞLERİM — mesaj / yorum / talep sayıları yukarıda "Bugünün işleri"nde */}
+      <Card className="shadow-sm border-l-4 border-l-amber-500 gap-0 py-0 pb-2">
+        {head(<Clock size={16} className="text-amber-500" />, "Bekleyen İşlerim", openOrders.length, "/admin/orders?todo=1", "bg-amber-500")}
+        {openOrders.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-6 text-center flex flex-col items-center gap-1"><PackageOpen size={24} className="text-slate-300" /> Bekleyen işin yok. 🎉</p>
+        ) : (
+          <div className="divide-y px-2">
+            {openOrders.slice(0, 7).map((o) => (
+              <Link key={o.id} href={`/admin/orders?id=${o.id}`} className="flex items-center gap-3 py-1.5 px-2 hover:bg-amber-50/50 rounded-lg transition-colors group">
+                <span className="font-mono text-xs font-bold text-blue-600 w-24 shrink-0 truncate">{orderLabel(o)}</span>
+                <span className="text-sm font-medium w-48 shrink-0 truncate">
+                  {o.channel && o.channel !== "site" && <span className="mr-1 text-[9px] font-black uppercase px-1 py-0.5 rounded bg-orange-100 text-orange-700">{CH[o.channel] ?? o.channel.slice(0, 2).toUpperCase()}</span>}
+                  {(o.profiles ? `${o.profiles.first_name ?? ""} ${o.profiles.last_name ?? ""}`.trim() : "") || o.customer_name || "—"}
+                </span>
+                <span className="flex-1 min-w-0 truncate text-xs font-bold text-amber-800" title={o.step?.hint}>
+                  {o.step?.stage}{o.step?.actions?.[0] ? ` → ${o.step.actions[0].label}` : ""}
+                  {o.step?.hint && <span className="font-normal text-slate-500"> · {o.step.hint}</span>}
+                </span>
+                <span className="text-sm text-slate-500 w-16 text-right shrink-0">₺{Number(o.total_amount).toFixed(0)}</span>
+                <span className="text-[10px] text-slate-400 w-16 text-right shrink-0 hidden md:block">{new Date(o.created_at).toLocaleDateString("tr-TR")}</span>
+              </Link>
+            ))}
+            {openOrders.length > 7 && <Link href="/admin/orders?todo=1" className="block text-center text-xs text-muted-foreground hover:text-slate-800 py-1.5">+{openOrders.length - 7} iş daha</Link>}
+          </div>
+        )}
+      </Card>
     </div>
   );
 }

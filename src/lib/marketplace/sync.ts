@@ -168,10 +168,25 @@ async function settleImmediate(
   report.failed += badRows.length;
 }
 
+// Pazaryeri Stok Görevleri yalnız entegrasyonu OLMAYAN kanallar için üretilir (migration 20261106).
+// Kanalın bayrağı ayarlardaki açık/kapalı durumunu izler; API'ye geçince bekleyen manuel görevler kapanır.
+async function syncIntegrationFlag(sb: any, label: string, api: boolean) {
+  const want = api ? "api" : "manual";
+  const { data } = await sb.from("marketplace_channels").update({ integration: want })
+    .ilike("name", label).neq("integration", want).select("id");
+  const ids = ((data as any[]) || []).map((c) => c.id);
+  if (api && ids.length) {
+    await sb.from("stock_sync_tasks")
+      .update({ status: "done", method: "api", done_at: new Date().toISOString(), note: "Entegrasyon açık — stok otomatik gidiyor" })
+      .in("channel_id", ids).eq("status", "pending");
+  }
+}
+
 export async function processChannel(channel: Channel, supabase: AdminClient = createAdminClient()): Promise<SyncReport> {
   const a = ADAPTERS[channel];
   const report: SyncReport = { channel, sent: 0, batches: 0, confirmed: 0, failed: 0, errors: [] };
   const { enabled, ready, cfg } = await a.load(supabase);
+  await syncIntegrationFlag(supabase as any, a.label, enabled && ready);
   if (!enabled) return { ...report, skipped: "disabled" };
   if (!ready) return { ...report, skipped: "no_credentials" };
   const sb = supabase as any;
