@@ -22,11 +22,16 @@ export default {
               WHERE n.nspname = 'public' AND c.relkind IN ('r','p') AND NOT c.relrowsecurity ORDER BY 1`),
         "RLS KAPALI (herkes okuyup yazabilir)", (r) => r.t);
 
+      // "public" rolüne yazılmış kurallar girişsiz ziyaretçiyi de kapsar; ama içinde "yalnız yönetici" (is_admin),
+      // "yalnız kendi kaydı" (auth.uid) ya da "yalnız giriş yapmış / servis" şartı varsa anon geçemez → ayıklanır.
       check("Girişsiz ziyaretçiye yazma izni veren politika yok",
-        list(`SELECT tablename AS t, policyname AS p, cmd FROM pg_policies
+        list(`SELECT tablename AS t, policyname AS p, cmd, left(coalesce(qual, '-'), 80) AS q, left(coalesce(with_check, '-'), 80) AS w
+              FROM pg_policies
               WHERE schemaname = 'public' AND cmd IN ('INSERT','UPDATE','DELETE','ALL')
-                AND (roles && ARRAY['anon','public']::name[]) ORDER BY 1, 2`),
-        "anon yazabilir", (r) => `${r.t}.${r.p} (${r.cmd})`);
+                AND (roles && ARRAY['anon','public']::name[])
+                AND coalesce(qual, '') || ' ' || coalesce(with_check, '') !~* '(is_admin|auth\\.uid|auth\\.jwt|auth\\.role\\(\\)\\s*=\\s*''(authenticated|service_role)'')'
+              ORDER BY 1, 2`),
+        "anon yazabilir", (r) => `${r.t}.${r.p} (${r.cmd}; koşul: ${r.q} / ${r.w})`);
 
       // Herkesin (giriş yapmış her üyenin) TÜM satırları değiştirebildiği / sildiği kural
       check("Üyeye tüm kayıtları değiştirme izni veren kural yok",
@@ -74,6 +79,8 @@ export default {
       const PUBLIC_OK = new Set([
         "is_admin", "get_product_rating", "get_product_ratings", "product_review_stats", "marketplace_listing_key",
         "handle_new_user", "member_account_state",
+        // Bilinçli herkese açık: ürün sayfasında "bekleyen havale var, stok dönebilir" bilgisi; yorumcu adı (maskeli)
+        "product_hold_info", "review_author_names",
       ]);
       const fns = list(`SELECT DISTINCT p.proname AS f FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
                         WHERE n.nspname = 'public' AND p.prosecdef AND has_function_privilege('anon', p.oid, 'EXECUTE')
