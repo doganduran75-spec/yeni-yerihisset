@@ -1,7 +1,7 @@
 # Hukuki metinler — kontrol notları (2026-10-11)
 
 Taslaklar yazıldı: `/kvkk`, `/gizlilik`, `/cerez-politikasi`, `/mesafeli-satis` (+ `#on-bilgilendirme`), `/iade-degisim`, `/iletisim`.
-Şirket bilgileri tek yerde: `src/config/company.ts` (eski sitenin İletişim sayfasından alındı).
+**Düzenleme: Ayarlar › Sayfalar & Künye** — metinler ve şirket künyesi panelden; sayfayı onaylayınca "Taslak" işaretini kaldırman yeterli (arama motoruna ve site haritasına kendiliğinden girer).
 Sayfalar hâlâ **taslak** (üstte uyarı + arama motoruna kapalı). Onaydan sonra: her sayfada `draft={false}` + `robots noindex` satırı kaldırılır (bana "onayladım" demen yeterli).
 
 ## A) Senin doldurman / doğrulaman gerekenler

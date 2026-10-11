@@ -1,4 +1,4 @@
-// ŞİRKET KÜNYESİ — yasal sayfalar (KVKK, gizlilik, çerez, mesafeli satış, iade) ve İletişim buradan okur.
+// ŞİRKET KÜNYESİ — VARSAYILANLAR. Asıl değerler Ayarlar › Sayfalar › Şirket künyesi (settings) — src/lib/static-pages.ts getCompany().
 // Kaynak: eski sitenin İletişim sayfası (yerihisset.com/iletisim, 2026-10-11). Boş (null) alanlar sayfada
 // "(eklenecek)" görünür → canlıya geçmeden doldurulmalı (docs/HUKUKI-METINLER-NOTLAR.md).
 export const COMPANY = {
@@ -18,5 +18,3 @@ export const COMPANY = {
   legalUpdated: "11 Ekim 2026",
 };
 
-/** Boş künye alanı sayfada fark edilsin */
-export const orTodo = (v: string | null | undefined) => v || "(eklenecek)";

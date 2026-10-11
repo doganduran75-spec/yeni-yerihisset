@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/lib/supabase";
-import { Loader2, Save, Store, Globe, Mail, Server, BarChart3, Eye, EyeOff, ShoppingCart, Copy, Check, Layers, ShieldCheck, Tag, Bookmark, FolderSearch, Tags, Megaphone, Truck, CreditCard, Landmark, MessageSquare, Plug, Cookie } from "lucide-react";
+import { Loader2, Save, Store, Globe, Mail, Server, BarChart3, Eye, EyeOff, ShoppingCart, Copy, Check, Layers, ShieldCheck, Tag, Bookmark, FolderSearch, Tags, Megaphone, Truck, CreditCard, Landmark, MessageSquare, Plug, Cookie, FileText } from "lucide-react";
 import VariantsTab from "@/components/admin/settings/VariantsTab";
 import RolesTab from "@/components/admin/settings/RolesTab";
 import BrandsTab from "@/components/admin/settings/BrandsTab";
@@ -20,10 +20,11 @@ import IntegrationsTab from "@/components/admin/settings/IntegrationsTab";
 import ShippingMethodsManager from "@/components/admin/ShippingMethodsManager";
 import IntroVideoUpload from "@/components/admin/settings/IntroVideoUpload";
 import CookieConsentTab from "@/components/admin/settings/CookieConsentTab";
+import StaticPagesTab from "@/components/admin/settings/StaticPagesTab";
 import TestMailButton from "@/components/admin/TestMailButton";
 import { siteAlert } from "@/components/ui/site-dialog";
 
-type SettingsTab = "general" | "variants" | "roles" | "brands" | "categories" | "kb-categories" | "member-tags" | "popup" | "email-templates" | "integrations" | "cookies";
+type SettingsTab = "general" | "variants" | "roles" | "brands" | "categories" | "kb-categories" | "member-tags" | "popup" | "email-templates" | "integrations" | "cookies" | "pages";
 
 type Settings = {
   id: string;
@@ -199,6 +200,7 @@ function SettingsPageInner() {
     { id: "general",       label: "Genel Ayarlar",           icon: <Store size={16} /> },
     { id: "integrations",  label: "Entegrasyonlar",          icon: <Plug size={16} /> },
     { id: "email-templates", label: "E-posta Şablonları",    icon: <Mail size={16} /> },
+    { id: "pages",         label: "Sayfalar & Künye",        icon: <FileText size={16} /> },
     { id: "cookies",       label: "Çerez Onayı",             icon: <Cookie size={16} /> },
     { id: "popup",         label: "Popup",                   icon: <Megaphone size={16} /> },
     { id: "brands",        label: "Markalar",                icon: <Tag size={16} /> },
@@ -238,6 +240,7 @@ function SettingsPageInner() {
       {activeTab === "email-templates" && <EmailTemplatesTab />}
       {activeTab === "popup"          && <PopupTab />}
       {activeTab === "cookies"        && <CookieConsentTab />}
+      {activeTab === "pages"          && <StaticPagesTab />}
       {activeTab === "member-tags"   && <MemberTagsTab />}
       {activeTab === "brands"        && <BrandsTab />}
       {activeTab === "categories"    && <CategoriesTab />}

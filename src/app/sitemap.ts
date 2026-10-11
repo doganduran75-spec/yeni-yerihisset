@@ -12,11 +12,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   );
 
   // Aktif ürünler + kategori / marka / bilgi bankası (arama motoru ve yapay zekâ tarayıcıları bu listeden keşfeder)
-  const [{ data: products }, { data: cats }, { data: brands }, { data: kb }] = await Promise.all([
+  const [{ data: products }, { data: cats }, { data: brands }, { data: kb }, { data: pages }] = await Promise.all([
     supabase.from("products").select("slug, updated_at, category_id, brand_id").eq("is_active", true).order("updated_at", { ascending: false }),
     supabase.from("categories").select("id, slug, updated_at"),
     supabase.from("brands").select("id, slug"),
     (supabase as any).from("kb_articles").select("slug, updated_at, created_at"),
+    // Yayındaki düzenlenebilir sayfalar (hukuki + Hakkımızda; taslaklar herkese açık değil → gelmez)
+    (supabase as any).from("static_pages").select("slug, updated_at"),
   ]);
   // Yalnız aktif ürünü olan kategori / markalar (boş liste sayfası dizine girmesin)
   const usedCats = new Set((products ?? []).map((p: any) => p.category_id).filter(Boolean));
@@ -66,7 +68,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "monthly",
       priority: 0.5,
     },
-    // Hukuki sayfalar taslakken (noindex) haritaya girmez; onaylanınca buraya eklenir.
+    // Hukuki sayfalar + Hakkımızda: Ayarlar › Sayfalar'da "Taslak" işareti kalkınca haritaya girer
+    ...((pages ?? []) as any[]).map((p) => ({ url: `${SITE_URL}/${p.slug}`, lastModified: new Date(p.updated_at), changeFrequency: "yearly" as const, priority: 0.3 })),
   ];
 
   return [...staticPages, ...listUrls, ...productUrls, ...kbUrls];

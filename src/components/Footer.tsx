@@ -64,6 +64,7 @@ export default function Footer() {
           <h5 className="text-xs font-black uppercase tracking-[0.2em] text-slate-900">Kurumsal</h5>
           <ul className="space-y-4 text-sm font-bold text-slate-500 italic">
             <li><Link href="/barefoot-nedir" className="hover:text-olive-600 transition-colors uppercase">Barefoot Nedir?</Link></li>
+            <li><Link href="/hakkimizda" className="hover:text-olive-600 transition-colors uppercase">Hakkımızda</Link></li>
             <li><Link href="/iletisim" className="hover:text-olive-600 transition-colors uppercase">İletişim</Link></li>
             <li><Link href="/bilgi-bankasi" className="hover:text-olive-600 transition-colors uppercase">Bilgi Bankası</Link></li>
             <li><Link href="/firsatlar" className="hover:text-olive-600 transition-colors uppercase">Fırsatlar</Link></li>

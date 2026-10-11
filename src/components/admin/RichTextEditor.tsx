@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
+import { TableKit } from "@tiptap/extension-table"; // hukuki sayfalardaki tablolar (KVKK, çerez) silinmesin
 import Image from "@tiptap/extension-image";
 import Link from "@tiptap/extension-link";
 import Placeholder from "@tiptap/extension-placeholder";
@@ -46,6 +47,7 @@ export default function RichTextEditor({
       Image.configure({ allowBase64: false, inline: false }),
       Link.configure({ openOnClick: false, HTMLAttributes: { class: "text-olive-600 underline" } }),
       Placeholder.configure({ placeholder }),
+      TableKit.configure({ table: { resizable: false } }),
     ],
     content: value,
     onUpdate({ editor }) {

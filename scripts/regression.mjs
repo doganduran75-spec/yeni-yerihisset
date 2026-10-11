@@ -156,6 +156,7 @@ async function main() {
     ["20261025 iptal e-postası şablonu", "SELECT NOT EXISTS(SELECT 1 FROM public.email_templates WHERE trigger='order_cancelled' AND body_html LIKE '%Ödeme yapıldıysa%')"],
     ["20261026 şifresiz hesaplar", "SELECT to_regprocedure('public.mark_account_passwordless(uuid)') IS NOT NULL"],
     ["20261028 üyelik durumu (misafir/doğrulanmamış/üye)", "SELECT to_regprocedure('public.member_account_state(uuid)') IS NOT NULL AND NOT EXISTS(SELECT 1 FROM pg_trigger WHERE tgname='on_profile_created_assign_role')"],
+    ["20261110 düzenlenebilir sayfalar + şirket künyesi", "SELECT to_regclass('public.static_pages') IS NOT NULL AND EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='settings' AND column_name='company_title')"],
     ["20261109 çerez onayı (mod ayarı, onay defteri, kimliksiz sayaç)", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='settings' AND column_name='cookie_consent_strict') AND to_regclass('public.consent_log') IS NOT NULL AND to_regclass('public.analytics_anon_daily') IS NOT NULL AND EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='analytics_sessions' AND column_name='consent')"],
     ["20261108 pazaryeri yardımcı fonksiyonları dışarıya kapalı", "SELECT NOT has_function_privilege('anon', 'public.marketplace_is_listed(text,text)', 'EXECUTE') AND NOT has_function_privilege('authenticated', 'public.marketplace_send_qty(text,uuid,integer)', 'EXECUTE')"],
     ["20261107 yetkili fonksiyonlar dışarıya kapalı", "SELECT NOT has_function_privilege('anon', 'public.link_contacts_for_user(uuid,text)', 'EXECUTE') AND NOT has_function_privilege('authenticated', 'public.link_contacts_for_user(uuid,text)', 'EXECUTE') AND NOT has_function_privilege('anon', 'public.rollup_analytics_daily(date)', 'EXECUTE')"],
@@ -190,7 +191,7 @@ async function main() {
     ["/ara?q=barefoot", "Arama"], ["/firsatlar", "Fırsatlar"], ["/bilgi-bankasi", "Bilgi bankası"],
     ...(kb ? [[`/bilgi-bankasi/${kb}`, "Bilgi bankası makalesi"]] : []),
     ["/barefoot-nedir", "Barefoot nedir"], ["/sepet", "Sepet"], ["/checkout", "Ödeme"], ["/siparis-tamam", "Sipariş sonucu"],
-    ["/login", "Giriş"], ["/account", "Hesabım"], ["/sifre-belirle", "Şifre belirle"], ["/kampanya-izni", "Kampanya izni"], ["/deneme-sonucu", "Satış sonrası (oldu mu?)"], ["/iletisim", "İletişim", "Kromozom"],
+    ["/login", "Giriş"], ["/account", "Hesabım"], ["/sifre-belirle", "Şifre belirle"], ["/kampanya-izni", "Kampanya izni"], ["/deneme-sonucu", "Satış sonrası (oldu mu?)"], ["/iletisim", "İletişim", "Kromozom"], ["/hakkimizda", "Hakkımızda", "Kromozom"],
     ["/iade-degisim", "İade-değişim", "gün evde deneyin"], ["/mesafeli-satis", "Mesafeli satış + ön bilgilendirme", "on-bilgilendirme"], ["/kvkk", "KVKK", "Kromozom"], ["/gizlilik", "Gizlilik"],
     ["/cerez-politikasi", "Çerez politikası (tercih değiştirme)", "Çerez tercihlerini değiştir"], ["/admin", "Admin (kabuk)"], ["/admin/system", "Admin sistem (kabuk)"], ["/sitemap.xml", "Site haritası"], ["/robots.txt", "robots.txt"],
   ];
@@ -202,9 +203,12 @@ async function main() {
     add(r.ms > 3000 ? "warn" : "ok", name, r.ms > 3000 ? `yavaş açılıyor: ${r.ms} ms (${path})` : "");
   }
   // Hukuki metinler canlıda taslak kalmamalı (docs/HUKUKI-METINLER-NOTLAR.md); künyede boş alan olmamalı
-  for (const path of ["/kvkk", "/gizlilik", "/cerez-politikasi", "/mesafeli-satis", "/iade-degisim", "/iletisim"]) {
+  for (const path of ["/kvkk", "/gizlilik", "/cerez-politikasi", "/mesafeli-satis", "/iade-degisim", "/hakkimizda", "/iletisim"]) {
     const r = await get(path);
     if (r.status !== 200) continue;
+    // Panelden düzenlenen metinlerde yer tutucu doldurulmamış kalmasın ({{unvan}} vb.)
+    const raw = (r.text.match(/\{\{\s*[a-z_]+\s*\}\}/) || [])[0];
+    raw ? add("fail", `Yer tutucu doldurulmamış: ${path}`, `${raw} — Ayarlar › Sayfalar'da yazım hatası olabilir`) : add("ok", `Yer tutucular dolu: ${path}`);
     liveOnly(!r.text.includes("Taslak:") && !r.text.includes("noindex"), `Hukuki metin yayında: ${path}`, "taslak / arama motoruna kapalı — onaydan sonra draft kaldırılmalı");
     liveOnly(!r.text.includes("(eklenecek)"), `Künye eksiksiz: ${path}`, "telefon / MERSİS / KEP eksik (src/config/company.ts)");
   }
@@ -347,6 +351,8 @@ async function main() {
       const r = await rest(`${tbl}?select=*&limit=1`);
       r.status >= 400 || (Array.isArray(r.json) && r.json.length === 0) ? add("ok", `${label} dışarıya kapalı`) : add("fail", `${label} dışarıya AÇIK`, `HTTP ${r.status} — 20261109 migration'ı`);
     }
+    const spw = await rest("static_pages", { method: "POST", body: { slug: "regresyon-yetki", title: "x", body: "x", draft: false } });
+    spw.status >= 400 ? add("ok", "Sayfa metinleri dışarıdan değiştirilemiyor") : add("fail", "Sayfa metinleri dışarıdan DEĞİŞTİRİLEBİLİYOR", `HTTP ${spw.status} — 20261110 migration'ı`);
     const mh = await rest("mail_health?select=last_error&limit=1");
     mh.status >= 400 || (Array.isArray(mh.json) && mh.json.length === 0) ? add("ok", "E-posta sağlık kaydı dışarıya kapalı") : add("fail", "E-posta sağlık kaydı dışarıya AÇIK", `HTTP ${mh.status} — 20261106 migration'ı`);
     const cer = await rest("client_errors?select=message&limit=1");

@@ -104,6 +104,7 @@ export const homeContent = {
           { label: "Ayak Ölçüm Rehberi", href: "/bilgi-bankasi" },
           { label: "Sıkça Sorulan Sorular", href: "/bilgi-bankasi" },
           { label: "İade ve Değişim", href: "/iade-degisim" },
+          { label: "Hakkımızda", href: "/hakkimizda" },
           { label: "İletişim", href: "/iletisim" },
         ],
       },

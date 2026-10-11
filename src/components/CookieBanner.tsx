@@ -41,7 +41,13 @@ export default function CookieBanner() {
     // "Çerez tercihlerini değiştir" bağlantısı pencereyi tercihler ekranıyla yeniden açar
     const reopen = () => { setDraft(consentChoice() ?? NONE); setPrefs(true); setShow(true); };
     window.addEventListener(CONSENT_OPEN_EVENT, reopen);
-    return () => window.removeEventListener(CONSENT_OPEN_EVENT, reopen);
+    // Panelden düzenlenen sayfa metinlerindeki bağlantı ({{cerez_tercihleri}} → <a data-cookie-prefs>)
+    const onClick = (e: MouseEvent) => {
+      const a = (e.target as HTMLElement | null)?.closest?.("[data-cookie-prefs]");
+      if (a) { e.preventDefault(); reopen(); }
+    };
+    document.addEventListener("click", onClick);
+    return () => { window.removeEventListener(CONSENT_OPEN_EVENT, reopen); document.removeEventListener("click", onClick); };
   }, []);
 
   function choose(choice: ConsentChoice) {

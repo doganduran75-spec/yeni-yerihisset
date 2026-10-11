@@ -7,12 +7,13 @@
 // JSON-LD güvenli yazım: "<" kaçışlanır → veri içindeki "</script>" bloğu kapatamaz
 const safeJsonLd = (v: unknown) => JSON.stringify(v).replace(/</g, "\\u003c");
 
-import { COMPANY } from "@/config/company";
+import { getCompany } from "@/lib/static-pages";
 import { TRIAL_DAYS } from "@/lib/order-next-step";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com";
 
-export default function GlobalStructuredData() {
+export default async function GlobalStructuredData() {
+  const COMPANY = await getCompany(); // Ayarlar › Sayfalar › Şirket künyesi
   const organization = {
     "@context": "https://schema.org",
     // OnlineStore: yapay zekâ ve arama motorları için "YeriHisset = Türkiye'de barefoot ayakkabı satan çevrim içi
@@ -28,9 +29,7 @@ export default function GlobalStructuredData() {
     taxID: COMPANY.taxNumber.replace(/\s/g, ""),
     address: {
       "@type": "PostalAddress",
-      streetAddress: "Barbaros Mah. Begonya Sok. No:1/2 Nida Kule Batı",
-      addressLocality: "Ataşehir",
-      addressRegion: "İstanbul",
+      streetAddress: COMPANY.address,
       addressCountry: "TR",
     },
     areaServed: { "@type": "Country", name: "Türkiye" },

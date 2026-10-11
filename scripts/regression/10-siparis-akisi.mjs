@@ -51,6 +51,7 @@ export default {
         DELETE FROM public.consent_log WHERE session_id IN (SELECT session_id FROM public.analytics_sessions WHERE landing_path = '/regresyon-test');
         DELETE FROM public.analytics_sessions WHERE landing_path = '/regresyon-test';
         DELETE FROM public.analytics_anon_daily WHERE path LIKE '/regresyon-test%';
+        DELETE FROM public.static_pages WHERE slug LIKE 'regresyon-%';
         DELETE FROM public.search_dismissals WHERE term LIKE 'regresyon-test%';
         DELETE FROM public.feedback WHERE message LIKE '%regresyon-test%';
       `);
@@ -683,6 +684,20 @@ export default {
         const an = await api("/api/track", { headers: UA, body: { anon: true, views: [{ path: "/regresyon-test-anonim", source: "regresyon" }] } });
         const v = num(`SELECT coalesce(sum(views), 0) FROM public.analytics_anon_daily WHERE path = '/regresyon-test-anonim'`);
         ok(an.status === 200 && v >= 1, "İzinsiz ziyaret kimliksiz sayılıyor", `HTTP ${an.status} · ${v} görüntüleme`);
+      });
+
+      await part("Düzenlenebilir sayfalar: taslak gizli, yayında açık", async () => {
+        const slug = `regresyon-sayfa-${RUN}`;
+        const up = await rest("static_pages", { token: F.admin.token, method: "POST", body: { slug, title: "REGRESYON", body: "<p>x</p>", draft: true } });
+        ok(up.status < 300, "Yönetici sayfa metnini kaydedebiliyor", `HTTP ${up.status}`);
+        const m1 = await rest(`static_pages?slug=eq.${slug}&select=slug`, { token: F.member.token });
+        const a1 = await rest(`static_pages?slug=eq.${slug}&select=slug`);
+        ok(!(Array.isArray(m1.json) && m1.json.length) && !(Array.isArray(a1.json) && a1.json.length), "Taslak sayfa dışarıya ve üyeye kapalı", `üye ${m1.json?.length ?? m1.status} · anon ${a1.json?.length ?? a1.status}`);
+        const mu = await rest(`static_pages?slug=eq.${slug}`, { token: F.member.token, method: "PATCH", body: { draft: false } });
+        ok(sql(`SELECT draft FROM public.static_pages WHERE slug = ${lit(slug)}`)[0]?.[0] === "t", "Üye sayfayı yayına alamıyor", `HTTP ${mu.status}`);
+        await rest(`static_pages?slug=eq.${slug}`, { token: F.admin.token, method: "PATCH", body: { draft: false } });
+        const a2 = await rest(`static_pages?slug=eq.${slug}&select=slug`);
+        ok(Array.isArray(a2.json) && a2.json.length === 1, "Yayındaki sayfa herkese açık (site haritası)", `HTTP ${a2.status}`);
       });
 
       await part("Pazaryeri stok görevi: entegre kanala görev açılmaz", async () => {
