@@ -10,7 +10,7 @@ export default {
   name: "Veritabanı güvenliği",
   async run(t) {
     const { one, add, part, rest } = t;
-    const list = (q) => { try { return JSON.parse(one(`SELECT coalesce(json_agg(x), '[]') FROM (${q}) x`) || "[]"); } catch (e) { return { error: String(e.message).split("\n")[0] }; } };
+    const list = (q) => { try { return JSON.parse(one(`SELECT coalesce(jsonb_agg(x), '[]') FROM (${q}) x`) || "[]"); } catch (e) { return { error: String(e.message).split("\n")[0] }; } };
     const check = (name, rows, bad, fmt, level = "fail") => {
       if (rows?.error) return add("warn", name, `kontrol edilemedi: ${rows.error}`);
       rows.length === 0 ? add("ok", name) : add(level, name, `${bad}: ${rows.map(fmt).join(", ")}`);

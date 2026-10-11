@@ -663,14 +663,16 @@ export default {
       });
 
       await part("Pazaryeri stok görevi: entegre kanala görev açılmaz", async () => {
-        const parse = (q) => { try { return JSON.parse(one(q)) || []; } catch { return []; } };
-        const chans = parse(`SELECT coalesce(json_agg(json_build_object('id', id, 'name', name, 'api', integration = 'api')), '[]') FROM public.marketplace_channels WHERE is_active`);
+        // jsonb_agg: tek satır çıktı (json_agg satır sonu ekler, one() yalnız ilk satırı okur)
+        const parse = (q) => JSON.parse(one(q) || "[]");
+        const chans = parse(`SELECT coalesce(jsonb_agg(json_build_object('id', id, 'name', name, 'api', integration = 'api')), '[]') FROM public.marketplace_channels WHERE is_active`);
         const s0 = stock();
         sql(`UPDATE public.product_variants SET stock = 0 WHERE id = ${lit(F.var)}`);
-        const tasks = parse(`SELECT coalesce(json_agg(channel_id), '[]') FROM public.stock_sync_tasks WHERE variant_id = ${lit(F.var)} AND status = 'pending'`);
+        const tasks = parse(`SELECT coalesce(jsonb_agg(channel_id), '[]') FROM public.stock_sync_tasks WHERE variant_id = ${lit(F.var)} AND status = 'pending'`);
         sql(`UPDATE public.product_variants SET stock = ${Number(s0)} WHERE id = ${lit(F.var)}`);
         sql(`DELETE FROM public.stock_sync_tasks WHERE variant_id = ${lit(F.var)}`);
         const apiCh = chans.filter((c) => c.api), manCh = chans.filter((c) => !c.api);
+        ok(chans.length > 0, "Aktif pazaryeri kanalları okundu", "kanal listesi boş — test anlamsız kalır");
         ok(!tasks.some((id) => apiCh.some((c) => c.id === id)), "Entegrasyonu açık kanala manuel görev açılmıyor", `entegre: ${apiCh.map((c) => c.name).join(", ") || "yok"}`);
         ok(manCh.every((c) => tasks.includes(c.id)), "Entegrasyonu olmayan aktif kanala görev açılıyor", `manuel: ${manCh.map((c) => c.name).join(", ") || "yok"} · açılan ${tasks.length}`);
         ok(stock() === s0, "Test stoğu geri alındı", `stok ${stock()} (beklenen ${s0})`);
