@@ -410,6 +410,16 @@ async function main() {
   // 6) Ayarlar ve ortam
   });
   await part("Ayarlar ve ortam", async () => {
+    // Kurulu paketler package-lock ile aynı mı (git pull sonrası npm ci atlanırsa güvenlik güncellemesi kurulmamış kalır)
+    try {
+      const lock = JSON.parse(readFileSync(new URL("../package-lock.json", import.meta.url), "utf8")).packages || {};
+      const stale = ["next", "sharp", "@tiptap/extension-table", "iyzipay", "nodemailer"].filter((n) => {
+        const want = lock[`node_modules/${n}`]?.version;
+        if (!want) return false;
+        try { return JSON.parse(readFileSync(new URL(`../node_modules/${n}/package.json`, import.meta.url), "utf8")).version !== want; } catch { return true; }
+      });
+      stale.length ? add("fail", "Kurulu paketler eski", `${stale.join(", ")} — çalıştır: npm ci --no-audit --no-fund && bash scripts/deploy.sh`) : add("ok", "Kurulu paketler package-lock ile aynı");
+    } catch (e) { add("warn", "Paket sürümleri kontrol edilemedi", String(e?.message || e)); }
   const S = SETTINGS();
   const st = {
     smtp: String(!!(S.smtp_host && S.smtp_user)),

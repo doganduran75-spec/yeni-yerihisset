@@ -24,19 +24,24 @@ date +%s > "$DEPLOY_FLAG"
 trap 'rm -f "$DEPLOY_FLAG"' EXIT
 trap 'echo; echo "✗ DAĞITIM YARIDA KALDI — site süreçleri durmuş olabilir (site kapalı)."; echo "  Hatayı düzeltip tekrar: bash scripts/deploy.sh   ·   durum: pm2 status"' ERR
 
-LOCK_BEFORE="$(sha1sum package-lock.json 2>/dev/null | cut -d' ' -f1)"
 echo "▸ git pull"
 git pull
-LOCK_AFTER="$(sha1sum package-lock.json 2>/dev/null | cut -d' ' -f1)"
+# Bağımlılık damgası: son BAŞARILI kurulumdaki package-lock özeti node_modules içinde saklanır.
+# git pull'u betikten önce elle yapmak da (sık yapılıyor) artık kurulumu atlatmaz.
+LOCK_NOW="$(sha1sum package-lock.json 2>/dev/null | cut -d' ' -f1)"
+LOCK_STAMP_FILE=node_modules/.yh-lock-sha1
+LOCK_STAMP="$(cat "$LOCK_STAMP_FILE" 2>/dev/null || true)"
 
 echo "▸ pm2 stop (build sırasında 502 olmasın)"
 pm2 stop yerihisset || true
 
-# Bağımlılıklar değiştiyse (package-lock.json) temiz kurulum — ör. Next sürüm yükseltmesi
-if [ "$LOCK_BEFORE" != "$LOCK_AFTER" ] || [ "${FORCE_NPM_CI:-0}" = "1" ]; then
-  echo "▸ package-lock değişti → npm ci"
+# Bağımlılıklar son kurulumdan beri değiştiyse (package-lock.json) temiz kurulum — ör. Next sürüm yükseltmesi, yeni paket
+if [ "$LOCK_NOW" != "$LOCK_STAMP" ] || [ "${FORCE_NPM_CI:-0}" = "1" ]; then
+  echo "▸ bağımlılıklar değişmiş → npm ci"
   npm ci --no-audit --no-fund
+  echo "$LOCK_NOW" > "$LOCK_STAMP_FILE"
 fi
+echo "  next $(node -p "require('next/package.json').version" 2>/dev/null || echo '?')"
 
 echo "▸ .next çıktısı temizleniyor (cache korunuyor)"
 if [ -d .next ]; then
