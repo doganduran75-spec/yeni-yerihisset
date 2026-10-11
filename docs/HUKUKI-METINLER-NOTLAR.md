@@ -11,10 +11,10 @@ Sayfalar hâlâ **taslak** (üstte uyarı + arama motoruna kapalı). Onaydan son
 | A1 | **Telefon numarası** | E-ticaret mevzuatı sitede iletişim bilgisini zorunlu tutuyor. Şu an "(eklenecek)" görünüyor. |
 | A2 | **MERSİS numarası** | Şirketin MERSİS no'su (Ticaret Sicil Gazetesi / e-Devlet). Sitede görünmesi gerekiyor. |
 | A3 | **KEP adresi** | Şirketin KEP adresi varsa (…@hs01.kep.tr). Ltd. şirketler için zorunlu; KVKK başvuruları için de yazılır. |
-| A4 | **Vergi numarası çelişkisi** | Eski İletişim sayfası: Kozyatağı V.D. **590 110 85 31**. Eski mesafeli satış sayfası: "Kozyatağı – **3150037470**". Hangisi doğru? (Metinlerde ilki kullanıldı.) |
+| A4 ✅ 5901108531 | **Vergi numarası çelişkisi** | Eski İletişim sayfası: Kozyatağı V.D. **590 110 85 31**. Eski mesafeli satış sayfası: "Kozyatağı – **3150037470**". Hangisi doğru? (Metinlerde ilki kullanıldı.) |
 | A5 | **Adres** | Barbaros Mah. Begonya Sok. No:1/2 Nida Kule Batı, Ataşehir / İstanbul — güncel mi? İade gönderileri bu adrese mi, depoya mı gidiyor? |
-| A6 | **Deneme / iade süresi: 14 gün mü 30 gün mü?** | Eski site "30 gün, ücretsiz iade" diyordu. Yeni sistem 14 gün (yasal alt sınır). 30 istersen tek sayı değişir (`TRIAL_DAYS`); metinler otomatik güncellenir. Uzun süre güçlü bir satış argümanı. |
-| A7 | **Değişimde kargo** | Metin: "değişimde sizden ek kargo ücreti alınmaz" — doğru mu? |
+| A6 ✅ 14 gün (yasal); geçerse "bize yazın" | **Deneme / iade süresi: 14 gün mü 30 gün mü?** | Eski site "30 gün, ücretsiz iade" diyordu. Yeni sistem 14 gün (yasal alt sınır). 30 istersen tek sayı değişir (`TRIAL_DAYS`); metinler otomatik güncellenir. Uzun süre güçlü bir satış argümanı. |
+| A7 ✅ ücret yok | **Değişimde kargo** | Metin: "değişimde sizden ek kargo ücreti alınmaz" — doğru mu? |
 | A8 | **Kampanyalı iade kuralı** | "Kalan sepet kampanya koşulunu karşılamıyorsa indirim iadeden düşülebilir" (eski sitende vardı) — kalsın mı? |
 | A9 | **Muhasebe / e-fatura** | KVKK'da "muhasebe ve e-fatura hizmeti aldığımız kuruluşlar" yazıyor. Kullandığın program/mali müşavir varsa adı gerekmez; genel ifade yeterli. |
 | A10 | **ETBİS** | Eski sitede ETBİS kaydı var. Yeni site aynı alan adında olduğundan kayıt geçerli; canlıya geçince ETBİS'teki bilgilerin (adres, faaliyet) güncel olduğunu kontrol et. |

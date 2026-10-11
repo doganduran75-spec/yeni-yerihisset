@@ -148,7 +148,7 @@ export const STATIC_PAGES: Record<StaticPageSlug, { title: string; intro: string
 <li>Paket hasarlıysa kargo görevlisine tutanak tutturun, teslim almayın ve bize yazın; ürününüzü yeniden göndeririz.</li>
 </ul>
 <h2>{{deneme_gunu}} gün evde deneyin</h2>
-<p>Ürün elinize ulaştığında size bir e-posta gönderiyoruz. Ayakkabıyı evde, temiz bir zeminde, günün farklı saatlerinde deneyin. Karar verince e-postadaki ya da Hesabım › Siparişlerim'deki <b>Oldu / Değişim / İade</b> düğmesine basın. Bunun için teslimattan itibaren <b>{{deneme_gunu}} gününüz</b> var.</p>
+<p>Ürün elinize ulaştığında size bir e-posta gönderiyoruz. Ayakkabıyı evde, temiz bir zeminde, günün farklı saatlerinde deneyin. Karar verince e-postadaki ya da Hesabım › Siparişlerim'deki <b>Oldu / Değişim / İade</b> düğmesine basın. Bunun için teslimattan itibaren <b>{{deneme_gunu}} gününüz</b> var. Bu süre geçtiyse de bize {{eposta}} adresinden yazın; birlikte çözelim.</p>
 <h2>Değişim</h2>
 <ul>
 <li>Numarası olmadıysa size uygun numarayı öneririz; aynı modelin stokta olan numaraları gösterilir.</li>

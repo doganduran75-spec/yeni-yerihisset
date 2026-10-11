@@ -6,7 +6,7 @@ export const COMPANY = {
   title: "Kromozom Dış Ticaret Ltd. Şti.",
   address: "Barbaros Mah. Begonya Sok. No:1/2 Nida Kule Batı, Ataşehir / İstanbul",
   taxOffice: "Kozyatağı",
-  taxNumber: "590 110 85 31",
+  taxNumber: "5901108531",
   mersis: null as string | null,   // MERSİS numarası
   kep: null as string | null,      // KEP adresi (…@hs01.kep.tr)
   phone: null as string | null,    // müşteri hizmetleri telefonu
