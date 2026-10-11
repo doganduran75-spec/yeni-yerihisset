@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 
 export const metadata = {
+  alternates: { canonical: "/affiliate" },
   title: "Satış Ortaklığı Programı",
   description:
     "YeriHisset satış ortaklığı programına katıl, paylaşımlarından YeriHisset Kredisi kazan.",

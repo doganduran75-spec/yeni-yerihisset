@@ -19,7 +19,7 @@ interface ProductStructuredDataProps {
     image_url: string | null;
     has_variants: boolean | null;
     brands: { name: string } | null;
-    categories: { name: string } | null;
+    categories: { name: string; slug?: string | null } | null;
     product_variants?: Array<{
       id: string;
       price: number;
@@ -109,7 +109,7 @@ export default function ProductStructuredData({
     itemListElement: [
       { "@type": "ListItem", position: 1, name: "Anasayfa", item: storeUrl },
       ...(product.categories?.name
-        ? [{ "@type": "ListItem", position: 2, name: product.categories.name, item: `${storeUrl}` }]
+        ? [{ "@type": "ListItem", position: 2, name: product.categories.name, item: product.categories.slug ? `${storeUrl}/kategori/${product.categories.slug}` : `${storeUrl}/magaza` }]
         : []),
       { "@type": "ListItem", position: product.categories?.name ? 3 : 2, name: product.title, item: productUrl },
     ],

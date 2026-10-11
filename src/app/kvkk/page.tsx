@@ -4,6 +4,7 @@ import LegalPageLayout from "@/components/LegalPageLayout";
 import { COMPANY, orTodo } from "@/config/company";
 
 export const metadata: Metadata = {
+  alternates: { canonical: "/kvkk" },
   title: "KVKK Aydınlatma Metni",
   robots: { index: false, follow: true }, // taslak — onaylanınca kaldır
 };

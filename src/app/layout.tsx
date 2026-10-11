@@ -45,12 +45,12 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com";
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: "YeriHisset | Kaliteli Alışveriş ve Bilgi Platformu",
+    default: "YeriHisset | Barefoot Ayakkabı — Yetişkin ve Çocuk",
     template: "%s | YeriHisset",
   },
   description:
-    "En yeni ürünler, harika fırsatlar ve zengin içerikler tek bir platformda. Kaliteli alışverişin adresi YeriHisset.",
-  keywords: ["alışveriş", "ürünler", "indirim", "kampanya", "YeriHisset"],
+    "Barefoot ayakkabı: geniş burun, sıfır topuk farkı, esnek ince taban. Yetişkinler için Dodura, ilk adımlar için Attipas. 14 gün evde dene, ücretsiz iade.",
+  keywords: ["barefoot ayakkabı", "çıplak ayak ayakkabı", "minimalist ayakkabı", "ilk adım ayakkabısı", "Attipas", "Dodura", "YeriHisset"],
   authors: [{ name: "YeriHisset" }],
   creator: "YeriHisset",
   publisher: "YeriHisset",
@@ -59,9 +59,9 @@ export const metadata: Metadata = {
     locale: "tr_TR",
     url: SITE_URL,
     siteName: "YeriHisset",
-    title: "YeriHisset | Kaliteli Alışveriş ve Bilgi Platformu",
+    title: "YeriHisset | Barefoot Ayakkabı — Yetişkin ve Çocuk",
     description:
-      "En yeni ürünler, harika fırsatlar ve zengin içerikler tek bir platformda.",
+      "Barefoot ayakkabı: geniş burun, sıfır topuk farkı, esnek ince taban. 14 gün evde dene, ücretsiz iade.",
     images: [
       {
         url: "/opengraph-image",
@@ -73,9 +73,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "YeriHisset | Kaliteli Alışveriş ve Bilgi Platformu",
+    title: "YeriHisset | Barefoot Ayakkabı — Yetişkin ve Çocuk",
     description:
-      "En yeni ürünler, harika fırsatlar ve zengin içerikler tek bir platformda.",
+      "Barefoot ayakkabı: geniş burun, sıfır topuk farkı, esnek ince taban. 14 gün evde dene, ücretsiz iade.",
     images: ["/opengraph-image"],
   },
   robots: {
@@ -89,9 +89,8 @@ export const metadata: Metadata = {
       "max-snippet": -1,
     },
   },
-  alternates: {
-    canonical: SITE_URL,
-  },
+  // canonical burada YOK: kök düzende tanımlanınca kendi canonical'ı olmayan her alt sayfaya miras kalıp
+  // "asıl sayfam ana sayfa" diyordu (ör. /barefoot-nedir dizinden düşerdi). Her sayfa kendi canonical'ını verir.
   // Google Search Console doğrulaması — token'ı env'e koy (NEXT_PUBLIC_GSC_VERIFICATION).
   // Yoksa hiçbir şey render edilmez.
   ...(process.env.NEXT_PUBLIC_GSC_VERIFICATION

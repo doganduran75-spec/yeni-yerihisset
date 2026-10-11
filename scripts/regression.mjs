@@ -238,6 +238,33 @@ async function main() {
 
   // 4) Dışarıdan veri erişimi (anon anahtarla, Supabase üzerinden)
   });
+  await part("Arama motoru ve yapay zekâ görünürlüğü (SEO / GEO)", async () => {
+    // Kök düzendeki canonical alt sayfalara miras kalıp "asıl sayfam ana sayfa" diyordu (2026-10-11 düzeltildi)
+    const canon = (html) => (html.match(/<link[^>]+rel="canonical"[^>]+href="([^"]+)"/) || [])[1] || "";
+    const bn = await get("/barefoot-nedir");
+    const c1 = canon(bn.text);
+    c1.endsWith("/barefoot-nedir") ? add("ok", "Eğitim sayfası kendi adresini gösteriyor (canonical)") : add("fail", "Eğitim sayfası canonical hatalı", `"${c1 || "yok"}" — ana sayfayı gösterirse Google dizinden düşürür`);
+    const p = one("SELECT slug FROM public.products WHERE is_active ORDER BY created_at DESC LIMIT 1");
+    if (p) {
+      const r = await get(`/products/${p}`);
+      const c2 = canon(r.text);
+      c2.endsWith(`/products/${p}`) ? add("ok", "Ürün sayfası canonical doğru") : add("fail", "Ürün sayfası canonical hatalı", c2 || "yok");
+      const md = (r.text.match(/<meta name="description" content="([^"]*)"/) || [])[1] || "";
+      md && md.length <= 170 ? add("ok", "Ürün meta açıklaması kısa ve dolu", `${md.length} karakter`) : add("warn", "Ürün meta açıklaması", md ? `${md.length} karakter (≤160 olmalı)` : "yok");
+      /"@type":"Product"/.test(r.text) ? add("ok", "Ürün yapısal verisi (Product) var") : add("fail", "Ürün yapısal verisi yok");
+      // Yapay zekâ tarayıcıları JavaScript çalıştırmaz: ürün adı ve açıklaması ilk HTML'de olmalı
+      const title = one(`SELECT title FROM public.products WHERE slug = ${lit(p)}`);
+      r.text.includes(title.replace(/&/g, "&amp;")) ? add("ok", "Ürün içeriği JavaScript olmadan okunuyor") : add("fail", "Ürün içeriği ilk HTML'de yok", "yapay zekâ tarayıcıları göremez");
+    }
+    const home = await get("/");
+    /"@type":"OnlineStore"/.test(home.text) && home.text.includes("/ara?q=") ? add("ok", "Mağaza kimliği yapısal verisi (OnlineStore + arama)") : add("fail", "Mağaza kimliği yapısal verisi eksik");
+    const sm = await get("/sitemap.xml");
+    const hasKb = one("SELECT EXISTS(SELECT 1 FROM public.kb_articles)") === "t";
+    sm.text.includes("/kategori/") && (!hasKb || sm.text.includes("/bilgi-bankasi/")) && sm.text.includes("/barefoot-nedir")
+      ? add("ok", "Site haritasında kategori + rehber sayfaları var") : add("fail", "Site haritası eksik", "kategori / bilgi bankası / barefoot-nedir");
+    const rb = await get("/robots.txt");
+    liveOnly(!/Disallow: \/\s*$/m.test(rb.text) && !/OAI-SearchBot[\s\S]{0,40}Disallow: \//.test(rb.text), "robots.txt arama ve yapay zekâ tarayıcılarına açık", "canlıda site taramaya kapalı (NEXT_PUBLIC_NOINDEX kaldırılmalı)");
+  });
   await part("Ürün beslemesi ve reklam etiketleri (Google / Meta)", async () => {
     const S = SETTINGS();
     const q = S.gmc_feed_secret ? `?secret=${encodeURIComponent(S.gmc_feed_secret)}` : "";

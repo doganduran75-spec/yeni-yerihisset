@@ -5,6 +5,7 @@ import CookiePreferencesLink from "@/components/CookiePreferencesLink";
 import { COMPANY } from "@/config/company";
 
 export const metadata: Metadata = {
+  alternates: { canonical: "/cerez-politikasi" },
   title: "Çerez Politikası",
   robots: { index: false, follow: true }, // taslak — onaylanınca kaldır
 };

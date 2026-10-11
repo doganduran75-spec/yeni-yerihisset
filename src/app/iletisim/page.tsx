@@ -4,6 +4,7 @@ import { MapPin, Phone, Mail, Clock, Building2 } from "lucide-react";
 import { COMPANY, orTodo } from "@/config/company";
 
 export const metadata: Metadata = {
+  alternates: { canonical: "/iletisim" },
   title: "İletişim",
   robots: { index: false, follow: true }, // telefon + MERSİS + KEP girilince kaldır (src/config/company.ts)
 };

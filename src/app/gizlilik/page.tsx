@@ -4,6 +4,7 @@ import LegalPageLayout from "@/components/LegalPageLayout";
 import { COMPANY } from "@/config/company";
 
 export const metadata: Metadata = {
+  alternates: { canonical: "/gizlilik" },
   title: "Gizlilik Politikası",
   robots: { index: false, follow: true }, // taslak — onaylanınca kaldır
 };

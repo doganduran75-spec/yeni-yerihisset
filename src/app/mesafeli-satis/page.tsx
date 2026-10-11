@@ -4,6 +4,7 @@ import LegalPageLayout from "@/components/LegalPageLayout";
 import { COMPANY, orTodo } from "@/config/company";
 
 export const metadata: Metadata = {
+  alternates: { canonical: "/mesafeli-satis" },
   title: "Mesafeli Satış Sözleşmesi ve Ön Bilgilendirme Formu",
   robots: { index: false, follow: true }, // taslak — onaylanınca kaldır
 };

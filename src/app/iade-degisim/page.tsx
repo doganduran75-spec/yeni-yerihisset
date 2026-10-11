@@ -5,6 +5,7 @@ import { COMPANY } from "@/config/company";
 import { TRIAL_DAYS } from "@/lib/order-next-step";
 
 export const metadata: Metadata = {
+  alternates: { canonical: "/iade-degisim" },
   title: "İade, Değişim ve Teslimat",
   robots: { index: false, follow: true }, // taslak — onaylanınca kaldır
 };

@@ -1,5 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
+import type { Metadata } from "next";
 import HomeClient from "./HomeClient";
+
+export const metadata: Metadata = { alternates: { canonical: "/" } };
 
 // ISR: ana sayfa artık SUNUCUDA render edilir ve önbelleklenir, 5 dakikada bir
 // tazelenir. Öne çıkan ürünler sunucuda çekilir → her ziyaretçinin tarayıcısı

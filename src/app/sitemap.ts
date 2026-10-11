@@ -11,12 +11,30 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 
-  // Aktif ürünleri çek
-  const { data: products } = await supabase
-    .from("products")
-    .select("slug, updated_at")
-    .eq("is_active", true)
-    .order("updated_at", { ascending: false });
+  // Aktif ürünler + kategori / marka / bilgi bankası (arama motoru ve yapay zekâ tarayıcıları bu listeden keşfeder)
+  const [{ data: products }, { data: cats }, { data: brands }, { data: kb }] = await Promise.all([
+    supabase.from("products").select("slug, updated_at, category_id, brand_id").eq("is_active", true).order("updated_at", { ascending: false }),
+    supabase.from("categories").select("id, slug, updated_at"),
+    supabase.from("brands").select("id, slug"),
+    (supabase as any).from("kb_articles").select("slug, updated_at, created_at"),
+  ]);
+  // Yalnız aktif ürünü olan kategori / markalar (boş liste sayfası dizine girmesin)
+  const usedCats = new Set((products ?? []).map((p: any) => p.category_id).filter(Boolean));
+  const usedBrands = new Set((products ?? []).map((p: any) => p.brand_id).filter(Boolean));
+  const listUrls: MetadataRoute.Sitemap = [
+    ...((cats ?? []) as any[]).filter((c) => usedCats.has(c.id) && c.slug).map((c) => ({
+      url: `${SITE_URL}/kategori/${c.slug}`, lastModified: c.updated_at ? new Date(c.updated_at) : new Date(), changeFrequency: "weekly" as const, priority: 0.8,
+    })),
+    ...((brands ?? []) as any[]).filter((b) => usedBrands.has(b.id) && b.slug).map((b) => ({
+      url: `${SITE_URL}/marka/${b.slug}`, lastModified: new Date(), changeFrequency: "weekly" as const, priority: 0.7,
+    })),
+  ];
+  const kbUrls: MetadataRoute.Sitemap = ((kb ?? []) as any[]).filter((a) => a.slug).map((a) => ({
+    url: `${SITE_URL}/bilgi-bankasi/${a.slug}`,
+    lastModified: new Date(a.updated_at || a.created_at || Date.now()),
+    changeFrequency: "monthly" as const,
+    priority: 0.7,
+  }));
 
   const productUrls: MetadataRoute.Sitemap = (products ?? []).map((p) => ({
     url: `${SITE_URL}/products/${p.slug}`,
@@ -39,13 +57,17 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "daily",
       priority: 0.9,
     },
+    { url: `${SITE_URL}/barefoot-nedir`, lastModified: new Date(), changeFrequency: "monthly", priority: 0.8 },
+    { url: `${SITE_URL}/bilgi-bankasi`, lastModified: new Date(), changeFrequency: "weekly", priority: 0.7 },
+    { url: `${SITE_URL}/firsatlar`, lastModified: new Date(), changeFrequency: "weekly", priority: 0.5 },
     {
       url: `${SITE_URL}/affiliate`,
       lastModified: new Date(),
       changeFrequency: "monthly",
       priority: 0.5,
     },
+    // Hukuki sayfalar taslakken (noindex) haritaya girmez; onaylanınca buraya eklenir.
   ];
 
-  return [...staticPages, ...productUrls];
+  return [...staticPages, ...listUrls, ...productUrls, ...kbUrls];
 }

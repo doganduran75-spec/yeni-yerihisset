@@ -5,6 +5,7 @@ import Footer from "@/components/Footer";
 import { Footprints, Wind, Activity, HeartPulse, ArrowRight } from "lucide-react";
 
 export const metadata: Metadata = {
+  alternates: { canonical: "/barefoot-nedir" },
   title: "Barefoot (Çıplak Ayak) Nedir?",
   description: "Barefoot ayakkabı nedir, ayağına ne yapar? Geniş burun, sıfır topuk farkı ve esnek taban ile doğal yürüyüş.",
 };

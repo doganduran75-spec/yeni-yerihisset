@@ -102,6 +102,14 @@ async function getRatingSummary(productId: string): Promise<{ avg: number; count
 
 // --- Metadata (Open Graph + SEO) ---
 
+function metaDescription(text: string | null | undefined, fallback: string, max = 155): string {
+  const t = String(text || "").replace(/<[^>]+>/g, " ").replace(/[#*_>`]/g, "").replace(/\s+/g, " ").trim();
+  if (!t) return fallback;
+  if (t.length <= max) return t;
+  const cut = t.slice(0, max - 1);
+  return cut.slice(0, Math.max(cut.lastIndexOf(" "), max - 30)).replace(/[,.;:\-–—\s]+$/, "") + "…";
+}
+
 export async function generateMetadata(
   { params }: { params: Promise<{ slug: string }> }
 ): Promise<Metadata> {
@@ -116,9 +124,11 @@ export async function generateMetadata(
 
   const productUrl = `${SITE_URL}/products/${product.slug}`;
   const primaryImage = product.images?.[0] ?? product.image_url ?? null;
-  const description =
-    product.description ??
-    `${product.title} - YeriHisset'te ₺${product.price.toFixed(2)} fiyatıyla.`;
+  // Arama sonucunda görünen özet ~155 karakter: kısa açıklama → uzun açıklamanın başı (kelime sınırında kesilir)
+  const description = metaDescription(
+    product.short_description || product.description,
+    `${product.title} — barefoot ayakkabı. YeriHisset'te ₺${product.price.toFixed(2)}; 14 gün evde dene, ücretsiz iade.`,
+  );
 
   return {
     title: `${product.title}`,
