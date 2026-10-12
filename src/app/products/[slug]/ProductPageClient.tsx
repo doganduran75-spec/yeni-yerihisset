@@ -37,7 +37,8 @@ import { supabase } from "@/lib/supabase";
 import { trackViewItem, trackAddToCart } from "@/lib/analytics";
 import { fetchLiveStocks, fetchItemStock } from "@/lib/live-stock";
 import SizeGuide from "@/components/products/SizeGuide";
-import type { SizeChart } from "@/lib/size-chart";
+import { sortedRows, type SizeChart } from "@/lib/size-chart";
+import { productSpecs } from "@/config/product-specs";
 
 type Variant = {
   id: string;
@@ -658,6 +659,43 @@ export default function ProductPageClient({ product, initialSize = null, initial
                 </div>
               </section>
             )}
+
+            {/* Teknik bilgiler (src/config/product-specs.ts) + numara → ayak uzunluğu (ölçü tablosundan) — metin olarak,
+                yapay zekâ ve arama motorlarının alıntılayacağı sayısal bilgi */}
+            {(() => {
+              const specs = productSpecs(product.brands?.name, product.title);
+              const rows = sizeChart && !sizeChart.kids ? sortedRows(sizeChart) : [];
+              if (!specs && !rows.length) return null;
+              const cm = (mm: number) => (mm / 10).toLocaleString("tr-TR", { maximumFractionDigits: 1 });
+              return (
+                <section className="border-t border-slate-100 pt-8">
+                  <h2 className="text-2xl font-black text-slate-900 mb-4">Teknik bilgiler</h2>
+                  {specs && (
+                    <table className="w-full text-sm">
+                      <tbody>
+                        {specs.map(([k, v]) => (
+                          <tr key={k} className="border-b border-slate-100 last:border-0">
+                            <th className="py-2 pr-4 text-left font-semibold text-slate-500 align-top w-44">{k}</th>
+                            <td className="py-2 text-slate-800">{v}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                  {rows.length > 0 && (
+                    <div className="mt-6">
+                      <h3 className="font-black text-slate-900 mb-2">Numara — ayak uzunluğu</h3>
+                      <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 text-sm">
+                        {rows.map((r) => (
+                          <div key={r.label} className="rounded-lg bg-slate-50 px-3 py-1.5"><b>{r.label}</b> · {cm(r.max_mm)} cm</div>
+                        ))}
+                      </div>
+                      <p className="text-xs text-slate-500 mt-2">Ayağınızı topuktan en uzun parmağa kadar ölçün; ölçünüze karşılık gelen numarayı seçin. Alıştığınız numarayı almanız genelde doğrudur.</p>
+                    </div>
+                  )}
+                </section>
+              );
+            })()}
           </div>
         </div>
       </main>

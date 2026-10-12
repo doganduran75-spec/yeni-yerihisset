@@ -5,6 +5,8 @@
  */
 
 // JSON-LD güvenli yazım: "<" kaçışlanır → veri içindeki "</script>" bloğu kapatamaz
+import { productSpecs } from "@/config/product-specs";
+
 const safeJsonLd = (v: unknown) => JSON.stringify(v).replace(/</g, "\\u003c");
 
 interface ProductStructuredDataProps {
@@ -87,6 +89,11 @@ export default function ProductStructuredData({
     description: product.description ?? `${product.title} - ${storeName}'de satışta.`,
     url: productUrl,
     ...(product.model_code ? { mpn: product.model_code, sku: product.model_code } : {}),
+    // Teknik bilgiler (taban kalınlığı, malzeme, ağırlık…) — makinelerin okuyacağı biçimde
+    ...(() => {
+      const specs = productSpecs(product.brands?.name, product.title);
+      return specs ? { additionalProperty: specs.map(([name, value]) => ({ "@type": "PropertyValue", name, value })) } : {};
+    })(),
     ...(images.length > 0 ? { image: images } : {}),
     ...(product.brands?.name ? { brand: { "@type": "Brand", name: product.brands.name } } : {}),
     offers: offers.length === 1 ? offers[0] : offers,

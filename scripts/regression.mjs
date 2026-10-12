@@ -263,6 +263,13 @@ async function main() {
       const title = one(`SELECT title FROM public.products WHERE slug = ${lit(p)}`);
       r.text.includes(title.replace(/&/g, "&amp;")) ? add("ok", "Ürün içeriği JavaScript olmadan okunuyor") : add("fail", "Ürün içeriği ilk HTML'de yok", "yapay zekâ tarayıcıları göremez");
     }
+    // Dodura ürün sayfasında teknik bilgiler (taban katmanları, ağırlık) metin + yapısal veri olarak (src/config/product-specs.ts)
+    const dp = one("SELECT p.slug FROM public.products p JOIN public.brands b ON b.id = p.brand_id WHERE p.is_active AND lower(b.name) = 'dodura' LIMIT 1");
+    if (dp) {
+      const r = await get(`/products/${dp}`);
+      r.text.includes("Ayak ile zemin arası") && r.text.includes('"additionalProperty"') ? add("ok", "Dodura teknik bilgileri sayfada ve yapısal veride")
+        : add("fail", "Dodura teknik bilgileri eksik", "Teknik bilgiler tablosu / additionalProperty yok");
+    }
     const home = await get("/");
     /"@type":"OnlineStore"/.test(home.text) && home.text.includes("/ara?q=") ? add("ok", "Mağaza kimliği yapısal verisi (OnlineStore + arama)") : add("fail", "Mağaza kimliği yapısal verisi eksik");
     const sm = await get("/sitemap.xml");
