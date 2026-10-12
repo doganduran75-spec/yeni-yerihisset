@@ -606,6 +606,15 @@ export default {
           `gönderilen ${ds.json?.sent}, başarısız ${ds.json?.failed}, bekleyen ${pending()}`);
       });
 
+      await part("Manuel stok bildirimi: yönetici üyeye ekleyebiliyor", async () => {
+        // Başka kanaldan (Instagram / WhatsApp) "haber verin" diyen üyeyi yönetici elle ekler → bildirim üyenin hesabına bağlı
+        const ins = await rest("stock_notifications", { token: F.admin.token, method: "POST", headers: { Prefer: "return=representation" },
+          body: { product_id: F.prod, variant_id: F.var, user_id: F.member.id, email: F.member.email ?? null, status: "pending" } });
+        ok(ins.status < 300, "Yönetici üye adına stok bildirimi ekleyebiliyor", `HTTP ${ins.status} ${ins.text?.slice?.(0, 120) ?? ""}`);
+        const own = await rest(`stock_notifications?user_id=eq.${F.member.id}&product_id=eq.${F.prod}&select=id`, { token: F.member.token });
+        ok(Array.isArray(own.json) && own.json.length >= 1, "Üye kendi stok bildirimini görüyor", `HTTP ${own.status}`);
+      });
+
       await part("Pano: sistem durumu ve müşteri hata kaydı", async () => {
         const st = await api("/api/admin/system-status", { method: "GET", token: F.admin.token });
         const keys = (st.json?.tiles ?? []).map((x) => x.key).join(",");

@@ -21,7 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Bell, Check, Loader2, RefreshCw, Plus, Search, AtSign, MessageCircle } from "lucide-react";
+import { Bell, Check, Loader2, RefreshCw, Plus, Search, AtSign, MessageCircle, UserCheck, X } from "lucide-react";
 
 // WhatsApp linki (TR numaralarını uluslararası formata çevir)
 function waLink(phone?: string | null): string | null {
@@ -91,6 +91,29 @@ export default function StockNotificationsPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [pSearch, setPSearch] = useState("");
   const [form, setForm] = useState({ productId: "", variantId: "", name: "", email: "", instagram: "", phone: "" });
+  // Üye seçimi: başka kanaldan (Instagram / WhatsApp) yazışılan kişi zaten üyeyse onu çağır → bildirim üyeye bağlanır
+  const [member, setMember] = useState<{ id: string; name: string; email: string | null; phone: string | null } | null>(null);
+  const [mSearch, setMSearch] = useState("");
+  const [mResults, setMResults] = useState<any[]>([]);
+  useEffect(() => {
+    const q = mSearch.trim();
+    if (q.length < 2) { setMResults([]); return; }
+    const t = setTimeout(async () => {
+      const like = `%${q.replace(/[%,()]/g, " ")}%`;
+      const { data } = await (supabase as any).from("profiles")
+        .select("id, first_name, last_name, email, phone")
+        .or(`first_name.ilike.${like},last_name.ilike.${like},email.ilike.${like},phone.ilike.${like}`)
+        .neq("role", "admin").limit(8);
+      setMResults((data as any[]) || []);
+    }, 250);
+    return () => clearTimeout(t);
+  }, [mSearch]);
+  function pickMember(p: any) {
+    const name = [p.first_name, p.last_name].filter(Boolean).join(" ");
+    setMember({ id: p.id, name: name || p.email || "Üye", email: p.email ?? null, phone: p.phone ?? null });
+    setForm((f) => ({ ...f, name, email: p.email ?? "", phone: p.phone ?? "" }));
+    setMSearch(""); setMResults([]);
+  }
   const [addSaving, setAddSaving] = useState(false);
 
   useEffect(() => {
@@ -283,7 +306,16 @@ export default function StockNotificationsPage() {
       // Kişiyi bul (email) ya da oluştur
       // Mükerrer önleme: e-posta / instagram / telefon ile mevcut kişiyi bul
       let contactId: string | null = null;
-      if (email) {
+      // Seçilen üye: aynı ürüne bekleyen bildirimi varsa ikinci kez ekleme; kişi kaydı üyeye bağlı olanı kullan
+      if (member) {
+        let dq = (supabase as any).from("stock_notifications").select("id").eq("user_id", member.id).eq("product_id", form.productId).eq("status", "pending");
+        dq = form.variantId ? dq.eq("variant_id", form.variantId) : dq.is("variant_id", null);
+        const { data: dup } = await dq.limit(1).maybeSingle();
+        if (dup) { alert("Bu üyenin bu ürün için zaten bekleyen bir bildirimi var."); return; }
+        const { data: linked } = await (supabase as any).from("contacts").select("id").eq("linked_user_id", member.id).limit(1).maybeSingle();
+        if (linked) contactId = linked.id;
+      }
+      if (!contactId && email) {
         const { data } = await (supabase as any).from("contacts").select("id").eq("email", email).limit(1).maybeSingle();
         if (data) contactId = data.id;
       }
@@ -301,6 +333,7 @@ export default function StockNotificationsPage() {
           full_name: form.name.trim() || null,
           email, phone, instagram_handle: instagram,
           source_channel: "stock_notify",
+          ...(member ? { linked_user_id: member.id } : {}),
           note: `Stok bildirimi: ${selectedUnit?.title ?? ""}${selectedUnit?.variantLabel ? " · " + selectedUnit.variantLabel : ""}`,
           created_by: user?.id ?? null,
         }).select("id").single();
@@ -312,6 +345,7 @@ export default function StockNotificationsPage() {
         product_id: form.productId,
         variant_id: form.variantId || null,
         contact_id: contactId,
+        ...(member ? { user_id: member.id } : {}),
         email, phone, instagram,
         status: "pending",
       });
@@ -319,7 +353,7 @@ export default function StockNotificationsPage() {
 
       setAddOpen(false);
       setForm({ productId: "", variantId: "", name: "", email: "", instagram: "", phone: "" });
-      setPSearch("");
+      setPSearch(""); setMember(null);
       fetchNotifications();
     } catch (e: any) {
       alert("Eklenemedi: " + (e?.message ?? "hata"));
@@ -603,8 +637,36 @@ export default function StockNotificationsPage() {
             </div>
 
             <div className="border-t pt-3 space-y-3">
-              <p className="text-xs font-semibold text-slate-600">Kişi bilgileri (en az biri)</p>
-              <div className="grid grid-cols-2 gap-3">
+              <p className="text-xs font-semibold text-slate-600">Kişi</p>
+              {member ? (
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm">
+                  <span className="min-w-0 flex items-center gap-2">
+                    <UserCheck size={16} className="text-green-700 shrink-0" />
+                    <span className="min-w-0"><b className="block truncate">{member.name}</b><span className="text-[11px] text-slate-500 truncate block">üye · {member.email || member.phone || ""} — stok gelince e-postayla otomatik bilgilendirilir</span></span>
+                  </span>
+                  <button className="text-xs text-blue-600 font-bold shrink-0 flex items-center gap-1" onClick={() => { setMember(null); setForm(f => ({ ...f, name: "", email: "", phone: "" })); }}><X size={12} /> Kaldır</button>
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <div className="relative">
+                    <UserCheck size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <Input value={mSearch} onChange={e => setMSearch(e.target.value)} placeholder="Üyeyse ara: ad, e-posta veya telefon…" className="pl-9 h-10" />
+                  </div>
+                  {mResults.length > 0 && (
+                    <div className="max-h-48 overflow-y-auto rounded-lg border border-slate-100 divide-y">
+                      {mResults.map((p) => (
+                        <button key={p.id} onClick={() => pickMember(p)} className="w-full text-left px-3 py-2 text-xs hover:bg-blue-50">
+                          <span className="font-medium text-slate-800">{[p.first_name, p.last_name].filter(Boolean).join(" ") || "—"}</span>
+                          <span className="text-slate-400"> · {p.email || ""}{p.phone ? ` · ${p.phone}` : ""}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {mSearch.trim().length >= 2 && mResults.length === 0 && <p className="text-[11px] text-muted-foreground">Üye bulunamadı — aşağıya bilgilerini yaz.</p>}
+                  <p className="text-[11px] text-muted-foreground">Üye değilse aşağıya en az bir bilgi yaz:</p>
+                </div>
+              )}
+              <div className={`grid grid-cols-2 gap-3 ${member ? "hidden" : ""}`}>
                 <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Ad Soyad" />
                 <Input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="E-posta" />
                 <div className="relative">
