@@ -26,6 +26,10 @@ async function run(req: NextRequest) {
   }
   // Müşteri hata kayıtları (pano › Sistem) 90 günden eskiyse sil
   await (supabase as any).from("client_errors").delete().lt("created_at", new Date(Date.now() - 90 * 86400000).toISOString());
+  // KVKK saklama süresi (docs/HUKUKI-METINLER-NOTLAR.md C5): e-posta gönderim kayıtları ve kuyruk 1 yıl
+  const yearAgo = new Date(Date.now() - 365 * 86400000).toISOString();
+  await (supabase as any).from("notification_log").delete().lt("created_at", yearAgo);
+  await (supabase as any).from("email_queue").delete().lt("created_at", yearAgo).in("status", ["sent", "failed", "skipped"]);
   return NextResponse.json({ ok: true, pruned: prune.data });
 }
 

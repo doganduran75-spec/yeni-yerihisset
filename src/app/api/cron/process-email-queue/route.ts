@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { buildSmtpConfig } from "@/lib/smtp-config";
 import { createMailTransport, isEmailLockedError } from "@/lib/mail-guard";
+import { MARKETING_KINDS, marketingEligible, unsubscribeUrl, withUnsubscribeFooter } from "@/lib/marketing-mail";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -30,12 +31,11 @@ async function run(req: NextRequest) {
   const storeName = settings.store_name || "YeriHisset";
   const fromName = settings.smtp_from_name || storeName;
   const smtpConfig = buildSmtpConfig(settings);
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com";
 
   // Bekleyenleri al (tüm kuyruk, en eski önce)
   const { data: pending } = await (supabase as any)
     .from("email_queue")
-    .select("id, campaign_id, recipient_email, subject, html_body, from_name, from_email, attempts")
+    .select("id, kind, campaign_id, recipient_email, subject, html_body, from_name, from_email, attempts")
     .eq("status", "pending")
     .order("created_at", { ascending: true })
     .limit(BATCH);
@@ -46,23 +46,33 @@ async function run(req: NextRequest) {
   await (supabase as any).from("email_queue").update({ status: "processing" }).in("id", items.map((i) => i.id));
 
   const transporter = createMailTransport(smtpConfig as any);
-  let sent = 0, failed = 0, retried = 0;
+  // Kampanya / sepet hatırlatması: yalnız izinliye (gönderim anında kontrol) + kişiye özel çıkış bağlantısı
+  const eligible = await marketingEligible(supabase, items.filter((i) => MARKETING_KINDS.has(i.kind || "campaign")).map((i) => i.recipient_email));
+  let sent = 0, failed = 0, retried = 0, skipped = 0;
   const touchedCampaigns = new Set<string>();
 
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
     if (item.campaign_id) touchedCampaigns.add(item.campaign_id);
+    const marketing = MARKETING_KINDS.has(item.kind || "campaign");
+    const rcpt = marketing ? eligible.get(String(item.recipient_email || "").toLowerCase()) : null;
+    if (marketing && !rcpt) {
+      await (supabase as any).from("email_queue")
+        .update({ status: "skipped", error_message: "kampanya izni yok", last_attempt_at: new Date().toISOString() }).eq("id", item.id);
+      skipped++;
+      continue;
+    }
+    const unsub = rcpt ? unsubscribeUrl(rcpt) : null;
     try {
       await transporter.sendMail({
         from: `"${item.from_name || fromName}" <${item.from_email || smtpConfig.auth.user}>`,
         to: item.recipient_email,
         subject: item.subject,
-        html: item.html_body,
-        headers: {
-          "List-Unsubscribe": `<${siteUrl}/unsubscribe?email=${encodeURIComponent(item.recipient_email)}>`,
-          "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+        html: marketing ? withUnsubscribeFooter(item.html_body, unsub, storeName) : item.html_body,
+        headers: unsub ? {
+          "List-Unsubscribe": `<${unsub}>`,
           "Precedence": "bulk",
-        },
+        } : undefined,
       });
       await (supabase as any).from("email_queue")
         .update({ status: "sent", sent_at: new Date().toISOString(), attempts: (item.attempts ?? 0) + 1, last_attempt_at: new Date().toISOString() })
@@ -92,7 +102,7 @@ async function run(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, processed: items.length, sent, failed, retried });
+  return NextResponse.json({ ok: true, processed: items.length, sent, failed, retried, skipped });
 }
 
 export const POST = run;

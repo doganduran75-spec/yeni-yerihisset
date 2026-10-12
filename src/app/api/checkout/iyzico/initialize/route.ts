@@ -65,9 +65,8 @@ export async function POST(req: NextRequest) {
   if (!items?.length) {
     return NextResponse.json({ error: "Eksik bilgi" }, { status: 400 });
   }
-  // TC Kimlik No checkout'ta SORULMAZ (siparişi basitleştirmek için). Profilde kayıtlıysa o,
-  // yoksa iyzico'ya bireysel müşteri varsayılanı 11111111111 gider (fatura da bu numarayla
-  // kesilebilir). Kurumsal faturada vergi no kullanılır.
+  // TC Kimlik No checkout'ta SORULMAZ ve SAKLANMAZ: iyzico'ya bireysel müşteri varsayılanı 11111111111
+  // gider (fatura da bu numarayla kesilebilir). Kurumsal faturada vergi no kullanılır.
   const tcknInput = (identityNumber || "").replace(/\D/g, "");
 
   const supabase = createAdminClient();
@@ -81,7 +80,7 @@ export async function POST(req: NextRequest) {
     userId = authUser.id;
     if (!shippingAddressId) return NextResponse.json({ error: "Adres seçilmedi" }, { status: 400 });
     const { data: prof } = await (supabase as any)
-      .from("profiles").select("first_name, last_name, email, phone, identity_number").eq("id", userId).single();
+      .from("profiles").select("first_name, last_name, email, phone").eq("id", userId).single();
     profile = prof || {};
     const { data: addr } = await supabase
       .from("user_addresses").select("*").eq("id", shippingAddressId).eq("user_id", userId).single();
@@ -95,12 +94,10 @@ export async function POST(req: NextRequest) {
     profile = { first_name: g.address.first_name, last_name: g.address.last_name, email: g.email, phone: g.address.phone };
   }
 
-  // Elle girilmiş geçerli TC varsa profile kaydet; yoksa profildeki kullanılır
-  if (tcknInput.length === 11) {
-    await (supabase as any).from("profiles").update({ identity_number: tcknInput }).eq("id", userId);
-  }
-  const savedTckn = String(profile?.identity_number || "").replace(/\D/g, "");
-  const tckn = tcknInput.length === 11 ? tcknInput : savedTckn.length === 11 ? savedTckn : "";
+  // KVKK (docs/HUKUKI-METINLER-NOTLAR.md C6): TC kimlik no toplanmaz / saklanmaz. Kurumsal olmayan alıcıda
+  // iyzico'ya bireysel müşteri varsayılanı 11111111111 gider; profile ve sipariş fatura kaydına yazılmaz.
+  void tcknInput;
+  const tckn = "";
 
   // ── GÜVENLİK: Fiyatları sunucuda doğrula (tarayıcıdan gelen price yok sayılır) ──
   const pricing = await validateCartPricing(supabase, items);

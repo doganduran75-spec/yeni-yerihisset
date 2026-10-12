@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { getAuthUserFromRequest } from "@/lib/auth-from-request";
+import { allMarketingRecipients, marketingEligible } from "@/lib/marketing-mail";
 
 /** UTM parametreli link dönüşümü */
 function addUtmLinks(html: string, campaign: string): string {
@@ -61,16 +62,18 @@ export async function POST(req: NextRequest) {
       recipientEmails = (profiles || []).map((p: any) => p.email).filter(Boolean);
     }
   } else {
-    // Sunucu tek seferde en fazla 1000 satır verir → sayfa sayfa hepsini al
-    for (let from = 0; ; from += 1000) {
-      const { data: profiles } = await supabase.from("profiles").select("email").not("email", "is", null).order("id").range(from, from + 999);
-      recipientEmails.push(...(profiles || []).map((p: any) => p.email).filter(Boolean));
-      if (!profiles || profiles.length < 1000) break;
-    }
+    // "Herkes" = kampanya izni olan tüm üyeler + bülten aboneleri
+    recipientEmails = (await allMarketingRecipients(supabase)).map((r) => r.email);
   }
 
+  // Yalnız kampanya izni olanlar (6563 / İYS) — izinsizler listeden çıkar, sayısı bildirilir
+  const before = new Set(recipientEmails.map((e) => e.trim().toLowerCase())).size;
+  const ok = await marketingEligible(supabase, recipientEmails);
+  recipientEmails = [...ok.keys()];
+  const excluded = before - recipientEmails.length;
+
   if (!recipientEmails.length) {
-    return NextResponse.json({ error: "Alıcı bulunamadı" }, { status: 400 });
+    return NextResponse.json({ error: `Kampanya izni olan alıcı yok${excluded ? ` (${excluded} kişi izinsiz olduğu için çıkarıldı)` : ""}` }, { status: 400 });
   }
 
   // UTM eklenmiş HTML hazırla
@@ -112,5 +115,6 @@ export async function POST(req: NextRequest) {
     ok: true,
     campaignId: campaignRecord.id,
     total: recipientEmails.length,
+    excluded, // kampanya izni olmadığı için listeden çıkarılanlar
   });
 }

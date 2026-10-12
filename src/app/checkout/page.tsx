@@ -90,7 +90,7 @@ export default function CheckoutPage() {
     lastName: "",
     email: "",
   });
-  const [identityNumber, setIdentityNumber] = useState("");
+  const [identityNumber] = useState(""); // TC kimlik sorulmaz (KVKK C6); iyzico sabit değer alır
   const [emailExists, setEmailExists] = useState(false); // misafir e-postası şifreli bir üyeye ait → giriş gerekir
   const [emailKnown, setEmailKnown] = useState(false);   // şifresi belirlenmemiş hesap (eski müşteri / önceki misafir) → devam
   // Site içi uyarılar (tarayıcı alert'i yerine)
@@ -202,7 +202,6 @@ export default function CheckoutPage() {
         lastName: profile.last_name || "",
         email: profile.email || user.email || "",
       });
-      if (profile.identity_number) setIdentityNumber(profile.identity_number);
     }
 
     // YeriHisset Kredisi bakiyesi (varsa) — cüzdanı sepette indirim olarak kullanabilir

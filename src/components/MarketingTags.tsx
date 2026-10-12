@@ -32,7 +32,8 @@ function loadPixel(pixelId: string) {
 // İstatistik izni → GA ölçüm çerezleri; pazarlama izni → reklam çerezleri + Meta Pixel
 function updateGa(c: ConsentChoice) {
   const w = window as any;
-  if (typeof w.gtag === "function") {
+  if (c.stats && typeof w.__yhGA === "function") w.__yhGA(); // Google betiği ancak istatistik izniyle yüklenir (GoogleAnalytics.tsx)
+  if (w.__yhGAon && typeof w.gtag === "function") {
     const ad = c.marketing ? "granted" : "denied";
     w.gtag("consent", "update", { analytics_storage: c.stats ? "granted" : "denied", ad_storage: ad, ad_user_data: ad, ad_personalization: ad });
   }

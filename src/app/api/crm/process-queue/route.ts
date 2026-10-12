@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase-admin";
 import { getAuthUserFromRequest } from "@/lib/auth-from-request";
 import { buildSmtpConfig } from "@/lib/smtp-config";
 import { createMailTransport } from "@/lib/mail-guard";
+import { marketingEligible, unsubscribeUrl, withUnsubscribeFooter } from "@/lib/marketing-mail";
 
 /** N milisaniye bekle */
 function delay(ms: number) {
@@ -93,22 +94,28 @@ export async function POST(req: NextRequest) {
   // Nodemailer transporter
   const transporter = createMailTransport(smtpConfig as any);
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com";
   let sent = 0;
   let failed = 0;
   const errors: string[] = [];
+  // Kampanya: yalnız izinliye (gönderim anında) + kişiye özel çıkış bağlantısı (src/lib/marketing-mail.ts)
+  const eligible = await marketingEligible(supabase, items.map((i: any) => i.recipient_email));
 
   for (const item of items) {
+    const rcpt = eligible.get(String(item.recipient_email || "").toLowerCase());
+    if (!rcpt) {
+      await (supabase as any).from("email_queue").update({ status: "skipped", error_message: "kampanya izni yok" }).eq("id", item.id);
+      continue;
+    }
+    const unsub = unsubscribeUrl(rcpt);
     try {
       await transporter.sendMail({
         from: `"${item.from_name || fromName}" <${item.from_email || smtpConfig.auth.user}>`,
         to: item.recipient_email,
         subject: item.subject,
-        html: item.html_body,
+        html: withUnsubscribeFooter(item.html_body, unsub, String(settings?.store_name || "YeriHisset")),
         headers: {
           // Anti-spam başlıkları
-          "List-Unsubscribe": `<${siteUrl}/unsubscribe?email=${encodeURIComponent(item.recipient_email)}>`,
-          "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+          ...(unsub ? { "List-Unsubscribe": `<${unsub}>` } : {}),
           "Precedence": "bulk",
           "X-Mailer": "YeriHisset Mailer",
           "X-Campaign-Id": campaignId,

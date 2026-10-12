@@ -463,6 +463,16 @@ export async function sendOrderNotification(
   if (trigger === "order_delivered" && (order.channel || "site") === "site" && !order.import_source) {
     bodyHtml += fitBoxHtml(order.id);
   }
+  // Mesafeli Sözleşmeler Yönetmeliği: sözleşme + ön bilgilendirme tüketiciye kalıcı veri saklayıcısıyla (e-posta)
+  // iletilmeli → site siparişinin onay e-postasına sözleşme bağlantıları (docs/HUKUKI-METINLER-NOTLAR.md C4)
+  if (trigger === "order_placed" && (order.channel || "site") === "site" && !order.import_source) {
+    bodyHtml += `
+    <p style="margin:18px 0 0;font-size:12px;color:#64748b;line-height:1.6">Siparişinle birlikte kabul ettiğin
+      <a href="${storeUrl}/mesafeli-satis#on-bilgilendirme" style="color:#4d7c0f">Ön Bilgilendirme Formu</a> ve
+      <a href="${storeUrl}/mesafeli-satis" style="color:#4d7c0f">Mesafeli Satış Sözleşmesi</a> bu bağlantılarda;
+      sipariş bilgilerin (ürün, fiyat, adres) yukarıda. Cayma hakkın: teslimden itibaren 14 gün —
+      <a href="${storeUrl}/iade-degisim" style="color:#4d7c0f">İade ve değişim</a>.</p>`;
+  }
   // Kampanya e-postası izni yoksa sipariş onayında kısa davet (izin, açılan sayfadaki düğmeyle verilir)
   if (uid && trigger === "order_placed" && profile && profile.marketing_consent === false) {
     bodyHtml += `

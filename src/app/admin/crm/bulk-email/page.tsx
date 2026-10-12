@@ -333,6 +333,7 @@ export default function BulkEmailPage() {
       const data = await res.json();
 
       if (data.ok) {
+        if (data.excluded > 0) alert(`${data.excluded} kişi kampanya izni olmadığı için listeden çıkarıldı. ${data.total} kişiye gönderiliyor.`);
         // Kuyruğa alındı — ilerleme başlat
         setProgress({
           campaignId: data.campaignId,

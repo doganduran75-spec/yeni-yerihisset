@@ -581,6 +581,28 @@ export default {
         ok(gr.status === 200 && gid && mc(gid).c === true, "Misafir siparişinde izin kaydedildi", `${why(gr)} ${gid ? JSON.stringify(mc(gid)) : "profil yok"}`);
       });
 
+      await part("Kampanya e-postası kuralı: izinsize gitmez, bülten izni, abonelikten çık", async () => {
+        // Kuyruktaki kampanya e-postası izinsiz alıcıya GÖNDERİLMEZ (gönderim anında "skipped") — src/lib/marketing-mail.ts
+        sql(`UPDATE public.profiles SET marketing_consent = false, marketing_consent_at = NULL WHERE id = ${lit(F.member.id)}`);
+        const qid = one(`INSERT INTO public.email_queue (kind, recipient_email, subject, html_body, status) VALUES ('campaign', ${lit(F.member.email)}, 'REGRESYON-TEST kampanya', '<p>x</p>', 'pending') RETURNING id`);
+        const cr = await api("/api/cron/process-email-queue", { headers: { "x-cron-secret": process.env.CRON_SECRET || "" } });
+        const st = one(`SELECT status || ':' || coalesce(error_message, '') FROM public.email_queue WHERE id = ${lit(qid)}`);
+        ok(cr.status === 200 && String(st).startsWith("skipped"), "İzinsiz üyeye kampanya e-postası gitmiyor", `HTTP ${cr.status} · ${st}`);
+        sql(`DELETE FROM public.email_queue WHERE id = ${lit(qid)}`);
+        // Bülten aboneliği = kampanya izni (kişi kaydında)
+        const ne = `rgt-bulten-${RUN}@${DOMAIN}`;
+        const nl = await api("/api/newsletter", { headers: { "x-forwarded-for": F.ip }, body: { email: ne, _hp: "", _t: 6000 } });
+        const c = row(`SELECT id, marketing_consent AS mc FROM public.contacts WHERE email = ${lit(ne)}`);
+        ok(nl.status === 200 && c?.mc === true, "Bülten aboneliği kampanya izni olarak kaydediliyor", `${why(nl)} ${JSON.stringify(c)}`);
+        // E-postadaki "abonelikten çık" bağlantısı (kişi: "c." önekli imzalı bağlantı)
+        if (c?.id) {
+          const sig = createHmac("sha256", `contact-marketing-consent:${process.env.SUPABASE_SERVICE_ROLE_KEY || ""}`).update(c.id).digest("base64url").slice(0, 32);
+          const un = await api("/api/marketing-consent", { body: { t: `c.${c.id}.${sig}`, granted: false } });
+          const c2 = row(`SELECT marketing_consent AS mc, marketing_opt_out_at IS NOT NULL AS out FROM public.contacts WHERE id = ${lit(c.id)}`);
+          ok(un.status === 200 && c2?.mc === false && c2?.out === true, "Abonelikten çık bağlantısı çalışıyor", `${why(un)} ${JSON.stringify(c2)}`);
+        }
+      });
+
       await part("Stok bildirimi (Stoğa girince haber ver)", async () => {
         const H = { "x-forwarded-for": F.ip };
         const email = `rgt-bildirim-${RUN}@${DOMAIN}`;

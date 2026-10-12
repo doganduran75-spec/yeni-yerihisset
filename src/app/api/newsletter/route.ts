@@ -21,10 +21,15 @@ export async function POST(req: NextRequest) {
   const supabase = createAdminClient();
   const { data: existing } = await (supabase as any)
     .from("contacts").select("id").eq("email", email).maybeSingle();
-  if (existing) return NextResponse.json({ ok: true, already: true });
+  // Bülten = kampanya e-postasına açık izin (src/lib/marketing-mail.ts); tekrar abone olan çıkışını geri alır
+  const consent = { marketing_consent: true, marketing_consent_at: new Date().toISOString(), marketing_opt_out_at: null };
+  if (existing) {
+    await (supabase as any).from("contacts").update(consent).eq("id", existing.id);
+    return NextResponse.json({ ok: true, already: true });
+  }
 
   const { error } = await (supabase as any)
-    .from("contacts").insert({ email, source_channel: "newsletter", status: "lead" });
+    .from("contacts").insert({ email, source_channel: "newsletter", status: "lead", ...consent });
   if (error?.code === "23505") return NextResponse.json({ ok: true, already: true }); // aynı anda gelen ikinci istek
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 

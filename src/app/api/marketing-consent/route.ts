@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { getAuthUserFromRequest } from "@/lib/auth-from-request";
-import { setMarketingConsent, verifyConsentToken } from "@/lib/marketing-consent";
+import { setMarketingConsent, verifyConsentToken, verifyContactConsentToken } from "@/lib/marketing-consent";
 import { rateLimited, clientIp, TOO_MANY } from "@/lib/rate-limit";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -23,7 +23,15 @@ async function resolveUser(req: NextRequest, token?: string | null): Promise<{ u
 
 export async function GET(req: NextRequest) {
   if (rateLimited("marketing-consent", clientIp(req), 60, 600000)) return NextResponse.json(TOO_MANY, { status: 429 });
-  const { userId } = await resolveUser(req, new URL(req.url).searchParams.get("t"));
+  const tq = new URL(req.url).searchParams.get("t");
+  // Üye olmayan kişi (bülten abonesi): "c." önekli bağlantı
+  const contactId = tq ? verifyContactConsentToken(tq) : null;
+  if (contactId) {
+    const { data: c } = await (createAdminClient() as any).from("contacts").select("email, marketing_consent").eq("id", contactId).maybeSingle();
+    if (!c) return NextResponse.json({ error: "Bağlantı geçersiz" }, { status: 400 });
+    return NextResponse.json({ ok: true, granted: !!c.marketing_consent, email: mask(c.email) });
+  }
+  const { userId } = await resolveUser(req, tq);
   if (!userId) return NextResponse.json({ error: "Bağlantı geçersiz" }, { status: 400 });
   const { data: p } = await (createAdminClient() as any).from("profiles").select("email, marketing_consent").eq("id", userId).maybeSingle();
   if (!p) return NextResponse.json({ error: "Bağlantı geçersiz" }, { status: 400 });
@@ -34,6 +42,15 @@ export async function POST(req: NextRequest) {
   if (rateLimited("marketing-consent", clientIp(req), 60, 600000)) return NextResponse.json(TOO_MANY, { status: 429 });
   const body = (await req.json().catch(() => ({}))) as { granted?: unknown; t?: string };
   if (typeof body.granted !== "boolean") return NextResponse.json({ error: "granted gerekli" }, { status: 400 });
+  const contactId = body.t ? verifyContactConsentToken(body.t) : null;
+  if (contactId) {
+    const now = new Date().toISOString();
+    const { error } = await (createAdminClient() as any).from("contacts").update(body.granted
+      ? { marketing_consent: true, marketing_consent_at: now, marketing_opt_out_at: null }
+      : { marketing_consent: false, marketing_opt_out_at: now }).eq("id", contactId);
+    if (error) return NextResponse.json({ error: "Kaydedilemedi" }, { status: 500 });
+    return NextResponse.json({ ok: true, granted: body.granted });
+  }
   const { userId, viaLink } = await resolveUser(req, body.t);
   if (!userId) return NextResponse.json({ error: viaLink ? "Bağlantı geçersiz" : "Giriş yapmalısınız" }, { status: viaLink ? 400 : 401 });
   const r = await setMarketingConsent(userId, body.granted, viaLink ? "email_link" : "account");

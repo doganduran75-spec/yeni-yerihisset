@@ -156,6 +156,7 @@ async function main() {
     ["20261025 iptal e-postası şablonu", "SELECT NOT EXISTS(SELECT 1 FROM public.email_templates WHERE trigger='order_cancelled' AND body_html LIKE '%Ödeme yapıldıysa%')"],
     ["20261026 şifresiz hesaplar", "SELECT to_regprocedure('public.mark_account_passwordless(uuid)') IS NOT NULL"],
     ["20261028 üyelik durumu (misafir/doğrulanmamış/üye)", "SELECT to_regprocedure('public.member_account_state(uuid)') IS NOT NULL AND NOT EXISTS(SELECT 1 FROM pg_trigger WHERE tgname='on_profile_created_assign_role')"],
+    ["20261113 kişi kampanya izni + TC kimlik saklanmıyor", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='contacts' AND column_name='marketing_consent') AND NOT EXISTS(SELECT 1 FROM public.profiles WHERE identity_number IS NOT NULL)"],
     ["20261112 ana sayfa metinleri panelden", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='settings' AND column_name='home_content')"],
     ["20261111 ürün adında stok kodu yok (ayrı alan: model_code)", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='products' AND column_name='model_code') AND NOT EXISTS(SELECT 1 FROM public.products WHERE is_active AND title ~ '\\s[A-Z]{2,}[A-Z0-9]*[0-9]{2}\\s*$')"],
     ["20261110 düzenlenebilir sayfalar + şirket künyesi", "SELECT to_regclass('public.static_pages') IS NOT NULL AND EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='settings' AND column_name='company_title')"],
@@ -216,6 +217,13 @@ async function main() {
   }
   const nf = await get("/bu-sayfa-kesinlikle-yok-123");
   nf.status === 404 ? add("ok", "Olmayan sayfa → 404") : add("warn", "Olmayan sayfa", `HTTP ${nf.status} (404 beklenirdi)`);
+  // KVKK C2: Google Analytics betiği izin verilmeden sayfaya doğrudan eklenmez (yalnız izinle __yhGA yükler)
+  {
+    const h0 = await get("/");
+    /<script[^>]+src="https:\/\/www\.googletagmanager\.com\/gtag\/js/.test(h0.text)
+      ? add("fail", "Google Analytics onaysız yükleniyor", "gtag.js sayfada doğrudan var")
+      : add("ok", "Google Analytics yalnız çerez izniyle yükleniyor");
+  }
   // Ana sayfa metinleri panelden (Ayarlar › Ana Sayfa): kayıtlı "rehber kartı" başlığı (yoksa varsayılan) sayfada görünmeli
   {
     const q = one("SELECT coalesce(home_content->'cards'->'learn'->>'title', '') FROM public.settings ORDER BY id LIMIT 1") || "Barefoot Rehberini Keşfet";

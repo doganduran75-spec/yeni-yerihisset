@@ -24,6 +24,23 @@ export function verifyConsentToken(token: string): string | null {
   return want.length === got.length && timingSafeEqual(want, got) ? m[1] : null;
 }
 
+// Üye olmayan kişi (bülten abonesi, contacts): aynı ?t= parametresi, "c." önekiyle
+const sigC = (contactId: string) => createHmac("sha256", `contact-${key()}`).update(contactId).digest("base64url").slice(0, 32);
+export function contactConsentToken(contactId: string): string {
+  return `c.${contactId}.${sigC(contactId)}`;
+}
+export function verifyContactConsentToken(token: string): string | null {
+  const m = /^c\.([0-9a-f-]{36})\.([A-Za-z0-9_-]{32})$/i.exec(String(token || ""));
+  if (!m) return null;
+  const want = Buffer.from(sigC(m[1]));
+  const got = Buffer.from(m[2]);
+  return want.length === got.length && timingSafeEqual(want, got) ? m[1] : null;
+}
+export function contactConsentUrl(contactId: string, optOut = false): string {
+  const site = (process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com").replace(/\/$/, "");
+  return `${site}/kampanya-izni?t=${contactConsentToken(contactId)}${optOut ? "&cik=1" : ""}`;
+}
+
 export function consentUrl(userId: string, optOut = false): string {
   const site = (process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com").replace(/\/$/, "");
   return `${site}/kampanya-izni?t=${consentToken(userId)}${optOut ? "&cik=1" : ""}`;

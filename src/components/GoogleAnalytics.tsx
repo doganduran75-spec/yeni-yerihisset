@@ -32,29 +32,34 @@ export default async function GoogleAnalytics() {
   const measurementId = await getGaMeasurementId();
   if (!measurementId) return null;
 
+  // KVKK (docs/HUKUKI-METINLER-NOTLAR.md C2): Google'ın betiği istatistik İZNİ olmadan HİÇ indirilmez (onaysız istek
+  // gitmesin). gtag burada yalnız bir kuyruk; window.__yhGA() izin anında betiği yükler — sayfa açılışında izin varsa
+  // hemen, sonradan verilirse MarketingTags çağırır. Onaydan önce kuyruğa düşen olaylar gönderilmeden atılır.
+  // Kategoriler: "accepted" = hepsi, "s1m0" = istatistik var / pazarlama yok (src/lib/consent.ts)
+  const id = JSON.stringify(measurementId);
   return (
-    <>
-      <Script
-        src={`https://www.googletagmanager.com/gtag/js?id=${measurementId}`}
-        strategy="afterInteractive"
-      />
-      <Script id="ga4-init" strategy="afterInteractive">
-        {`
-          window.dataLayer = window.dataLayer || [];
-          function gtag(){dataLayer.push(arguments);}
-          // KVKK: çerez onayı yoksa GA çerezsiz çalışır (consent mode); "Kabul Et" → MarketingTags "granted" yapar
-          // Kategoriler: "accepted" = hepsi, "s1m0" = istatistik var / pazarlama yok (src/lib/consent.ts)
-          var yhc = ''; try { yhc = localStorage.getItem('yh:cookie-consent') || ''; } catch (e) {}
-          var yhs = (yhc === 'accepted' || /^s1/.test(yhc)) ? 'granted' : 'denied';
-          var yhm = (yhc === 'accepted' || /m1$/.test(yhc)) ? 'granted' : 'denied';
-          gtag('consent', 'default', { analytics_storage: yhs, ad_storage: yhm, ad_user_data: yhm, ad_personalization: yhm });
+    <Script id="ga4-init" strategy="afterInteractive">
+      {`
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        window.gtag = gtag;
+        window.__yhGA = function () {
+          if (window.__yhGAon) return;
+          window.__yhGAon = true;
+          var c = ''; try { c = localStorage.getItem('yh:cookie-consent') || ''; } catch (e) {}
+          var m = (c === 'accepted' || /m1$/.test(c)) ? 'granted' : 'denied';
+          window.dataLayer.length = 0;
+          gtag('consent', 'default', { analytics_storage: 'granted', ad_storage: m, ad_user_data: m, ad_personalization: m });
           gtag('js', new Date());
-          gtag('config', '${measurementId}', {
-            send_page_view: true,
-            cookie_flags: 'SameSite=None;Secure'
-          });
-        `}
-      </Script>
-    </>
+          gtag('config', ${id}, { send_page_view: true, cookie_flags: 'SameSite=None;Secure' });
+          var s = document.createElement('script');
+          s.async = true;
+          s.src = 'https://www.googletagmanager.com/gtag/js?id=' + encodeURIComponent(${id});
+          document.head.appendChild(s);
+        };
+        var yhc = ''; try { yhc = localStorage.getItem('yh:cookie-consent') || ''; } catch (e) {}
+        if (yhc === 'accepted' || /^s1/.test(yhc)) window.__yhGA();
+      `}
+    </Script>
   );
 }

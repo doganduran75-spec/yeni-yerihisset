@@ -32,12 +32,12 @@ Sayfalar hâlâ **taslak** (üstte uyarı + arama motoruna kapalı). Onaydan son
 
 | # | İş | Neden |
 |---|----|------|
-| C1 | **Kampanya e-postalarına "abonelikten çık" bağlantısı** + yalnız izin verenlere gönderim | Gizlilik metni "e-postadaki bağlantıdan tek tıkla geri alabilirsiniz" diyor; şu an bağlantı yok. Yasal zorunluluk (6563). |
-| C2 | **Google Analytics'i onaydan önce hiç yüklememek** | Şu an onay yokken GA çerezsiz ama yine de Google'a istek gönderiyor (yurt dışı aktarım). Onaysız hiç yüklenmemesi daha güvenli. |
+| C1 ✅ | **Kampanya e-postalarına "abonelikten çık" bağlantısı** + yalnız izin verenlere gönderim | Gizlilik metni "e-postadaki bağlantıdan tek tıkla geri alabilirsiniz" diyor; şu an bağlantı yok. Yasal zorunluluk (6563). |
+| C2 ✅ | **Google Analytics'i onaydan önce hiç yüklememek** | Şu an onay yokken GA çerezsiz ama yine de Google'a istek gönderiyor (yurt dışı aktarım). Onaysız hiç yüklenmemesi daha güvenli. |
 | C3 ✅ (2026-10-11) | **Kendi ziyaret istatistiğimiz** — Ayarlar › Çerez Onayı: şimdilik KAPALI (deneme modu: seçim yapılana kadar tam kayıt, Reddet → anonimleşir); canlıda bir süre deneyip AÇIK (KVKK modu) yapılacak. Kategorili pencere + onay defteri kuruldu. | Şu an ziyaretçi seçim yapmadan çalışıyor (IP dahil), yalnız "Reddet" deyince duruyor. Öneri: seçim yapılmadan ve reddedilince **IP'siz, kimliksiz sayım**; "Kabul"de bugünkü gibi. Metin "Reddederseniz kullanılmaz" diyor → C3 yapılınca tam doğru olur. **Senin onayın gerekiyor** (veri kaybı: kabul etmeyenlerin yolculuğu görünmez). |
-| C4 | **Sipariş onay e-postasına sözleşme** | Yönetmelik: sözleşme ve ön bilgilendirme "kalıcı veri saklayıcısı" ile (e-posta) tüketiciye iletilmeli. Sipariş e-postasına sözleşme bağlantısı + sipariş özeti eklenecek. |
-| C5 | **E-posta kayıtlarının saklama süresi** | Bildirim / e-posta kuyruğu kayıtları süresiz tutuluyor; 1 yıl sonra silinsin (KVKK "ne kadar saklıyoruz" bölümüyle uyum). |
-| C6 | **Eski TCKN alanı** | Profildeki eski TC kimlik no'ları gereksiz; silinmeli (iyzico'ya artık sabit değer gidiyor). |
+| C4 ✅ | **Sipariş onay e-postasına sözleşme** | Yönetmelik: sözleşme ve ön bilgilendirme "kalıcı veri saklayıcısı" ile (e-posta) tüketiciye iletilmeli. Sipariş e-postasına sözleşme bağlantısı + sipariş özeti eklenecek. |
+| C5 ✅ | **E-posta kayıtlarının saklama süresi** | Bildirim / e-posta kuyruğu kayıtları süresiz tutuluyor; 1 yıl sonra silinsin (KVKK "ne kadar saklıyoruz" bölümüyle uyum). |
+| C6 ✅ | **Eski TCKN alanı** | Profildeki eski TC kimlik no'ları gereksiz; silinmeli (iyzico'ya artık sabit değer gidiyor). |
 
 ## D) Yapılanlar (bu turda)
 
