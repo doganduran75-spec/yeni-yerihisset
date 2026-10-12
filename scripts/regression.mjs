@@ -156,6 +156,7 @@ async function main() {
     ["20261025 iptal e-postası şablonu", "SELECT NOT EXISTS(SELECT 1 FROM public.email_templates WHERE trigger='order_cancelled' AND body_html LIKE '%Ödeme yapıldıysa%')"],
     ["20261026 şifresiz hesaplar", "SELECT to_regprocedure('public.mark_account_passwordless(uuid)') IS NOT NULL"],
     ["20261028 üyelik durumu (misafir/doğrulanmamış/üye)", "SELECT to_regprocedure('public.member_account_state(uuid)') IS NOT NULL AND NOT EXISTS(SELECT 1 FROM pg_trigger WHERE tgname='on_profile_created_assign_role')"],
+    ["20261115 iade yöntemi: kredi kartı (elle)", "SELECT public.refund_method_label('card') = 'Kredi kartı'"],
     ["20261114 kategori / marka sayfa metni (tanıtım + SSS)", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='categories' AND column_name='faq') AND EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='brands' AND column_name='intro')"],
     ["20261113 kişi kampanya izni + TC kimlik saklanmıyor", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='contacts' AND column_name='marketing_consent') AND NOT EXISTS(SELECT 1 FROM public.profiles WHERE identity_number IS NOT NULL)"],
     ["20261112 ana sayfa metinleri panelden", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='settings' AND column_name='home_content')"],

@@ -20,7 +20,9 @@ import { kickMarketplaceSync } from "@/lib/marketplace/sync";
 // iyzico seçilirse para iyzico'dan otomatik iade edilir; diğer yöntemlerde parayı admin gönderir,
 // sistem kaydeder. Durum değişiklikleri veritabanında tek işlemle (tutarsız birleşim olmaz).
 
-const METHODS = new Set(["iyzico", "bank_transfer", "cash", "marketplace", "other"]);
+// card = kartla ödenmiş ama iyzico kaydı olmayan sipariş (elle girilen / eski siteden aktarılan): iade POS / ödeme
+// panelinden elle yapılır, burada yalnız kaydedilir
+const METHODS = new Set(["iyzico", "card", "bank_transfer", "cash", "marketplace", "other"]);
 
 export async function POST(req: NextRequest) {
   const user = await getAuthUserFromRequest(req);

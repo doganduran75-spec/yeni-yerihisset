@@ -284,7 +284,7 @@ function buildCancelInfoHtml(order: any, storeUrl: string): string {
   if (refunded > 0) {
     tone = "green";
     const m = String(order.refund_method || "");
-    if (m === "iyzico") {
+    if (m === "iyzico" || m === "card") {
       lines.push(`<b>${money(refunded)}</b> tutarındaki kart ödemen iade edildi. Tutar, bankana bağlı olarak genellikle <b>1–14 iş günü</b> içinde kartına yansır.`);
     } else if (m === "bank_transfer") {
       lines.push(`<b>${money(refunded)}</b> tutarındaki ödemen banka hesabına havale/EFT ile iade edildi. Bankana bağlı olarak genellikle <b>1–3 iş günü</b> içinde hesabında görünür.`);

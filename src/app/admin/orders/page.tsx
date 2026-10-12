@@ -142,7 +142,7 @@ const paymentLabels: Record<string, string> = {
   refunded: "İade edildi",
 };
 const REFUND_METHOD_LABEL: Record<string, string> = {
-  iyzico: "iyzico", bank_transfer: "Havale/EFT", cash: "Kapıda / nakit", marketplace: "Pazaryeri", other: "Diğer",
+  iyzico: "iyzico", card: "Kredi kartı", bank_transfer: "Havale/EFT", cash: "Kapıda / nakit", marketplace: "Pazaryeri", other: "Diğer",
 };
 
 // ─── Sevkiyat Durumu ──────────────────────────────────────────────────────────
@@ -2353,7 +2353,9 @@ function OrderActionDialog({ mode, order, onClose, onDone }: {
   const remaining = Math.round((total - refunded) * 100) / 100;
   const paidNow = order.payment_status === "paid" || order.payment_status === "partial_refund";
   const iyzicoOk = order.payment_method === "iyzico" && !!order.iyzico_payment_id;
-  const [method, setMethod] = useState(iyzicoOk ? "iyzico" : "bank_transfer");
+  // Kartla ödenmiş ama iyzico kaydı yok (elle girilen / eski siteden aktarılan sipariş) → "Kredi kartı (elle)" varsayılan
+  const cardPaid = !iyzicoOk && ["credit_card", "card", "iyzico"].includes(String(order.payment_method || ""));
+  const [method, setMethod] = useState(iyzicoOk ? "iyzico" : cardPaid ? "card" : "bank_transfer");
   const [note, setNote] = useState("");
   const [amount, setAmount] = useState(mode === "refund" ? String(remaining) : "");
   const [busy, setBusy] = useState(false);
@@ -2374,6 +2376,7 @@ function OrderActionDialog({ mode, order, onClose, onDone }: {
   const [confirmed, setConfirmed] = useState(false);
   const confirmText: Record<string, string> = {
     iyzico_manual: "Kart iadesini iyzico panelinden yaptım",
+    card: "Kart iadesini ödeme / POS panelinden yaptım",
     bank_transfer: "Parayı müşterinin banka hesabına gönderdim",
     cash: "Nakit iadeyi yaptım",
     other: "İadeyi yaptım",
@@ -2414,6 +2417,7 @@ function OrderActionDialog({ mode, order, onClose, onDone }: {
       <select value={method} onChange={(e) => setMethod(e.target.value)} className={sel}>
         {iyzicoOk && <option value="iyzico">Kart — iyzico'dan şimdi otomatik iade et (önerilen)</option>}
         {iyzicoOk && <option value="iyzico_manual">Kart — iadeyi iyzico panelinden kendim yaptım (yalnız kaydet)</option>}
+        {!iyzicoOk && <option value="card">Kredi kartı — iadeyi ödeme / POS panelinden kendim yaptım (yalnız kaydet)</option>}
         <option value="bank_transfer">Havale/EFT — parayı müşterinin hesabına ben gönderdim</option>
         <option value="cash">Kapıda / nakit</option>
         <option value="other">Diğer</option>
