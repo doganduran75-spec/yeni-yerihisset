@@ -111,7 +111,7 @@ export default function MarketplaceSyncCard() {
                   <div key={r.id} className="flex items-center gap-2 text-[11px]" title={r.message || undefined}>
                     <span className={r.ok ? "text-green-600" : "text-red-600"}>{r.ok ? "✓" : "✗"}</span>
                     <span className="font-mono text-slate-600 truncate min-w-0 flex-1">{r.listing_key}</span>
-                    <span className="text-slate-500 shrink-0">{r.channel === "trendyol" ? "Trendyol" : "Hepsiburada"}</span>
+                    <span className="text-slate-500 shrink-0">{({ trendyol: "Trendyol", hepsiburada: "Hepsiburada", amazon: "Amazon" } as Record<string, string>)[r.channel] ?? r.channel}</span>
                     <span className="font-bold text-slate-800 w-16 text-right shrink-0">{r.kind === "price" ? `₺${Math.round(Number(r.price ?? 0))}` : r.qty}</span>
                     <span className="text-slate-400 w-16 text-right shrink-0">{ago(r.created_at)}</span>
                   </div>

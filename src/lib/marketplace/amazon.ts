@@ -6,6 +6,8 @@
 //   Stok:  PATCH /listings/2021-08-01/items/{sellerId}/{sku}  (SKU başına tek istek, saniyede 5)
 //          productType "PRODUCT" + /attributes/fulfillment_availability (DEFAULT = satıcı gönderimi)
 //          Yanıt EŞZAMANLI: ACCEPTED (kabul) / INVALID (+sorunlar).
+//   Fiyat: aynı uç, /attributes/purchasable_offer (our_price, KDV dahil, TRY). Teklifin tamamı
+//          değişir: Amazon panelinde ayrıca girilmiş indirimli fiyat / min-maks sınırı silinir.
 //   İlan:  GET /listings/2021-08-01/items/{sellerId}  (searchListingsItems; sayfa 20, sorgu başına
 //          en çok 1000 → fazlası oluşturulma tarihine göre aralıklara bölünür)
 //   Test:  GET /sellers/v1/marketplaceParticipations
@@ -138,17 +140,13 @@ export async function amzTestConnection(c: AmazonConfig): Promise<{ totalProduct
 
 export type AmazonStockResult = { ok: boolean; reason?: string; retry?: boolean };
 
-/** Tek SKU'nun satıcı-gönderimli (FBM) stoğunu yaz. */
-async function patchStock(c: AmazonConfig, sku: string, qty: number): Promise<AmazonStockResult> {
+/** Tek SKU'ya tek özellik yaz (stok ya da fiyat). */
+async function patchAttr(c: AmazonConfig, sku: string, path: string, value: unknown[]): Promise<AmazonStockResult> {
   const j = await call(c, "PATCH", `/listings/2021-08-01/items/${encodeURIComponent(c.sellerId)}/${encodeURIComponent(sku)}`, {
     marketplaceIds: c.marketplaceId, issueLocale: "tr_TR",
   }, {
     productType: "PRODUCT",
-    patches: [{
-      op: "replace",
-      path: "/attributes/fulfillment_availability",
-      value: [{ fulfillment_channel_code: "DEFAULT", quantity: Math.max(0, Math.floor(qty)) }],
-    }],
+    patches: [{ op: "replace", path, value }],
   });
   if (j?.status === "ACCEPTED") return { ok: true };
   const issues = ((j?.issues ?? []) as any[]).filter((i) => i?.severity === "ERROR");
@@ -156,16 +154,33 @@ async function patchStock(c: AmazonConfig, sku: string, qty: number): Promise<Am
   return { ok: false, reason };
 }
 
+/** Satıcı-gönderimli (FBM) stok */
+const stockValue = (qty: number) => [{ fulfillment_channel_code: "DEFAULT", quantity: Math.max(0, Math.floor(qty)) }];
+/** Satış fiyatı (KDV dahil) */
+const priceValue = (c: AmazonConfig, price: number) => [{
+  marketplace_id: c.marketplaceId, currency: "TRY", audience: "ALL",
+  our_price: [{ schedule: [{ value_with_tax: Math.round(price * 100) / 100 }] }],
+}];
+
 /** Stok gönder — SKU başına istek, saniyede ~4 (sınır 5). Sonuç anahtar başına HEMEN döner.
  *  Yetki hatası tüm paketi durdurur (fırlatır); istek sınırı → kalanlar "biraz sonra tekrar". */
-export async function amzUpdateStocks(c: AmazonConfig, items: { key: string; qty: number }[]): Promise<Map<string, AmazonStockResult>> {
+export function amzUpdateStocks(c: AmazonConfig, items: { key: string; qty: number }[]): Promise<Map<string, AmazonStockResult>> {
+  return patchEach(c, items, (it) => patchAttr(c, it.key, "/attributes/fulfillment_availability", stockValue(it.qty)));
+}
+
+/** Fiyat gönder — stokla aynı kurallar (SKU başına istek, sonuç hemen). */
+export function amzUpdatePrices(c: AmazonConfig, items: { key: string; price: number }[]): Promise<Map<string, AmazonStockResult>> {
+  return patchEach(c, items, (it) => patchAttr(c, it.key, "/attributes/purchasable_offer", priceValue(c, it.price)));
+}
+
+async function patchEach<T extends { key: string }>(c: AmazonConfig, items: T[], send: (it: T) => Promise<AmazonStockResult>): Promise<Map<string, AmazonStockResult>> {
   const out = new Map<string, AmazonStockResult>();
   let throttled = false;
   for (const it of items) {
     if (throttled) { out.set(it.key, { ok: false, retry: true, reason: "Amazon istek sınırı — biraz sonra tekrar" }); continue; }
     const t0 = Date.now();
     try {
-      out.set(it.key, await patchStock(c, it.key, it.qty));
+      out.set(it.key, await send(it));
     } catch (e: any) {
       if (e instanceof AmazonError && (e.status === 401 || e.status === 403) && out.size === 0) throw e;
       if (e instanceof AmazonError && e.status === 429) throttled = true;

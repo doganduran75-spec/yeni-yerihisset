@@ -9,6 +9,8 @@
 // Pazaryeri satış durumu (Trendyol / Hepsiburada sütunlarının yanında): "ilanda değil" →
 // o kanala hiç gönderilmez (hata yok); ilandaysa "Kapalı" kutusu → o kanala stok 0 gider.
 // Kutular ANINDA uygulanır (fiyat taslaklarından bağımsız). İlan listesi saatte bir eşitlenir.
+// Site satış durumu ("Site satış" sütunu): varyantın "Aktif"i (varyantsız üründe ürünün "Aktif"i) —
+// ürün sayfasındaki kutularla aynı. Kanallar bağımsız: sitede kapalı ürün pazaryerinde satılmaya devam eder.
 import { useEffect, useMemo, useState, useCallback } from "react";
 import AdminOpsTabs from "@/components/admin/AdminOpsTabs";
 import { supabase } from "@/lib/supabase";
@@ -34,7 +36,7 @@ type PriceList = { id: string; code: string; name: string; channel: string; kind
 type Row = {
   key: string; productId: string; variantId: string | null;
   title: string; value: string; sku: string; barcode: string; stock: number;
-  productActive: boolean; categoryId: string | null; categoryName: string; brandId: string | null; brandName: string;
+  productActive: boolean; variantActive: boolean; categoryId: string | null; categoryName: string; brandId: string | null; brandName: string;
   search: string;
 };
 
@@ -132,6 +134,52 @@ export default function PricesPage() {
     loadMkt();
   }
 
+  // Site satış durumu: varyant satırı → varyantın Aktif'i; varyantsız ürün → ürünün Aktif'i.
+  // openProducts: kapalı ürünleri de aç (yoksa varyant açılsa da ürün kapalı kalır).
+  async function setSite(targets: Row[], open: boolean, openProducts = false) {
+    const sb = supabase as any;
+    const vIds = [...new Set(targets.filter((r) => r.variantId).map((r) => r.variantId!))];
+    const pIds = [...new Set(targets.filter((r) => !r.variantId || (open && openProducts && !r.productActive)).map((r) => r.productId))];
+    try {
+      for (let i = 0; i < vIds.length; i += 300) {
+        const { error } = await sb.from("product_variants").update({ is_active: open }).in("id", vIds.slice(i, i + 300));
+        if (error) throw error;
+      }
+      for (let i = 0; i < pIds.length; i += 300) {
+        const { error } = await sb.from("products").update({ is_active: open }).in("id", pIds.slice(i, i + 300));
+        if (error) throw error;
+      }
+    } catch (e: any) {
+      const msg = String(e?.message || e);
+      siteAlert({ title: "Kaydedilemedi", message: /fiyat|price/i.test(msg) ? "Fiyatı olmayan ürün sitede satışa açılamaz — önce site satış fiyatını gir." : msg, tone: "danger" });
+    }
+    // Sayfadaki fiyat taslakları kaybolmasın: yalnız durum kolonlarını tazele
+    const ids = [...new Set(targets.map((r) => r.productId))];
+    const fresh: any[] = [];
+    for (let i = 0; i < ids.length; i += 300) {
+      const { data } = await sb.from("products").select("id, is_active, product_variants(id, is_active)").in("id", ids.slice(i, i + 300));
+      fresh.push(...((data as any[]) || []));
+    }
+    const pAct = new Map(fresh.map((p) => [p.id, p.is_active !== false]));
+    const vAct = new Map(fresh.flatMap((p) => ((p.product_variants as any[]) || []).map((v) => [v.id, v.is_active !== false] as const)));
+    setRows((prev) => prev.map((r) => (pAct.has(r.productId)
+      ? { ...r, productActive: pAct.get(r.productId)!, variantActive: r.variantId ? (vAct.get(r.variantId) ?? r.variantActive) : true }
+      : r)));
+  }
+
+  async function toggleSiteRow(r: Row, open: boolean) {
+    if (open && r.variantId && !r.productActive) {
+      const ok = await siteConfirm({
+        title: "Ürün sitede tümüyle kapalı",
+        message: `“${r.title}” ürün sayfasında Aktif değil. Ürün sitede açılsın mı? (Açık olan diğer numaraları da satışa açılır; kapalı numaralar kapalı kalır.)`,
+        confirmText: "Ürünü aç",
+      });
+      if (!ok) return;
+      return setSite([r], true, true);
+    }
+    return setSite([r], open);
+  }
+
   async function syncListingsNow() {
     setMktBusy("sync");
     const msgs: string[] = [];
@@ -183,7 +231,7 @@ export default function PricesPage() {
         for (const v of vs) {
           const value = v.variant_options?.value ?? "";
           const r: Row = {
-            ...base, key: `v:${v.id}`, variantId: v.id, value, sku: v.sku ?? "", barcode: v.barcode ?? "",
+            ...base, key: `v:${v.id}`, variantId: v.id, variantActive: v.is_active !== false, value, sku: v.sku ?? "", barcode: v.barcode ?? "",
             stock: Number(v.stock ?? 0),
             search: norm([p.title, value, v.sku, v.barcode, base.brandName, base.categoryName].filter(Boolean).join(" ")),
           };
@@ -193,7 +241,7 @@ export default function PricesPage() {
         }
       } else {
         const r: Row = {
-          ...base, key: `p:${p.id}`, variantId: null, value: "", sku: "", barcode: "", stock: 0,
+          ...base, key: `p:${p.id}`, variantId: null, variantActive: true, value: "", sku: "", barcode: "", stock: 0,
           search: norm([p.title, base.brandName, base.categoryName].filter(Boolean).join(" ")),
         };
         out.push(r);
@@ -235,7 +283,9 @@ export default function PricesPage() {
       if (fCat !== "all" && r.categoryId !== fCat) return false;
       if (fBrand !== "all" && r.brandId !== fBrand) return false;
       if (fMissing && current(r, fMissing) != null) return false;
-      if (fMkt) {
+      if (fMkt === "site:listed" && !siteOpen(r)) return false;
+      if (fMkt === "site:closed" && siteOpen(r)) return false;
+      if (fMkt && !fMkt.startsWith("site:")) {
         const [ch, kind] = fMkt.split(":") as [MktChannel, string];
         const s = r.variantId ? mkt[r.variantId]?.[ch] : undefined;
         if (!s) return false;
@@ -255,7 +305,8 @@ export default function PricesPage() {
       const last = [...activeLists].reverse().find((l) => l.channel === ch);
       if (last) (out[last.code] ||= []).push(ch); else tail.push(ch);
     }
-    return { out, tail };
+    const siteLast = [...activeLists].reverse().find((l) => l.channel === "site")?.code ?? null;
+    return { out, tail, siteLast };
   }, [activeLists, MKT_CHANNELS]);
 
   // Değişiklikler (kayıtlıdan farklı taslaklar)
@@ -308,7 +359,7 @@ export default function PricesPage() {
     siteAlert({ message: `${n} satırda “${listByCode.get(bTarget)?.name ?? bTarget}” güncellendi (henüz kaydedilmedi).`, tone: "success" });
   }
 
-  // ── Pazaryerine fiyat gönder (Trendyol satış+PSF, Hepsiburada satış) ──
+  // ── Pazaryerine fiyat gönder (Trendyol satış+PSF, Hepsiburada satış, Amazon satış) ──
   async function pushToMarketplaces(variantIds: string[]) {
     const ids = [...new Set(variantIds.filter(Boolean))];
     if (!ids.length) { siteAlert({ message: "Gönderilecek (varyantlı) ürün yok.", tone: "danger" }); return; }
@@ -322,7 +373,7 @@ export default function PricesPage() {
     if (!r.ok) { siteAlert({ title: "Pazaryerine gönderilemedi", message: j.error || "Hata", tone: "danger" }); return; }
     const parts: string[] = [];
     for (const rep of j.reports || []) {
-      const name = rep.channel === "trendyol" ? "Trendyol" : "Hepsiburada";
+      const name = CHANNEL_LABEL[rep.channel] ?? rep.channel;
       const q = j.queued?.[rep.channel] ?? 0;
       if (rep.skipped === "disabled") parts.push(`${name}: senkron kapalı (${q} fiyat sırada bekliyor)`);
       else if (rep.skipped === "no_credentials") parts.push(`${name}: bağlantı bilgisi eksik`);
@@ -362,7 +413,7 @@ export default function PricesPage() {
       const payload = changes.map((c) => ({ product_id: c.row.productId, variant_id: c.row.variantId, list_code: c.code, amount: c.amount }));
       const { data, error } = await (supabase as any).rpc("apply_price_changes", { p_changes: payload, p_source: "price_page" });
       if (error) throw new Error(error.message.includes("SITE_PRICE_REQUIRED") ? "Site satış fiyatı boş veya 0 olamaz." : error.message);
-      const touched = changes.filter((c) => c.code.startsWith("trendyol_") || c.code.startsWith("hepsiburada_")).map((c) => c.row.variantId!).filter(Boolean);
+      const touched = changes.filter((c) => /^(trendyol|hepsiburada|amazon)_/.test(c.code)).map((c) => c.row.variantId!).filter(Boolean);
       await load();
       if (push) {
         if (touched.length) await pushToMarketplaces(touched);
@@ -436,7 +487,9 @@ export default function PricesPage() {
               {activeLists.map((l) => <option key={l.code} value={l.code}>Fiyatı boş: {l.name}</option>)}
             </select>
             <select value={fMkt} onChange={(e) => setFMkt(e.target.value)} className={sel}>
-              <option value="">Pazaryeri: tümü</option>
+              <option value="">Satış kanalı: tümü</option>
+              <option value="site:listed">Site: satışta</option>
+              <option value="site:closed">Site: kapalı</option>
               {MKT_CHANNELS.flatMap((ch) => [
                 <option key={ch + "l"} value={`${ch}:listed`}>{CHANNEL_LABEL[ch]}: satışta</option>,
                 <option key={ch + "c"} value={`${ch}:closed`}>{CHANNEL_LABEL[ch]}: kapalı</option>,
@@ -452,17 +505,17 @@ export default function PricesPage() {
             <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setBulkOpen(true)}><Wand2 size={14} /> Toplu işlem ({filtered.length})</Button>
             <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setListsOpen(true)}><ListPlus size={14} /> Listeler</Button>
             <Button size="sm" variant="outline" className="gap-1.5" onClick={exportExcel}><FileDown size={14} /> Excel</Button>
-            <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setMktOpen(true)} title="Filtrelenmiş satırları Trendyol / Hepsiburada'da satışa kapat ya da aç">
-              <Store size={14} /> Pazaryeri satışı
+            <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setMktOpen(true)} title="Filtrelenmiş satırları sitede ya da pazaryerlerinde satışa kapat / aç">
+              <Store size={14} /> Kanal satışı
             </Button>
             <Button size="sm" variant="outline" className="gap-1.5" onClick={syncListingsNow} disabled={!!mktBusy}
               title={`Pazaryerlerindeki ilan listesini şimdi çek. Son: Trendyol ${mktSynced.trendyol ? new Date(mktSynced.trendyol).toLocaleString("tr-TR") : "—"} · Hepsiburada ${mktSynced.hepsiburada ? new Date(mktSynced.hepsiburada).toLocaleString("tr-TR") : "—"}`}>
               {mktBusy === "sync" ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} İlanları eşitle
             </Button>
-            <Button size="sm" variant="outline" className="gap-1.5" disabled={dirtyCount > 0} title={dirtyCount ? "Önce değişiklikleri kaydet" : "Filtrelenmiş satırların kayıtlı Trendyol / Hepsiburada fiyatlarını yeniden gönder"}
+            <Button size="sm" variant="outline" className="gap-1.5" disabled={dirtyCount > 0} title={dirtyCount ? "Önce değişiklikleri kaydet" : "Filtrelenmiş satırların kayıtlı Trendyol / Hepsiburada / Amazon fiyatlarını yeniden gönder"}
               onClick={async () => {
                 const ids = filtered.map((r) => r.variantId).filter(Boolean) as string[];
-                if (await siteConfirm({ title: "Fiyatlar pazaryerlerine gönderilsin mi?", message: `Filtrelenmiş ${ids.length} satırın kayıtlı Trendyol ve Hepsiburada fiyatları gönderilecek (o kanalda fiyatı boş olanlar atlanır).`, confirmText: "Gönder" })) {
+                if (await siteConfirm({ title: "Fiyatlar pazaryerlerine gönderilsin mi?", message: `Filtrelenmiş ${ids.length} satırın kayıtlı Trendyol, Hepsiburada ve Amazon fiyatları gönderilecek (o kanalda fiyatı boş olanlar atlanır).`, confirmText: "Gönder" })) {
                   await pushToMarketplaces(ids);
                 }
               }}>
@@ -478,7 +531,7 @@ export default function PricesPage() {
               <Button size="sm" variant="outline" className="gap-1.5" onClick={() => save(false)} disabled={!dirtyCount || saving}>
                 {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Kaydet
               </Button>
-              <Button size="sm" className="gap-1.5" onClick={() => save(true)} disabled={!dirtyCount || saving} title="Kaydet + değişen Trendyol / Hepsiburada fiyatlarını pazaryerlerine gönder">
+              <Button size="sm" className="gap-1.5" onClick={() => save(true)} disabled={!dirtyCount || saving} title="Kaydet + değişen Trendyol / Hepsiburada / Amazon fiyatlarını pazaryerlerine gönder">
                 {saving ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} Kaydet ve pazaryerlerine gönder
               </Button>
             </div>
@@ -498,6 +551,7 @@ export default function PricesPage() {
                     <th key={l.code} className="px-2 py-2 font-bold text-right whitespace-nowrap">
                       {l.name}<span className="block text-[9px] font-semibold text-slate-400 normal-case">{CHANNEL_LABEL[l.channel] ?? l.channel} · {l.kind === "list" ? "PSF" : "satış"} · {l.currency}</span>
                     </th>,
+                    ...(mktAfter.siteLast === l.code ? [<SiteTh key="sh" />] : []),
                     ...(mktAfter.out[l.code] || []).map((ch) => <MktTh key={"mh" + ch} ch={ch} synced={!!mktSynced[ch]} />),
                   ])}
                   {mktAfter.tail.map((ch) => <MktTh key={"mh" + ch} ch={ch} synced={!!mktSynced[ch]} />)}
@@ -522,6 +576,7 @@ export default function PricesPage() {
                         <MktTd key={"md" + ch} ch={ch} s={r.variantId ? mkt[r.variantId]?.[ch] : undefined}
                           onToggle={(closed) => setClosed([{ channel: ch, variant_id: r.variantId!, closed }])} />
                       ));
+                      const siteCell = mktAfter.siteLast === l.code ? [<SiteTd key="sd" r={r} onToggle={(open) => toggleSiteRow(r, open)} />] : [];
                       return [
                         <td key={l.code} className="px-1 py-0.5">
                           <input
@@ -535,6 +590,7 @@ export default function PricesPage() {
                             )}
                           />
                         </td>,
+                        ...siteCell,
                         ...mktCells,
                       ];
                     })}
@@ -555,6 +611,7 @@ export default function PricesPage() {
           <p className="text-[11px] text-muted-foreground">
             Site satış fiyatı boş ya da 0 olamaz; fiyatı olmayan ürün yayına alınamaz. Diğer listelerde hücreyi boşaltırsan o listedeki fiyat silinir.
             Pazaryeri sütunu: “ilanda değil” → o kanala stok/fiyat gönderilmez · “Kapalı” işaretli → o kanala stok 0 gider (anında, kaydet gerekmez).
+            Site sütunu: “Kapalı” → o numara sitede satılmaz (sepet / ödeme anında; ürün sayfası ~5 dk içinde yenilenir). Kanallar birbirinden bağımsızdır.
           </p>
         </>
       )}
@@ -618,11 +675,33 @@ export default function PricesPage() {
 
       {/* Pazaryeri satışı — filtrelenmiş satırlarda toplu kapat / aç */}
       {mktOpen && (
-        <Modal title={`Pazaryeri satışı — ${filtered.length} satır`} onClose={() => setMktOpen(false)}>
+        <Modal title={`Kanal satışı — ${filtered.length} satır`} onClose={() => setMktOpen(false)}>
           <div className="space-y-3 text-sm">
             <p className="text-xs text-muted-foreground">
-              Yalnız o kanalda <b>ilanda olan</b> satırlara uygulanır. Kapatınca o kanala stok 0 gider; açınca gerçek stok gider. Anında uygulanır.
+              Her kanal ayrı: bir kanalda kapatmak diğerlerini etkilemez. Pazaryerinde yalnız <b>ilanda olan</b> satırlara uygulanır
+              (kapatınca o kanala stok 0, açınca gerçek stok gider). Anında uygulanır.
             </p>
+            {(() => {
+              const closedProducts = new Set(filtered.filter((r) => r.variantId && !r.productActive).map((r) => r.productId)).size;
+              return (
+                <div className="flex flex-wrap items-center gap-2 rounded-lg border p-2.5">
+                  <b className="w-28">Site</b>
+                  <span className="text-xs text-muted-foreground flex-1">{filtered.filter(siteOpen).length} / {filtered.length} satır satışta</span>
+                  <Button size="sm" variant="outline" disabled={!filtered.length || !!mktBusy} onClick={async () => {
+                    if (!(await siteConfirm({ title: `Sitede ${filtered.length} satır kapatılsın mı?`, message: "Bu numaralar sitede satılmaz. Pazaryerlerinde satış sürer.", confirmText: "Kapat", tone: "danger" }))) return;
+                    setMktBusy("site"); await setSite(filtered, false); setMktBusy(null); setMktOpen(false);
+                  }}>Satışa kapat</Button>
+                  <Button size="sm" variant="outline" disabled={!filtered.length || !!mktBusy} onClick={async () => {
+                    const withProducts = closedProducts > 0 && await siteConfirm({
+                      title: `${closedProducts} ürün sitede tümüyle kapalı`,
+                      message: "Bu ürünler ürün sayfasında Aktif değil. Onlar da açılsın mı? (Hayır: yalnız numaralar açılır, ürün kapalı kalır.)",
+                      confirmText: "Ürünleri de aç", cancelText: "Hayır",
+                    });
+                    setMktBusy("site"); await setSite(filtered, true, withProducts); setMktBusy(null); setMktOpen(false);
+                  }}>Satışa aç</Button>
+                </div>
+              );
+            })()}
             {MKT_CHANNELS.map((ch) => {
               const ids = filtered.map((r) => r.variantId).filter((v): v is string => !!v && !!mkt[v]?.[ch]?.listed);
               return (
@@ -716,7 +795,7 @@ function ListsManager({ lists, onClose, onChanged }: { lists: PriceList[]; onClo
           <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Liste adı (ör. Amazon DE Satış)" className="h-9" />
           <div className="grid grid-cols-3 gap-2">
             <select value={channel} onChange={(e) => setChannel(e.target.value)} className="h-9 rounded-lg border px-2 text-xs">
-              <option value="other">Diğer</option><option value="site">Site</option><option value="trendyol">Trendyol</option><option value="hepsiburada">Hepsiburada</option>
+              <option value="other">Diğer</option><option value="site">Site</option><option value="trendyol">Trendyol</option><option value="hepsiburada">Hepsiburada</option><option value="amazon">Amazon</option>
             </select>
             <select value={kind} onChange={(e) => setKind(e.target.value as any)} className="h-9 rounded-lg border px-2 text-xs">
               <option value="sale">Satış</option><option value="list">PSF</option>
@@ -828,6 +907,33 @@ function PriceHistory({ lists, onReverted }: { lists: PriceList[]; onReverted: (
       </div>
       <p className="text-[11px] text-muted-foreground">Son 500 değişiklik. “Bu kaydı geri al”, aynı anda kaydedilen tüm değişiklikleri eski değerine döndürür.</p>
     </div>
+  );
+}
+
+// ─── Site satış durumu sütunu ────────────────────────────────────────────────
+const siteOpen = (r: Row) => r.productActive && r.variantActive;
+
+function SiteTh() {
+  return (
+    <th className="px-2 py-2 font-bold text-center whitespace-nowrap" title="Sitede satışta mı? (ürün sayfasındaki Aktif kutularıyla aynı)">
+      Site satış
+      <span className="block text-[9px] font-semibold text-slate-400 normal-case">numara / ürün</span>
+    </th>
+  );
+}
+
+function SiteTd({ r, onToggle }: { r: Row; onToggle: (open: boolean) => void }) {
+  const open = siteOpen(r);
+  const productClosed = !r.productActive && !!r.variantId;
+  return (
+    <td className="px-2 py-0.5 text-center">
+      <label className={cn("inline-flex items-center gap-1 text-[10px] font-semibold cursor-pointer rounded px-1.5 py-0.5 whitespace-nowrap",
+        open ? "text-emerald-700" : "bg-red-50 text-red-700")}
+        title={open ? "Sitede satışta" : productClosed ? "Ürünün tamamı sitede kapalı (ürün sayfasında Aktif değil)" : "Bu numara sitede kapalı"}>
+        <input type="checkbox" checked={!open} onChange={(e) => onToggle(!e.target.checked)} />
+        {open ? "Satışta" : productClosed ? "Ürün kapalı" : "Kapalı"}
+      </label>
+    </td>
   );
 }
 

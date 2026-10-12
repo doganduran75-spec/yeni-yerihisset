@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// Pazaryeri FİYAT kuyruğu işleyicisi (Trendyol: satış + PSF, Hepsiburada: satış).
+// Pazaryeri FİYAT kuyruğu işleyicisi (Trendyol: satış + PSF, Hepsiburada: satış, Amazon: satış).
 // Kuyruğa yalnız Fiyatlar sayfasından "Kaydet ve pazaryerlerine gönder" / "filtrelenmişi gönder"
 // ile girer (enqueue_marketplace_prices). Stok işleyicisiyle aynı desen: kilitle → gönder →
 // sonucu doğrula → Senkron Geçmişi'ne (kind=price) yaz. Kanal kapalıysa satırlar bekler.
@@ -7,16 +7,27 @@
 import { createAdminClient } from "@/lib/supabase-admin";
 import { getTrendyolConfig, hasCredentials, updatePrices, getBatchResult, TrendyolError } from "@/lib/marketplace/trendyol";
 import { getHepsiburadaConfig, hbHasCredentials, hbUpdatePrices, hbGetUploadResult, HepsiburadaError } from "@/lib/marketplace/hepsiburada";
-// Fiyat gönderimi yalnız Trendyol + Hepsiburada (Amazon fiyatı: sonraki aşama)
-type Channel = "trendyol" | "hepsiburada";
+import { getAmazonConfig, amzHasCredentials, amzUpdatePrices, AmazonError, type AmazonStockResult } from "@/lib/marketplace/amazon";
+type Channel = "trendyol" | "hepsiburada" | "amazon";
+const CHANNELS: Channel[] = ["trendyol", "hepsiburada", "amazon"];
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 export type PriceReport = { channel: Channel; skipped?: "disabled" | "no_credentials"; sent: number; confirmed: number; failed: number; errors: string[] };
 
 type Claimed = { id: string; variant_id: string; product_id: string | null; listing_key: string; sending_sale: number; sending_list: number | null };
 type SentRow = { id: string; variant_id: string; product_id: string | null; listing_key: string; sale_price: number; batch_pos: number | null; sent_at: string };
+/** Yükleme id'si (sonuç sonra sorulur) ya da eşzamanlı sonuç (Amazon: anahtar → sonuç) */
+type Sent = string | { batchId: string; results: Map<string, AmazonStockResult> };
+type Adapter = {
+  maxBatch: number;
+  maxInFlight: number;
+  load(sb: AdminClient): Promise<{ enabled: boolean; ready: boolean; cfg: any }>;
+  send(cfg: any, rows: Claimed[]): Promise<Sent>;
+  result(cfg: any, batchId: string, rows: SentRow[]): Promise<{ done: boolean; failures: Map<string, string> }>;
+  isFatal(e: unknown): boolean;
+};
 
-const ADAPTERS = {
+const ADAPTERS: Record<Channel, Adapter> = {
   trendyol: {
     maxBatch: 1000,
     maxInFlight: 20,
@@ -58,7 +69,39 @@ const ADAPTERS = {
     },
     isFatal: (e: unknown) => e instanceof HepsiburadaError && [0, 401, 403, 429].includes(e.status),
   },
-} as const;
+  amazon: {
+    maxBatch: 50,        // SKU başına istek, saniyede ~4 (stokla aynı sınır)
+    maxInFlight: 1000,   // eşzamanlı sonuç → bekleyen yükleme olmaz
+    async load(sb: AdminClient) { const c = await getAmazonConfig(sb); return { enabled: c.enabled, ready: amzHasCredentials(c), cfg: c as any }; },
+    async send(cfg: any, rows: Claimed[]) {
+      const results = await amzUpdatePrices(cfg, rows.map((r) => ({ key: r.listing_key, price: Number(r.sending_sale) })));
+      return { batchId: `az-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, results };
+    },
+    // Sonuç gönderimde kesinleşir; buraya yalnız yarıda kalmış (çöken işleyici) satırlar düşer
+    async result() { return { done: true, failures: new Map<string, string>() }; },
+    isFatal: (e: unknown) => e instanceof AmazonError && [0, 401, 403, 429].includes(e.status),
+  },
+};
+
+/** Eşzamanlı sonuç (Amazon): kabul → ok, red → failed (istek sınırına takılanlar önceden sıraya döner) */
+async function settleImmediate(sb: any, channel: Channel, batchId: string, rows: Claimed[], results: Map<string, AmazonStockResult>, rep: PriceReport) {
+  const now = new Date().toISOString();
+  const okRows = rows.filter((r) => results.get(r.listing_key)?.ok);
+  const badRows = rows.filter((r) => !results.get(r.listing_key)?.ok);
+  if (okRows.length) {
+    await sb.from("marketplace_price_sync").update({ status: "ok", confirmed_at: now, error: null })
+      .in("id", okRows.map((r) => r.id)).eq("status", "sent").eq("batch_request_id", batchId);
+  }
+  for (const r of badRows) {
+    await sb.from("marketplace_price_sync").update({ status: "failed", error: results.get(r.listing_key)?.reason, updated_at: now })
+      .eq("id", r.id).eq("status", "sent").eq("batch_request_id", batchId);
+  }
+  const asLog = (r: Claimed) => ({ ...r, sale_price: r.sending_sale });
+  await log(sb, channel, okRows.map(asLog), true, () => null, batchId);
+  await log(sb, channel, badRows.map(asLog), false, (r) => results.get(r.listing_key)?.reason || null, batchId);
+  rep.confirmed += okRows.length;
+  rep.failed += badRows.length;
+}
 
 async function log(sb: any, channel: Channel, rows: any[], ok: boolean, reason: (r: any) => string | null, batchId: string | null) {
   if (!rows.length) return;
@@ -86,9 +129,18 @@ export async function processPriceChannel(channel: Channel, supabase: AdminClien
     if (!list.length) break;
     const ids = list.map((r) => r.id);
     try {
-      const batchId = await a.send(cfg, list);
-      await sb.rpc("mark_marketplace_price_sent", { p_ids: ids, p_batch: batchId, p_pos: list.map((_, i) => i + 1) });
-      rep.sent += list.length;
+      const sent = await a.send(cfg, list);
+      const batchId = typeof sent === "string" ? sent : sent.batchId;
+      let done = list;
+      if (typeof sent !== "string") {
+        // İstek sınırına takılan / sonucu gelmeyenler tekrar sıraya (durum hâlâ "sending")
+        const retry = list.filter((r) => { const x = sent.results.get(r.listing_key); return !x || (!x.ok && x.retry); });
+        if (retry.length) await sb.rpc("mark_marketplace_price_retry", { p_ids: retry.map((r) => r.id), p_error: sent.results.get(retry[0].listing_key)?.reason || "Tekrar denenecek" });
+        done = list.filter((r) => !retry.includes(r));
+      }
+      if (done.length) await sb.rpc("mark_marketplace_price_sent", { p_ids: done.map((r) => r.id), p_batch: batchId, p_pos: done.map((_, i) => i + 1) });
+      rep.sent += done.length;
+      if (typeof sent !== "string") await settleImmediate(sb, channel, batchId, done, sent.results, rep);
     } catch (e: any) {
       const msg = e?.message || String(e);
       await sb.rpc("mark_marketplace_price_retry", { p_ids: ids, p_error: msg });
@@ -140,7 +192,7 @@ export async function processPriceChannel(channel: Channel, supabase: AdminClien
 
 export async function processMarketplacePrices(supabase: AdminClient = createAdminClient()): Promise<PriceReport[]> {
   const out: PriceReport[] = [];
-  for (const c of ["trendyol", "hepsiburada"] as Channel[]) {
+  for (const c of CHANNELS) {
     try { out.push(await processPriceChannel(c, supabase)); }
     catch (e: any) { out.push({ channel: c, sent: 0, confirmed: 0, failed: 0, errors: [e?.message || String(e)] }); }
   }
@@ -151,7 +203,7 @@ export async function processMarketplacePrices(supabase: AdminClient = createAdm
 export async function pushPrices(variantIds: string[], supabase: AdminClient = createAdminClient()) {
   const sb = supabase as any;
   const queued: Record<string, number> = {};
-  for (const c of ["trendyol", "hepsiburada"] as Channel[]) {
+  for (const c of CHANNELS) {
     const { data, error } = await sb.rpc("enqueue_marketplace_prices", { p_channel: c, p_variant_ids: variantIds });
     if (error) throw new Error(error.message);
     queued[c] = Number(data ?? 0);

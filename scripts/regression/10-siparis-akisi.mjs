@@ -5,7 +5,8 @@
 // Fırsat/iş ortaklığı ayrıcalığı, kampanya e-postası izni, stok bildirimi, silme, süresi dolan sipariş.
 //
 // Test verisi: kategori "regresyon-test", pasif ürünler "REGRESYON-TEST …" (mağazada görünmez,
-// SKU/barkod yok → pazaryerine gitmez), kuponlar "RGT…", üyeler "rgt-…@yerihisset.test"
+// SKU/barkod yok → pazaryerine gitmez; kapalı ürünün numarası satılmadığı için test ürünü yalnız
+// sipariş isteği süresince açılır), kuponlar "RGT…", üyeler "rgt-…@yerihisset.test"
 // (bu adreslere e-posta asla gitmez, yöneticiye "yeni sipariş" bildirimi düşmez).
 // Başta önceki çalıştırmadan kalan, sonda bu çalıştırmanın verisi silinir.
 import { randomBytes, createHmac } from "node:crypto";
@@ -15,7 +16,15 @@ const DOMAIN = "yerihisset.test";
 export default {
   name: "Sipariş akışı",
   async run(t) {
-    const { sql, one, num, lit, add, part, api, rest, auth, sleep } = t;
+    const { sql, one, num, lit, add, part, api: rawApi, rest, auth, sleep } = t;
+    // Sitede kapalı ürünün numarası sipariş edilemez (order-pricing). Test ürünü mağazada görünmesin diye
+    // pasif; yalnız sipariş isteği süresince açılır.
+    const api = async (path, opts) => {
+      if (path !== "/api/orders/create" || !F.prod) return rawApi(path, opts);
+      sql(`UPDATE public.products SET is_active = true WHERE id = ${lit(F.prod)}`);
+      try { return await rawApi(path, opts); }
+      finally { sql(`UPDATE public.products SET is_active = false WHERE id = ${lit(F.prod)}`); }
+    };
     const RUN = Date.now().toString(36);
     const ok = (cond, name, detail) => add(cond ? "ok" : "fail", name, cond ? "" : detail);
     const eq = (a, b) => Math.abs(Number(a) - Number(b)) < 0.01;
@@ -762,6 +771,47 @@ export default {
         ok(!tasks.some((id) => apiCh.some((c) => c.id === id)), "Entegrasyonu açık kanala manuel görev açılmıyor", `entegre: ${apiCh.map((c) => c.name).join(", ") || "yok"}`);
         ok(manCh.every((c) => tasks.includes(c.id)), "Entegrasyonu olmayan aktif kanala görev açılıyor", `manuel: ${manCh.map((c) => c.name).join(", ") || "yok"} · açılan ${tasks.length}`);
         ok(stock() === s0, "Test stoğu geri alındı", `stok ${stock()} (beklenen ${s0})`);
+      });
+
+      await part("Satış kanalları bağımsız: sitede / Trendyol'da kapat-aç, Amazon fiyatı", async () => {
+        const buf = num("SELECT coalesce(trendyol_stock_buffer, 0) FROM public.settings ORDER BY id LIMIT 1");
+        const sendQty = () => num(`SELECT public.marketplace_send_qty('trendyol', ${lit(F.var)}, 30)`);
+        const expect = Math.min(Math.max(0, 30 - buf), 20000);
+        const vActive = () => one(`SELECT is_active FROM public.product_variants WHERE id = ${lit(F.var)}`);
+        // Sitede kapat (Fiyatlar › Site satış ile aynı istek) → sitede satılmaz, Trendyol'a gerçek stok gider
+        const off = await rest(`product_variants?id=eq.${F.var}`, { token: F.admin.token, method: "PATCH", body: { is_active: false } });
+        ok(off.status < 300 && vActive() === "f", "Yönetici numarayı sitede kapatabiliyor", `HTTP ${off.status}`);
+        const n0 = memberOrders();
+        const r1 = await order([MAIN(1)]);
+        ok(r1.status === 400 && memberOrders() === n0, "Sitede kapalı numara sipariş edilemiyor", why(r1));
+        ok(sendQty() === expect, "Sitede kapalı numara Trendyol'a gerçek stokla gidiyor", `gönderilecek ${sendQty()} (beklenen ${expect})`);
+        const mu = await rest(`product_variants?id=eq.${F.var}`, { token: F.member.token, method: "PATCH", body: { is_active: true } });
+        ok(vActive() === "f", "Üye numarayı sitede açamıyor", `HTTP ${mu.status}`);
+        sql(`UPDATE public.product_variants SET is_active = true WHERE id = ${lit(F.var)}`);
+        // Trendyol'da kapat → Trendyol'a 0 gider, sitede satış sürer
+        const closeTy = (closed) => rest("rpc/set_marketplace_closed", { token: F.admin.token, method: "POST", body: { p_items: [{ channel: "trendyol", variant_id: F.var, closed }] } });
+        const c1 = await closeTy(true);
+        ok(c1.status < 300 && sendQty() === 0, "Trendyol'da kapatınca Trendyol'a stok 0 gidiyor", `HTTP ${c1.status}, gönderilecek ${sendQty()}`);
+        const r2 = await order([MAIN(1)]);
+        ok(!!r2.json?.orderId, "Trendyol'da kapalıyken sitede satış sürüyor", why(r2));
+        const c2 = await closeTy(false);
+        ok(c2.status < 300 && sendQty() === expect, "Trendyol'da açınca gerçek stok gidiyor", `HTTP ${c2.status}, gönderilecek ${sendQty()}`);
+        // Ürünün tamamı sitede kapalı (test ürünü zaten pasif) → açık numarası da eski sepetten satılmaz
+        const n1 = memberOrders();
+        const r3 = await rawApi("/api/orders/create", { token: F.member.token, body: { items: [MAIN(1)], shippingAddressId: F.addr, billingSameAsShipping: true, paymentMethod: "bank_transfer" } });
+        ok(r3.status === 400 && memberOrders() === n1, "Sitede kapalı ürünün numarası sipariş edilemiyor (eski sepet)", why(r3));
+        // Amazon fiyatı kuyruğa giriyor (geri alınan işlem: gerçek kuyruğa / pazaryerine bir şey gitmez)
+        const key = `RGT-AZ-${RUN}`.toUpperCase();
+        const az = one(`BEGIN;
+          UPDATE public.product_variants SET sku = ${lit(key)} WHERE id = ${lit(F.var)};
+          INSERT INTO public.marketplace_listings (channel, listing_key) VALUES ('amazon', ${lit(key)}) ON CONFLICT DO NOTHING;
+          INSERT INTO public.item_prices (product_id, variant_id, price_list_id, amount)
+            SELECT ${lit(F.prod)}, ${lit(F.var)}, id, 1234.5 FROM public.price_lists WHERE code = 'amazon_sale';
+          SELECT public.enqueue_marketplace_prices('amazon', ARRAY[${lit(F.var)}]::uuid[]) || '|' ||
+            coalesce((SELECT sale_price::text FROM public.marketplace_price_sync WHERE channel = 'amazon' AND variant_id = ${lit(F.var)}), '-');
+          ROLLBACK;`) || "";
+        const [qn, price] = az.split("|");
+        ok(qn === "1" && Number(price) === 1234.5, "Amazon satış fiyatı pazaryeri kuyruğuna giriyor", `kuyruk ${qn ?? "?"}, fiyat ${price ?? "?"}`);
       });
 
       await part("Sipariş silme ve süresi dolan sipariş", async () => {

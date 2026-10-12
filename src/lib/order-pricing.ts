@@ -148,7 +148,9 @@ export async function validateCartPricing(
 
     if (it.variant_id) {
       const v = variantMap.get(it.variant_id);
-      if (!v || !v.is_active) {
+      // Ürün sitede kapalıysa (ürünün Aktif'i) açık numarası da satılmaz — eski sepetten gelse bile
+      const vp = productMap.get(it.product_id);
+      if (!v || !v.is_active || !vp || !vp.is_active) {
         return { ok: false, error: `"${it.title}" artık mevcut değil.` };
       }
       // Varyantın gerçekten bu ürüne ait olduğunu doğrula
