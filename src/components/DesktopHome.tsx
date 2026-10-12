@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { formatPriceDisplay, getMinPrice } from "@/lib/product-price";
 import { track } from "@/lib/track";
-import { homeContent as HC } from "@/config/homeContent";
+import { useHomeContent } from "@/lib/home-content-context";
 
 // DESIGN.md ("YeriHisset Grounded Wellness") temelli MASAÜSTÜ ana sayfa.
 // page.tsx'te hidden md:block ile yalnız masaüstünde gösterilir. Kendi footer'ını
@@ -45,6 +45,7 @@ export default function DesktopHome({
   onQuickAdd?: (p: any) => void;
   addedId?: string | null;
 }) {
+  const HC = useHomeContent(); // Ayarlar › Ana Sayfa (varsayılan: src/config/homeContent.ts)
   const popular = (products || []).slice(0, HC.products.limitDesktop);
 
   return (
@@ -209,6 +210,7 @@ function ProductCard({ p, onQuickAdd, added }: { p: any; onQuickAdd?: (p: any) =
 }
 
 function DesktopFooter() {
+  const HC = useHomeContent();
   const bot = useBotTrap();
   const [email, setEmail] = useState("");
   const [state, setState] = useState<"idle" | "loading" | "ok" | "err">("idle");

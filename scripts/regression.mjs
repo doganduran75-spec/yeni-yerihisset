@@ -156,6 +156,7 @@ async function main() {
     ["20261025 iptal e-postası şablonu", "SELECT NOT EXISTS(SELECT 1 FROM public.email_templates WHERE trigger='order_cancelled' AND body_html LIKE '%Ödeme yapıldıysa%')"],
     ["20261026 şifresiz hesaplar", "SELECT to_regprocedure('public.mark_account_passwordless(uuid)') IS NOT NULL"],
     ["20261028 üyelik durumu (misafir/doğrulanmamış/üye)", "SELECT to_regprocedure('public.member_account_state(uuid)') IS NOT NULL AND NOT EXISTS(SELECT 1 FROM pg_trigger WHERE tgname='on_profile_created_assign_role')"],
+    ["20261112 ana sayfa metinleri panelden", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='settings' AND column_name='home_content')"],
     ["20261111 ürün adında stok kodu yok (ayrı alan: model_code)", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='products' AND column_name='model_code') AND NOT EXISTS(SELECT 1 FROM public.products WHERE is_active AND title ~ '\\s[A-Z]{2,}[A-Z0-9]*[0-9]{2}\\s*$')"],
     ["20261110 düzenlenebilir sayfalar + şirket künyesi", "SELECT to_regclass('public.static_pages') IS NOT NULL AND EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='settings' AND column_name='company_title')"],
     ["20261109 çerez onayı (mod ayarı, onay defteri, kimliksiz sayaç)", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='settings' AND column_name='cookie_consent_strict') AND to_regclass('public.consent_log') IS NOT NULL AND to_regclass('public.analytics_anon_daily') IS NOT NULL AND EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='analytics_sessions' AND column_name='consent')"],
@@ -215,6 +216,13 @@ async function main() {
   }
   const nf = await get("/bu-sayfa-kesinlikle-yok-123");
   nf.status === 404 ? add("ok", "Olmayan sayfa → 404") : add("warn", "Olmayan sayfa", `HTTP ${nf.status} (404 beklenirdi)`);
+  // Ana sayfa metinleri panelden (Ayarlar › Ana Sayfa): kayıtlı "rehber kartı" başlığı (yoksa varsayılan) sayfada görünmeli
+  {
+    const q = one("SELECT coalesce(home_content->'cards'->'learn'->>'title', '') FROM public.settings ORDER BY id LIMIT 1") || "Barefoot Rehberini Keşfet";
+    const h = await get("/");
+    const esc = (t) => t.replace(/&/g, "&amp;").replace(/'/g, "&#x27;").replace(/"/g, "&quot;");
+    h.text.includes(q) || h.text.includes(esc(q)) ? add("ok", "Ana sayfa metinleri panelden okunuyor") : add("fail", "Ana sayfa metni panelle uyuşmuyor", `"${q}" sayfada yok`);
+  }
   if (prod) {
     const m = await get("/magaza");
     m.text.includes(`/products/${prod[0]}`) ? add("ok", "Mağazada ürün listeleniyor") : add("fail", "Mağazada ürün yok", `${prod[1]} görünmüyor`);

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { GraduationCap, ShoppingBag, ArrowRight, ChevronRight, BadgeCheck, Truck, Footprints, CreditCard } from "lucide-react";
 import { formatPriceDisplay, getMinPrice } from "@/lib/product-price";
 import { track } from "@/lib/track";
-import { homeContent as HC } from "@/config/homeContent";
+import { useHomeContent } from "@/lib/home-content-context";
 import MobileIntro from "@/components/MobileIntro";
 
 // DESIGN.md ("YeriHisset Grounded Wellness") temelli mobil ana sayfa.
@@ -33,6 +33,7 @@ const JAK = "var(--font-jakarta), 'Plus Jakarta Sans', system-ui, sans-serif";
 const TRUST_ICON = { foot: Footprints, leaf: BadgeCheck, truck: Truck, card: CreditCard } as const;
 
 export default function MobileHome({ products }: { products: any[] }) {
+  const HC = useHomeContent(); // Ayarlar › Ana Sayfa (varsayılan: src/config/homeContent.ts)
   const popular = (products || []).slice(0, HC.products.limitMobile);
   const chips = HC.trust.slice(0, HC.trustMobileCount);
 

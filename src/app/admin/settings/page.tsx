@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/lib/supabase";
-import { Loader2, Save, Store, Globe, Mail, Server, BarChart3, Eye, EyeOff, ShoppingCart, Copy, Check, Layers, ShieldCheck, Tag, Bookmark, FolderSearch, Tags, Megaphone, Truck, CreditCard, Landmark, MessageSquare, Plug, Cookie, FileText } from "lucide-react";
+import { Loader2, Save, Store, Globe, Mail, Server, BarChart3, Eye, EyeOff, ShoppingCart, Copy, Check, Layers, ShieldCheck, Tag, Bookmark, FolderSearch, Tags, Megaphone, Truck, CreditCard, Landmark, MessageSquare, Plug, Cookie, FileText, Home } from "lucide-react";
 import VariantsTab from "@/components/admin/settings/VariantsTab";
 import RolesTab from "@/components/admin/settings/RolesTab";
 import BrandsTab from "@/components/admin/settings/BrandsTab";
@@ -21,10 +21,11 @@ import ShippingMethodsManager from "@/components/admin/ShippingMethodsManager";
 import IntroVideoUpload from "@/components/admin/settings/IntroVideoUpload";
 import CookieConsentTab from "@/components/admin/settings/CookieConsentTab";
 import StaticPagesTab from "@/components/admin/settings/StaticPagesTab";
+import HomeContentTab from "@/components/admin/settings/HomeContentTab";
 import TestMailButton from "@/components/admin/TestMailButton";
 import { siteAlert } from "@/components/ui/site-dialog";
 
-type SettingsTab = "general" | "variants" | "roles" | "brands" | "categories" | "kb-categories" | "member-tags" | "popup" | "email-templates" | "integrations" | "cookies" | "pages";
+type SettingsTab = "general" | "variants" | "roles" | "brands" | "categories" | "kb-categories" | "member-tags" | "popup" | "email-templates" | "integrations" | "cookies" | "pages" | "home";
 
 type Settings = {
   id: string;
@@ -131,9 +132,11 @@ function SettingsPageInner() {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [loadError, setLoadError] = useState<string | null>(null);
 
+  // Genel sekmesine her dönüşte tazele: başka sekmede (Künye: adres / telefon / e-posta) değişen değer eskisiyle ezilmesin
   useEffect(() => {
-    fetchSettings();
-  }, []);
+    if (loading || activeTab === "general") fetchSettings(); // ilk açılışta her sekmede bir kez (sayfa yükleniyor ekranı kalksın)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
 
   async function authHeaders(): Promise<Record<string, string>> {
     const { data: { session } } = await supabase.auth.getSession();
@@ -174,7 +177,8 @@ function SettingsPageInner() {
         method: "POST",
         headers: { "Content-Type": "application/json", ...(await authHeaders()) },
         // Entegrasyon alanları (Trendyol/Hepsiburada/Kargonomi) Entegrasyonlar sekmesinde kaydedilir → burada gönderme
-        body: JSON.stringify({ settings: Object.fromEntries(Object.entries(settings).filter(([k]) => !/^(trendyol_|hepsiburada_|amazon_|kargonomi_)/.test(k))) }),
+        // Ana Sayfa / Çerez Onayı / Künye sekmelerinin alanları da burada gönderilmez (o sekmelerde kaydedilir; eski değer üstüne yazılmasın)
+        body: JSON.stringify({ settings: Object.fromEntries(Object.entries(settings).filter(([k]) => !/^(trendyol_|hepsiburada_|amazon_|kargonomi_|company_|home_content$|cookie_consent_strict$)/.test(k))) }),
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok || !d.ok) throw new Error(d.error || "Ayarlar kaydedilemedi.");
@@ -200,6 +204,7 @@ function SettingsPageInner() {
     { id: "general",       label: "Genel Ayarlar",           icon: <Store size={16} /> },
     { id: "integrations",  label: "Entegrasyonlar",          icon: <Plug size={16} /> },
     { id: "email-templates", label: "E-posta Şablonları",    icon: <Mail size={16} /> },
+    { id: "home",          label: "Ana Sayfa",               icon: <Home size={16} /> },
     { id: "pages",         label: "Sayfalar & Künye",        icon: <FileText size={16} /> },
     { id: "cookies",       label: "Çerez Onayı",             icon: <Cookie size={16} /> },
     { id: "popup",         label: "Popup",                   icon: <Megaphone size={16} /> },
@@ -241,6 +246,7 @@ function SettingsPageInner() {
       {activeTab === "popup"          && <PopupTab />}
       {activeTab === "cookies"        && <CookieConsentTab />}
       {activeTab === "pages"          && <StaticPagesTab />}
+      {activeTab === "home"           && <HomeContentTab />}
       {activeTab === "member-tags"   && <MemberTagsTab />}
       {activeTab === "brands"        && <BrandsTab />}
       {activeTab === "categories"    && <CategoriesTab />}

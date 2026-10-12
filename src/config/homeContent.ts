@@ -12,12 +12,9 @@
 
 export const homeContent = {
   // ── Karşılama / segmentasyon ──────────────────────────────────────────────
+  // (Eski karşılama başlığı / soru / alt yazılar tasarım değişikliğinde kalktı — yalnız bu bağlantı kullanılıyor.
+  //  Panel: Ayarlar › Ana Sayfa; burada OLMAYAN alan panelde de çıkmaz.)
   hero: {
-    badge: "Yerin Hissini Keşfedin — Doğal Adımlara Hoş Geldiniz", // masaüstü pill rozet
-    question: "Bugün YeriHisset'e hangi adımla geldin?",
-    subtitleDesktop: "Sana en doğru deneyimi sunabilmemiz için ihtiyacını seç, yolculuğunu birlikte başlatalım.",
-    subtitleMobile: "Sana en uygun deneyimi seçerek başlayalım",
-    promptMobile: "Neden buradasın?",
     continueLink: "Veya doğrudan ana sayfaya devam et",
   },
 

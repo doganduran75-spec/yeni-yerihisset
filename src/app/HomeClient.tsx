@@ -7,11 +7,13 @@ import { fetchItemStock } from "@/lib/live-stock";
 import Navbar from "@/components/Navbar";
 import MobileHome from "@/components/MobileHome";
 import DesktopHome from "@/components/DesktopHome";
+import { HomeContentProvider } from "@/lib/home-content-context";
+import type { HomeContent } from "@/config/homeContent";
 
 // Ana sayfanın etkileşimli (client) kısmı. Ürünler SUNUCUDAN prop olarak gelir
 // (ISR ile önbelleklenir) — böylece ilk boyamada ürünler hazır, tarayıcı ayrıca
 // Supabase'e sorgu atmaz, SEO için ürünler HTML'de olur.
-export default function HomeClient({ initialProducts }: { initialProducts: any[] }) {
+export default function HomeClient({ initialProducts, content }: { initialProducts: any[]; content?: HomeContent }) {
   const products = initialProducts || [];
   const [addedId, setAddedId] = useState<string | null>(null); // sepete ekleme animasyonu
   const [stockMsg, setStockMsg] = useState<string | null>(null);
@@ -56,13 +58,15 @@ export default function HomeClient({ initialProducts }: { initialProducts: any[]
       {/* Tek, SEO-odaklı H1 (görünmez) — hero başlıkları h2; sayfada tek h1 kalır */}
       <h1 className="sr-only">YeriHisset — Doğal Barefoot Ayakkabılar: Geniş Burun, Sıfır Topuk Farkı</h1>
 
-      {/* Mobil: app-benzeri ana sayfa */}
-      <MobileHome products={products} />
+      <HomeContentProvider value={content}>
+        {/* Mobil: app-benzeri ana sayfa */}
+        <MobileHome products={products} />
 
-      {/* Masaüstü: DESIGN.md ana sayfa (kendi footer'ıyla) */}
-      <div className="hidden md:block">
-        <DesktopHome products={products} loading={false} onQuickAdd={handleQuickAdd} addedId={addedId} />
-      </div>
+        {/* Masaüstü: DESIGN.md ana sayfa (kendi footer'ıyla) */}
+        <div className="hidden md:block">
+          <DesktopHome products={products} loading={false} onQuickAdd={handleQuickAdd} addedId={addedId} />
+        </div>
+      </HomeContentProvider>
 
       {stockMsg && (
         <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 w-[92%] max-w-md p-4 bg-white border-2 border-red-200 rounded-2xl shadow-2xl text-sm font-bold text-red-700 text-center">
