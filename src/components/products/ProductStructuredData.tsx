@@ -18,6 +18,7 @@ interface ProductStructuredDataProps {
     images: string[] | null;
     image_url: string | null;
     has_variants: boolean | null;
+    model_code?: string | null;
     brands: { name: string } | null;
     categories: { name: string; slug?: string | null } | null;
     product_variants?: Array<{
@@ -85,6 +86,7 @@ export default function ProductStructuredData({
     name: product.title,
     description: product.description ?? `${product.title} - ${storeName}'de satışta.`,
     url: productUrl,
+    ...(product.model_code ? { mpn: product.model_code, sku: product.model_code } : {}),
     ...(images.length > 0 ? { image: images } : {}),
     ...(product.brands?.name ? { brand: { "@type": "Brand", name: product.brands.name } } : {}),
     offers: offers.length === 1 ? offers[0] : offers,

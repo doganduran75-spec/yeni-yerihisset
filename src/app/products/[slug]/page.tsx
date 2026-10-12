@@ -33,7 +33,7 @@ async function getProduct(slug: string) {
     .from("products")
     .select(`
       id, title, description, short_description, slug, price, stock, images, image_url, has_variants,
-      category_id, brand_id,
+      category_id, brand_id, model_code,
       brands (name, slug),
       categories (name, slug),
       product_variants (

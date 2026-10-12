@@ -59,6 +59,7 @@ type Product = {
   title: string;
   description: string | null;
   short_description: string | null;
+  model_code?: string | null;
   slug: string;
   price: number;
   stock: number;
@@ -442,6 +443,7 @@ export default function ProductPageClient({ product, initialSize = null, initial
               <h1 className="text-4xl md:text-5xl font-black text-slate-900 leading-tight">
                 {product.title}
               </h1>
+              {product.model_code && <p className="text-xs text-slate-400 -mt-2">Ürün kodu: {product.model_code}</p>}
               <div className="flex items-baseline gap-4">
                 <span className="text-3xl font-black text-olive-600">
                   ₺{currentPrice.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}

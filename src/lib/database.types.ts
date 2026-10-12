@@ -1664,6 +1664,7 @@ export type Database = {
           images: string[] | null
           in_production: number
           is_active: boolean
+          model_code: string | null
           price: number
           saya_option_id: string | null
           short_description: string | null
@@ -1685,6 +1686,7 @@ export type Database = {
           images?: string[] | null
           in_production?: number
           is_active?: boolean
+          model_code?: string | null
           price?: number
           saya_option_id?: string | null
           short_description?: string | null
@@ -1706,6 +1708,7 @@ export type Database = {
           images?: string[] | null
           in_production?: number
           is_active?: boolean
+          model_code?: string | null
           price?: number
           saya_option_id?: string | null
           short_description?: string | null
