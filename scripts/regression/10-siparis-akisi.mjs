@@ -339,11 +339,17 @@ export default {
         const item = row(`SELECT id FROM public.order_items WHERE order_id = ${lit(O.ret)}`);
         const s0 = stock();
         const total = Number(ord(O.ret).total_amount);
+        // Faturası kesilmiş + kapalı sipariş (ör. eski siteden "tamamlandı" aktarılmış) → iade işlenince yeniden açılır,
+        // "İade faturasını da kestim" işaretliyse iade faturası kaydedilir
+        await patch({ invoice_status: "invoiced" });
+        sql(`UPDATE public.orders SET is_closed = true, closed_at = now() WHERE id = ${lit(O.ret)}`);
         const rr = await api("/api/admin/orders/action", {
           token: F.admin.token,
-          body: { action: "return", orderId: O.ret, items: [{ item_id: item?.id, qty: 1, restock: true }], note: "regresyon", refund: { amount: 1000, method: "bank_transfer" }, confirmed: true },
+          body: { action: "return", orderId: O.ret, items: [{ item_id: item?.id, qty: 1, restock: true }], note: "regresyon", refund: { amount: 1000, method: "bank_transfer" }, confirmed: true, return_invoiced: true },
         });
         const o = ord(O.ret);
+        ok(o.invoice_status === "return_invoiced", "\"İade faturasını da kestim\" → fatura: iade faturası kesildi", `fatura ${o.invoice_status}`);
+        ok(one(`SELECT is_closed FROM public.orders WHERE id = ${lit(O.ret)}`) === "f", "Kapalı siparişe iade işlenince sipariş yeniden açılıyor (panoda görünür)", "is_closed hâlâ true");
         ok(rr.status === 200 && o.shipment_status === "returned", "İade al → kargo durumu 'İade geldi'", `${why(rr)} → ${o.shipment_status}`);
         ok(stock() === s0 + 1, "İade gelen sağlam ürün stoğa eklendi", `stok ${s0} → ${stock()}`);
         const wantPay = total > 1000 ? "partial_refund" : "refunded";

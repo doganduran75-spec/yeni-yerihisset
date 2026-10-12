@@ -54,7 +54,11 @@ export function orderNextStep(o: OrderLike): NextStep {
   const r = coreNextStep(o);
   // Eski siteden (WooCommerce) aktarılan siparişler: kargolanmışsa ya da 30 günden eskiyse geçmiş kayıttır →
   // bekleyen işlere düşmez (aktarım geçiş döneminde gelen, yeni ve henüz kargolanmamış olanlar düşer).
-  if (o.import_source && (SHIPPED.includes(o.shipment_status || "waiting") || daysSince(o.created_at) > 30)) return { ...r, needsAction: false };
+  // İstisna: aktarılan siparişte yeni sistemde iade / para iadesi / açık talep işleniyorsa iş sürüyor demektir
+  // (ör. iade geldi → iade faturası kesilecek) → bekleyen işlerde kalır.
+  const live = o.shipment_status === "returned" || Number(o.refunded_amount || 0) > 0 || !!o.open_case
+    || !!o.order_items?.some((i) => Number(i.returned_qty || 0) > 0);
+  if (o.import_source && !live && (SHIPPED.includes(o.shipment_status || "waiting") || daysSince(o.created_at) > 30)) return { ...r, needsAction: false };
   return r;
 }
 
@@ -132,7 +136,14 @@ function coreNextStep(o: OrderLike): NextStep {
     if (inv === "invoiced" && (pay === "refunded" || pay === "partial_refund")) acts.push({ key: "return_invoice", label: "İade faturası kesildi", kind: "primary" });
     if (inv === "pending" && !allReturned) acts.push(invoiceAction);
     const due = acts.some((a) => a.key === "refund" || a.key === "return_invoice");
-    return { stage: allReturned ? "İade geldi" : "Kısmi iade geldi", hint: due ? "İade gelen ürünün ücretini iade et." : undefined, actions: acts, needsAction: due };
+    const refundDue = acts.some((a) => a.key === "refund");
+    // İadenin son adımı: faturası kesilmiş siparişte para iade edildiyse iade faturası kesilir
+    const onlyInvoice = !refundDue && acts.some((a) => a.key === "return_invoice");
+    return {
+      stage: onlyInvoice ? "İade faturası kesilecek" : allReturned ? "İade geldi" : "Kısmi iade geldi",
+      hint: refundDue ? "İade gelen ürünün ücretini iade et." : onlyInvoice ? "Ücret iade edildi; faturası kesilmiş siparişin iade faturasını kes, sonra “İade faturası kesildi”." : undefined,
+      actions: acts, needsAction: due,
+    };
   }
 
   if (ship === "shipped" || ship === "undelivered") {

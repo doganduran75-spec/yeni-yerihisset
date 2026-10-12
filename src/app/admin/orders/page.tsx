@@ -2365,6 +2365,9 @@ function OrderActionDialog({ mode, order, onClose, onDone }: {
   const [ret, setRet] = useState<Record<string, { on: boolean; qty: number; restock: boolean }>>(() =>
     Object.fromEntries(items.filter((i) => i.left > 0).map((i) => [i.id, { on: true, qty: i.left, restock: true }])));
   const [withRefund, setWithRefund] = useState(paidNow);
+  // Faturası kesilmiş siparişte para iade ediliyorsa iade faturası da kesilmeli (iadenin son adımı; kesilmezse bekleyen işlerde kalır)
+  const invoiced = order.invoice_status === "invoiced";
+  const [returnInvoiced, setReturnInvoiced] = useState(false);
   const retSum = Math.min(remaining, Math.round(items.reduce((a, i) => a + (ret[i.id]?.on ? Number(i.unit_price) * (ret[i.id]?.qty || 0) : 0), 0) * 100) / 100);
   const [retAmount, setRetAmount] = useState<string | null>(null);
 
@@ -2394,6 +2397,7 @@ function OrderActionDialog({ mode, order, onClose, onDone }: {
         if (!body.items.length) throw new Error("İade gelen ürünü seç.");
         if (withRefund && paidNow) body.refund = { amount: Number(String(retAmount ?? retSum).replace(",", ".")), method, note: note.trim() || undefined };
       }
+      if (invoiced && returnInvoiced && (mode === "refund" || (mode === "return" && withRefund && paidNow))) body.return_invoiced = true;
       const { data: { session } } = await supabase.auth.getSession();
       const r = await fetch("/api/admin/orders/action", {
         method: "POST",
@@ -2520,6 +2524,13 @@ function OrderActionDialog({ mode, order, onClose, onDone }: {
                 </div>
               )}
             </>
+          )}
+
+          {invoiced && (mode === "refund" || (mode === "return" && withRefund && paidNow)) && (
+            <label className="flex items-start gap-2 rounded-lg border p-2.5 text-xs">
+              <input type="checkbox" checked={returnInvoiced} onChange={(e) => setReturnInvoiced(e.target.checked)} className="mt-0.5" />
+              <span><b>İade faturasını da kestim</b> — sipariş faturalandığı için iade faturası gerekir. İşaretlemezsen “İade faturası kesilecek” olarak bekleyen işlerde kalır.</span>
+            </label>
           )}
 
           <label className="block space-y-1">

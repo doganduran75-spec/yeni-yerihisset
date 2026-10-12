@@ -121,6 +121,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Geçersiz işlem" }, { status: 400 });
   }
 
+  // "İade faturasını da kestim" (İade al / Ücret iadesi penceresi): faturası kesilmiş siparişte iade faturası işaretlenir
+  if (body.return_invoiced === true && (action === "return" || action === "refund")) {
+    await sb.from("orders").update({ invoice_status: "return_invoiced" }).eq("id", orderId).eq("invoice_status", "invoiced");
+  }
+  // Kapalı (ör. eski siteden "tamamlandı" aktarılmış) siparişe iade / para iadesi işlendiyse iş yeniden açılır →
+  // panodaki "Bekleyen işlerim"de görünür (iade faturası adımı)
+  if (action === "return" || action === "refund") {
+    await sb.from("orders").update({ is_closed: false, closed_at: null } as any).eq("id", orderId).eq("is_closed", true);
+  }
+
   const { data: fresh } = await sb.from("orders")
     .select("id, status, payment_status, shipment_status, invoice_status, refunded_amount, refund_status, refund_method")
     .eq("id", orderId).maybeSingle();
