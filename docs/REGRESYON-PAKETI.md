@@ -76,6 +76,7 @@ bildirimi düşmez). Tek iz: sipariş numaraları birkaç numara atlar.
 | Düzenlenebilir sayfalar | Yönetici kaydeder; taslak dışarıya/üyeye kapalı; üye yayına alamaz; yayındaki herkese açık. Duman: hukuki sayfalar + Hakkımızda'da yer tutucu doldurulmamış kalmıyor, sayfa metinleri dışarıdan değiştirilemiyor |
 | Çerez onayı | Mod okunuyor; izinli ziyaret IP ile kaydediliyor; Reddet → IP siliniyor, seçim "red", onay defterinde; izinsiz ziyaret kimliksiz sayılıyor; onay defteri ve sayaç dışarıya kapalı |
 | Pazaryeri stok görevi | Stok 0'a düşünce entegrasyonu açık kanala görev açılmaz, entegrasyonu olmayan aktif kanala açılır |
+| Kategori sayfa metni | Yönetici tanıtım + SSS kaydeder, üye değiştiremez, sayfada ve FAQPage yapısal verisinde görünür. Duman: ana rehber, mağaza H1, eski yazı yönlendirmesi, beslemede renk / yaş grubu |
 | Kampanya e-postası kuralı | İzinsiz üyeye kuyruktaki kampanya gitmiyor (skipped); bülten aboneliği izin; abonelikten çık bağlantısı (kişi) çalışıyor. Duman: Google Analytics onaysız yüklenmiyor; profillerde TC kimlik yok |
 | Stok bildirimi | Bot kaydı reddedilir; misafir kaydı + Kişiler; çift kayıt olmaz; üye kaydı; üye "stok geldi" gönderemez; gönderilemeyen bildirim "bekliyor" kalır |
 | Silme ve süre dolumu | "Siparişi sil" (stok geri, kupon sayısı düzelir); 24 saat ödenmeyen havale siparişi iptal olur, stok geri |

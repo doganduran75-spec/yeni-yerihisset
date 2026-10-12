@@ -1,3 +1,4 @@
+import { ListIntro, ListFaq, introDescription } from "@/components/ListPageContent";
 import { createClient } from "@supabase/supabase-js";
 import { getFreeShippingOver, qualifiesFreeShipping } from "@/lib/free-shipping-rule";
 import { notFound } from "next/navigation";
@@ -25,10 +26,10 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
   const sb = getSupabase();
-  const { data: brand } = await sb.from("brands").select("name").eq("slug", slug).single();
+  const { data: brand } = await sb.from("brands").select("name, intro").eq("slug", slug).single();
   return {
-    title: brand?.name ?? "Marka",
-    description: `${brand?.name ?? "Marka"} markasına ait tüm ürünler`,
+    title: brand?.name ? `${brand.name} Barefoot Ayakkabı` : "Marka",
+    description: introDescription(brand?.intro, `${brand?.name ?? "Marka"} barefoot ayakkabı modelleri, fiyatları ve stok durumu — YeriHisset.`),
     alternates: { canonical: `${process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com"}/marka/${slug}` },
   };
 }
@@ -44,7 +45,7 @@ export default async function MarkaPage({
 
   const { data: brand } = await sb
     .from("brands")
-    .select("id, name, slug, logo_url")
+    .select("id, name, slug, logo_url, intro, faq")
     .eq("slug", slug)
     .single();
 
@@ -86,6 +87,7 @@ export default async function MarkaPage({
                 {brand.name}
               </h1>
               <p className="text-slate-400 mt-1 text-sm">{list.length} ürün</p>
+              <ListIntro intro={brand.intro} />
             </div>
           </div>
 
@@ -168,6 +170,9 @@ export default async function MarkaPage({
               })}
             </div>
           )}
+
+          {/* Sık sorulan sorular (Ayarlar › Markalar › Sayfa metni) */}
+          <ListFaq faq={brand.faq} />
         </div>
       </main>
       <Footer />

@@ -376,6 +376,8 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          intro: string | null
+          faq: Json | null
           logo_url: string | null
           name: string
           slug: string
@@ -384,6 +386,8 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
+          intro?: string | null
+          faq?: Json | null
           logo_url?: string | null
           name: string
           slug: string
@@ -392,6 +396,8 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
+          intro?: string | null
+          faq?: Json | null
           logo_url?: string | null
           name?: string
           slug?: string
@@ -403,6 +409,8 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          intro: string | null
+          faq: Json | null
           name: string
           slug: string
           updated_at: string
@@ -410,6 +418,8 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
+          intro?: string | null
+          faq?: Json | null
           name: string
           slug: string
           updated_at?: string
@@ -417,6 +427,8 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
+          intro?: string | null
+          faq?: Json | null
           name?: string
           slug?: string
           updated_at?: string

@@ -14,6 +14,7 @@
  */
 
 import { NextRequest } from "next/server";
+import { feedAttrs } from "@/config/product-specs";
 import { createAdminClient } from "@/lib/supabase-admin";
 
 // XML özel karakterleri kaçır
@@ -112,6 +113,16 @@ export async function GET(request: NextRequest) {
     const brandName = esc((product.brands as any)?.name || defaultBrand);
     const categoryName = esc((product.categories as any)?.name || "");
     const description = esc(plain(product.description) || plain(product.short_description) || product.title);
+    // Renk / cinsiyet / yaş grubu / malzeme / öne çıkanlar / teknik detay (src/config/product-specs.ts)
+    const fa = feedAttrs((product.brands as any)?.name, product.title);
+    const extra = [
+      fa.color ? `<g:color>${esc(fa.color)}</g:color>` : "",
+      fa.gender ? `<g:gender>${fa.gender}</g:gender>` : "",
+      fa.ageGroup ? `<g:age_group>${fa.ageGroup}</g:age_group>` : "",
+      fa.material ? `<g:material>${esc(fa.material)}</g:material>` : "",
+      ...fa.highlights.map((h) => `<g:product_highlight>${esc(h.slice(0, 150))}</g:product_highlight>`),
+      ...fa.details.map(([k, v]) => `<g:product_detail><g:section_name>Teknik bilgiler</g:section_name><g:attribute_name>${esc(k)}</g:attribute_name><g:attribute_value>${esc(v)}</g:attribute_value></g:product_detail>`),
+    ].filter(Boolean).join("\n      ");
 
     const activeVariants = ((product.product_variants as any[]) ?? []).filter(
       (v: any) => v.is_active
@@ -149,6 +160,8 @@ export async function GET(request: NextRequest) {
       ${variant.sku ? `<g:mpn>${esc(variant.sku)}</g:mpn>` : ""}
       ${!code && !variant.sku ? "<g:identifier_exists>no</g:identifier_exists>" : ""}
       ${tag && variantValue ? `<g:${tag}>${variantValue}</g:${tag}>` : ""}
+      ${tag === "size" && fa.sizeSystem ? `<g:size_system>${fa.sizeSystem}</g:size_system>` : ""}
+      ${extra}
     </item>`);
       }
     } else {
@@ -172,6 +185,7 @@ export async function GET(request: NextRequest) {
       ${categoryName ? `<g:custom_label_0>${categoryName}</g:custom_label_0>` : ""}
       ${defaultCategory ? `<g:google_product_category>${esc(defaultCategory)}</g:google_product_category>` : ""}
       <g:identifier_exists>no</g:identifier_exists>
+      ${extra}
     </item>`);
     }
   }

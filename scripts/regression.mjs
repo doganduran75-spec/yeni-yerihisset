@@ -156,6 +156,7 @@ async function main() {
     ["20261025 iptal e-postası şablonu", "SELECT NOT EXISTS(SELECT 1 FROM public.email_templates WHERE trigger='order_cancelled' AND body_html LIKE '%Ödeme yapıldıysa%')"],
     ["20261026 şifresiz hesaplar", "SELECT to_regprocedure('public.mark_account_passwordless(uuid)') IS NOT NULL"],
     ["20261028 üyelik durumu (misafir/doğrulanmamış/üye)", "SELECT to_regprocedure('public.member_account_state(uuid)') IS NOT NULL AND NOT EXISTS(SELECT 1 FROM pg_trigger WHERE tgname='on_profile_created_assign_role')"],
+    ["20261114 kategori / marka sayfa metni (tanıtım + SSS)", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='categories' AND column_name='faq') AND EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='brands' AND column_name='intro')"],
     ["20261113 kişi kampanya izni + TC kimlik saklanmıyor", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='contacts' AND column_name='marketing_consent') AND NOT EXISTS(SELECT 1 FROM public.profiles WHERE identity_number IS NOT NULL)"],
     ["20261112 ana sayfa metinleri panelden", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='settings' AND column_name='home_content')"],
     ["20261111 ürün adında stok kodu yok (ayrı alan: model_code)", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='products' AND column_name='model_code') AND NOT EXISTS(SELECT 1 FROM public.products WHERE is_active AND title ~ '\\s[A-Z]{2,}[A-Z0-9]*[0-9]{2}\\s*$')"],
@@ -193,7 +194,7 @@ async function main() {
     ...(cat ? [[`/kategori/${cat}`, "Kategori"]] : []), ...(brand ? [[`/marka/${brand}`, "Marka"]] : []),
     ["/ara?q=barefoot", "Arama"], ["/firsatlar", "Fırsatlar"], ["/bilgi-bankasi", "Bilgi bankası"],
     ...(kb ? [[`/bilgi-bankasi/${kb}`, "Bilgi bankası makalesi"]] : []),
-    ["/barefoot-nedir", "Barefoot nedir"], ["/sepet", "Sepet"], ["/checkout", "Ödeme"], ["/siparis-tamam", "Sipariş sonucu"],
+    ["/barefoot-nedir", "Barefoot nedir (ana rehber)", "Zero drop"], ["/magaza", "Mağaza başlığı (H1)", "Barefoot Ayakkabı Mağazası"], ["/sepet", "Sepet"], ["/checkout", "Ödeme"], ["/siparis-tamam", "Sipariş sonucu"],
     ["/login", "Giriş"], ["/account", "Hesabım"], ["/sifre-belirle", "Şifre belirle"], ["/kampanya-izni", "Kampanya izni"], ["/deneme-sonucu", "Satış sonrası (oldu mu?)"], ["/iletisim", "İletişim", "Kromozom"], ["/hakkimizda", "Hakkımızda", "Kromozom"],
     ["/iade-degisim", "İade-değişim", "gün evde deneyin"], ["/mesafeli-satis", "Mesafeli satış + ön bilgilendirme", "on-bilgilendirme"], ["/kvkk", "KVKK", "Kromozom"], ["/gizlilik", "Gizlilik"],
     ["/cerez-politikasi", "Çerez politikası (tercih değiştirme)", "Çerez tercihlerini değiştir"], ["/admin", "Admin (kabuk)"], ["/admin/system", "Admin sistem (kabuk)"], ["/sitemap.xml", "Site haritası"], ["/robots.txt", "robots.txt"],
@@ -288,6 +289,16 @@ async function main() {
     }
     const home = await get("/");
     /"@type":"OnlineStore"/.test(home.text) && home.text.includes("/ara?q=") ? add("ok", "Mağaza kimliği yapısal verisi (OnlineStore + arama)") : add("fail", "Mağaza kimliği yapısal verisi eksik");
+    // Aynı soruyu cevaplayan eski yazı ana rehbere kalıcı yönlendiriliyor (next.config)
+    const rd = await get("/bilgi-bankasi/barefoot-ayakkabi-nedir");
+    [301, 308].includes(rd.status) ? add("ok", "Eski \"barefoot nedir\" yazısı ana rehbere yönleniyor") : add("fail", "Eski yazı yönlenmiyor", `HTTP ${rd.status}`);
+    // Ürün beslemesi: renk / yaş grubu (Merchant Center yapay zekâ alışverişi) — Dodura varsa
+    if (one("SELECT EXISTS(SELECT 1 FROM public.products p JOIN public.brands b ON b.id = p.brand_id WHERE p.is_active AND lower(b.name) = 'dodura')") === "t") {
+      const S = SETTINGS();
+      const fd = await get(`/feed/google-merchant${S.gmc_feed_secret ? `?secret=${encodeURIComponent(S.gmc_feed_secret)}` : ""}`);
+      fd.text.includes("<g:age_group>adult</g:age_group>") && fd.text.includes("<g:color>") && fd.text.includes("<g:product_highlight>")
+        ? add("ok", "Beslemede renk / yaş grubu / öne çıkanlar var") : add("fail", "Beslemede ürün özellikleri eksik", `HTTP ${fd.status}`);
+    }
     const sm = await get("/sitemap.xml");
     const hasKb = one("SELECT EXISTS(SELECT 1 FROM public.kb_articles)") === "t";
     sm.text.includes("/kategori/") && (!hasKb || sm.text.includes("/bilgi-bankasi/")) && sm.text.includes("/barefoot-nedir")

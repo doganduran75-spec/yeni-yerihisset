@@ -86,6 +86,11 @@ const nextConfig: NextConfig = {
       // Mağaza /magaza'ya taşındı (eski WordPress'in Google'da dizinli adresi de /magaza/).
       // Yalnız liste sayfası; ürün detayları /products/<slug> olarak kalır.
       { source: "/products", destination: "/magaza", permanent: true },
+      // "Barefoot nedir?" tek ana rehberde (Ayarlar › Sayfalar › barefoot-nedir): aynı soruyu cevaplayan eski yazı ve
+      // eski WordPress adresleri buraya (birbirleriyle yarışmasınlar — docs/SEO-GEO-ANALIZ.md aşama 2)
+      { source: "/bilgi-bankasi/barefoot-ayakkabi-nedir", destination: "/barefoot-nedir", permanent: true },
+      { source: "/barefoot-ayakkabi-nedir", destination: "/barefoot-nedir", permanent: true },
+      { source: "/neden-barefoot", destination: "/barefoot-nedir", permanent: true },
     ];
   },
 

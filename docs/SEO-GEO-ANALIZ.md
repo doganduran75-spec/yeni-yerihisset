@@ -336,3 +336,11 @@ bağlantısı, yazar + son güncelleme tarihi, görsel alt metinleri (rehber gö
 - `/magaza`'da H1 yok → "Barefoot Ayakkabı Mağazası" başlığı + 2 cümle giriş.
 - Ürün sayfasındaki 3 boş alt metin: gizli ön yükleme görselleri — doğru, değişiklik gerekmez.
 - Ana sayfa (379 kelime, H1 iyi) — varlık tanımı paragrafı eklenebilir (5.4).
+
+### Aşama 2 — yapılanlar (2026-10-12)
+- Ürün adlarından stok kodu ayrıldı (`model_code`, sayfada "Ürün kodu", yapısal veride mpn).
+- Dodura "Teknik bilgiler" tablosu + numara → ayak uzunluğu + `additionalProperty` (src/config/product-specs.ts).
+- Besleme: renk, cinsiyet, yaş grubu, malzeme, beden sistemi, ürün öne çıkanları, teknik detay.
+- `/magaza` H1 + giriş; `/barefoot-nedir` kapsamlı ana rehber (kaynaklı, SSS'li; Ayarlar › Sayfalar'dan düzenlenir), eski yazı ve eski WP adresleri 301.
+- Kategori / marka: tanıtım + SSS alanları (Ayarlar › Kategoriler / Markalar › Sayfa metni) + FAQPage yapısal verisi; başlık ve meta açıklama "Barefoot …".
+- **Kalan (içerik — sende):** kategori/marka tanıtım metinleri ve SSS'leri girmek; renk paragrafları; diğer rehber yazılarının genişletilmesi (C bölümü).

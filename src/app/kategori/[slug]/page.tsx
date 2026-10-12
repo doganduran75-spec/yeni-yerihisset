@@ -1,3 +1,4 @@
+import { ListIntro, ListFaq, introDescription } from "@/components/ListPageContent";
 import { createClient } from "@supabase/supabase-js";
 import { getFreeShippingOver } from "@/lib/free-shipping-rule";
 import { notFound } from "next/navigation";
@@ -24,10 +25,10 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
   const sb = getSupabase();
-  const { data: cat } = await sb.from("categories").select("name").eq("slug", slug).single();
+  const { data: cat } = await sb.from("categories").select("name, intro").eq("slug", slug).single();
   return {
-    title: cat?.name ?? "Kategori",
-    description: `${cat?.name ?? "Kategori"} kategorisindeki tüm ürünler`,
+    title: cat?.name ? `Barefoot ${cat.name}` : "Kategori",
+    description: introDescription(cat?.intro, `Barefoot ${(cat?.name ?? "").toLocaleLowerCase("tr-TR")} modelleri: geniş burun, sıfır topuk farkı, esnek taban. Numaranı seç, stoktakileri gör.`),
     alternates: { canonical: `${process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com"}/kategori/${slug}` },
   };
 }
@@ -43,7 +44,7 @@ export default async function KategoriPage({
 
   const { data: category } = await sb
     .from("categories")
-    .select("id, name, slug")
+    .select("id, name, slug, intro, faq")
     .eq("slug", slug)
     .single();
 
@@ -80,10 +81,14 @@ export default async function KategoriPage({
               {category.name}
             </h1>
             <p className="text-slate-400 mt-1 text-sm">{list.length} ürün</p>
+            <ListIntro intro={category.intro} />
           </div>
 
           {/* Ürün grid + numara filtresi */}
           <SizeFilterGrid products={list} categoryName={category.name} freeOver={freeOver} />
+
+          {/* Sık sorulan sorular (Ayarlar › Kategoriler › Sayfa metni) */}
+          <ListFaq faq={category.faq} />
         </div>
       </main>
       <Footer />

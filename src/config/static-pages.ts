@@ -3,7 +3,7 @@
 // bu metni geri yükler. Metinlerde yer tutucular kullanılır → künye bir yerden değişince her sayfada güncellenir
 // (src/lib/static-pages.ts › fillPlaceholders).
 
-export type StaticPageSlug = "kvkk" | "gizlilik" | "cerez-politikasi" | "mesafeli-satis" | "iade-degisim" | "hakkimizda";
+export type StaticPageSlug = "kvkk" | "gizlilik" | "cerez-politikasi" | "mesafeli-satis" | "iade-degisim" | "hakkimizda" | "barefoot-nedir";
 
 export const PLACEHOLDERS: { key: string; label: string }[] = [
   { key: "marka", label: "Marka adı (YeriHisset)" },
@@ -196,5 +196,49 @@ export const STATIC_PAGES: Record<StaticPageSlug, { title: string; intro: string
 </ul>
 <h2>Şirket bilgileri</h2>
 {{satici_bilgileri}}`,
+  },
+
+  "barefoot-nedir": {
+    title: "Barefoot Ayakkabı Nedir?",
+    intro: "Barefoot (yalınayak) ayakkabı; geniş burunlu, topuk ile ön ayak arasında yükseklik farkı olmayan (sıfır drop), esnek ve ince tabanlı ayakkabıdır. Ayağı korur ama sınırlamaz: ayak, çıplak yürürken olduğu gibi doğal şeklinde hareket eder.",
+    draftDefault: false,
+    body: `<h2>Kısaca</h2>
+<p>Barefoot ayakkabı, ayağın doğal şeklini ve hareketini taklit etmek için tasarlanmış minimal bir ayakkabıdır. Klasik ayakkabıdan dört farkı vardır: <b>geniş burun</b>, <b>sıfır topuk farkı</b>, <b>esnek taban</b> ve <b>ince taban</b>. Amaç, ayağı dış etkenlerden korurken parmakların yayılmasına, ayak kaslarının çalışmasına ve zeminin hissedilmesine izin vermektir.</p>
+<h2>Barefoot ayakkabının 4 özelliği</h2>
+<table><thead><tr><th>Özellik</th><th>Ne demek?</th><th>Neden önemli?</th></tr></thead><tbody>
+<tr><td><b>Geniş burun</b></td><td>Ayakkabının önü, ayağın en geniş yeri olan parmak hizasında da geniştir; sivrilmez.</td><td>Parmaklar sıkışmadan yayılır, denge için doğal tabanı oluşturur.</td></tr>
+<tr><td><b>Sıfır topuk farkı (zero drop)</b></td><td>Topuk ile ön ayak aynı yükseklikte, 0 mm fark.</td><td>Vücut ağırlığı ayağa doğal dağılır; duruş topukla öne itilmez.</td></tr>
+<tr><td><b>Esnek taban</b></td><td>Taban elle kolayca bükülür, burkulabilir.</td><td>Ayak eklemleri ve kasları her adımda çalışır.</td></tr>
+<tr><td><b>İnce taban</b></td><td>Klasik ayakkabıya göre çok daha az yastık.</td><td>Zemin hissedilir; ayak dengesini kendisi kurar.</td></tr>
+</tbody></table>
+<h2>Barefoot ayakkabının tabanı kaç mm olmalı?</h2>
+<p>Literatürde minimal (barefoot tarzı) ayakkabıların taban kalınlığı genellikle <b>3–10 mm</b> aralığında tanımlanır; topuk farkı 0 mm'dir. Daha ince taban zemini daha çok hissettirir, biraz daha kalın taban ise şehir yüzeylerinde daha konforludur. Örneğin Dodura'da ayak ile zemin arasında toplam yaklaşık 10,5 mm vardır: 5,5 mm organik kauçuk taban, 1 mm keçe, 3 mm geri dönüştürülmüş memory foam iç taban ve 1 mm gerçek deri.</p>
+<h2>Zero drop (sıfır topuk farkı) nedir?</h2>
+<p>"Drop", topuk altındaki kalınlık ile ön ayak altındaki kalınlık arasındaki farktır. Spor ve günlük ayakkabılarda bu fark çoğunlukla 8–12 mm'dir; barefoot ayakkabıda <b>0 mm</b>'dir. Yani ayakkabının içinde ayak, düz bir zemindeymiş gibi durur.</p>
+<h2>Bilim ne diyor?</h2>
+<ul>
+<li><b>Ayak kuvveti:</b> Altı ay boyunca günlük hayatta minimal ayakkabı giyen yetişkinlerde ayak kuvveti ortalama <b>%57</b> arttı (Curtis ve ark., <i>Scientific Reports</i>, 2021 — <a href="https://doi.org/10.1038/s41598-021-98070-0" target="_blank" rel="noopener">kaynak</a>).</li>
+<li><b>Ayak kasları:</b> Minimal ayakkabıyla yürümek, 8 haftada ayak kaslarının boyut ve kuvvetini ayak egzersizleri kadar artırdı (Ridge ve ark., <i>Medicine &amp; Science in Sports &amp; Exercise</i>, 2019 — <a href="https://pubmed.ncbi.nlm.nih.gov/30113521/" target="_blank" rel="noopener">kaynak</a>).</li>
+<li><b>Çocuklarda:</b> 2.300 çocuğun incelendiği bir çalışmada düz taban, ayakkabı giyen çocuklarda %8,6, giymeyenlerde %2,8 oranında görüldü; fark en çok kapalı burunlu ayakkabılarda belirgindi (Rao ve Joseph, <i>Journal of Bone and Joint Surgery</i>, 1992 — <a href="https://pubmed.ncbi.nlm.nih.gov/1624509/" target="_blank" rel="noopener">kaynak</a>). Bu bir ilişki göstergesidir; tek başına neden-sonuç kanıtı değildir.</li>
+<li><b>Çocuk ayakkabısı önerisi:</b> Çocuk ortopedisi uzmanı Lynn Staheli'nin derlemesine göre ayağın en iyi gelişimi yalınayak ortamda olur; çocuk ayakkabısı "yalınayak modeli" esas alınarak seçilmelidir (<i>Pediatrics</i>, 1991).</li>
+</ul>
+<h2>Barefoot'a nasıl geçilir?</h2>
+<p>Ayak kasları yıllarca destekli ayakkabıya alıştıysa geçişi yavaş yapın. Araştırmacıların önerisi: günde yaklaşık <b>2.500 adımla</b> başlayıp her hafta kademeli artırmak. İlk haftalarda evde ve kısa yürüyüşlerde giyin, ayak ya da baldırda yorgunluk hissederseniz bir gün ara verin. Ayak, diz veya bel ağrınız, diyabet ya da dolaşım sorununuz varsa geçişten önce hekiminize veya fizyoterapistinize danışın.</p>
+<h2>Çocuklar için barefoot</h2>
+<p>Bebekler yürümeyi öğrenirken ayaklarıyla zemini hissetmeye ihtiyaç duyar. İlk adım ayakkabısında esnek, ince ve kaymaz bir taban; parmakları sıkmayan geniş bir burun ve hafiflik aranır. Çocuk ayağı hızlı büyüdüğü için numara 2–3 ayda bir kontrol edilmelidir.</p>
+<h2>Doğru numara nasıl seçilir?</h2>
+<p>Akşam saatinde, ayakta dururken ayağınızı topuktan en uzun parmağa kadar ölçün. Barefoot ayakkabıda burun geniş olduğu için çoğu kişiye alıştığı numara olur. Ürün sayfalarında her numaranın ayak uzunluğu ve "Numaramı bul" aracı var. Olmazsa {{deneme_gunu}} gün içinde ücretsiz değişim ve iade: <a href="/iade-degisim">ayrıntılar</a>.</p>
+<h2>Sık sorulan sorular</h2>
+<h3>Barefoot ayakkabı her gün giyilir mi?</h3>
+<p>Evet; geçiş dönemini tamamladıktan sonra günlük kullanım için tasarlanmıştır. Başlangıçta süreyi kademeli artırmanız önerilir.</p>
+<h3>Barefoot ayakkabı ortopedik ayakkabı mı?</h3>
+<p>Hayır. Ortopedik ayakkabı ayağı destekleyip yönlendirir; barefoot ayakkabı ise destek eklemez, ayağın kendi kas ve eklemleriyle çalışmasına alan bırakır. Tıbbi bir sorununuz varsa hekiminizin önerisini izleyin.</p>
+<h3>Taş ve sert zeminde acıtır mı?</h3>
+<p>Taban ince ama koruyucudur; zemini hissedersiniz, keskin cisimlere karşı korunursunuz. Alışma döneminde sert ve engebeli zeminlerde daha dikkatli yürüyün.</p>
+<h3>Kışın giyilir mi?</h3>
+<p>Evet. Deri barefoot bot ve ayakkabılar kışın da giyilir; soğuk havalarda yün çorapla kullanabilirsiniz.</p>
+<h3>Hangi numarayı almalıyım?</h3>
+<p>Genellikle alıştığınız numarayı. Ayak uzunluğunuzu ölçüp ürün sayfasındaki tabloya bakın; arada kalırsanız bize yazın, birlikte seçelim ({{eposta}}).</p>
+<p>Daha fazlası için: <a href="/bilgi-bankasi">Bilgi Bankası</a> · <a href="/magaza">Barefoot ayakkabılar</a></p>`,
   },
 };

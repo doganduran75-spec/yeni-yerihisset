@@ -717,6 +717,17 @@ export default {
         ok(an.status === 200 && v >= 1, "İzinsiz ziyaret kimliksiz sayılıyor", `HTTP ${an.status} · ${v} görüntüleme`);
       });
 
+      await part("Kategori sayfa metni: tanıtım + SSS (yapısal veri)", async () => {
+        const up = await rest(`categories?id=eq.${F.cat}`, { token: F.admin.token, method: "PATCH", headers: { Prefer: "return=representation" },
+          body: { intro: "REGRESYON-TEST tanıtım metni", faq: [{ q: "REGRESYON-TEST soru?", a: "REGRESYON-TEST cevap." }] } });
+        ok(up.status < 300, "Yönetici kategori sayfa metnini kaydedebiliyor", `HTTP ${up.status}`);
+        const mu = await rest(`categories?id=eq.${F.cat}`, { token: F.member.token, method: "PATCH", body: { intro: "üye yazdı" } });
+        ok(one(`SELECT intro FROM public.categories WHERE id = ${lit(F.cat)}`) === "REGRESYON-TEST tanıtım metni", "Üye kategori metnini değiştiremiyor", `HTTP ${mu.status}`);
+        const pg = await api("/kategori/regresyon-test", { method: "GET" });
+        ok(pg.text.includes("REGRESYON-TEST tanıtım metni") && pg.text.includes("REGRESYON-TEST soru?") && pg.text.includes('"FAQPage"'),
+          "Tanıtım + SSS sayfada ve FAQPage yapısal verisinde", `HTTP ${pg.status}`);
+      });
+
       await part("Düzenlenebilir sayfalar: taslak gizli, yayında açık", async () => {
         const slug = `regresyon-sayfa-${RUN}`;
         const up = await rest("static_pages", { token: F.admin.token, method: "POST", body: { slug, title: "REGRESYON", body: "<p>x</p>", draft: true } });

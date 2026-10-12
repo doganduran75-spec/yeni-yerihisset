@@ -46,6 +46,11 @@ export default async function ProductsPage() {
       <Navbar />
       <main className="min-h-screen bg-background">
         <div className="container mx-auto px-4 py-8 max-w-7xl">
+          {/* Sayfanın tek H1'i + kısa tanım (arama motoru / yapay zekâ "bu sayfa ne?" sorusunu buradan anlar) */}
+          <header className="mb-6">
+            <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">Barefoot Ayakkabı Mağazası</h1>
+            <p className="text-sm text-slate-500 mt-1 max-w-2xl">Geniş burunlu, sıfır topuk farklı, esnek ince tabanlı barefoot ayakkabılar: yetişkinler için Dodura, ilk adımlar için Attipas. Numaranı seç, stoktakileri gör; 14 gün evde dene.</p>
+          </header>
           {/* Ürün grid + numara filtresi */}
           <SizeFilterGrid products={list} freeOver={freeOver} />
 

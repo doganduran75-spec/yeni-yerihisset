@@ -31,7 +31,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       url: `${SITE_URL}/marka/${b.slug}`, lastModified: new Date(), changeFrequency: "weekly" as const, priority: 0.7,
     })),
   ];
-  const kbUrls: MetadataRoute.Sitemap = ((kb ?? []) as any[]).filter((a) => a.slug).map((a) => ({
+  // "barefoot-ayakkabi-nedir" yazısı /barefoot-nedir ana rehberine yönlendiriliyor (next.config) → haritada yönlendirilen adres olmasın
+  const kbUrls: MetadataRoute.Sitemap = ((kb ?? []) as any[]).filter((a) => a.slug && a.slug !== "barefoot-ayakkabi-nedir").map((a) => ({
     url: `${SITE_URL}/bilgi-bankasi/${a.slug}`,
     lastModified: new Date(a.updated_at || a.created_at || Date.now()),
     changeFrequency: "monthly" as const,
@@ -69,7 +70,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.5,
     },
     // Hukuki sayfalar + Hakkımızda: Ayarlar › Sayfalar'da "Taslak" işareti kalkınca haritaya girer
-    ...((pages ?? []) as any[]).map((p) => ({ url: `${SITE_URL}/${p.slug}`, lastModified: new Date(p.updated_at), changeFrequency: "yearly" as const, priority: 0.3 })),
+    ...((pages ?? []) as any[]).filter((p) => p.slug !== "barefoot-nedir").map((p) => ({ url: `${SITE_URL}/${p.slug}`, lastModified: new Date(p.updated_at), changeFrequency: "yearly" as const, priority: 0.3 })),
   ];
 
   return [...staticPages, ...listUrls, ...productUrls, ...kbUrls];

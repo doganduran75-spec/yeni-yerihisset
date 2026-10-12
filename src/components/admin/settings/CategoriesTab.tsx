@@ -7,9 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { supabase } from "@/lib/supabase";
-import { Plus, Trash2, Loader2, Bookmark } from "lucide-react";
+import { Plus, Trash2, Loader2, Bookmark, FileText } from "lucide-react";
+import ListPageContentDialog from "./ListPageContentDialog";
 
-type Category = { id: string; name: string; slug: string; created_at: string };
+type Category = { id: string; name: string; slug: string; created_at: string; intro?: string | null; faq?: any };
 
 const toSlug = (text: string) =>
   text.toString().toLowerCase().trim()
@@ -23,6 +24,7 @@ export default function CategoriesTab() {
   const [saving, setSaving] = useState(false);
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
+  const [contentFor, setContentFor] = useState<Category | null>(null); // "Sayfa metni" (tanıtım + SSS)
 
   useEffect(() => { fetch(); }, []);
 
@@ -112,6 +114,7 @@ export default function CategoriesTab() {
                     <TableCell className="text-xs font-mono text-muted-foreground">{cat.slug}</TableCell>
                     <TableCell className="text-sm">{new Date(cat.created_at).toLocaleDateString("tr-TR")}</TableCell>
                     <TableCell className="text-right">
+                      <Button variant="outline" size="sm" className="h-8 gap-1 mr-1" onClick={() => setContentFor(cat)}><FileText size={13} /> Sayfa metni</Button>
                       <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => handleDelete(cat.id)}>
                         <Trash2 size={14} />
                       </Button>
@@ -123,6 +126,7 @@ export default function CategoriesTab() {
           )}
         </CardContent>
       </Card>
+      {contentFor && <ListPageContentDialog table="categories" row={contentFor} onClose={() => setContentFor(null)} onSaved={() => { setContentFor(null); fetch(); }} />}
     </div>
   );
 }

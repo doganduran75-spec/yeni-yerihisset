@@ -7,8 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { supabase } from "@/lib/supabase";
-import { Plus, Trash2, Loader2, Tag } from "lucide-react";
+import { Plus, Trash2, Loader2, Tag, FileText } from "lucide-react";
 import SizeChartEditor from "./SizeChartEditor";
+import ListPageContentDialog from "./ListPageContentDialog";
 
 type Brand = { id: string; name: string; slug: string; logo_url: string | null; created_at: string };
 
@@ -20,6 +21,7 @@ const toSlug = (text: string) =>
 
 export default function BrandsTab() {
   const [brands, setBrands] = useState<Brand[]>([]);
+  const [contentFor, setContentFor] = useState<any>(null); // "Sayfa metni" (tanıtım + SSS)
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [open, setOpen] = useState(false);
@@ -123,6 +125,7 @@ export default function BrandsTab() {
                     <TableCell className="text-xs font-mono text-muted-foreground">{brand.slug}</TableCell>
                     <TableCell className="text-sm">{new Date(brand.created_at).toLocaleDateString("tr-TR")}</TableCell>
                     <TableCell className="text-right">
+                      <Button variant="outline" size="sm" className="h-8 gap-1 mr-1" onClick={() => setContentFor(brand)}><FileText size={13} /> Sayfa metni</Button>
                       <SizeChartEditor brand={brand} />
                       <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => handleDelete(brand.id)}>
                         <Trash2 size={14} />
@@ -135,6 +138,7 @@ export default function BrandsTab() {
           )}
         </CardContent>
       </Card>
+      {contentFor && <ListPageContentDialog table="brands" row={contentFor} onClose={() => setContentFor(null)} onSaved={() => { setContentFor(null); fetch(); }} />}
     </div>
   );
 }
