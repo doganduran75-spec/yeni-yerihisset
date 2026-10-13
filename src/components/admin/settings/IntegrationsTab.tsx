@@ -686,7 +686,7 @@ export default function IntegrationsTab() {
             <div>
               <CardTitle className="flex items-center gap-2"><Truck size={20} className="text-blue-600" /> Kargonomi — Kargo</CardTitle>
               <CardDescription className="mt-1">
-                Siparişler ekranındaki “Kargoya Ver (Kargonomi)” için API bağlantısı. Token ve Depo ID Kargonomi panelinden alınır.
+                Siparişte “Kargoya ver (Kargonomi)”: desi gir → firma teklifleri gelir → firmayı seç → kargo kodu gelene kadar dakikada bir sorgulanır → kod gelince sipariş “Kargoda”, müşteriye takip numarası gider.
               </CardDescription>
             </div>
             <Toggle on={s.kargonomi_enabled} onChange={(v) => save("kargonomi", { kargonomi_enabled: v })} disabled={savingKey === "kargonomi"} />
@@ -694,7 +694,7 @@ export default function IntegrationsTab() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Field label="API Token (Bearer)" hint="Kargonomi Panel → Entegrasyonlar → API Anahtarları">
+            <Field label="API Token (Bearer)" hint="Panelde görünmüyor — Kargonomi destekten (destek@kargonomi.com.tr) istenir">
               <SecretInput value={s.kargonomi_api_token} onChange={(v) => set({ kargonomi_api_token: v })} placeholder="••••••••••••••••••••" />
             </Field>
             <Field label="Depo ID (Warehouse ID)" hint="Kargonomi Panel → Depolar bölümündeki depo numarası">
@@ -706,10 +706,9 @@ export default function IntegrationsTab() {
             <p className="font-semibold flex items-center gap-2"><Truck size={15} /> Kargonomi Bağlantı Adımları</p>
             <ol className="list-decimal list-inside space-y-1 text-xs text-orange-700">
               <li><a href="https://app.kargonomi.com.tr" target="_blank" rel="noopener noreferrer" className="underline font-medium">app.kargonomi.com.tr</a> adresine giriş yapın.</li>
-              <li>Sağ üst menüden <strong>Entegrasyonlar → API Anahtarları</strong> bölümüne gidin.</li>
-              <li>Yeni bir API anahtarı oluşturun ve yukarıdaki <strong>API Token</strong> alanına yapıştırın.</li>
+              <li><strong>API Token</strong>'ı Kargonomi destekten isteyin (panelde yer almıyor) ve yukarıya yapıştırın.</li>
               <li><strong>Depolar</strong> bölümünden sevkiyatın yapılacağı deponun ID numarasını alın.</li>
-              <li>Kaydedin. Siparişler ekranındaki <strong>Kargoya Ver</strong> butonu artık çalışır.</li>
+              <li>Kaydedin. Siparişteki <strong>Kargoya ver (Kargonomi)</strong> teklifleri getirir; firmayı siz seçersiniz.</li>
             </ol>
           </div>
 

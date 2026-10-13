@@ -161,6 +161,7 @@ async function main() {
     ["20261025 iptal e-postası şablonu", "SELECT NOT EXISTS(SELECT 1 FROM public.email_templates WHERE trigger='order_cancelled' AND body_html LIKE '%Ödeme yapıldıysa%')"],
     ["20261026 şifresiz hesaplar", "SELECT to_regprocedure('public.mark_account_passwordless(uuid)') IS NOT NULL"],
     ["20261028 üyelik durumu (misafir/doğrulanmamış/üye)", "SELECT to_regprocedure('public.member_account_state(uuid)') IS NOT NULL AND NOT EXISTS(SELECT 1 FROM pg_trigger WHERE tgname='on_profile_created_assign_role')"],
+    ["20261118 Kargonomi teklif / firma seçimi / kod bekleme alanları", "SELECT count(*) = 3 FROM information_schema.columns WHERE table_name = 'orders' AND column_name IN ('kargonomi_offers', 'kargonomi_confirmed_at', 'kargonomi_error')"],
     ["20261117 Amazon fiyat listesi", "SELECT EXISTS(SELECT 1 FROM public.price_lists WHERE code = 'amazon_sale' AND channel = 'amazon')"],
     ["20261116 iade işlenen kapalı siparişler yeniden açık", "SELECT NOT EXISTS(SELECT 1 FROM public.orders WHERE is_closed AND payment_status IN ('refunded','partial_refund') AND invoice_status = 'invoiced')"],
     ["20261115 iade yöntemi: kredi kartı (elle)", "SELECT public.refund_method_label('card') = 'Kredi kartı'"],

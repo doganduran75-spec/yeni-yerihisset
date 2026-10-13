@@ -25,6 +25,10 @@ export type OrderLike = {
   total_amount?: number | string | null;
   refunded_amount?: number | string | null;
   kargonomi_tracking_code?: string | null;
+  kargonomi_shipment_id?: string | null;   // taslak / onaylı gönderi (src/lib/kargonomi-flow.ts)
+  kargonomi_confirmed_at?: string | null;  // firma seçildi → kargo kodu bekleniyor
+  kargonomi_provider?: string | null;
+  kargonomi_error?: string | null;
   mp_restocked_at?: string | null;
   order_items?: { quantity: number; returned_qty?: number | null }[] | null;
   created_at?: string | null;
@@ -101,8 +105,22 @@ function coreNextStep(o: OrderLike): NextStep {
         { key: "cancel", label: "Siparişi iptal et", kind: "danger" },
       ], needsAction: true };
     }
-    return { stage: "Hazırlanıyor", hint: "Kargoya ver.", actions: [
-      ...(o.kargonomi_tracking_code ? [] : [{ key: "ship_kargonomi", label: "Kargoya ver (Kargonomi)", kind: "primary" } as NextAction]),
+    // Kargonomi: firma seçildi, kod bekleniyor (dakikada bir sorgulanır; 1 saati geçerse ya da firma hata verirse iş yöneticide)
+    if (o.kargonomi_confirmed_at && !o.kargonomi_tracking_code) {
+      const late = daysSince(o.kargonomi_confirmed_at) > 1 / 24;
+      const firm = o.kargonomi_provider ? ` (${o.kargonomi_provider})` : "";
+      return o.kargonomi_error
+        ? { stage: "Kargonomi: gönderi oluşturulamadı", hint: o.kargonomi_error, actions: [
+            { key: "ship_kargonomi", label: "Kargonomi — iptal et / yeniden teklif", kind: "primary" },
+            { key: "ship_manual", label: "Kargoya verildi (elle)", kind: "primary" },
+          ], needsAction: true }
+        : { stage: `Kargo kodu bekleniyor${firm}`, hint: late
+            ? "1 saattir kod gelmedi — Kargonomi panelinden kontrol et."
+            : "Kod gelince sipariş kendiliğinden “Kargoda” olur ve müşteriye takip numarası gider (dakikada bir sorgulanır).",
+          actions: [{ key: "ship_kargonomi", label: "Kargonomi durumu", kind: "primary" }], needsAction: late };
+    }
+    return { stage: o.kargonomi_shipment_id ? "Hazırlanıyor — kargo firması seçilmedi" : "Hazırlanıyor", hint: "Kargoya ver.", actions: [
+      ...(o.kargonomi_tracking_code ? [] : [{ key: "ship_kargonomi", label: o.kargonomi_shipment_id ? "Kargo firmasını seç (Kargonomi)" : "Kargoya ver (Kargonomi)", kind: "primary" } as NextAction]),
       { key: "ship_manual", label: "Kargoya verildi (elle)", kind: "primary" },
       { key: "cancel", label: "Siparişi iptal et + para iadesi", kind: "danger" },
     ], needsAction: true };

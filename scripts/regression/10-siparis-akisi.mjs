@@ -815,6 +815,23 @@ export default {
         ok(qn === "1" && Number(price) === 1234.5, "Amazon satış fiyatı pazaryeri kuyruğuna giriyor", `kuyruk ${qn ?? "?"}, fiyat ${price ?? "?"}`);
       });
 
+      await part("Kargonomi: yetki ve ödemesiz sipariş", async () => {
+        // Gerçek gönderi açılmaz: ödemesi alınmamış sipariş Kargonomi'ye hiç gitmez (teklif / firma seçimi / kod bekleme akışı)
+        const r = await order([MAIN(1)]);
+        const id = r.json?.orderId;
+        if (!id) return add("fail", "Kargonomi testi için sipariş oluşturulamadı", why(r));
+        const ship = (token, body) => rawApi("/api/kargonomi/ship", { ...(token ? { token } : {}), body: { order_id: id, ...body } });
+        const a = await ship(null, { op: "quote", desi: 2 });
+        ok(a.status === 401, "Kargonomi: girişsiz istek reddediliyor", why(a));
+        const m = await ship(F.member.token, { op: "quote", desi: 2 });
+        ok(m.status === 403, "Kargonomi: üye kargo oluşturamıyor", why(m));
+        const bad = await ship(F.admin.token, { op: "yok" });
+        ok(bad.status === 400, "Kargonomi: geçersiz işlem reddediliyor", why(bad));
+        const q = await ship(F.admin.token, { op: "quote", desi: 2 });
+        ok([400, 409].includes(q.status) && one(`SELECT kargonomi_shipment_id IS NULL FROM public.orders WHERE id = ${lit(id)}`) === "t",
+          "Kargonomi: ödemesi alınmamış sipariş için gönderi açılmıyor", why(q));
+      });
+
       await part("Sipariş silme ve süresi dolan sipariş", async () => {
         if (O.del) {
           const s0 = stock();

@@ -6,6 +6,7 @@ import { importMarketplaceOrders } from "@/lib/marketplace/orders";
 import { processMarketplacePrices } from "@/lib/marketplace/price-sync";
 import { syncMarketplaceListings } from "@/lib/marketplace/listings";
 import { evaluateHealthAlerts } from "@/lib/server-health-alerts";
+import { pollKargonomi } from "@/lib/kargonomi-flow";
 
 // Pazaryeri SİPARİŞLERİ (önce: yeni siparişleri al, iptallerde stoğu geri ekle) +
 // stok kuyruğu (Trendyol + Hepsiburada) — YEDEK tetik: anlık tetik
@@ -41,6 +42,9 @@ async function run(req: NextRequest) {
   for (const p of prices) {
     if (p.errors.length) console.error(`[cron/marketplace-prices:${p.channel}]`, p.errors.join(" | "));
   }
+  // 4) Kargonomi: firması seçilmiş, kargo kodu gelmemiş siparişler (kod gelince sipariş "Kargoda" + e-posta)
+  const kargo = await pollKargonomi(supabase).catch((e: any) => ({ checked: 0, shipped: 0, errors: [e?.message || String(e)] }));
+  if (kargo.errors.length) console.error("[cron/kargonomi]", kargo.errors.join(" | "));
   await (supabase as any).from("marketplace_stock_log")
     .delete().lt("created_at", new Date(Date.now() - 180 * 86400_000).toISOString());
   // Form spam koruması kayıtları (src/lib/bot-guard.ts): 30 günden eskiler
@@ -55,7 +59,7 @@ async function run(req: NextRequest) {
   if (new Date().getMinutes() % 15 === 7) {
     await evaluateHealthAlerts(supabase).catch((e: any) => console.error("[cron/health-alerts]", e?.message || e));
   }
-  return NextResponse.json({ ok: true, orders, reports, prices });
+  return NextResponse.json({ ok: true, orders, reports, prices, kargo });
 }
 
 export const GET = run;

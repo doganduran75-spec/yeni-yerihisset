@@ -59,7 +59,7 @@ export default function AdminDashboard() {
       // (kargoda / teslim / faturalı) ve eski aktarılmış siparişler burada görünmez.
       const { data: openData } = await (supabase as any)
         .from('orders')
-        .select('id, order_number, external_order_number, total_amount, refunded_amount, status, payment_status, shipment_status, invoice_status, created_at, channel, import_source, customer_name, kargonomi_tracking_code, mp_restocked_at, fit_status, delivered_at, profiles (first_name, last_name), order_cases (kind, status, return_method, label_sent_at, closed_at)')
+        .select('id, order_number, external_order_number, total_amount, refunded_amount, status, payment_status, shipment_status, invoice_status, created_at, channel, import_source, customer_name, kargonomi_tracking_code, kargonomi_shipment_id, kargonomi_confirmed_at, kargonomi_provider, kargonomi_error, mp_restocked_at, fit_status, delivered_at, profiles (first_name, last_name), order_cases (kind, status, return_method, label_sent_at, closed_at)')
         .eq('is_closed', false)
         .order('created_at', { ascending: false })
         .limit(1000);

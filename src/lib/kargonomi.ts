@@ -1,200 +1,146 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
- * Kargonomi API Client
- * Docs: https://www.kargonomi.com.tr/help/api-dokumantasyonu/kargonomi-api/
- * Base URL: https://app.kargonomi.com.tr/api/v1
+ * Kargonomi API istemcisi — yalnız sunucuda.
+ * Belge: https://www.kargonomi.com.tr/help/api-dokumantasyonu/kargonomi-api/
+ * Akış (src/lib/kargonomi-flow.ts): POST /shipments (taslak) → GET /shipment-price-comparison/{id}
+ * (firma teklifleri) → POST /confirm-shipping-price (seçilen firma; form verisi) → GET /shipments/{id}
+ * ile kargo kodu gelene kadar sorgu. Token panelde yok; Kargonomi destekten istenir.
  */
 
 const BASE_URL = "https://app.kargonomi.com.tr/api/v1";
 
-/**
- * Token öncelik sırası: parametre > env var
- * Admin panelinden kaydedilen token parametre olarak gelir.
- */
-function resolveToken(tokenOverride?: string): string {
-  const token = tokenOverride ?? process.env.KARGONOMI_API_TOKEN ?? "";
-  if (!token) throw new Error("Kargonomi API token ayarlanmamış. Admin > Ayarlar > Entegrasyonlar bölümünden girin.");
-  return token;
+export class KargonomiError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
 }
 
-function authHeaders(token?: string) {
-  return {
-    Authorization: `Bearer ${resolveToken(token)}`,
-    "Content-Type": "application/json",
-    Accept: "application/json",
-  };
+async function call(token: string, method: string, path: string, body?: { json?: unknown; form?: Record<string, string> }) {
+  if (!token) throw new KargonomiError(0, "Kargonomi API token ayarlanmamış (Ayarlar › Entegrasyonlar › Kargonomi).");
+  const headers: Record<string, string> = { Authorization: `Bearer ${token}`, Accept: "application/json" };
+  let payload: BodyInit | undefined;
+  if (body?.json !== undefined) { headers["Content-Type"] = "application/json"; payload = JSON.stringify(body.json); }
+  else if (body?.form) { const f = new FormData(); for (const [k, v] of Object.entries(body.form)) f.append(k, v); payload = f; }
+  let res: Response;
+  try {
+    res = await fetch(BASE_URL + path, { method, headers, body: payload, signal: AbortSignal.timeout(25000), cache: "no-store" });
+  } catch (e: any) {
+    throw new KargonomiError(0, `Kargonomi'ye bağlanılamadı: ${e?.message || e}`);
+  }
+  const text = await res.text();
+  let json: any = null;
+  try { json = text ? JSON.parse(text) : null; } catch { /* düz metin */ }
+  if (!res.ok) {
+    const errs = json?.errors && typeof json.errors === "object" ? Object.values(json.errors).flat().join("; ") : "";
+    const msg = errs || json?.message || json?.error || text?.slice(0, 300) || res.statusText;
+    const hint = res.status === 401 ? " (API token geçersiz)" : "";
+    throw new KargonomiError(res.status, `Kargonomi ${res.status}: ${msg}${hint}`);
+  }
+  return json;
 }
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+// Yanıt bazen { data: … } / { shipment: … } sarmalı
+const unwrap = (j: any, key?: string) => (key && j?.[key]) ?? j?.data?.[key ?? ""] ?? j?.data ?? j;
 
-export type KargonomiState = {
-  id: number;
-  name: string;
-};
+// ── İl / ilçe ───────────────────────────────────────────────────────────────
 
-export type KargonomiCity = {
-  id: number;
-  name: string;
-  state_id: number;
-};
-
-export type CreateShipmentPayload = {
-  buyer_name: string;
-  buyer_phone: string;
-  buyer_address: string;
-  buyer_state_id: number;
-  buyer_city_id: number;
-  warehouse_id: string | number;
-  desi: number;
-  /** Optional: ref no (e.g. order ID) to appear on label */
-  reference_no?: string;
-};
-
-export type KargonomiShipmentResult = {
-  id: number | string;
-  tracking_code: string;
-  label_url?: string;
-  [key: string]: unknown;
-};
-
-// ---------------------------------------------------------------------------
-// Module-level cache (lives for the lifetime of the Node.js process / Lambda)
-// ---------------------------------------------------------------------------
-
-let _statesCache: KargonomiState[] | null = null;
-const _citiesCache: Record<number, KargonomiCity[]> = {};
-
-// ---------------------------------------------------------------------------
-// Turkish character normalization for fuzzy matching
-// ---------------------------------------------------------------------------
+type Named = { id: number; name: string };
+let statesCache: Named[] | null = null;
+const citiesCache: Record<number, Named[]> = {};
 
 export function normalizetr(str: string): string {
-  return str
-    .toLocaleLowerCase("tr")
-    .replace(/ğ/g, "g")
-    .replace(/ü/g, "u")
-    .replace(/ş/g, "s")
-    .replace(/ı/g, "i")
-    .replace(/ö/g, "o")
-    .replace(/ç/g, "c")
-    .trim();
+  return String(str || "").toLocaleLowerCase("tr")
+    .replace(/ğ/g, "g").replace(/ü/g, "u").replace(/ş/g, "s").replace(/ı/g, "i").replace(/ö/g, "o").replace(/ç/g, "c")
+    .replace(/i̇/g, "i").trim();
+}
+const listOf = (j: any, key: string): Named[] => (Array.isArray(j) ? j : j?.[key] ?? j?.data ?? []);
+
+export async function findStateId(token: string, cityName: string): Promise<number> {
+  statesCache ??= listOf(await call(token, "GET", "/states"), "states");
+  const m = statesCache.find((s) => normalizetr(s.name) === normalizetr(cityName));
+  if (!m) throw new KargonomiError(422, `"${cityName}" ili Kargonomi'de bulunamadı — sipariş adresindeki ili kontrol et.`);
+  return m.id;
 }
 
-function nameSimilar(a: string, b: string): boolean {
-  return normalizetr(a) === normalizetr(b);
+export async function findCityId(token: string, stateId: number, districtName: string): Promise<number> {
+  citiesCache[stateId] ??= listOf(await call(token, "GET", `/cities/${stateId}`), "cities");
+  const m = citiesCache[stateId].find((c) => normalizetr(c.name) === normalizetr(districtName));
+  // İlçe adı tutmazsa merkez ilçeyi seçmek yanlış adrese gönderir → dur, yöneticiye söyle
+  if (!m) throw new KargonomiError(422, `"${districtName}" ilçesi Kargonomi'de bulunamadı — sipariş adresindeki ilçeyi kontrol et.`);
+  return m.id;
 }
 
-// ---------------------------------------------------------------------------
-// API helpers
-// ---------------------------------------------------------------------------
+// ── Gönderi ─────────────────────────────────────────────────────────────────
 
-export async function getStates(token?: string): Promise<KargonomiState[]> {
-  if (_statesCache) return _statesCache;
+export type KargonomiShipment = {
+  id: number | string;
+  status?: string;
+  status_label?: string;
+  shipping_provider_name?: string | null;
+  shipping_webservice_tracking_code?: string | null;
+  shipping_webservice_barcode?: string | null;
+  [k: string]: unknown;
+};
 
-  const res = await fetch(`${BASE_URL}/states`, {
-    headers: authHeaders(token),
-    next: { revalidate: 86400 }, // 24h — state list changes rarely
+export type KargonomiOffer = { id: string; name: string; price: string | null; amount: number | null };
+
+export type NewShipment = {
+  buyer_name: string; buyer_phone: string; buyer_email?: string; buyer_address: string;
+  buyer_state_id: number; buyer_city_id: number; warehouse_id: number; desi: number; content?: string;
+};
+
+/** Taslak gönderi (firma seçilmeden) */
+export async function createShipment(token: string, s: NewShipment): Promise<KargonomiShipment> {
+  const { desi, content, ...rest } = s;
+  const j = await call(token, "POST", "/shipments", {
+    json: { shipment: { ...rest, packages: [{ desi, ...(content ? { content } : {}) }] } },
   });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Kargonomi /states hatası ${res.status}: ${text}`);
-  }
-
-  const json = await res.json();
-  // Response may be { states: [...] } or directly an array
-  const list: KargonomiState[] = Array.isArray(json) ? json : (json.states ?? json.data ?? []);
-  _statesCache = list;
-  return list;
+  const sh = unwrap(j, "shipment");
+  if (!sh?.id) throw new KargonomiError(502, "Kargonomi gönderi numarası dönmedi");
+  return sh;
 }
 
-export async function getCities(stateId: number, token?: string): Promise<KargonomiCity[]> {
-  if (_citiesCache[stateId]) return _citiesCache[stateId];
-
-  const res = await fetch(`${BASE_URL}/cities/${stateId}`, {
-    headers: authHeaders(token),
-    next: { revalidate: 86400 },
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Kargonomi /cities/${stateId} hatası ${res.status}: ${text}`);
-  }
-
-  const json = await res.json();
-  const list: KargonomiCity[] = Array.isArray(json) ? json : (json.cities ?? json.data ?? []);
-  _citiesCache[stateId] = list;
-  return list;
+/** "22.67 + KDV" → 22.67; "Hizmet Dışı Bölge" → null */
+function priceAmount(p: unknown): number | null {
+  const m = String(p ?? "").replace(",", ".").match(/\d+(\.\d+)?/);
+  return m ? Number(m[0]) : null;
 }
 
-/**
- * Verilen şehir adına (ör. "İstanbul") karşılık gelen Kargonomi state ID'sini döner.
- */
-export async function findStateId(cityName: string, token?: string): Promise<number> {
-  const states = await getStates(token);
-  const match = states.find((s) => nameSimilar(s.name, cityName));
-  if (!match) {
-    throw new Error(`"${cityName}" için Kargonomi il kaydı bulunamadı. Mevcut iller: ${states.map((s) => s.name).join(", ")}`);
-  }
-  return match.id;
+/** Firma teklifleri (fiyatı olmayan = hizmet dışı; "Otomatik" = en ucuz) */
+export async function getOffers(token: string, shipmentId: string | number): Promise<KargonomiOffer[]> {
+  const j = await call(token, "GET", `/shipment-price-comparison/${shipmentId}`);
+  const list = (j?.shipping_provider_with_price ?? j?.data?.shipping_provider_with_price ?? []) as any[];
+  return list.map((o) => ({ id: String(o.id), name: String(o.name ?? o.slug ?? o.id), price: o.price == null ? null : String(o.price), amount: priceAmount(o.price) }));
 }
 
-/**
- * Verilen ilçe adına karşılık gelen Kargonomi city ID'sini döner.
- */
-export async function findCityId(stateId: number, districtName: string, token?: string): Promise<number> {
-  const cities = await getCities(stateId, token);
-  const match = cities.find((c) => nameSimilar(c.name, districtName));
-  if (!match) {
-    // Soft-fail: return first city in state instead of crashing the shipment
-    console.warn(
-      `"${districtName}" ilçesi Kargonomi'de bulunamadı (stateId=${stateId}). İlk ilçe kullanılıyor: ${cities[0]?.name}`
-    );
-    if (cities.length === 0) throw new Error(`stateId=${stateId} için ilçe listesi boş döndü.`);
-    return cities[0].id;
-  }
-  return match.id;
+/** Seçilen firmayla gönderiyi onayla (providerId "-1" = en ucuz) */
+export async function confirmProvider(token: string, shipmentId: string | number, providerId: string): Promise<KargonomiShipment> {
+  const j = await call(token, "POST", "/confirm-shipping-price", { form: { shipment_id: String(shipmentId), shipping_provider_id: String(providerId) } });
+  return unwrap(j, "shipment");
 }
 
-// ---------------------------------------------------------------------------
-// Shipment creation
-// ---------------------------------------------------------------------------
+export async function getShipment(token: string, shipmentId: string | number): Promise<KargonomiShipment> {
+  return unwrap(await call(token, "GET", `/shipments/${shipmentId}`), "shipment");
+}
 
-export async function createShipment(
-  payload: CreateShipmentPayload,
-  token?: string
-): Promise<KargonomiShipmentResult> {
-  const warehouseId = payload.warehouse_id ?? process.env.KARGONOMI_WAREHOUSE_ID;
-  if (!warehouseId) throw new Error("Kargonomi Depo ID ayarlanmamış. Admin > Ayarlar > Entegrasyonlar bölümünden girin.");
+/** Taslak → sil; onaylanmış (kargoya verilmemiş) → iptal talebi */
+export async function cancelShipment(token: string, shipmentId: string | number, draft: boolean) {
+  if (draft) return call(token, "DELETE", `/shipments/${shipmentId}`);
+  return call(token, "POST", "/shipments/cancel", { json: { shipment_id: String(shipmentId) } });
+}
 
-  const body = {
-    shipment: {
-      buyer_name: payload.buyer_name,
-      buyer_phone: payload.buyer_phone,
-      buyer_address: payload.buyer_address,
-      buyer_state_id: payload.buyer_state_id,
-      buyer_city_id: payload.buyer_city_id,
-      warehouse_id: warehouseId,
-      ...(payload.reference_no ? { reference_no: payload.reference_no } : {}),
-      packages: [{ desi: payload.desi }],
-    },
-  };
+/** Kargo firmasının verdiği takip kodu (yoksa barkod) */
+export const trackingOf = (s: KargonomiShipment) =>
+  String(s.shipping_webservice_tracking_code || s.shipping_webservice_barcode || "").trim() || null;
 
-  const res = await fetch(`${BASE_URL}/shipments`, {
-    method: "POST",
-    headers: authHeaders(token),
-    body: JSON.stringify(body),
-  });
+export const FAILED_STATUSES = ["webservice_order_failed", "cancelled", "request_for_cancellation"];
 
-  const json = await res.json().catch(() => ({}));
-
-  if (!res.ok) {
-    const msg = json?.message ?? json?.error ?? JSON.stringify(json);
-    throw new Error(`Kargonomi kargo oluşturma hatası ${res.status}: ${msg}`);
-  }
-
-  // Response may be { shipment: {...} } or directly the object
-  const shipment = json.shipment ?? json.data ?? json;
-  return shipment as KargonomiShipmentResult;
+/** Türkiye cep / sabit: 10 hane (başında 0 / 90 olmadan) */
+export function phone10(p: unknown): string {
+  let d = String(p ?? "").replace(/\D/g, "");
+  if (d.length === 12 && d.startsWith("90")) d = d.slice(2);
+  if (d.length === 11 && d.startsWith("0")) d = d.slice(1);
+  return d;
 }

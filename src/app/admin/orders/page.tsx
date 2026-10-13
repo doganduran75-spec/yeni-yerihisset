@@ -6,6 +6,7 @@ import { orderNextStep, type NextActionKey } from "@/lib/order-next-step";
 import { useSearchParams, useRouter } from "next/navigation";
 import AdminOpsTabs from "@/components/admin/AdminOpsTabs";
 import OrderTimeline from "@/components/admin/OrderTimeline";
+import KargonomiDialog from "@/components/admin/KargonomiDialog";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -231,10 +232,6 @@ export default function OrdersPage() {
 
   // Kargoya Ver dialog
   const [shipDialogOrder, setShipDialogOrder] = useState<Order | null>(null);
-  const [desi, setDesi] = useState("2");
-  const [shipping, setShipping] = useState(false);
-  const [shipResult, setShipResult] = useState<{ tracking_code: string; label_url?: string | null } | null>(null);
-  const [shipError, setShipError] = useState<string | null>(null);
 
   // ─── Yeni Sipariş state ───────────────────────────────────────────────────
   const [createOpen, setCreateOpen] = useState(false);
@@ -756,45 +753,11 @@ export default function OrdersPage() {
     });
   }
 
-  // ─── Kargoya Ver ──────────────────────────────────────────────────────────
-
-  async function handleShipOrder() {
-    if (!shipDialogOrder) return;
-    setShipping(true);
-    setShipError(null);
-    setShipResult(null);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      const res = await fetch("/api/kargonomi/ship", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ order_id: shipDialogOrder.id, desi: Number(desi) }),
-      });
-      const json = await res.json();
-      if (!res.ok) { setShipError(json.error ?? "Kargo oluşturulamadı."); return; }
-
-      setShipResult({ tracking_code: json.tracking_code, label_url: json.label_url });
-      setOrders(prev => prev.map(o =>
-        o.id === shipDialogOrder.id
-          ? { ...o, shipment_status: "shipped", kargonomi_tracking_code: json.tracking_code }
-          : o
-      ));
-      if (selectedOrder?.id === shipDialogOrder.id) {
-        setSelectedOrder(prev => prev
-          ? { ...prev, shipment_status: "shipped", kargonomi_tracking_code: json.tracking_code }
-          : null
-        );
-      }
-    } catch {
-      setShipError("Bağlantı hatası. Tekrar deneyin.");
-    } finally {
-      setShipping(false);
-    }
-  }
+  // ─── Kargoya Ver (Kargonomi) — pencere: src/components/admin/KargonomiDialog.tsx ──
+  const onKargonomiChanged = useCallback((row: Order) => {
+    setOrders((prev) => prev.map((o) => (o.id === row.id ? { ...o, ...row } : o)));
+    setSelectedOrder((prev) => (prev && prev.id === row.id ? { ...prev, ...row } : prev));
+  }, []);
 
   // ── Durum seçenekleri ve kuralları: liste satırı ve sipariş detayı AYNI listeyi kullanır ──
   const PAYMENT_OPTIONS = [
@@ -981,9 +944,6 @@ export default function OrdersPage() {
 
   function openShipDialog(order: Order) {
     setShipDialogOrder(order);
-    setDesi("2");
-    setShipResult(null);
-    setShipError(null);
   }
 
   // ─── Küçük badge bileşeni ─────────────────────────────────────────────────
@@ -1367,111 +1327,8 @@ export default function OrdersPage() {
         </CardContent>
       </Card>
 
-      {/* ─── Kargoya Ver Dialog ───────────────────────────────────────────── */}
-      <Dialog
-        open={!!shipDialogOrder}
-        onOpenChange={(open) => { if (!open) { setShipDialogOrder(null); setShipResult(null); setShipError(null); } }}
-      >
-        <DialogContent className="sm:max-w-[420px]">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Truck size={18} className="text-purple-600" /> Kargoya Ver
-            </DialogTitle>
-            <DialogDescription>
-              Sipariş {orderLabel(shipDialogOrder)} — Kargonomi üzerinden gönderi oluşturulacak.
-            </DialogDescription>
-          </DialogHeader>
-
-          {shipResult ? (
-            <div className="space-y-4 py-2">
-              <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-xl p-4">
-                <CheckCircle size={22} className="text-green-600 shrink-0" />
-                <div>
-                  <p className="text-sm font-semibold text-green-800">Kargo başarıyla oluşturuldu!</p>
-                  <p className="text-xs text-green-600 mt-0.5">Sevkiyat durumu "Kargoya Verildi" olarak güncellendi.</p>
-                </div>
-              </div>
-              <div className="bg-slate-50 border rounded-lg p-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground font-medium">Takip Kodu</span>
-                  <button
-                    onClick={() => navigator.clipboard.writeText(shipResult.tracking_code)}
-                    className="text-blue-500 hover:text-blue-700 text-xs flex items-center gap-1"
-                  >
-                    <Copy size={12} /> Kopyala
-                  </button>
-                </div>
-                <code className="text-sm font-mono font-bold block">{shipResult.tracking_code}</code>
-              </div>
-              {shipResult.label_url && (
-                <a
-                  href={shipResult.label_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-2 w-full py-2 px-4 border border-purple-300 text-purple-700 rounded-lg text-sm font-medium hover:bg-purple-50 transition-colors"
-                >
-                  <ExternalLink size={14} /> Kargo Etiketini Aç
-                </a>
-              )}
-              <Button className="w-full" variant="outline" onClick={() => { setShipDialogOrder(null); setShipResult(null); }}>
-                Kapat
-              </Button>
-            </div>
-          ) : (
-            <div className="space-y-4 py-2">
-              {shipDialogOrder && (() => {
-                let addr: Record<string, string> = {};
-                try { addr = typeof shipDialogOrder.shipping_address === "string" ? JSON.parse(shipDialogOrder.shipping_address) : shipDialogOrder.shipping_address ?? {}; } catch {}
-                return (
-                  <div className="bg-slate-50 border rounded-lg p-3 text-xs text-muted-foreground space-y-1">
-                    <p className="font-semibold text-slate-700">{addr.name ?? `${shipDialogOrder.profiles?.first_name} ${shipDialogOrder.profiles?.last_name}`}</p>
-                    <p>{addr.address}</p>
-                    <p>{addr.district && `${addr.district}, `}{addr.city}</p>
-                    <p>{addr.phone ?? shipDialogOrder.profiles?.phone}</p>
-                  </div>
-                );
-              })()}
-
-              <div className="space-y-2">
-                <label htmlFor="desi" className="text-sm font-medium">
-                  Desi <span className="text-muted-foreground font-normal">(tahmini kargo ağırlık birimi)</span>
-                </label>
-                <Input
-                  id="desi"
-                  type="number"
-                  min="1"
-                  max="300"
-                  step="0.5"
-                  value={desi}
-                  onChange={(e) => setDesi(e.target.value)}
-                  placeholder="2"
-                />
-              </div>
-
-              {shipError && (
-                <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
-                  <AlertCircle size={16} className="shrink-0 mt-0.5" />
-                  {shipError}
-                </div>
-              )}
-
-              <div className="flex gap-2 pt-1">
-                <Button variant="outline" className="flex-1" onClick={() => setShipDialogOrder(null)} disabled={shipping}>
-                  İptal
-                </Button>
-                <Button
-                  className="flex-1 gap-2 bg-purple-600 hover:bg-purple-700"
-                  onClick={handleShipOrder}
-                  disabled={shipping || !desi}
-                >
-                  {shipping ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
-                  {shipping ? "Gönderiliyor..." : "Kargoya Ver"}
-                </Button>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* ─── Kargoya Ver (Kargonomi): teklif → firma seçimi → kod bekleme ─── */}
+      <KargonomiDialog order={shipDialogOrder} onClose={() => setShipDialogOrder(null)} onChanged={onKargonomiChanged} />
 
       {/* ─── Detay Dialog ─────────────────────────────────────────────────── */}
       <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
