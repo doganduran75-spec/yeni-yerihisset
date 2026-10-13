@@ -1,7 +1,7 @@
 "use client";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// Ayarlar › Entegrasyonlar: Trendyol + Hepsiburada + Amazon (stok senkronu + sipariş) + Kargonomi (kargo).
+// Ayarlar › Entegrasyonlar: Trendyol + Hepsiburada + Amazon (stok senkronu + sipariş) + Kargonomi (kargo) + Paraşüt (fatura).
 // Ayarlar /api/admin/settings ile okunur/yazılır (gizli kolonlar yalnız sunucuda).
 // Her kart YALNIZ kendi alanlarını kaydeder (başka kartın/sekmenin ayarını ezmez).
 // Kanal durumu/işlemleri: /api/admin/integrations/<kanal>.
@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { supabase } from "@/lib/supabase";
 import { siteAlert, siteConfirm } from "@/components/ui/site-dialog";
 import HepsiburadaTestCenter from "@/components/admin/settings/HepsiburadaTestCenter";
+import ParasutCard from "@/components/admin/settings/ParasutCard";
 import {
   Loader2, Save, Eye, EyeOff, Truck, Store, RefreshCw, Send, PlugZap, AlertTriangle, CheckCircle2, Info, RotateCcw, History, ShoppingBag,
 } from "lucide-react";
@@ -725,6 +726,9 @@ export default function IntegrationsTab() {
           <div className="flex justify-end">{saveBtn("kargonomi", "Kargonomi")}</div>
         </CardContent>
       </Card>
+
+      {/* ─── Paraşüt (fatura) ─── */}
+      <ParasutCard />
     </div>
   );
 }

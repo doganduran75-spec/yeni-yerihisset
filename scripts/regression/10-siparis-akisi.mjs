@@ -832,6 +832,28 @@ export default {
           "Kargonomi: ödemesi alınmamış sipariş için gönderi açılmıyor", why(q));
       });
 
+      await part("Paraşüt: yetki ve gizli bilgiler", async () => {
+        const pa = (token, body) => rawApi("/api/admin/parasut", { ...(token ? { token } : {}), body });
+        const a = await pa(null, { op: "status" });
+        ok(a.status === 401, "Paraşüt: girişsiz istek reddediliyor", why(a));
+        const m = await pa(F.member.token, { op: "status" });
+        ok(m.status === 403, "Paraşüt: üye erişemiyor", why(m));
+        const s = await pa(F.admin.token, { op: "status" });
+        ok(s.status === 200 && s.json?.ok === true && !("clientSecret" in (s.json || {})), "Paraşüt: yönetici bağlantı durumunu görüyor (gizli bilgi dönmeden)", why(s));
+        // Gizli bilgiler tarayıcıya kapalı: settings'teki secret, oturum tablosu
+        const sec = await rest("settings?select=parasut_client_secret");
+        ok(sec.status >= 400, "Paraşüt Client Secret dışarıdan okunamıyor", `HTTP ${sec.status}`);
+        const au = await rest("parasut_auth?select=refresh_token", { token: F.admin.token });
+        ok(au.status >= 400 || (Array.isArray(au.json) && au.json.length === 0), "Paraşüt oturum anahtarı yöneticinin tarayıcısına bile açık değil", `HTTP ${au.status}`);
+        // Kanal / kargo ayarları yalnız yöneticide
+        const mc = await rest("parasut_channel_settings?select=channel", { token: F.member.token });
+        ok(Array.isArray(mc.json) ? mc.json.length === 0 : mc.status >= 400, "Üye Paraşüt kanal ayarlarını göremiyor", `HTTP ${mc.status}`);
+        const ac = await rest("parasut_channel_settings?select=channel", { token: F.admin.token });
+        ok(Array.isArray(ac.json) && ac.json.some((x) => x.channel === "trendyol"), "Yönetici kanal ayarlarını görüyor (Trendyol satırı var)", `HTTP ${ac.status}`);
+        const mw = await rest("cargo_carriers", { token: F.member.token, method: "POST", body: { name: "REGRESYON-TEST kargo", vkn: "1234567890" } });
+        ok(mw.status >= 400 && num("SELECT count(*) FROM public.cargo_carriers WHERE name LIKE 'REGRESYON-TEST%'") === 0, "Üye kargo firması VKN'si ekleyemiyor", `HTTP ${mw.status}`);
+      });
+
       await part("Sipariş silme ve süresi dolan sipariş", async () => {
         if (O.del) {
           const s0 = stock();

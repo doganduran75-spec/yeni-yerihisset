@@ -178,7 +178,7 @@ function SettingsPageInner() {
         headers: { "Content-Type": "application/json", ...(await authHeaders()) },
         // Entegrasyon alanları (Trendyol/Hepsiburada/Kargonomi) Entegrasyonlar sekmesinde kaydedilir → burada gönderme
         // Ana Sayfa / Çerez Onayı / Künye sekmelerinin alanları da burada gönderilmez (o sekmelerde kaydedilir; eski değer üstüne yazılmasın)
-        body: JSON.stringify({ settings: Object.fromEntries(Object.entries(settings).filter(([k]) => !/^(trendyol_|hepsiburada_|amazon_|kargonomi_|company_|home_content$|cookie_consent_strict$)/.test(k))) }),
+        body: JSON.stringify({ settings: Object.fromEntries(Object.entries(settings).filter(([k]) => !/^(trendyol_|hepsiburada_|amazon_|kargonomi_|parasut_|company_|home_content$|cookie_consent_strict$)/.test(k))) }),
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok || !d.ok) throw new Error(d.error || "Ayarlar kaydedilemedi.");
