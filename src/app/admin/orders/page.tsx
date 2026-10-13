@@ -55,6 +55,18 @@ type OrderItem = {
   products: { title: string } | null;
 };
 
+async function parasutApi(body: Record<string, unknown>) {
+  const { data: { session } } = await supabase.auth.getSession();
+  const r = await fetch("/api/admin/parasut", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
+    body: JSON.stringify(body),
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || "Paraşüt hatası");
+  return j;
+}
+
 // Sıradaki adım + açık satış sonrası talep (order_cases — src/lib/after-sale.ts)
 const openCaseOf = (o: any) => ((o?.order_cases as any[]) || []).find((c) => !c.closed_at) ?? null;
 const nx = (o: any) => orderNextStep({ ...o, open_case: openCaseOf(o) });
@@ -232,6 +244,11 @@ export default function OrdersPage() {
 
   // Kargoya Ver dialog
   const [shipDialogOrder, setShipDialogOrder] = useState<Order | null>(null);
+  // Paraşüt açık mı? Kapalıysa "Faturayı kes (Paraşüt)" düğmesi gizlenir
+  const [parasutOn, setParasutOn] = useState(false);
+  useEffect(() => {
+    parasutApi({ op: "status" }).then((s) => setParasutOn(!!(s.enabled && s.connected))).catch(() => {});
+  }, []);
 
   // ─── Yeni Sipariş state ───────────────────────────────────────────────────
   const [createOpen, setCreateOpen] = useState(false);
@@ -809,6 +826,29 @@ export default function OrdersPage() {
   }
 
   // Sıradaki adım panelindeki düğmeler → mevcut işlemler (kurallar src/lib/order-next-step.ts)
+  // Paraşüt faturası: kes / kaldığı yerden devam / durum (src/lib/parasut-invoice.ts)
+  async function invoiceParasut(o: Order, acceptDiff = false) {
+    const busy = (o as any).parasut_status && !["error", "done"].includes((o as any).parasut_status);
+    if (!busy && !acceptDiff && !(await siteConfirm({ title: "Fatura Paraşüt'te kesilsin mi?", message: "Müşteri, satış faturası, tahsilat (kanal ayarındaki hesap) ve e-Arşiv / e-Fatura oluşturulur. e-Belge resmîleşince geri alınamaz.", confirmText: "Faturayı kes" }))) return;
+    setUpdatingId(o.id);
+    try {
+      const r = await parasutApi({ op: busy ? "check_invoice" : "invoice", order_id: o.id, ...(acceptDiff ? { accept_diff: true } : {}) });
+      siteAlert({ title: "Paraşüt", message: r.status === "done" ? `Fatura kesildi${r.invoiceNo ? `: ${r.invoiceNo}` : ""}. Sipariş “Faturalandı”.` : "e-Belge hazırlanıyor; dakikada bir kontrol edilir, bitince sipariş “Faturalandı” olur.", tone: "success" });
+    } catch (e: any) {
+      const msg = String(e?.message || e);
+      if (/Tutarı onayla/.test(msg) && (await siteConfirm({ title: "Tutar farkı", message: msg, confirmText: "Tutarı onayla ve devam et" }))) { setUpdatingId(null); return invoiceParasut(o, true); }
+      siteAlert({ title: "Paraşüt faturası kesilemedi", message: msg, tone: "danger" });
+    } finally {
+      setUpdatingId(null);
+      refreshOrder(o.id);
+    }
+  }
+
+  async function openInvoicePdf(o: Order) {
+    try { const r = await parasutApi({ op: "invoice_pdf", order_id: o.id }); window.open(r.url, "_blank", "noopener"); }
+    catch (e: any) { siteAlert({ message: String(e?.message || e), tone: "danger" }); }
+  }
+
   async function runNextAction(o: Order, key: NextActionKey) {
     switch (key) {
       case "mark_paid": return markPaymentPaid(o.id);
@@ -820,6 +860,7 @@ export default function OrdersPage() {
         if (await siteConfirm({ title: "Kargoya verildi mi?", message: "Sipariş “Kargoda” olur ve müşteriye kargo e-postası gider.", confirmText: "Kargoya verildi" })) updateField(o.id, { shipment_status: "shipped" });
         return;
       case "mark_delivered": return updateField(o.id, { shipment_status: "delivered" });
+      case "invoice_parasut": return invoiceParasut(o);
       case "invoice":
         if (await siteConfirm({ title: "Fatura kesildi mi?", message: "Faturayı kestiysen işaretle.", confirmText: "Fatura kesildi" })) updateField(o.id, { invoice_status: "invoiced" });
         return;
@@ -1531,7 +1572,7 @@ export default function OrdersPage() {
                     )}
                     {step.actions.length > 0 && (
                       <div className="flex flex-wrap items-center gap-2">
-                        {step.actions.filter((a) => a.key !== "send_label" && a.key !== "ship_alt").map((a) => (
+                        {step.actions.filter((a) => a.key !== "send_label" && a.key !== "ship_alt" && (a.key !== "invoice_parasut" || parasutOn)).map((a) => (
                           <Button
                             key={a.key}
                             size="sm"
@@ -1544,6 +1585,12 @@ export default function OrdersPage() {
                           </Button>
                         ))}
                       </div>
+                    )}
+                    {(o as any).parasut_invoice_no && (
+                      <p className="text-xs text-muted-foreground">
+                        Paraşüt faturası <b className="font-mono">{(o as any).parasut_invoice_no}</b>
+                        {(o as any).parasut_pdf_path && <button className="ml-2 underline font-semibold text-emerald-700" onClick={() => openInvoicePdf(o)}>PDF</button>}
+                      </p>
                     )}
                   </div>
                 );

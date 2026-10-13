@@ -40,7 +40,8 @@ type Ch = { channel: string; account_id: string | null; account_name: string | n
 type Carrier = { name: string; vkn: string | null };
 
 export default function ParasutCard() {
-  const [f, setF] = useState({ parasut_enabled: false, parasut_client_id: "", parasut_client_secret: "", parasut_company_id: "", parasut_shipment_included: true });
+  const [f, setF] = useState({ parasut_enabled: false, parasut_client_id: "", parasut_client_secret: "", parasut_company_id: "", parasut_shipment_included: true, parasut_shipping_product_id: "" });
+  const [pps, setPps] = useState<{ parasut_id: string; name: string | null; code: string | null; vat_rate: number | null }[]>([]);
   const [st, setSt] = useState<any>(null);
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
@@ -55,12 +56,15 @@ export default function ParasutCard() {
     setF({
       parasut_enabled: !!d.parasut_enabled, parasut_client_id: d.parasut_client_id ?? "", parasut_client_secret: d.parasut_client_secret ?? "",
       parasut_company_id: d.parasut_company_id ?? "", parasut_shipment_included: d.parasut_shipment_included !== false,
+      parasut_shipping_product_id: d.parasut_shipping_product_id ?? "",
     });
     const sb = supabase as any;
-    const [{ data: c }, { data: k }] = await Promise.all([
+    const [{ data: c }, { data: k }, { data: p }] = await Promise.all([
       sb.from("parasut_channel_settings").select("*").order("channel"),
       sb.from("cargo_carriers").select("name, vkn").order("name"),
+      sb.from("parasut_products").select("parasut_id, name, code, vat_rate").eq("archived", false).order("name").limit(2000),
     ]);
+    setPps((p as any[]) || []);
     setChs(((c as Ch[]) || []).sort((a, b) => Object.keys(CH_LABEL).indexOf(a.channel) - Object.keys(CH_LABEL).indexOf(b.channel)));
     setCarriers((k as Carrier[]) || []);
     try {
@@ -163,6 +167,17 @@ export default function ParasutCard() {
           )}
           {st?.error && <p className="text-xs text-red-600">{st.error}</p>}
         </div>
+
+        {/* Kargo ücreti kalemi */}
+        <label className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="font-medium">Kargo ücreti kalemi (alınırsa):</span>
+          <select value={f.parasut_shipping_product_id} className="h-8 rounded-md border px-1 bg-white max-w-[280px]"
+            onChange={(e) => saveSettings({ parasut_shipping_product_id: e.target.value })}>
+            <option value="">— Paraşüt’teki “Kargo” hizmetini seç —</option>
+            {pps.map((p) => <option key={p.parasut_id} value={p.parasut_id}>{p.name}{p.code ? ` (${p.code})` : ""}{p.vat_rate != null ? ` · KDV %${Number(p.vat_rate)}` : ""}</option>)}
+          </select>
+          <span className="text-muted-foreground">{pps.length ? "KDV oranı Paraşüt kaydından (kargo %20)." : "Liste için önce Ürün eşleştirme › Paraşüt’ten çek."}</span>
+        </label>
 
         {/* 3) Kanal ayarları */}
         <div className="space-y-2">

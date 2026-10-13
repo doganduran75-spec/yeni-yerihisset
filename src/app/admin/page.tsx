@@ -59,7 +59,7 @@ export default function AdminDashboard() {
       // (kargoda / teslim / faturalı) ve eski aktarılmış siparişler burada görünmez.
       const { data: openData } = await (supabase as any)
         .from('orders')
-        .select('id, order_number, external_order_number, total_amount, refunded_amount, status, payment_status, shipment_status, invoice_status, created_at, channel, import_source, customer_name, kargonomi_tracking_code, kargonomi_shipment_id, kargonomi_confirmed_at, kargonomi_provider, kargonomi_error, mp_restocked_at, fit_status, delivered_at, profiles (first_name, last_name), order_cases (kind, status, return_method, label_sent_at, closed_at)')
+        .select('id, order_number, external_order_number, total_amount, refunded_amount, status, payment_status, shipment_status, invoice_status, created_at, channel, import_source, customer_name, kargonomi_tracking_code, kargonomi_shipment_id, kargonomi_confirmed_at, kargonomi_provider, kargonomi_error, parasut_status, parasut_error, mp_restocked_at, fit_status, delivered_at, profiles (first_name, last_name), order_cases (kind, status, return_method, label_sent_at, closed_at)')
         .eq('is_closed', false)
         .order('created_at', { ascending: false })
         .limit(1000);
@@ -185,7 +185,7 @@ export default function AdminDashboard() {
                   {(o.profiles ? `${o.profiles.first_name ?? ""} ${o.profiles.last_name ?? ""}`.trim() : "") || o.customer_name || "—"}
                 </span>
                 <span className="flex-1 min-w-0 truncate text-xs font-bold text-amber-800" title={o.step?.hint}>
-                  {o.step?.stage}{o.step?.actions?.[0] ? ` → ${o.step.actions[0].label}` : ""}
+                  {o.step?.stage}{(() => { const a = o.step?.actions?.find((x: any) => x.key !== "invoice_parasut") ?? o.step?.actions?.[0]; return a ? ` → ${a.label}` : ""; })()}
                   {o.step?.hint && <span className="font-normal text-slate-500"> · {o.step.hint}</span>}
                 </span>
                 <span className="text-sm text-slate-500 w-16 text-right shrink-0">₺{Number(o.total_amount).toFixed(0)}</span>

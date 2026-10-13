@@ -852,6 +852,17 @@ export default {
         ok(Array.isArray(ac.json) && ac.json.some((x) => x.channel === "trendyol"), "Yönetici kanal ayarlarını görüyor (Trendyol satırı var)", `HTTP ${ac.status}`);
         const mw = await rest("cargo_carriers", { token: F.member.token, method: "POST", body: { name: "REGRESYON-TEST kargo", vkn: "1234567890" } });
         ok(mw.status >= 400 && num("SELECT count(*) FROM public.cargo_carriers WHERE name LIKE 'REGRESYON-TEST%'") === 0, "Üye kargo firması VKN'si ekleyemiyor", `HTTP ${mw.status}`);
+        // Fatura: üye kesemez; ödemesi alınmamış sipariş Paraşüt'e hiç gitmez (gerçek fatura kesilmez)
+        const r = await order([MAIN(1)]);
+        const id = r.json?.orderId;
+        if (!id) return add("fail", "Paraşüt testi için sipariş oluşturulamadı", why(r));
+        const mi = await pa(F.member.token, { op: "invoice", order_id: id });
+        ok(mi.status === 403, "Paraşüt: üye fatura kesemiyor", why(mi));
+        const ai = await pa(F.admin.token, { op: "invoice", order_id: id });
+        ok([400, 422].includes(ai.status) && one(`SELECT parasut_invoice_id IS NULL AND parasut_status IS NULL FROM public.orders WHERE id = ${lit(id)}`) === "t",
+          "Paraşüt: ödemesi alınmamış sipariş için fatura açılmıyor", why(ai));
+        const pdf = await pa(F.admin.token, { op: "invoice_pdf", order_id: id });
+        ok(pdf.status === 404, "Paraşüt: faturası olmayan siparişte PDF yok", why(pdf));
       });
 
       await part("Sipariş silme ve süresi dolan sipariş", async () => {

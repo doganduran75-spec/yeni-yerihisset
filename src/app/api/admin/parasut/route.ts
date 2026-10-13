@@ -5,9 +5,11 @@ import { getAuthUserFromRequest } from "@/lib/auth-from-request";
 import {
   ParasutError, connectionStatus, connectWithCode, disconnect, listAccounts, syncProducts, matchProducts, pushCodesToParasut,
 } from "@/lib/parasut";
+import { invoiceOrder, checkInvoice, invoicePdfUrl } from "@/lib/parasut-invoice";
 
 // Paraşüt (yalnız yönetici) — src/lib/parasut.ts
 //   status · connect {code} · disconnect · accounts · sync_products · match · link {variant_id, parasut_id} · push_codes {variant_ids}
+//   invoice {order_id, accept_diff?} · check_invoice {order_id} · invoice_pdf {order_id} (src/lib/parasut-invoice.ts)
 export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
@@ -44,6 +46,14 @@ export async function POST(req: NextRequest) {
         const ids = ((body.variant_ids as unknown[]) || []).filter(uuid) as string[];
         if (!ids.length) return NextResponse.json({ error: "Seçili satır yok" }, { status: 400 });
         return NextResponse.json({ ok: true, ...(await pushCodesToParasut(sb, ids)) });
+      }
+      case "invoice":
+      case "check_invoice":
+      case "invoice_pdf": {
+        if (!uuid(body.order_id)) return NextResponse.json({ error: "order_id" }, { status: 400 });
+        if (body.op === "invoice_pdf") return NextResponse.json({ ok: true, url: await invoicePdfUrl(sb, body.order_id) });
+        const r = body.op === "invoice" ? await invoiceOrder(sb, body.order_id, { acceptDiff: body.accept_diff === true }) : await checkInvoice(sb, body.order_id);
+        return NextResponse.json({ ok: true, ...r });
       }
       default: return NextResponse.json({ error: "Geçersiz işlem" }, { status: 400 });
     }

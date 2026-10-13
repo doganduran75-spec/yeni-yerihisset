@@ -9,7 +9,7 @@
 
 export type NextActionKey =
   | "mark_paid" | "cancel" | "ship_kargonomi" | "ship_manual" | "mark_delivered"
-  | "return" | "refund" | "invoice" | "return_invoice" | "mp_restock"
+  | "return" | "refund" | "invoice" | "invoice_parasut" | "return_invoice" | "mp_restock"
   // satış sonrası (B aşaması — src/lib/after-sale.ts)
   | "fit_ok" | "case_link" | "ship_alt" | "alt_delivered" | "send_label" | "close_case";
 
@@ -29,6 +29,8 @@ export type OrderLike = {
   kargonomi_confirmed_at?: string | null;  // firma seçildi → kargo kodu bekleniyor
   kargonomi_provider?: string | null;
   kargonomi_error?: string | null;
+  parasut_status?: string | null;          // Paraşüt faturası (src/lib/parasut-invoice.ts)
+  parasut_error?: string | null;
   mp_restocked_at?: string | null;
   order_items?: { quantity: number; returned_qty?: number | null }[] | null;
   created_at?: string | null;
@@ -63,6 +65,15 @@ export function orderNextStep(o: OrderLike): NextStep {
   const live = o.shipment_status === "returned" || Number(o.refunded_amount || 0) > 0 || !!o.open_case
     || !!o.order_items?.some((i) => Number(i.returned_qty || 0) > 0);
   if (o.import_source && !live && (SHIPPED.includes(o.shipment_status || "waiting") || daysSince(o.created_at) > 30)) return { ...r, needsAction: false };
+  // Paraşüt faturası kesiliyor / hata verdi (fatura adımı sırasında)
+  const ps = o.parasut_status;
+  if (ps && ps !== "done" && (o.invoice_status || "pending") === "pending" && r.actions.some((a) => a.key === "invoice")) {
+    return ps === "error"
+      ? { ...r, stage: `${r.stage} — Paraşüt faturası kesilemedi`, hint: o.parasut_error || r.hint,
+          actions: r.actions.map((a) => (a.key === "invoice_parasut" ? { ...a, label: "Paraşüt — yeniden dene" } : a)), needsAction: true }
+      : { ...r, stage: "Fatura kesiliyor (Paraşüt)", hint: "e-Arşiv / e-Fatura hazırlanıyor; dakikada bir kontrol edilir, bitince “Faturalandı” olur.",
+          actions: [{ key: "invoice_parasut", label: "Paraşüt durumu", kind: "primary" }], needsAction: false };
+  }
   return r;
 }
 
@@ -76,6 +87,8 @@ function coreNextStep(o: OrderLike): NextStep {
   const someReturned = ship === "returned" || !!items?.some((i) => Number(i.returned_qty || 0) > 0);
   const allReturned = ship === "returned" || (!!items?.length && items.every((i) => Number(i.returned_qty || 0) >= Number(i.quantity)));
   const invoiceAction: NextAction = { key: "invoice", label: "Fatura kesildi", kind: "primary" };
+  // Paraşüt açıksa ilk düğme (kapalıysa sipariş ekranı gizler)
+  const invoiceActs: NextAction[] = [{ key: "invoice_parasut", label: "Faturayı kes (Paraşüt)", kind: "primary" }, invoiceAction];
 
   // ── Pazaryeri: durumları pazaryeri yönetir ──
   if (isMarketplaceOrder(o)) {
@@ -86,7 +99,7 @@ function coreNextStep(o: OrderLike): NextStep {
         : { stage: "İade (pazaryeri)", hint: "Ürün depoya döndüyse stoğa ekle; para iadesini pazaryeri yapar.", actions: [{ key: "mp_restock", label: "İade geldi, stoğa ekle", kind: "danger" }], needsAction: true };
     }
     if (inv === "pending" && !SHIPPED.includes(ship)) {
-      return { stage: "Yeni sipariş", hint: "Kargodan önce faturayı kes.", actions: [invoiceAction], needsAction: true };
+      return { stage: "Yeni sipariş", hint: "Kargodan önce faturayı kes.", actions: invoiceActs, needsAction: true };
     }
     return { stage: SHIPPED.includes(ship) ? "Kargoda / teslim (pazaryeri)" : "Kargo bekleniyor (pazaryeri)", hint: "Durum pazaryerinden gelir.", actions: [], needsAction: false };
   }
@@ -152,7 +165,7 @@ function coreNextStep(o: OrderLike): NextStep {
     if (paid && remaining > 0) acts.push({ key: "refund", label: "Ücret iadesi yap", kind: "danger" });
     if (!allReturned) acts.push({ key: "return", label: "İade al", kind: "danger" });
     if (inv === "invoiced" && (pay === "refunded" || pay === "partial_refund")) acts.push({ key: "return_invoice", label: "İade faturası kesildi", kind: "primary" });
-    if (inv === "pending" && !allReturned) acts.push(invoiceAction);
+    if (inv === "pending" && !allReturned) acts.push(...invoiceActs);
     const due = acts.some((a) => a.key === "refund" || a.key === "return_invoice");
     const refundDue = acts.some((a) => a.key === "refund");
     // İadenin son adımı: faturası kesilmiş siparişte para iade edildiyse iade faturası kesilir
@@ -182,7 +195,7 @@ function coreNextStep(o: OrderLike): NextStep {
 
   // Teslim edildi (oldu / süre doldu / eski sipariş)
   const acts: NextAction[] = [];
-  if (inv === "pending") acts.push(invoiceAction);
+  if (inv === "pending") acts.push(...invoiceActs);
   acts.push({ key: "return", label: "İade al", kind: "danger" });
   return inv === "pending"
     ? { stage: "Teslim edildi", hint: "Müşteri memnunsa faturayı kes.", actions: acts, needsAction: true }
