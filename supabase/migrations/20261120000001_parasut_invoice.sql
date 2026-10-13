@@ -13,5 +13,5 @@ ALTER TABLE public.orders
   ADD COLUMN IF NOT EXISTS parasut_diff_ok boolean NOT NULL DEFAULT false; -- tutar farkı yönetici onaylı
 
 -- Fatura PDF'leri: herkese kapalı depo (yalnız sunucu; yöneticiye süreli bağlantı)
-INSERT INTO storage.buckets (id, name, public) VALUES ('invoices', 'invoices', false)
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types) VALUES ('invoices', 'invoices', false, 10485760, ARRAY['application/pdf'])
 ON CONFLICT (id) DO NOTHING;
