@@ -81,6 +81,11 @@ async function get(path, opts = {}) {
     const text = await r.text();
     return { status: r.status, text, ms: Date.now() - t0 };
   } catch (e) {
+    // "fetch failed" = bağlantı kurulamadı / koptu (yanıt yok; ör. kapanmış bağlantının yeniden kullanımı) → bir kez daha dene
+    if (!opts._retried && String(e?.message || e) === "fetch failed") {
+      await new Promise((res) => setTimeout(res, 1000));
+      return get(path, { ...opts, _retried: true });
+    }
     return { status: 0, text: String(e?.message || e), ms: Date.now() - t0 };
   }
 }
@@ -162,7 +167,7 @@ async function main() {
     ["20261114 kategori / marka sayfa metni (tanıtım + SSS)", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='categories' AND column_name='faq') AND EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='brands' AND column_name='intro')"],
     ["20261113 kişi kampanya izni + TC kimlik saklanmıyor", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='contacts' AND column_name='marketing_consent') AND NOT EXISTS(SELECT 1 FROM public.profiles WHERE identity_number IS NOT NULL)"],
     ["20261112 ana sayfa metinleri panelden", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='settings' AND column_name='home_content')"],
-    ["20261111 ürün adında stok kodu yok (ayrı alan: model_code)", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='products' AND column_name='model_code') AND NOT EXISTS(SELECT 1 FROM public.products WHERE is_active AND title ~ '\\s[A-Z]{2,}[A-Z0-9]*[0-9]{2}\\s*$')"],
+    ["20261111 ürün kodu ayrı alanda (model_code)", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='products' AND column_name='model_code')"],
     ["20261110 düzenlenebilir sayfalar + şirket künyesi", "SELECT to_regclass('public.static_pages') IS NOT NULL AND EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='settings' AND column_name='company_title')"],
     ["20261109 çerez onayı (mod ayarı, onay defteri, kimliksiz sayaç)", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='settings' AND column_name='cookie_consent_strict') AND to_regclass('public.consent_log') IS NOT NULL AND to_regclass('public.analytics_anon_daily') IS NOT NULL AND EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='analytics_sessions' AND column_name='consent')"],
     ["20261108 pazaryeri yardımcı fonksiyonları dışarıya kapalı", "SELECT NOT has_function_privilege('anon', 'public.marketplace_is_listed(text,text)', 'EXECUTE') AND NOT has_function_privilege('authenticated', 'public.marketplace_send_qty(text,uuid,integer)', 'EXECUTE')"],
@@ -417,6 +422,9 @@ async function main() {
   noCat.length ? add("warn", "Kategorisiz aktif ürün (mağazada görünmez)", noCat.join(", ")) : add("ok", "Tüm aktif ürünlerin kategorisi var");
   const noImg = sql("SELECT title FROM public.products WHERE is_active AND coalesce(image_url,'')='' AND coalesce(array_length(images,1),0)=0 ORDER BY title LIMIT 10").map((r) => r[0]);
   noImg.length ? add("warn", "Görselsiz aktif ürün", noImg.join(", ")) : add("ok", "Tüm aktif ürünlerin görseli var");
+  // Ürün kodu adın sonunda değil "Ürün kodu" alanında olmalı (20261111; SEO — docs/SEO-GEO-ANALIZ.md)
+  const codeTitle = sql("SELECT title FROM public.products WHERE is_active AND title ~ '\\s[A-Z]{2,}[A-Z0-9]*[0-9]{2}\\s*$' ORDER BY title LIMIT 10").map((r) => r[0]);
+  codeTitle.length ? add("warn", "Ürün adının sonunda stok kodu var (ürün sayfasında \"Ürün kodu\" alanına taşı)", codeTitle.join(", ")) : add("ok", "Ürün adlarında stok kodu yok");
   const noSku = num("SELECT count(*) FROM public.product_variants v JOIN public.products p ON p.id=v.product_id WHERE p.is_active AND coalesce(v.is_active,true) AND coalesce(btrim(v.sku),'')=''");
   noSku ? add("warn", "SKU'su boş aktif numara", `${noSku} adet (pazaryeriyle eşleşmez)`) : add("ok", "Aktif numaraların SKU'su dolu");
   const impPw = num("SELECT count(*) FROM auth.users u JOIN public.profiles p ON p.id = u.id WHERE p.import_source IS NOT NULL AND u.last_sign_in_at IS NULL AND coalesce(u.encrypted_password, '') <> ''");

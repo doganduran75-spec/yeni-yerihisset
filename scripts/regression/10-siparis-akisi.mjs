@@ -802,15 +802,16 @@ export default {
         ok(r3.status === 400 && memberOrders() === n1, "Sitede kapalı ürünün numarası sipariş edilemiyor (eski sepet)", why(r3));
         // Amazon fiyatı kuyruğa giriyor (geri alınan işlem: gerçek kuyruğa / pazaryerine bir şey gitmez)
         const key = `RGT-AZ-${RUN}`.toUpperCase();
-        const az = one(`BEGIN;
+        // İki ayrı SELECT: aynı sorgudaki alt sorgu, fonksiyonun eklediği satırı görmez (sorgu başı görüntüsü)
+        const az = sql(`BEGIN;
           UPDATE public.product_variants SET sku = ${lit(key)} WHERE id = ${lit(F.var)};
           INSERT INTO public.marketplace_listings (channel, listing_key) VALUES ('amazon', ${lit(key)}) ON CONFLICT DO NOTHING;
           INSERT INTO public.item_prices (product_id, variant_id, price_list_id, amount)
             SELECT ${lit(F.prod)}, ${lit(F.var)}, id, 1234.5 FROM public.price_lists WHERE code = 'amazon_sale';
-          SELECT public.enqueue_marketplace_prices('amazon', ARRAY[${lit(F.var)}]::uuid[]) || '|' ||
-            coalesce((SELECT sale_price::text FROM public.marketplace_price_sync WHERE channel = 'amazon' AND variant_id = ${lit(F.var)}), '-');
-          ROLLBACK;`) || "";
-        const [qn, price] = az.split("|");
+          SELECT public.enqueue_marketplace_prices('amazon', ARRAY[${lit(F.var)}]::uuid[]);
+          SELECT coalesce((SELECT sale_price::text FROM public.marketplace_price_sync WHERE channel = 'amazon' AND variant_id = ${lit(F.var)}), '-');
+          ROLLBACK;`);
+        const [qn, price] = [az[0]?.[0], az[1]?.[0]];
         ok(qn === "1" && Number(price) === 1234.5, "Amazon satış fiyatı pazaryeri kuyruğuna giriyor", `kuyruk ${qn ?? "?"}, fiyat ${price ?? "?"}`);
       });
 
