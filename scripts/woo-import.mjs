@@ -2,7 +2,8 @@
 // WOOCOMMERCE AKTARIMI — eski yerihisset.com ve attipas.com.tr müşterileri + siparişleri.
 // Önce DENEME (hiçbir şey yazmaz, rapor), sonra --apply. TEKRAR ÇALIŞTIRILABİLİR:
 // aktarılmış sipariş (import_source + import_ref) yeniden eklenmez, yalnız eski sitede
-// durumu değiştiyse durumu güncellenir; canlıya geçiş günü son bir kez çalıştırılır.
+// durumu değiştiyse durumu güncellenir — yeni sistemde işlenmişse (iade, fatura, kargo…) DOKUNULMAZ;
+// canlıya geçiş günü son bir kez çalıştırılır.
 //
 // Kurallar (kullanıcıyla netleşti):
 //   * Müşteri → ŞİFRESİZ hesap (e-posta onaylı); profil import_source ile işaretli.
@@ -136,7 +137,7 @@ async function main() {
   }
   const profiles = new Map((await pageAll("profiles", "id, email, first_name, last_name, phone, import_source")).map((p) => [p.id, p]));
   const withAddress = new Set((await pageAll("user_addresses", "user_id")).map((a) => a.user_id));
-  const existingOrders = await pageAll("orders", "id, order_number, import_source, import_ref, external_raw");
+  const existingOrders = await pageAll("orders", "id, order_number, import_source, import_ref, external_raw, status, payment_status, shipment_status, invoice_status");
   const imported = new Map(existingOrders.filter((o) => o.import_source).map((o) => [`${o.import_source}:${o.import_ref}`, o]));
   // Dolu numaralar (aktarılanlar dahil): eski sitenin sonraki siparişleri, sayaçtan numara almış
   // bir siparişle çakışırsa yeni numara alır (eski no "Eski no" olarak görünür)
@@ -257,7 +258,7 @@ async function main() {
       if (error) throw new Error(`sipariş sayacı: ${error.message}`);
       seqBumped = true;
     }
-    const oStat = { insert: 0, update: 0, same: 0, conflicts: 0, items: 0 };
+    const oStat = { insert: 0, update: 0, same: 0, conflicts: 0, items: 0, kept: [] };
     const skipped = new Map(), statuses = new Map(), revenueByYear = new Map();
     const match = { map: 0, sku: 0, barcode: 0, none: 0 };
     let oi = 0;
@@ -275,6 +276,12 @@ async function main() {
       const prev = imported.get(`${site.source}:${ref}`);
       if (prev) {
         if (prev.external_raw?.wc_modified && wcModified && wcModified <= prev.external_raw.wc_modified) { oStat.same++; continue; }
+        // Yeni sistemde işlenmiş mi? Önceki aktarımın yazdığı durumla bugünkü durum farklıysa evet → ezme
+        const was = prev.external_raw?.wc_status ? mapStatus({ ...o, status: prev.external_raw.wc_status }) : null;
+        if (was && (was.skip || ["status", "payment_status", "shipment_status", "invoice_status"].some((k) => (prev[k] ?? null) !== (was[k] ?? null)))) {
+          oStat.kept.push(prev.order_number || `#${o.number}`);
+          continue;
+        }
         oStat.update++;
         if (APPLY) {
           const { error } = await sb.from("orders").update({ ...fields, external_raw: { ...(prev.external_raw || {}), wc_status: o.status, wc_modified: wcModified } }).eq("id", prev.id);
@@ -373,6 +380,7 @@ async function main() {
     log(`═══ ${site.label} → kanal: ${site.channel === "site" ? "YeriHisset" : "Attipas"} ═══`);
     log(`MÜŞTERİ: ${people.size} kişi · yeni hesap ${cStat.new} · var olan hesaba bağlanan ${cStat.linked} · adres eklenecek ${cStat.addr}${cStat.blocked ? ` · silinmiş sahte üye (atlandı) ${cStat.blocked}` : ""}${cStat.failed ? ` · HATA ${cStat.failed}` : ""}`);
     log(`SİPARİŞ: eklenecek ${oStat.insert} (${oStat.items} satır) · durumu güncellenecek ${oStat.update} · değişmeyen ${oStat.same}`);
+    if (oStat.kept.length) log(`  Eski sitede değişti ama yeni sistemde işlendiği için dokunulmadı (${oStat.kept.length}): ${oStat.kept.join(", ")}`);
     log(`  Durumlar: ${[...statuses.entries()].map(([k, n]) => `${k} ${n}`).join(" · ") || "—"}`);
     log(`  Alınmayan: ${[...skipped.entries()].map(([k, n]) => `${k} ${n}`).join(" · ") || "—"}`);
     if (site.ownNumbers) log(`  Kendi numarasıyla gelen: ${oStat.insert - oStat.conflicts} · numarası dolu olduğu için yeni numara alan: ${oStat.conflicts}`);
