@@ -27,6 +27,7 @@ type StockRow = {
   image: string | null;
   search: string;
   waiting: number; // bu ürün/varyant için stok bekleyen (pending) kişi sayısı
+  notified: number; // stoğa girince haber verilmiş kişi sayısı (talep geçmişi — üretim kararı için)
 };
 
 // Türkçe-duyarsız normalize (arama için): küçült + Türkçe karakterleri sadeleştir
@@ -65,18 +66,26 @@ export default function StockPage() {
       `)
       .order("title");
 
-    // Bekleyen (pending) stok bildirimleri → ürün/varyant başına sayım
+    // Stok bildirimleri → ürün/varyant başına: bekleyen (pending) + bilgi verilmiş (notified).
+    // Bilgi verilen sayısı talep geçmişidir (müşteri almasa bile) → hangi renk-numara üretilmeli kararı.
     const waitMap = new Map<string, number>();
-    const { data: notifs } = await (supabase as any)
-      .from("stock_notifications")
-      .select("product_id, variant_id")
-      .eq("status", "pending");
-    for (const n of (notifs as any[]) || []) {
-      const k = `${n.product_id}::${n.variant_id ?? ""}`;
-      waitMap.set(k, (waitMap.get(k) ?? 0) + 1);
+    const notifMap = new Map<string, number>();
+    for (let from = 0; ; from += 1000) {
+      const { data: notifs } = await (supabase as any)
+        .from("stock_notifications")
+        .select("product_id, variant_id, status")
+        .range(from, from + 999);
+      for (const n of (notifs as any[]) || []) {
+        const k = `${n.product_id}::${n.variant_id ?? ""}`;
+        const m = n.status === "notified" ? notifMap : waitMap;
+        m.set(k, (m.get(k) ?? 0) + 1);
+      }
+      if (!notifs || notifs.length < 1000) break;
     }
     const waitOf = (productId: string, variantId: string | null) =>
       waitMap.get(`${productId}::${variantId ?? ""}`) ?? 0;
+    const notifiedOf = (productId: string, variantId: string | null) =>
+      notifMap.get(`${productId}::${variantId ?? ""}`) ?? 0;
 
     // Taban/Saya option id'lerini değere çöz (variant_options'tan)
     const prods = (data as any[]) || [];
@@ -115,6 +124,7 @@ export default function StockPage() {
             image: p.image_url,
             search: norm([p.title, desc, groupName, value, v.sku, v.barcode, taban, saya].filter(Boolean).join(" ")),
             waiting: waitOf(p.id, v.id),
+            notified: notifiedOf(p.id, v.id),
           });
         }
       } else {
@@ -135,6 +145,7 @@ export default function StockPage() {
           image: p.image_url,
           search: norm([p.title, desc, taban, saya].filter(Boolean).join(" ")),
           waiting: waitOf(p.id, null),
+          notified: notifiedOf(p.id, null),
         });
       }
     }
@@ -233,7 +244,7 @@ export default function StockPage() {
   // Excel'e aktar — tüm satırlar + tüm kolonlar (.xls; Excel HTML tablosu olarak açar)
   function exportExcel() {
     const esc = (s: any) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    const headers = ["Ürün", "Numara", "Stok Kodu", "Barkod", "Taban", "Saya", "Bekleyen", "Stok", "Üretimde"];
+    const headers = ["Ürün", "Numara", "Stok Kodu", "Barkod", "Taban", "Saya", "Bekleyen", "Bilgi verildi", "Stok", "Üretimde"];
     const body = rows.map((r) => `<tr>
       <td>${esc(r.title)}</td>
       <td>${esc(r.sizeValue)}</td>
@@ -242,6 +253,7 @@ export default function StockPage() {
       <td>${esc(r.taban)}</td>
       <td>${esc(r.saya)}</td>
       <td>${r.waiting}</td>
+      <td>${r.notified}</td>
       <td>${r.stock}</td>
       <td>${r.inProduction}</td>
     </tr>`).join("");
@@ -354,6 +366,7 @@ export default function StockPage() {
                 <th className="px-3 py-2.5">Taban</th>
                 <th className="px-3 py-2.5">Saya</th>
                 <th className="px-3 py-2.5 text-center">Bekleyen</th>
+                <th className="px-3 py-2.5 text-center" title="Stoğa girince haber verilmiş kişi sayısı (alsın almasın) — talep geçmişi">Bilgi verildi</th>
                 <th className="px-3 py-2.5 text-center">Stok</th>
                 <th className="px-3 py-2.5 text-center">Üretimde</th>
                 <th className="px-3 py-2.5"></th>
@@ -406,6 +419,10 @@ export default function StockPage() {
                       ) : (
                         <span className="text-slate-300">—</span>
                       )}
+                    </td>
+                    {/* Bilgi verildi (talep geçmişi) */}
+                    <td className="px-3 py-2 text-center text-xs" title={r.notified ? `${r.notified} kişiye “stoğa girdi” bilgisi verildi` : undefined}>
+                      {r.notified > 0 ? <span className="font-semibold text-slate-600">{r.notified}</span> : <span className="text-slate-300">—</span>}
                     </td>
                     {/* Stok input */}
                     <td className="px-3 py-2 text-center">

@@ -885,6 +885,27 @@ export default {
         ok(q(false) === "0", "API kapalıyken kuyruğa bir şey girmiyor", `kuyruk ${q(false)}`);
       });
 
+      await part("Üye temizliği: misafir süzgeci ve silme", async () => {
+        // Siparişsiz misafir (şifresiz) test hesabı
+        const email = `rgt-sil-${RUN}@${DOMAIN}`;
+        const c = await auth("admin/users", { method: "POST", service: true, body: { email, email_confirm: true } });
+        const gid = c.json?.id;
+        if (!gid) return add("fail", "Silme testi için hesap oluşturulamadı", `HTTP ${c.status}`);
+        sql(`INSERT INTO public.profiles (id, email, first_name, last_name) VALUES (${lit(gid)}, ${lit(email)}, 'Regresyon', 'Sil') ON CONFLICT (id) DO NOTHING`);
+        const s = await rest("rpc/admin_search_members", { token: F.admin.token, method: "POST", body: { p_q: email, p_state: "guest", p_orders: "none" } });
+        ok(Array.isArray(s.json) && s.json.some((r) => r.id === gid), "Misafir + siparişsiz süzgeci hesabı buluyor", `HTTP ${s.status}`);
+        const s2 = await rest("rpc/admin_search_members", { token: F.admin.token, method: "POST", body: { p_q: F.member.email, p_orders: "none" } });
+        ok(Array.isArray(s2.json) && !s2.json.some((r) => r.id === F.member.id), "Siparişi olan üye “siparişi yok” süzgecine girmiyor", `HTTP ${s2.status}`);
+        const md = await rest("rpc/admin_delete_members", { token: F.member.token, method: "POST", body: { p_ids: [gid] } });
+        ok(md.status >= 400 && one(`SELECT count(*) FROM public.profiles WHERE id = ${lit(gid)}`) === "1", "Üye hesap silemiyor", `HTTP ${md.status}`);
+        const d = await rest("rpc/admin_delete_members", { token: F.admin.token, method: "POST", body: { p_ids: [gid, F.member.id, F.admin.id] } });
+        const skipped = (d.json?.skipped || []).map((x) => x.reason);
+        ok(d.status === 200 && d.json?.deleted === 1 && one(`SELECT count(*) FROM auth.users WHERE id = ${lit(gid)}`) === "0" && one(`SELECT count(*) FROM public.profiles WHERE id = ${lit(gid)}`) === "0",
+          "Yönetici siparişsiz misafiri siliyor (hesap + profil)", `HTTP ${d.status} ${d.text.slice(0, 120)}`);
+        ok(skipped.includes("siparişi var") && skipped.includes("yönetici hesabı") && one(`SELECT count(*) FROM public.profiles WHERE id IN (${lit(F.member.id)}, ${lit(F.admin.id)})`) === "2",
+          "Siparişi olan ve yönetici hesaplar silinmiyor", JSON.stringify(d.json?.skipped));
+      });
+
       await part("Sipariş silme ve süresi dolan sipariş", async () => {
         if (O.del) {
           const s0 = stock();

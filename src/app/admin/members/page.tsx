@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { supabase } from "@/lib/supabase";
+import { siteAlert, siteConfirm } from "@/components/ui/site-dialog";
 import { Search, Mail, Phone, AtSign, Loader2, UserCog, Tags, X, Plus, UserPlus, Trash2, Link2, Activity } from "lucide-react";
 import { cn } from "@/lib/utils";
 import MemberJourney from "@/components/admin/MemberJourney";
@@ -101,6 +102,10 @@ export default function MembersPage() {
   const [roleFilter, setRoleFilter]     = useState("");
   const [tagFilter, setTagFilter]       = useState("");
   const [sourceFilter, setSourceFilter] = useState("");
+  const [stateFilter, setStateFilter]   = useState("");   // guest | unverified | member
+  const [ordersFilter, setOrdersFilter] = useState("");   // none | some
+  const [sel, setSel]                   = useState<Set<string>>(new Set());
+  const [deleting, setDeleting]         = useState(false);
   const [page, setPage]                 = useState(0);
   const [total, setTotal]               = useState(0);
   const [searched, setSearched]         = useState(false);
@@ -137,6 +142,35 @@ export default function MembersPage() {
   }
 
   // Arama + filtre → sunucudan bir sayfa
+  // Seçili hesapları sil (admin_delete_members): siparişi olan / yönetici hesaplar atlanır
+  async function deleteSelected() {
+    const ids = [...sel];
+    if (!ids.length) return;
+    const ok = await siteConfirm({
+      title: `${ids.length} hesap silinsin mi?`,
+      message: "Hesap, profil, adresler ve bağlı kişi kaydı kalıcı olarak silinir; geri alınamaz. Siparişi olan ve yönetici hesaplar silinmez.",
+      confirmText: "Kalıcı olarak sil", tone: "danger",
+    });
+    if (!ok) return;
+    setDeleting(true);
+    try {
+      const { data, error } = await (supabase as any).rpc("admin_delete_members", { p_ids: ids });
+      if (error) throw error;
+      const sk = ((data?.skipped as any[]) || []);
+      siteAlert({
+        title: "Silme tamam",
+        message: `${data?.deleted ?? 0} hesap silindi.${sk.length ? `\nSilinmeyen ${sk.length}: ${sk.slice(0, 5).map((x) => `${x.email} (${x.reason})`).join(", ")}` : ""}`,
+        tone: sk.length ? "danger" : "success",
+      });
+      setSel(new Set());
+      fetchAll();
+    } catch (e: any) {
+      siteAlert({ title: "Silinemedi", message: e?.message ?? "hata", tone: "danger" });
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   async function runSearch(p = 0, k: "member" | "contact" = kind) {
     setLoading(true);
     setSearched(true);
@@ -146,7 +180,9 @@ export default function MembersPage() {
         const { data, error } = await (supabase as any).rpc("admin_search_members", {
           p_q: search.trim() || null, p_role: roleFilter || null, p_tag: tagFilter || null,
           p_source: sourceFilter || null, p_limit: PAGE, p_offset: p * PAGE,
+          p_state: stateFilter || null, p_orders: ordersFilter || null,
         });
+        setSel(new Set());
         if (error) throw error;
         const rows = (data as any[]) || [];
         const ids = rows.map((r) => r.id);
@@ -381,6 +417,17 @@ export default function MembersPage() {
               <option value="woo_yerihisset">Eski YeriHisset</option>
               <option value="woo_attipas">Attipas</option>
             </select>
+            <select value={stateFilter} onChange={(e) => setStateFilter(e.target.value)} className={selCls}>
+              <option value="">Durum: tümü</option>
+              <option value="guest">Misafir (şifresiz)</option>
+              <option value="unverified">Doğrulanmamış</option>
+              <option value="member">Üye</option>
+            </select>
+            <select value={ordersFilter} onChange={(e) => setOrdersFilter(e.target.value)} className={selCls}>
+              <option value="">Sipariş: tümü</option>
+              <option value="none">Siparişi yok</option>
+              <option value="some">Siparişi var</option>
+            </select>
           </>
         )}
         <Button onClick={() => runSearch(0)} disabled={loading} className="gap-2 h-9">
@@ -396,6 +443,15 @@ export default function MembersPage() {
               ? "Aramak ya da filtrelemek için yukarıdan seç, sonra Listele. Boş arama + Listele = en yeni kayıtlar."
               : `${total} sonuç · sayfa ${page + 1} / ${pages}`}
           </CardDescription>
+          {kind === "member" && sel.size > 0 && (
+            <div className="flex flex-wrap items-center gap-2 pt-2">
+              <span className="text-sm font-medium">{sel.size} hesap seçili</span>
+              <Button size="sm" variant="outline" className="gap-1.5 text-red-700 border-red-200 hover:bg-red-50" disabled={deleting} onClick={deleteSelected}>
+                {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />} Seçilenleri sil
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setSel(new Set())}>Seçimi kaldır</Button>
+            </div>
+          )}
         </CardHeader>
         <CardContent className="p-0">
           {loading ? (
@@ -408,6 +464,13 @@ export default function MembersPage() {
             <Table>
               <TableHeader>
                 <TableRow className="bg-slate-50/50">
+                  {kind === "member" && (
+                    <TableHead className="w-8">
+                      <input type="checkbox" title="Bu sayfadakileri seç (siparişi olanlar hariç)"
+                        checked={members.some((m) => !m.order_count) && members.filter((m) => !m.order_count).every((m) => sel.has(m.id))}
+                        onChange={(e) => setSel(e.target.checked ? new Set(members.filter((m) => !m.order_count).map((m) => m.id)) : new Set())} />
+                    </TableHead>
+                  )}
                   <TableHead>Ad / İletişim</TableHead>
                   <TableHead>Tür & Roller</TableHead>
                   <TableHead>Etiket / Beden</TableHead>
@@ -423,6 +486,12 @@ export default function MembersPage() {
                     const memberTags  = member.tagOptionIds.map(id => allOptionsById.get(id)).filter(Boolean);
                     return (
                       <TableRow key={"m" + member.id} className="group cursor-pointer hover:bg-slate-50/60" onClick={() => router.push(`/admin/members/${member.id}`)}>
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          {!member.order_count && (
+                            <input type="checkbox" checked={sel.has(member.id)} title="Silmek için seç"
+                              onChange={(e) => setSel((x) => { const n = new Set(x); if (e.target.checked) n.add(member.id); else n.delete(member.id); return n; })} />
+                          )}
+                        </TableCell>
                         <TableCell>
                           <div className="font-medium text-sm leading-tight">{member.first_name} {member.last_name}</div>
                           <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5"><Mail size={11} /> {member.email ?? "—"}</div>
