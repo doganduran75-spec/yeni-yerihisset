@@ -865,6 +865,26 @@ export default {
         ok(pdf.status === 404, "Paraşüt: faturası olmayan siparişte PDF yok", why(pdf));
       });
 
+      await part("Google Merchant API: kuyruk ve yetki", async () => {
+        const g = (token, body) => rawApi("/api/admin/gmc", { ...(token ? { token } : {}), body });
+        const a = await g(null, { op: "status" });
+        ok(a.status === 401, "Google Merchant: girişsiz istek reddediliyor", why(a));
+        const m = await g(F.member.token, { op: "status" });
+        ok(m.status === 403, "Google Merchant: üye erişemiyor", why(m));
+        const s = await g(F.admin.token, { op: "status" });
+        ok(s.status === 200 && !/private_key|BEGIN PRIVATE/.test(s.text), "Google Merchant: yönetici durumu görüyor (anahtar dönmeden)", why(s));
+        const sec = await rest("settings?select=gmc_service_account");
+        ok(sec.status >= 400, "Servis hesabı anahtarı dışarıdan okunamıyor", `HTTP ${sec.status}`);
+        // Tetikleyici (geri alınan işlem — gerçek kuyruğa / Google'a bir şey gitmez): açıkken stok değişimi kuyruğa girer, kapalıyken girmez
+        const q = (on) => one(`BEGIN;
+          UPDATE public.settings SET gmc_api_enabled = ${on} WHERE id IS NOT NULL;
+          UPDATE public.product_variants SET stock = stock + 1 WHERE id = ${lit(F.var)};
+          SELECT count(*) FROM public.gmc_sync_queue WHERE product_id = ${lit(F.prod)};
+          ROLLBACK;`);
+        ok(q(true) === "1", "API açıkken numara stoğu değişince ürün Google kuyruğuna giriyor", `kuyruk ${q(true)}`);
+        ok(q(false) === "0", "API kapalıyken kuyruğa bir şey girmiyor", `kuyruk ${q(false)}`);
+      });
+
       await part("Sipariş silme ve süresi dolan sipariş", async () => {
         if (O.del) {
           const s0 = stock();

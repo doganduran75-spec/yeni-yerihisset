@@ -14,6 +14,7 @@ import { supabase } from "@/lib/supabase";
 import { siteAlert, siteConfirm } from "@/components/ui/site-dialog";
 import HepsiburadaTestCenter from "@/components/admin/settings/HepsiburadaTestCenter";
 import ParasutCard from "@/components/admin/settings/ParasutCard";
+import GmcApiCard from "@/components/admin/settings/GmcApiCard";
 import {
   Loader2, Save, Eye, EyeOff, Truck, Store, RefreshCw, Send, PlugZap, AlertTriangle, CheckCircle2, Info, RotateCcw, History, ShoppingBag,
 } from "lucide-react";
@@ -729,6 +730,9 @@ export default function IntegrationsTab() {
 
       {/* ─── Paraşüt (fatura) ─── */}
       <ParasutCard />
+
+      {/* ─── Google Merchant API (anlık ürün gönderimi) ─── */}
+      <GmcApiCard />
     </div>
   );
 }

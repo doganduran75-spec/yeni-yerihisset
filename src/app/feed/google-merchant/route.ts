@@ -14,8 +14,10 @@
  */
 
 import { NextRequest } from "next/server";
-import { feedAttrs } from "@/config/product-specs";
 import { createAdminClient } from "@/lib/supabase-admin";
+import { buildGmcItems, gmcSettings, type GmcItem } from "@/lib/gmc-items";
+
+// Kalemler src/lib/gmc-items.ts'te (Merchant API anlık gönderimiyle aynı kaynak / aynı kimlikler)
 
 // XML özel karakterleri kaçır
 function esc(str: string | null | undefined): string {
@@ -28,44 +30,49 @@ function esc(str: string | null | undefined): string {
     .replace(/'/g, "&apos;");
 }
 
-// Açıklama: HTML etiketleri ve fazla boşluk temizlenmiş düz metin (Meta/GMC düz metin ister)
-function plain(html: string | null | undefined, max = 4900): string {
-  if (!html) return "";
-  return html
-    .replace(/<(br|\/p|\/li|\/h\d)[^>]*>/gi, " ")
-    .replace(/<[^>]+>/g, "")
-    .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, max);
-}
-
-// Varyant grubu → besleme alanı (ayakkabıda "Numara" → size)
-function attrTag(groupName: string): "size" | "color" | null {
-  const g = groupName.toLocaleLowerCase("tr-TR");
-  if (/numara|beden|size|ölçü|olcu/.test(g)) return "size";
-  if (/renk|color/.test(g)) return "color";
-  return null;
-}
-
-// Geçerli GTIN (barkod): 8/12/13/14 hane
-function gtin(barcode: string | null | undefined): string | null {
-  const d = String(barcode || "").replace(/\s/g, "");
-  return /^(\d{8}|\d{12,14})$/.test(d) ? d : null;
-}
-
-// Stok durumunu GMC formatına çevir
-function availability(stock: number | null | undefined): string {
-  return (stock ?? 0) > 0 ? "in_stock" : "out_of_stock";
+function itemXml(it: GmcItem): string {
+  const extra = [
+    it.color ? `<g:color>${esc(it.color)}</g:color>` : "",
+    it.gender ? `<g:gender>${it.gender}</g:gender>` : "",
+    it.ageGroup ? `<g:age_group>${it.ageGroup}</g:age_group>` : "",
+    it.material ? `<g:material>${esc(it.material)}</g:material>` : "",
+    ...it.highlights.map((h) => `<g:product_highlight>${esc(h)}</g:product_highlight>`),
+    ...it.details.map(([k, v]) => `<g:product_detail><g:section_name>Teknik bilgiler</g:section_name><g:attribute_name>${esc(k)}</g:attribute_name><g:attribute_value>${esc(v)}</g:attribute_value></g:product_detail>`),
+  ].filter(Boolean).join("\n      ");
+  const value = esc(it.variantValue);
+  const cat = esc(it.productType);
+  return `
+    <item>
+      <g:id>${esc(it.id)}</g:id>
+      <g:item_group_id>${esc(it.itemGroupId)}</g:item_group_id>
+      <g:title>${esc(it.title)}</g:title>
+      <g:description>${esc(it.description)}</g:description>
+      <g:link>${esc(it.link)}</g:link>
+      ${it.imageLink ? `<g:image_link>${esc(it.imageLink)}</g:image_link>` : ""}
+      ${it.additionalImageLinks.map((img) => `<g:additional_image_link>${esc(img)}</g:additional_image_link>`).join("\n      ")}
+      <g:availability>${it.availability}</g:availability>
+      <g:price>${it.price.toFixed(2)} ${it.currency}</g:price>
+      ${it.salePrice != null ? `<g:sale_price>${it.salePrice.toFixed(2)} ${it.currency}</g:sale_price>` : ""}
+      <g:brand>${esc(it.brand)}</g:brand>
+      <g:condition>${esc(it.condition)}</g:condition>
+      ${cat ? `<g:product_type>${cat}</g:product_type>` : ""}
+      ${cat ? `<g:custom_label_0>${cat}</g:custom_label_0>` : ""}
+      ${it.googleProductCategory ? `<g:google_product_category>${esc(it.googleProductCategory)}</g:google_product_category>` : ""}
+      ${it.gtin ? `<g:gtin>${it.gtin}</g:gtin>` : ""}
+      ${it.mpn ? `<g:mpn>${esc(it.mpn)}</g:mpn>` : ""}
+      ${!it.identifierExists ? "<g:identifier_exists>no</g:identifier_exists>" : ""}
+      ${it.variantTag && value ? `<g:${it.variantTag}>${value}</g:${it.variantTag}>` : ""}
+      ${it.sizeSystem ? `<g:size_system>${it.sizeSystem}</g:size_system>` : ""}
+      ${extra}
+    </item>`;
 }
 
 export async function GET(request: NextRequest) {
   const supabase = createAdminClient();
 
   // Feed güvenliği: opsiyonel secret kontrolü
-  const { data: settings } = await supabase.from("settings").select("*").single();
+  const settings = await gmcSettings(supabase);
   const feedSecret = settings?.gmc_feed_secret;
-
   if (feedSecret) {
     const secret = request.nextUrl.searchParams.get("secret");
     if (secret !== feedSecret) {
@@ -75,119 +82,13 @@ export async function GET(request: NextRequest) {
 
   const storeName = settings?.store_name || "YeriHisset";
   const storeUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com";
-  const currency = settings?.currency || "TRY";
-  const condition = settings?.gmc_product_condition || "new";
-  const defaultBrand = settings?.gmc_brand_default || storeName;
-  const defaultCategory = settings?.gmc_default_category || "";
 
-  // Tüm aktif ürünleri çek
-  const { data: products, error } = await supabase
-    .from("products")
-    .select(`
-      id, title, description, short_description, slug, price, stock, images, image_url, has_variants, tags,
-      brands (name),
-      categories (name),
-      product_variants (
-        id, sku, barcode, price, compare_at_price, stock, is_active,
-        variant_options (
-          value,
-          variant_groups (name)
-        )
-      )
-    `)
-    .eq("is_active", true)
-    .order("created_at", { ascending: false });
-
-  if (error) {
+  let items: GmcItem[];
+  try {
+    items = await buildGmcItems(supabase, { settings });
+  } catch (error) {
     console.error("GMC feed error:", error);
     return new Response("Feed oluşturulurken hata oluştu", { status: 500 });
-  }
-
-  const items: string[] = [];
-
-  for (const product of products ?? []) {
-    const productUrl = `${storeUrl}/products/${product.slug}`;
-    const primaryImage =
-      (product.images as string[] | null)?.[0] ?? product.image_url ?? "";
-    const additionalImages = ((product.images as string[] | null) ?? []).slice(1);
-    const brandName = esc((product.brands as any)?.name || defaultBrand);
-    const categoryName = esc((product.categories as any)?.name || "");
-    const description = esc(plain(product.description) || plain(product.short_description) || product.title);
-    // Renk / cinsiyet / yaş grubu / malzeme / öne çıkanlar / teknik detay (src/config/product-specs.ts)
-    const fa = feedAttrs((product.brands as any)?.name, product.title);
-    const extra = [
-      fa.color ? `<g:color>${esc(fa.color)}</g:color>` : "",
-      fa.gender ? `<g:gender>${fa.gender}</g:gender>` : "",
-      fa.ageGroup ? `<g:age_group>${fa.ageGroup}</g:age_group>` : "",
-      fa.material ? `<g:material>${esc(fa.material)}</g:material>` : "",
-      ...fa.highlights.map((h) => `<g:product_highlight>${esc(h.slice(0, 150))}</g:product_highlight>`),
-      ...fa.details.map(([k, v]) => `<g:product_detail><g:section_name>Teknik bilgiler</g:section_name><g:attribute_name>${esc(k)}</g:attribute_name><g:attribute_value>${esc(v)}</g:attribute_value></g:product_detail>`),
-    ].filter(Boolean).join("\n      ");
-
-    const activeVariants = ((product.product_variants as any[]) ?? []).filter(
-      (v: any) => v.is_active
-    );
-
-    if (product.has_variants && activeVariants.length > 0) {
-      // Her varyant ayrı item — item_group_id ile gruplandır
-      for (const variant of activeVariants) {
-        const variantValue = esc(variant.variant_options?.value ?? "");
-        const tag = attrTag(variant.variant_options?.variant_groups?.name ?? "");
-        const variantTitle = `${esc(product.title)} - ${variantValue}`;
-        const variantUrl = `${productUrl}?variant=${variant.id}`; // ürün sayfası bu numarayı seçili açar
-        const onSale = variant.compare_at_price != null && Number(variant.compare_at_price) > Number(variant.price);
-        const listPrice = `${Number(onSale ? variant.compare_at_price : variant.price).toFixed(2)} ${currency}`;
-        const code = gtin(variant.barcode);
-
-        items.push(`
-    <item>
-      <g:id>${esc(product.id)}_${esc(variant.id)}</g:id>
-      <g:item_group_id>${esc(product.id)}</g:item_group_id>
-      <g:title>${variantTitle}</g:title>
-      <g:description>${description}</g:description>
-      <g:link>${esc(variantUrl)}</g:link>
-      ${primaryImage ? `<g:image_link>${esc(primaryImage)}</g:image_link>` : ""}
-      ${additionalImages.map((img: string) => `<g:additional_image_link>${esc(img)}</g:additional_image_link>`).join("\n      ")}
-      <g:availability>${availability(variant.stock)}</g:availability>
-      <g:price>${listPrice}</g:price>
-      ${onSale ? `<g:sale_price>${Number(variant.price).toFixed(2)} ${currency}</g:sale_price>` : ""}
-      <g:brand>${brandName}</g:brand>
-      <g:condition>${esc(condition)}</g:condition>
-      ${categoryName ? `<g:product_type>${categoryName}</g:product_type>` : ""}
-      ${categoryName ? `<g:custom_label_0>${categoryName}</g:custom_label_0>` : ""}
-      ${defaultCategory ? `<g:google_product_category>${esc(defaultCategory)}</g:google_product_category>` : ""}
-      ${code ? `<g:gtin>${code}</g:gtin>` : ""}
-      ${variant.sku ? `<g:mpn>${esc(variant.sku)}</g:mpn>` : ""}
-      ${!code && !variant.sku ? "<g:identifier_exists>no</g:identifier_exists>" : ""}
-      ${tag && variantValue ? `<g:${tag}>${variantValue}</g:${tag}>` : ""}
-      ${tag === "size" && fa.sizeSystem ? `<g:size_system>${fa.sizeSystem}</g:size_system>` : ""}
-      ${extra}
-    </item>`);
-      }
-    } else {
-      // Varyant'sız tek ürün
-      const price = `${Number(product.price).toFixed(2)} ${currency}`;
-
-      items.push(`
-    <item>
-      <g:id>${esc(product.id)}</g:id>
-      <g:item_group_id>${esc(product.id)}</g:item_group_id>
-      <g:title>${esc(product.title)}</g:title>
-      <g:description>${description}</g:description>
-      <g:link>${esc(productUrl)}</g:link>
-      ${primaryImage ? `<g:image_link>${esc(primaryImage)}</g:image_link>` : ""}
-      ${additionalImages.map((img: string) => `<g:additional_image_link>${esc(img)}</g:additional_image_link>`).join("\n      ")}
-      <g:availability>${availability(product.stock)}</g:availability>
-      <g:price>${price}</g:price>
-      <g:brand>${brandName}</g:brand>
-      <g:condition>${esc(condition)}</g:condition>
-      ${categoryName ? `<g:product_type>${categoryName}</g:product_type>` : ""}
-      ${categoryName ? `<g:custom_label_0>${categoryName}</g:custom_label_0>` : ""}
-      ${defaultCategory ? `<g:google_product_category>${esc(defaultCategory)}</g:google_product_category>` : ""}
-      <g:identifier_exists>no</g:identifier_exists>
-      ${extra}
-    </item>`);
-    }
   }
 
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
@@ -196,7 +97,7 @@ export async function GET(request: NextRequest) {
     <title>${esc(storeName)}</title>
     <link>${esc(storeUrl)}</link>
     <description>${esc(storeName)} ürün kataloğu</description>
-    ${items.join("")}
+    ${items.map(itemXml).join("")}
   </channel>
 </rss>`;
 
