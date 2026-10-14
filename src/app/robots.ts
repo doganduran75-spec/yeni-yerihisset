@@ -24,6 +24,7 @@ export default function robots(): MetadataRoute.Robots {
           "/siparis-tamam",
           "/sifre-belirle",
           "/deneme-sonucu",
+          "/yorum",
           "/eposta-onay",
           "/kampanya-izni",
           "/favoriler",

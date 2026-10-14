@@ -9,6 +9,7 @@ import { evaluateHealthAlerts } from "@/lib/server-health-alerts";
 import { pollKargonomi } from "@/lib/kargonomi-flow";
 import { pollParasut } from "@/lib/parasut-invoice";
 import { processGmcQueue } from "@/lib/gmc-sync";
+import { processReviewRequests, processWinback } from "@/lib/review-winback";
 
 // Pazaryeri SİPARİŞLERİ (önce: yeni siparişleri al, iptallerde stoğu geri ekle) +
 // stok kuyruğu (Trendyol + Hepsiburada) — YEDEK tetik: anlık tetik
@@ -53,6 +54,11 @@ async function run(req: NextRequest) {
   // 6) Google Merchant API: değişen ürünler (besleme günlük tam eşitlemeyi sürdürür)
   const google = await processGmcQueue(supabase).catch((e: any) => ({ products: 0, sent: 0, deleted: 0, failed: 0, skipped: "", errors: [e?.message || String(e)] }));
   if (google.errors.length) console.error("[cron/gmc]", google.errors.slice(0, 5).join(" | "));
+  // 7) Saatte bir: yorum isteme + "seni özledik" (src/lib/review-winback.ts; ayarlar Ayarlar › E-posta Şablonları)
+  if (new Date().getMinutes() === 23) {
+    await processReviewRequests(supabase).catch((e: any) => console.error("[cron/review-request]", e?.message || e));
+    await processWinback(supabase).catch((e: any) => console.error("[cron/winback]", e?.message || e));
+  }
   await (supabase as any).from("marketplace_stock_log")
     .delete().lt("created_at", new Date(Date.now() - 180 * 86400_000).toISOString());
   // Form spam koruması kayıtları (src/lib/bot-guard.ts): 30 günden eskiler

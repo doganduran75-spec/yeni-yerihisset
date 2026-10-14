@@ -18,12 +18,16 @@ const TRIGGER_LABELS: Record<string, string> = {
   coupon_assigned: "Yeni Kupon Tanımlandı",
   cart_abandonment: "Sepet Hatırlatma",
   order_recovery: "Sipariş Kurtarma",
+  review_request: "Yorum İsteme",
+  winback: "Seni Özledik",
 };
 
 // Şablon başına kullanılabilir değişkenler (düzenleme ipucu)
 const TRIGGER_VARS: Record<string, string[]> = {
   cart_abandonment: ["{{customer_name}}", "{{items_html}}", "{{store_url}}", "{{store_name}}"],
   order_recovery: ["{{customer_name}}", "{{order_id}}", "{{store_url}}", "{{store_name}}"],
+  review_request: ["{{customer_name}}", "{{product_names}}", "{{stars_html}}", "{{store_url}}", "{{store_name}}"],
+  winback: ["{{customer_name}}", "{{coupon_code}}", "{{coupon_percent}}", "{{coupon_expires}}", "{{store_url}}", "{{store_name}}"],
 };
 
 export default function EditTemplatePage({ params }: { params: Promise<{ trigger: string }> }) {

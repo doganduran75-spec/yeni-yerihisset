@@ -909,6 +909,34 @@ export default {
           "Siparişi olan ve yönetici hesaplar silinmiyor", JSON.stringify(d.json?.skipped));
       });
 
+      await part("Yorum isteme (bağlantıyla yorum) + seni özledik (geri dönüş algılama)", async () => {
+        const r = await order([MAIN(1)]);
+        const id = r.json?.orderId;
+        if (!id) return add("fail", "Yorum testi için sipariş oluşturulamadı", why(r));
+        const tok = randomBytes(16).toString("hex");
+        sql(`UPDATE public.orders SET review_token = ${lit(tok)}, review_requested_at = now() WHERE id = ${lit(id)}`);
+        const g = await rawApi(`/api/review?t=${tok}`, { method: "GET" });
+        ok(g.status === 200 && Array.isArray(g.json?.questions) && !g.json?.done, "Yorum bağlantısı soruları getiriyor (giriş gerekmeden)", why(g));
+        const bad = await rawApi(`/api/review?t=${"0".repeat(32)}`, { method: "GET" });
+        ok(bad.status === 404, "Geçersiz yorum bağlantısı reddediliyor", why(bad));
+        const fit = (g.json?.questions || []).find((q) => q.type === "choice");
+        const body = { t: tok, overall: 4, answers: fit ? { [fit.key]: fit.options[0] } : {}, comment: "REGRESYON-TEST yorum", _hp: "", _t: 5000 };
+        const p = await rawApi("/api/review", { body });
+        const rv = row(`SELECT rating_overall, is_approved, source, jsonb_array_length(answers) AS n FROM public.order_reviews WHERE order_id = ${lit(id)}`);
+        ok(p.status === 200 && rv && Number(rv.rating_overall) === 4 && rv.is_approved === false && rv.source === "email" && (!fit || Number(rv.n) >= 1),
+          "Yorum kaydediliyor (genel puan + cevaplar, onay bekliyor)", `${why(p)} ${JSON.stringify(rv)}`);
+        const again = await rawApi("/api/review", { body });
+        ok(again.status === 200 && again.json?.already === true && num(`SELECT count(*) FROM public.order_reviews WHERE order_id = ${lit(id)}`) === 1, "Aynı bağlantıyla ikinci yorum yazılmıyor", why(again));
+        // Seni özledik: uzun aradan sonra görülen üye işaretleniyor (geri alınan işlem)
+        const w = one(`BEGIN;
+          UPDATE public.settings SET winback = jsonb_set(winback, '{enabled}', 'true') WHERE id IS NOT NULL;
+          UPDATE public.profiles SET last_active_at = now() - interval '200 days', winback_detected_at = NULL WHERE id = ${lit(F.member.id)};
+          UPDATE public.profiles SET last_active_at = now() WHERE id = ${lit(F.member.id)};
+          SELECT (winback_detected_at IS NOT NULL)::text FROM public.profiles WHERE id = ${lit(F.member.id)};
+          ROLLBACK;`);
+        ok(w === "true", "Uzun süre gelmeyip dönen üye “seni özledik” için işaretleniyor", `işaret ${w}`);
+      });
+
       await part("Sipariş silme ve süresi dolan sipariş", async () => {
         if (O.del) {
           const s0 = stock();

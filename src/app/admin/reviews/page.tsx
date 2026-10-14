@@ -15,9 +15,12 @@ type Review = {
   id: string;
   order_id: string;
   user_id: string;
-  rating_shipping: number;
-  rating_quality: number;
-  rating_communication: number;
+  rating_shipping: number | null;
+  rating_quality: number | null;
+  rating_communication: number | null;
+  rating_overall: number | null;                // yorum isteme e-postasından (yeni biçim)
+  answers: { key: string; label: string; type: string; value: string | number }[] | null;
+  source: string | null;
   comment: string | null;
   images: string[];
   is_approved: boolean;
@@ -54,7 +57,9 @@ function StarRow({ label, value }: { label: string; value: number }) {
 }
 
 function avgRating(r: Review) {
-  return ((r.rating_shipping + r.rating_quality + r.rating_communication) / 3).toFixed(1);
+  if (typeof r.rating_overall === "number") return r.rating_overall.toFixed(1);
+  const nums = [r.rating_shipping, r.rating_quality, r.rating_communication].filter((x): x is number => typeof x === "number");
+  return nums.length ? (nums.reduce((a, b) => a + b, 0) / nums.length).toFixed(1) : "—";
 }
 
 export default function AdminReviewsPage() {
@@ -73,7 +78,7 @@ export default function AdminReviewsPage() {
         .from("order_reviews")
         .select(`
           id, order_id, user_id,
-          rating_shipping, rating_quality, rating_communication,
+          rating_shipping, rating_quality, rating_communication, rating_overall, answers, source,
           comment, images, is_approved, admin_note, created_at,
           orders (order_number),
           profiles (first_name, last_name, email)
@@ -252,9 +257,21 @@ export default function AdminReviewsPage() {
                   <div className="border-t px-5 pb-5 pt-4 space-y-4">
                     {/* Puanlar */}
                     <div className="bg-slate-50 rounded-xl p-4 space-y-2">
-                      <StarRow label="Kargo & Teslimat" value={review.rating_shipping} />
-                      <StarRow label="Ürün Kalitesi" value={review.rating_quality} />
-                      <StarRow label="İletişim" value={review.rating_communication} />
+                      {typeof review.rating_overall === "number" ? (
+                        <>
+                          {/* Yorum isteme e-postası: genel puan + o günkü sorular (soru metniyle saklanır) */}
+                          <StarRow label="Genel" value={review.rating_overall} />
+                          {(review.answers || []).map((a) => a.type === "stars"
+                            ? <StarRow key={a.key} label={a.label} value={Number(a.value)} />
+                            : <div key={a.key} className="flex items-center justify-between text-xs"><span className="text-slate-500">{a.label}</span><b className="text-slate-700">{String(a.value)}</b></div>)}
+                        </>
+                      ) : (
+                        <>
+                          {review.rating_shipping != null && <StarRow label="Kargo & Teslimat" value={review.rating_shipping} />}
+                          {review.rating_quality != null && <StarRow label="Ürün Kalitesi" value={review.rating_quality} />}
+                          {review.rating_communication != null && <StarRow label="İletişim" value={review.rating_communication} />}
+                        </>
+                      )}
                     </div>
 
                     {/* Yorum metni */}

@@ -37,7 +37,7 @@ export default function ProductReviews({ productId }: { productId: string }) {
     let query = (supabase as any)
       .from("order_reviews")
       .select(
-        "id, user_id, comment, rating_shipping, rating_quality, rating_communication, images, created_at"
+        "id, user_id, comment, rating_overall, rating_shipping, rating_quality, rating_communication, images, created_at"
       )
       .eq("is_approved", true)
       .order("created_at", { ascending: false });
@@ -58,7 +58,8 @@ export default function ProductReviews({ productId }: { productId: string }) {
       const nums = [r.rating_shipping, r.rating_quality, r.rating_communication].filter(
         (x) => typeof x === "number"
       ) as number[];
-      const avg = nums.length ? Math.round(nums.reduce((a, b) => a + b, 0) / nums.length) : 5;
+      const avg = typeof r.rating_overall === "number" ? r.rating_overall // yeni biçim: genel puan
+        : nums.length ? Math.round(nums.reduce((a, b) => a + b, 0) / nums.length) : 5;
       const name = nameById.get(r.user_id) || "Müşteri";
       return {
         id: r.id,

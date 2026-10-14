@@ -89,10 +89,11 @@ async function getRatingSummary(productId: string): Promise<{ avg: number; count
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   ) as any;
   const { data: st } = await supabase.from("settings").select("product_reviews_show_all").limit(1).maybeSingle();
-  let q = supabase.from("order_reviews").select("rating_shipping, rating_quality, rating_communication").eq("is_approved", true);
+  let q = supabase.from("order_reviews").select("rating_overall, rating_shipping, rating_quality, rating_communication").eq("is_approved", true);
   if (st?.product_reviews_show_all === false) q = q.eq("product_id", productId);
   const { data } = await q;
   const per = ((data as any[]) ?? []).map((r) => {
+    if (typeof r.rating_overall === "number") return r.rating_overall; // yeni biçim: genel puan (yorum isteme e-postası)
     const nums = [r.rating_shipping, r.rating_quality, r.rating_communication].filter((x) => typeof x === "number") as number[];
     return nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : null;
   }).filter((x): x is number => x !== null);

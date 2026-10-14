@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
 import { Edit2, Mail, Loader2, ToggleLeft, ToggleRight } from "lucide-react";
+import AutomationsCard from "@/components/admin/settings/AutomationsCard";
 
 type Template = {
   id: string;
@@ -24,6 +25,8 @@ const TRIGGERS = [
   { key: "coupon_assigned", label: "Yeni Kupon Tanımlandı", desc: "Bir üyeye indirim kuponu atandığında gönderilir.", color: "bg-amber-50 text-amber-700" },
   { key: "cart_abandonment", label: "Sepet Hatırlatma", desc: "Sepete ürün ekleyip ayrılan üyeye otomatik hatırlatma.", color: "bg-orange-50 text-orange-700" },
   { key: "order_recovery", label: "Sipariş Kurtarma", desc: "Ödemesi tamamlanmayıp iptal olan siparişi tamamlaması için.", color: "bg-rose-50 text-rose-700" },
+  { key: "review_request", label: "Yorum İsteme", desc: "Kullanmaya başladıktan sonra (gün sayısı aşağıdaki ayarda) tek e-posta; yıldıza dokununca yorum sayfası açılır.", color: "bg-yellow-50 text-yellow-700" },
+  { key: "winback", label: "Seni Özledik", desc: "Uzun süre gelmeyip dönen, kampanya izni olan üyeye kişiye özel kupon (ayar aşağıda).", color: "bg-lime-50 text-lime-700" },
 ];
 
 // Ayarlar › E-posta Şablonları sekmesi (düzenleme: /admin/crm/email-templates/[trigger])
@@ -137,6 +140,7 @@ export default function EmailTemplatesTab() {
         <code className="bg-blue-100 px-1 rounded text-xs">{"{{store_email}}"}</code>{" "}
         <code className="bg-blue-100 px-1 rounded text-xs">{"{{store_url}}"}</code>
       </div>
+      <AutomationsCard />
     </div>
   );
 }
