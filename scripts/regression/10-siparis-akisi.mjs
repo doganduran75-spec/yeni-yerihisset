@@ -892,8 +892,11 @@ export default {
         const gid = c.json?.id;
         if (!gid) return add("fail", "Silme testi için hesap oluşturulamadı", `HTTP ${c.status}`);
         sql(`INSERT INTO public.profiles (id, email, first_name, last_name) VALUES (${lit(gid)}, ${lit(email)}, 'Regresyon', 'Sil') ON CONFLICT (id) DO NOTHING`);
+        // Şifresiz = misafir (eski siteden aktarılan hesaplar gibi); GoTrue şifresiz oluştururken de bir değer yazabiliyor
+        sql(`UPDATE auth.users SET encrypted_password = '' WHERE id = ${lit(gid)}`);
         const s = await rest("rpc/admin_search_members", { token: F.admin.token, method: "POST", body: { p_q: email, p_state: "guest", p_orders: "none" } });
-        ok(Array.isArray(s.json) && s.json.some((r) => r.id === gid), "Misafir + siparişsiz süzgeci hesabı buluyor", `HTTP ${s.status}`);
+        ok(Array.isArray(s.json) && s.json.some((r) => r.id === gid), "Misafir + siparişsiz süzgeci hesabı buluyor",
+          `HTTP ${s.status}, ${Array.isArray(s.json) ? s.json.length : "?"} satır, durum: ${one(`SELECT public.member_account_state(${lit(gid)})`)}, profil: ${one(`SELECT count(*) FROM public.profiles WHERE id = ${lit(gid)}`)}`);
         const s2 = await rest("rpc/admin_search_members", { token: F.admin.token, method: "POST", body: { p_q: F.member.email, p_orders: "none" } });
         ok(Array.isArray(s2.json) && !s2.json.some((r) => r.id === F.member.id), "Siparişi olan üye “siparişi yok” süzgecine girmiyor", `HTTP ${s2.status}`);
         const md = await rest("rpc/admin_delete_members", { token: F.member.token, method: "POST", body: { p_ids: [gid] } });
