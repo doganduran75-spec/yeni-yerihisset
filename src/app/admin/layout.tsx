@@ -134,7 +134,8 @@ export default function AdminLayout({
         </SidebarContent>
       </Sidebar>
 
-      <SidebarInset>
+      {/* min-w-0: geniş tablolar (Fiyatlar, Stok…) sayfayı genişletmesin, kendi kutusunda yana kaysın */}
+      <SidebarInset className="min-w-0">
         <header className="h-16 flex shrink-0 items-center justify-between px-4 md:px-6 bg-background border-b transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12 shadow-sm">
           <div className="flex items-center gap-2 min-w-0">
             {/* Mobilde sol menüyü açan hamburger — masaüstünde menü zaten sabit */}
@@ -148,7 +149,7 @@ export default function AdminLayout({
             </Avatar>
           </div>
         </header>
-        <main className="flex-1 p-4 md:p-6 overflow-auto bg-muted/20">
+        <main className="flex-1 min-w-0 p-4 md:p-6 overflow-auto bg-muted/20">
           {children}
         </main>
       </SidebarInset>

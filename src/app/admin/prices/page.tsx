@@ -538,13 +538,12 @@ export default function PricesPage() {
           </div>
 
           {/* Tablo */}
-          <div className="rounded-xl border bg-white overflow-x-auto">
+          <div className="rounded-xl border bg-white overflow-auto max-h-[calc(100vh-15rem)]">
             <table className="w-full text-sm">
-              <thead className="bg-slate-50 text-left text-[11px] uppercase tracking-wider text-slate-500 sticky top-0">
+              <thead className="bg-slate-50 text-left text-[11px] uppercase tracking-wider text-slate-500 sticky top-0 z-10">
                 <tr>
-                  <th className="px-2 py-2 font-bold">Barkod</th>
-                  <th className="px-2 py-2 font-bold">Kod</th>
-                  <th className="px-2 py-2 font-bold min-w-[200px]">Ürün</th>
+                  <th className="px-2 py-2 font-bold">Kod / Barkod</th>
+                  <th className="px-2 py-2 font-bold min-w-[160px]">Ürün</th>
                   <th className="px-2 py-2 font-bold">No</th>
                   <th className="px-2 py-2 font-bold text-right">Stok</th>
                   {activeLists.map((l) => [
@@ -560,9 +559,8 @@ export default function PricesPage() {
               <tbody className="divide-y">
                 {filtered.slice(0, limit).map((r) => (
                   <tr key={r.key} className={cn("hover:bg-slate-50/60", !r.productActive && "opacity-60")}>
-                    <td className="px-2 py-1 font-mono text-[11px] text-slate-600 whitespace-nowrap">{r.barcode}</td>
-                    <td className="px-2 py-1 font-mono text-[11px] text-slate-600 whitespace-nowrap">{r.sku}</td>
-                    <td className="px-2 py-1 text-xs font-medium text-slate-800 max-w-[260px] truncate" title={r.title}>{r.title}</td>
+                    <td className="px-2 py-1 font-mono text-[11px] text-slate-600 whitespace-nowrap leading-tight">{r.sku}<span className="block text-[10px] text-slate-400">{r.barcode}</span></td>
+                    <td className="px-2 py-1 text-xs font-medium text-slate-800 max-w-[220px] truncate" title={r.title}>{r.title}</td>
                     <td className="px-2 py-1 text-xs font-bold text-blue-600">{r.value}</td>
                     <td className={cn("px-2 py-1 text-right text-xs font-semibold", r.stock <= 0 ? "text-red-500" : "text-slate-700")}>{r.variantId ? r.stock : ""}</td>
                     {activeLists.map((l) => {
@@ -585,7 +583,7 @@ export default function PricesPage() {
                             inputMode="decimal"
                             placeholder="—"
                             className={cn(
-                              "w-24 h-7 rounded-md border px-1.5 text-right text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-olive-300",
+                              "w-20 h-7 rounded-md border px-1.5 text-right text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-olive-300",
                               invalid ? "border-red-400 bg-red-50 text-red-700" : changed ? "border-amber-400 bg-amber-50 text-amber-900" : "border-transparent hover:border-slate-200 bg-transparent",
                             )}
                           />
