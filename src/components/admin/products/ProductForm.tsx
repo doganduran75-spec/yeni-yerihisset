@@ -8,7 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/lib/supabase";
-import { Loader2, Upload, X, ChevronLeft, Save, Copy, ImagePlus, GripVertical } from "lucide-react";
+import { Loader2, Upload, X, ChevronLeft, Save, Copy, ImagePlus, GripVertical, Trash2, Plus } from "lucide-react";
+import { siteAlert, siteConfirm } from "@/components/ui/site-dialog";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { sortByVariantValue } from "@/lib/variant-sort";
@@ -184,6 +185,46 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
     const newVariants = [...formData.variants];
     newVariants[index] = { ...newVariants[index], [field]: value };
     setFormData((prev) => ({ ...prev, variants: newVariants }));
+  }
+
+  // Bu renk kombinasyonunda üretilmeyen numarayı kaldır (Kaydet'te silinir: fiyat / stok listelerinden, pazaryeri
+  // eşleşmesinden çıkar). Siparişi olan numara silinmez (sipariş geçmişi ürüne bağlı kalmalı) → pasif bırakılır.
+  async function removeVariantRow(idx: number) {
+    const v: any = formData.variants[idx];
+    if (!v) return;
+    if (v.id) {
+      const sb = supabase as any;
+      const [{ count: orders }, { count: waiting }] = await Promise.all([
+        sb.from("order_items").select("id", { count: "exact", head: true }).eq("variant_id", v.id),
+        sb.from("stock_notifications").select("id", { count: "exact", head: true }).eq("variant_id", v.id).eq("status", "pending"),
+      ]);
+      if (orders) {
+        siteAlert({ title: "Silinemez", message: `${v.value} numaranın ${orders} siparişi var. Sipariş geçmişi bozulmasın diye silinmez — “Aktif” işaretini kaldırıp pasif bırak.`, tone: "danger" });
+        return;
+      }
+      const notes = [
+        Number(v.stock) > 0 ? `Stokta ${v.stock} adet görünüyor.` : "",
+        waiting ? `${waiting} kişi bu numara için “stoğa girince haber ver” bekliyor; talepleri boşa düşer.` : "",
+      ].filter(Boolean).join(" ");
+      if (!(await siteConfirm({ title: `${v.value} numara kaldırılsın mı?`, message: `Kaydedince bu numara silinir; fiyat ve stok listelerinden, pazaryeri eşleşmesinden çıkar.${notes ? " " + notes : ""} Kaydetmeden çıkarsan hiçbir şey değişmez.`, confirmText: "Kaldır", tone: "danger" }))) return;
+    }
+    setFormData((prev) => ({ ...prev, variants: prev.variants.filter((_, i) => i !== idx) }));
+  }
+
+  // Ürünün numara grubu: seçilen grup; kayıtlı üründe numaralardan bulunur
+  const currentGroup = variantGroups.find((g) => g.id === formData.selected_group_id)
+    || variantGroups.find((g) => (g.variant_options || []).some((o: any) => formData.variants.some((v: any) => v.variant_option_id === o.id)));
+
+  // Sonradan üretilen numarayı ekle (grubu yeniden seçmek bütün numaraları sıfırlar — bunu kullan)
+  function addVariantOption(optionId: string) {
+    const group = currentGroup;
+    const opt = group?.variant_options?.find((o: any) => o.id === optionId);
+    if (!opt) return;
+    const row = {
+      variant_option_id: opt.id, value: opt.value, sku: "", barcode: "", price: formData.price || "0", compare_at_price: "",
+      stock: "0", trendyol_psf: "", trendyol_price: "", is_active: true, image_url: "",
+    };
+    setFormData((prev) => ({ ...prev, variants: sortByVariantValue([...prev.variants, row as any], (x: any) => x.value) }));
   }
 
   function handleGroupSelect(groupId: string) {
@@ -552,6 +593,7 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
                             <TableHead className="w-40">SKU</TableHead>
                             <TableHead className="w-40">Barkod</TableHead>
                             <TableHead className="w-10 text-center">Aktif</TableHead>
+                            <TableHead className="w-10 text-center" title="Bu renkte üretilmeyen numarayı kaldır">Sil</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -574,13 +616,35 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
                               <TableCell className="text-center">
                                 <input type="checkbox" checked={v.is_active} onChange={(e) => handleVariantChange(idx, "is_active", e.target.checked)} className="h-4 w-4" />
                               </TableCell>
+                              <TableCell className="text-center">
+                                <button type="button" onClick={() => removeVariantRow(idx)} title="Bu renkte üretilmiyor — kaldır (Kaydet'te silinir)" className="text-slate-300 hover:text-red-600">
+                                  <Trash2 size={15} />
+                                </button>
+                              </TableCell>
                             </TableRow>
                           ))}
                         </TableBody>
                       </Table>
                     </div>
 
+                    {(() => {
+                      // Gruptaki ama bu üründe olmayan numaralar (kaldırılmış ya da sonradan üretilen)
+                      const group = currentGroup;
+                      const have = new Set(formData.variants.map((v: any) => v.variant_option_id));
+                      const missing = sortByVariantValue((group?.variant_options || []).filter((o: any) => !have.has(o.id)), (o: any) => o.value);
+                      return missing.length ? (
+                        <div className="flex flex-wrap items-center gap-2 px-1">
+                          <Plus size={14} className="text-slate-400" />
+                          <select value="" onChange={(e) => e.target.value && addVariantOption(e.target.value)} className="h-8 rounded-lg border px-2 text-sm bg-white">
+                            <option value="">Numara ekle…</option>
+                            {missing.map((o: any) => <option key={o.id} value={o.id}>{o.value}</option>)}
+                          </select>
+                          <span className="text-xs text-muted-foreground">Bu üründe olmayan: {missing.map((o: any) => o.value).join(", ")}</span>
+                        </div>
+                      ) : null;
+                    })()}
                     <p className="text-xs text-muted-foreground px-1">
+                      <b>Aktif</b> işaretsiz = sitede satılmaz ama listelerde kalır (pazaryerinde satılabilir). <b>Sil</b> = bu renkte üretilmiyor; Kaydet’te silinir, hiçbir listede görünmez.{" "}
                       Fiyatlar <a href="/admin/prices" className="text-blue-600 hover:underline font-semibold">Fiyatlar</a> sayfasından,
                       stok <a href="/admin/stock" className="text-blue-600 hover:underline font-semibold">Stok Yönetimi</a>'nden değişir.
                       Yeni eklenen numaranın başlangıç stoğunu burada girebilirsin.

@@ -952,6 +952,17 @@ export default {
         }
       });
 
+      await part("Üretilmeyen numara silinir (fiyat / stok listelerinden çıkar)", async () => {
+        const vid = insert("product_variants", { product_id: F.prod, price: 1000, stock: 0, is_active: false });
+        sql(`INSERT INTO public.item_prices (product_id, variant_id, price_list_id, amount) SELECT ${lit(F.prod)}, ${lit(vid)}, id, 900 FROM public.price_lists WHERE code = 'trendyol_sale'`);
+        const mu = await rest(`product_variants?id=eq.${vid}`, { token: F.member.token, method: "DELETE" });
+        ok(num(`SELECT count(*) FROM public.product_variants WHERE id = ${lit(vid)}`) === 1, "Üye numara silemiyor", `HTTP ${mu.status}`);
+        const ad = await rest(`product_variants?id=eq.${vid}`, { token: F.admin.token, method: "DELETE" });
+        ok(ad.status < 300 && num(`SELECT count(*) FROM public.product_variants WHERE id = ${lit(vid)}`) === 0
+          && num(`SELECT count(*) FROM public.item_prices WHERE variant_id = ${lit(vid)}`) === 0,
+          "Yönetici numarayı siliyor; fiyat listelerinden de çıkıyor", `HTTP ${ad.status}`);
+      });
+
       await part("Sipariş silme ve süresi dolan sipariş", async () => {
         if (O.del) {
           const s0 = stock();
