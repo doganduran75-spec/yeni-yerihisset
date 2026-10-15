@@ -7,13 +7,13 @@
 // Kanal durumu/işlemleri: /api/admin/integrations/<kanal>.
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/lib/supabase";
 import { siteAlert, siteConfirm } from "@/components/ui/site-dialog";
 import HepsiburadaTestCenter from "@/components/admin/settings/HepsiburadaTestCenter";
 import ParasutCard from "@/components/admin/settings/ParasutCard";
+import IntegrationSection from "@/components/admin/settings/IntegrationSection";
 import GmcApiCard from "@/components/admin/settings/GmcApiCard";
 import {
   Loader2, Save, Eye, EyeOff, Truck, Store, RefreshCw, Send, PlugZap, AlertTriangle, CheckCircle2, Info, RotateCcw, History, ShoppingBag,
@@ -512,27 +512,22 @@ export default function IntegrationsTab() {
         <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">Ayarlar okunamadı: {loadError}</p>
       )}
 
-      <div className="p-4 rounded-xl bg-blue-50 border border-blue-100 text-xs text-blue-900 space-y-1.5">
-        <p className="font-semibold text-sm flex items-center gap-1.5"><Info size={14} /> Pazaryeri stok senkronu nasıl çalışır?</p>
-        <ul className="list-disc pl-4 space-y-1">
-          <li>Sitede bir varyantın stoğu değişince (ürün sayfası, site siparişi, iptal/iade, toplu içe aktarma) açık olan her pazaryerine birkaç saniye içinde gönderilir; dakikada bir otomatik kontrol kaçanları ve hataları tekrar dener.</li>
-          <li>Yalnız <b>stok</b> gönderilir; pazaryeri fiyatlarına dokunulmaz. Her sonuç “Senkron geçmişi”ne yazılır; Dashboard'daki kart güncelliği özetler.</li>
-          <li className="text-amber-800"><b>Önemli:</b> Pazaryerlerinde gelen siparişler şimdilik sitedeki stoğu <b>düşürmez</b>. Pazaryerinde satış olunca sitedeki stoğu elle azalt — yoksa bir sonraki gönderim pazaryeri stoğunu eski sayıya geri yazar.</li>
+      {/* Genel açıklama: tıklayınca açılır */}
+      <details className="rounded-xl bg-blue-50 border border-blue-100 text-xs text-blue-900 px-4 py-3">
+        <summary className="cursor-pointer font-semibold text-sm flex items-center gap-1.5"><Info size={14} /> Pazaryeri senkronu nasıl çalışır?</summary>
+        <ul className="list-disc pl-4 space-y-1 mt-2">
+          <li>Sitede bir numaranın stoğu değişince (ürün sayfası, site siparişi, iptal/iade, toplu içe aktarma) açık olan her pazaryerine birkaç saniye içinde gönderilir; dakikada bir otomatik kontrol kaçanları ve hataları tekrar dener.</li>
+          <li>Fiyatlar yalnız <b>Fiyatlar</b> sayfasından “Kaydet ve pazaryerlerine gönder” ile gider; satışa kapat / aç da oradan (kanal başına).</li>
+          <li>Sipariş Aktarımı açıksa pazaryeri siparişleri dakikada bir alınır ve sitedeki stoğu düşürür; iptallerde stok geri eklenir, iadede “İadeyi stoğa ekle” onayı istenir.</li>
+          <li>Her sonuç “Senkron geçmişi”ne yazılır; Pano’daki kart güncelliği özetler.</li>
         </ul>
-      </div>
+      </details>
 
       {/* ─── Trendyol ─── */}
-      <Card className="shadow-sm border-muted">
-        <CardHeader>
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <CardTitle className="flex items-center gap-2"><Store size={20} className="text-orange-500" /> Trendyol — Stok Senkronu</CardTitle>
-              <CardDescription className="mt-1">Eşleştirme <b>barkodla</b>: ürün sayfasındaki varyant barkodu, Trendyol'daki barkodla aynı olmalı.</CardDescription>
-            </div>
-            <Toggle on={s.trendyol_enabled} onChange={(v) => toggleChannel("trendyol", v)} disabled={savingKey === "trendyol"} />
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-5">
+      <IntegrationSection id="trendyol" icon={<Store size={20} className="text-orange-500" />} title="Trendyol"
+        summary="Stok, fiyat ve sipariş aktarımı" status={s.trendyol_enabled ? "Açık" : s.trendyol_api_key ? "Kapalı" : "Bilgi girilmedi"} tone={s.trendyol_enabled ? "ok" : "off"}
+        right={<Toggle on={s.trendyol_enabled} onChange={(v) => toggleChannel("trendyol", v)} disabled={savingKey === "trendyol"} />}>
+          <p className="text-sm text-muted-foreground">Eşleştirme <b>barkodla</b>: ürün sayfasındaki varyant barkodu, Trendyol'daki barkodla aynı olmalı.</p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Field label="Satıcı ID (Cari ID)">
               <Input value={s.trendyol_seller_id} onChange={(e) => set({ trendyol_seller_id: e.target.value.replace(/\D/g, "") })} placeholder="Örn: 123456" inputMode="numeric" />
@@ -557,23 +552,13 @@ export default function IntegrationsTab() {
             {saveBtn("trendyol", "Trendyol")}
             <SyncPanel channel="trendyol" enabled={s.trendyol_enabled} />
           </div>
-        </CardContent>
-      </Card>
+      </IntegrationSection>
 
       {/* ─── Hepsiburada ─── */}
-      <Card className="shadow-sm border-muted">
-        <CardHeader>
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <CardTitle className="flex items-center gap-2"><Store size={20} className="text-orange-600" /> Hepsiburada — Stok Senkronu</CardTitle>
-              <CardDescription className="mt-1">
-                Eşleştirme Hepsiburada'daki <b>Satıcı Stok Kodu (MerchantSku)</b> ile yapılır; bunun sitedeki karşılığını aşağıdan seç.
-              </CardDescription>
-            </div>
-            <Toggle on={s.hepsiburada_enabled} onChange={(v) => toggleChannel("hepsiburada", v)} disabled={savingKey === "hepsiburada"} />
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-5">
+      <IntegrationSection id="hepsiburada" icon={<Store size={20} className="text-orange-600" />} title="Hepsiburada"
+        summary="Stok, fiyat ve sipariş aktarımı" status={s.hepsiburada_enabled ? "Açık" : s.hepsiburada_service_key ? "Kapalı" : "Bilgi girilmedi"} tone={s.hepsiburada_enabled ? "ok" : "off"}
+        right={<Toggle on={s.hepsiburada_enabled} onChange={(v) => toggleChannel("hepsiburada", v)} disabled={savingKey === "hepsiburada"} />}>
+          <p className="text-sm text-muted-foreground">Eşleştirme Hepsiburada'daki <b>Satıcı Stok Kodu (MerchantSku)</b> ile yapılır; bunun sitedeki karşılığını aşağıdan seç.</p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Field label="Merchant ID (Mağaza ID)">
               <Input value={s.hepsiburada_merchant_id} onChange={(e) => set({ hepsiburada_merchant_id: e.target.value.trim() })} placeholder="Örn: 1a2b3c4d-…" />
@@ -615,24 +600,14 @@ export default function IntegrationsTab() {
             <SyncPanel channel="hepsiburada" enabled={s.hepsiburada_enabled} />
           </div>
           <HepsiburadaTestCenter />
-        </CardContent>
-      </Card>
+      </IntegrationSection>
 
       {/* ─── Amazon (Amazon.com.tr) ─── */}
-      <Card className="shadow-sm border-muted">
-        <CardHeader>
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <CardTitle className="flex items-center gap-2"><Store size={20} className="text-slate-800" /> Amazon (Türkiye) — Stok Senkronu ve Siparişler</CardTitle>
-              <CardDescription className="mt-1">
-                Amazon&apos;daki <b>satıcı SKU&apos;su</b> ile eşleştirilir; yalnız Amazon&apos;da <b>ilanı olan</b> ürünlere, kendi gönderdiğin (FBM) stok olarak yazılır.
-                Ürünleri Amazon Seller Central&apos;dan açarsın; fiyat gönderimi henüz yok.
-              </CardDescription>
-            </div>
-            <Toggle on={s.amazon_enabled} onChange={(v) => toggleChannel("amazon", v)} disabled={savingKey === "amazon"} />
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-5">
+      <IntegrationSection id="amazon" icon={<Store size={20} className="text-slate-800" />} title="Amazon (Türkiye)"
+        summary="Stok ve sipariş aktarımı" status={s.amazon_enabled ? "Açık" : s.amazon_refresh_token ? "Kapalı" : "Bilgi girilmedi"} tone={s.amazon_enabled ? "ok" : "off"}
+        right={<Toggle on={s.amazon_enabled} onChange={(v) => toggleChannel("amazon", v)} disabled={savingKey === "amazon"} />}>
+          <p className="text-sm text-muted-foreground">Amazon&apos;daki <b>satıcı SKU&apos;su</b> ile eşleştirilir; yalnız Amazon&apos;da <b>ilanı olan</b> ürünlere, kendi gönderdiğin (FBM) stok olarak yazılır.
+                Ürünleri Amazon Seller Central&apos;dan açarsın; fiyat gönderimi henüz yok.</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Field label="Satıcı token'ı (Merchant Token)" hint="Seller Central → Ayarlar → Hesap Bilgileri → Satıcı Token'ınız">
               <Input value={s.amazon_seller_id} onChange={(e) => set({ amazon_seller_id: e.target.value.trim() })} placeholder="Örn: A1B2C3D4E5F6G7" />
@@ -678,23 +653,13 @@ export default function IntegrationsTab() {
             {saveBtn("amazon", "Amazon")}
             <SyncPanel channel="amazon" enabled={s.amazon_enabled} />
           </div>
-        </CardContent>
-      </Card>
+      </IntegrationSection>
 
       {/* ─── Kargonomi ─── */}
-      <Card className="shadow-sm border-muted">
-        <CardHeader>
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <CardTitle className="flex items-center gap-2"><Truck size={20} className="text-blue-600" /> Kargonomi — Kargo</CardTitle>
-              <CardDescription className="mt-1">
-                Siparişte “Kargoya ver (Kargonomi)”: desi gir → firma teklifleri gelir → firmayı seç → kargo kodu gelene kadar dakikada bir sorgulanır → kod gelince sipariş “Kargoda”, müşteriye takip numarası gider.
-              </CardDescription>
-            </div>
-            <Toggle on={s.kargonomi_enabled} onChange={(v) => save("kargonomi", { kargonomi_enabled: v })} disabled={savingKey === "kargonomi"} />
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <IntegrationSection id="kargonomi" icon={<Truck size={20} className="text-blue-600" />} title="Kargonomi"
+        summary="Teklif → firma seçimi → kargo kodu" status={!s.kargonomi_enabled ? "Kapalı" : s.kargonomi_api_token && s.kargonomi_warehouse_id ? "Hazır" : "Token bekleniyor"} tone={!s.kargonomi_enabled ? "off" : s.kargonomi_api_token && s.kargonomi_warehouse_id ? "ok" : "warn"}
+        right={<Toggle on={s.kargonomi_enabled} onChange={(v) => save("kargonomi", { kargonomi_enabled: v })} disabled={savingKey === "kargonomi"} />}>
+          <p className="text-sm text-muted-foreground">Siparişte “Kargoya ver (Kargonomi)”: desi gir → firma teklifleri gelir → firmayı seç → kargo kodu gelene kadar dakikada bir sorgulanır → kod gelince sipariş “Kargoda”, müşteriye takip numarası gider.</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Field label="API Token (Bearer)" hint="Panelde görünmüyor — Kargonomi destekten (destek@kargonomi.com.tr) istenir">
               <SecretInput value={s.kargonomi_api_token} onChange={(v) => set({ kargonomi_api_token: v })} placeholder="••••••••••••••••••••" />
@@ -725,8 +690,7 @@ export default function IntegrationsTab() {
           ) : null}
 
           <div className="flex justify-end">{saveBtn("kargonomi", "Kargonomi")}</div>
-        </CardContent>
-      </Card>
+      </IntegrationSection>
 
       {/* ─── Paraşüt (fatura) ─── */}
       <ParasutCard />

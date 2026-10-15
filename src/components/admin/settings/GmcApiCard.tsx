@@ -6,7 +6,7 @@
 //   veri kaynağına yazar. Kurulum: servis hesabı JSON + Merchant Center no → Kaydet → "Google'a kaydol" →
 //   veri kaynağı (beslemenin kaynağı) seç → Aç → "Tümünü gönder".
 import { useCallback, useEffect, useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import IntegrationSection from "@/components/admin/settings/IntegrationSection";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/lib/supabase";
@@ -65,20 +65,13 @@ export default function GmcApiCard() {
   );
 
   return (
-    <Card className="shadow-sm border-muted">
-      <CardHeader>
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <CardTitle className="flex items-center gap-2"><ShoppingBag size={20} className="text-blue-600" /> Google Merchant — anlık ürün gönderimi</CardTitle>
-            <CardDescription className="mt-1">Stok, fiyat ya da ürün değişince Google’a dakikalar içinde gider (Merchant API). Besleme adresi günlük tam eşitlemeyi sürdürür; ikisi aynı veri kaynağına yazar.</CardDescription>
-          </div>
-          <label className="flex items-center gap-2 text-sm font-semibold">
+    <IntegrationSection id="gmc" icon={<ShoppingBag size={20} className="text-blue-600" />} title="Google Merchant" summary="Stok / fiyat değişince Google’a anlık gönderim"
+      status={enabled ? "Açık" : st?.keyOk ? "Kapalı" : "Kurulmadı"} tone={enabled ? "ok" : "off"}
+      right={<label className="flex items-center gap-2 text-sm font-semibold">
             <input type="checkbox" checked={enabled} disabled={!!busy || !st?.dataSource}
               onChange={(e) => run("en", async () => { await saveSettings({ gmc_api_enabled: e.target.checked }); setEnabled(e.target.checked); })} /> Açık
-          </label>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-3 text-sm">
+          </label>}>
+        <p className="text-sm text-muted-foreground">Stok, fiyat ya da ürün değişince Google’a dakikalar içinde gider (Merchant API). Besleme adresi günlük tam eşitlemeyi sürdürür; ikisi aynı veri kaynağına yazar.</p>
         {step(1, !!st?.keyOk && !!st?.merchantId, (
           <div className="space-y-2">
             <p>Merchant Center hesap no ve servis hesabı anahtarı (JSON dosyasının içeriği).</p>
@@ -158,7 +151,6 @@ export default function GmcApiCard() {
             {st?.error && <p className="text-xs text-red-600">{st.error}</p>}
           </div>
         ))}
-      </CardContent>
-    </Card>
+      </IntegrationSection>
   );
 }

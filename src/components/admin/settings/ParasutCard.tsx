@@ -9,7 +9,7 @@
 //   5) Ürün eşleştirme: /admin/parasut
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import IntegrationSection from "@/components/admin/settings/IntegrationSection";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/lib/supabase";
@@ -112,19 +112,12 @@ export default function ParasutCard() {
 
   const lbl = "text-xs font-medium";
   return (
-    <Card className="shadow-sm border-muted">
-      <CardHeader>
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <CardTitle className="flex items-center gap-2"><Receipt size={20} className="text-emerald-600" /> Paraşüt — Fatura</CardTitle>
-            <CardDescription className="mt-1">Siparişte “Faturayı kes (Paraşüt)”: müşteri, fatura, tahsilat ve e-Arşiv / e-Fatura Paraşüt’te otomatik oluşur. Kanal (site / pazaryeri) başına ayrı tahsilat hesabı.</CardDescription>
-          </div>
-          <label className="flex items-center gap-2 text-sm font-semibold">
+    <IntegrationSection id="parasut" icon={<Receipt size={20} className="text-emerald-600" />} title="Paraşüt" summary="Fatura, tahsilat, e-Arşiv / e-Fatura"
+      status={st?.connected ? (f.parasut_enabled ? "Bağlı · açık" : "Bağlı · kapalı") : f.parasut_enabled ? "Bağlı değil" : "Kapalı"} tone={st?.connected && f.parasut_enabled ? "ok" : f.parasut_enabled ? "warn" : "off"}
+      right={<label className="flex items-center gap-2 text-sm font-semibold">
             <input type="checkbox" checked={f.parasut_enabled} disabled={busy === "save"} onChange={(e) => saveSettings({ parasut_enabled: e.target.checked })} /> Açık
-          </label>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-5 text-sm">
+          </label>}>
+        <p className="text-sm text-muted-foreground">Siparişte “Faturayı kes (Paraşüt)”: müşteri, fatura, tahsilat ve e-Arşiv / e-Fatura Paraşüt’te otomatik oluşur. Kanal (site / pazaryeri) başına ayrı tahsilat hesabı.</p>
         {/* 1) Uygulama bilgileri */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <label className="space-y-1"><span className={lbl}>Client ID</span>
@@ -235,7 +228,6 @@ export default function ParasutCard() {
         </div>
 
         <Link href="/admin/parasut" className="inline-flex items-center gap-1.5 font-semibold text-emerald-700 hover:underline">Ürün eşleştirme (her numara = bir Paraşüt ürünü) →</Link>
-      </CardContent>
-    </Card>
+      </IntegrationSection>
   );
 }
