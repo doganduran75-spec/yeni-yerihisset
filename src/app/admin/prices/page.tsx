@@ -79,6 +79,14 @@ export default function PricesPage() {
   const [fBrand, setFBrand] = useState("all");
   const [fActive, setFActive] = useState(true);
   const [fStock, setFStock] = useState(false);
+  // ?urun=<id>: ürün formundan "Fiyat gir" ile gelindi → yalnız o ürün (pasif olsa da)
+  const [fProduct, setFProduct] = useState<string | null>(null);
+  useEffect(() => {
+    try {
+      const id = new URLSearchParams(window.location.search).get("urun");
+      if (id && /^[0-9a-f-]{36}$/i.test(id)) setFProduct(id); // eslint-disable-line react-hooks/set-state-in-effect
+    } catch { /* adres okunamadı */ }
+  }, []);
   const [fMissing, setFMissing] = useState(""); // liste kodu: bu listede fiyatı boş olanlar
 
   // Toplu işlem
@@ -278,7 +286,9 @@ export default function PricesPage() {
   const filtered = useMemo(() => {
     const tokens = norm(q).split(/\s+/).filter(Boolean);
     return rows.filter((r) => {
-      if (fActive && !r.productActive) return false;
+      if (fProduct) return r.productId === fProduct;
+      // "Yalnız aktif" fiyatı girilmemiş pasif ürünü gizlemez: fiyat girilmeden yayına alınamaz (çıkmaz olmasın)
+      if (fActive && !r.productActive && current(r, "site_sale") != null) return false;
       if (fStock && r.stock <= 0) return false;
       if (fCat !== "all" && r.categoryId !== fCat) return false;
       if (fBrand !== "all" && r.brandId !== fBrand) return false;
@@ -295,7 +305,7 @@ export default function PricesPage() {
       }
       return tokens.every((t) => r.search.includes(t));
     });
-  }, [rows, q, fActive, fStock, fCat, fBrand, fMissing, fMkt, mkt, current]);
+  }, [rows, q, fActive, fStock, fCat, fBrand, fMissing, fMkt, mkt, current, fProduct]);
 
   // Kanal durum sütunu, o kanalın son fiyat sütununun hemen sağında (yoksa en sonda)
   const mktAfter = useMemo(() => {
@@ -450,6 +460,12 @@ export default function PricesPage() {
   return (
     <div className="space-y-4">
       <AdminOpsTabs active="prices" />
+      {fProduct && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-olive-200 bg-olive-50 px-4 py-3 text-sm text-olive-900">
+          <span className="flex-1 min-w-0">Yalnız yeni ürün gösteriliyor: <b>site satış fiyatını</b> gir → <b>Kaydet</b> → <b>Site satış</b> sütunundaki “Ürün kapalı” kutusuyla ürünü yayına al.</span>
+          <Button size="sm" variant="outline" onClick={() => { setFProduct(null); try { window.history.replaceState(null, "", "/admin/prices"); } catch { /* yok */ } }}>Tüm ürünleri göster</Button>
+        </div>
+      )}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2"><Tag size={22} className="text-olive-600" /> Fiyatlar</h1>

@@ -219,39 +219,33 @@ export default function SizeFilterGrid({ products: cachedProducts, categoryName,
     if (slug && products.some((p: any) => p.brands?.slug === slug)) setBrand(slug);
   }, [products]);
 
-  // Mevcut markalar (ürünlerden). Tek marka varsa filtre o marka SEÇİLİ görünür
-  // (bilgi amaçlı; süzme yapılmaz, markasız ürünler de listede kalır).
-  const brands = useMemo(() => {
+  // BAĞIMLI SÜZGEÇLER (sıra: Kategori → Marka → Numara). Her satır yalnız ürünü olan seçenekleri gösterir:
+  // Attipas seçiliyken yalnız İlkadım kategorisi, Ayakkabı seçiliyken yalnız Dodura… Geçersiz kalan seçim
+  // (ör. 40 numara İlkadım'da yok) "Hepsi" sayılır — durum sıfırlamak yerine etkin değer türetilir.
+  const listOf = (ps: any[], key: "categories" | "brands") => {
     const m = new Map<string, string>();
-    for (const p of products) {
-      const b = p.brands;
-      if (b?.slug && b?.name) m.set(b.slug, b.name);
-    }
-    return [...m.entries()].map(([slug, name]) => ({ slug, name })).sort((a, b) => a.name.localeCompare(b.name, "tr"));
-  }, [products]);
-  const singleBrand = brands.length === 1;
-  const activeBrand = singleBrand ? brands[0].slug : brand;
-
-  // Mevcut kategoriler (yalnızca kategorisi olan ürünlerden). ≥2 ise filtre gösterilir.
-  const cats = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const p of products) {
-      const c = p.categories;
-      if (c?.id && c?.name) m.set(c.id, c.name);
+    for (const p of ps) {
+      const x = p[key];
+      const k = key === "categories" ? x?.id : x?.slug;
+      if (k && x?.name) m.set(k, x.name);
     }
     return [...m.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name, "tr"));
-  }, [products]);
-  const showCatFilter = cats.length >= 2;
+  };
+  const cats = useMemo(() => listOf(products.filter((p) => !brand || p.brands?.slug === brand), "categories"), [products, brand]);
+  const effCat = cat && cats.some((c) => c.id === cat) ? cat : null;
+  const brands = useMemo(() => listOf(products.filter((p) => !effCat || p.categories?.id === effCat), "brands"), [products, effCat]);
+  const effBrand = brand && brands.some((b) => b.id === brand) ? brand : null;
+  const showCatFilter = cats.length >= 2 || !!effCat;
+  const showBrandFilter = brands.length >= 2 || !!effBrand;
 
-  // Marka + kategori süzgeci (numaradan bağımsız). Seçiliyse önce onlara indir.
   const base = useMemo(
     () => products.filter((p) =>
-      (!brand || singleBrand || p.brands?.slug === brand) &&
-      (!cat || p.categories?.id === cat)),
-    [products, cat, brand, singleBrand]
+      (!effBrand || p.brands?.slug === effBrand) &&
+      (!effCat || p.categories?.id === effCat)),
+    [products, effCat, effBrand]
   );
 
-  // Mevcut numaralar (kategori süzgecinden sonra)
+  // Mevcut numaralar (kategori + marka süzgecinden sonra)
   const sizes = useMemo(() => {
     const set = new Set<string>();
     for (const p of base) {
@@ -261,61 +255,34 @@ export default function SizeFilterGrid({ products: cachedProducts, categoryName,
     }
     return [...set].sort(compareVariantValues);
   }, [base]);
+  const effSize = size && sizes.includes(size) ? size : null;
 
   // Seçilen numaraya göre ayrım (kategori süzgecinden sonra)
   const { inStock, outStock } = useMemo(() => {
-    if (!size) return { inStock: base, outStock: [] as any[] };
+    if (!effSize) return { inStock: base, outStock: [] as any[] };
     const inS: any[] = [];
     const outS: any[] = [];
     for (const p of base) {
-      const sizeVars = (p.product_variants ?? []).filter((v: any) => isSizeVariant(v) && sizeValue(v) === size);
+      const sizeVars = (p.product_variants ?? []).filter((v: any) => isSizeVariant(v) && sizeValue(v) === effSize);
       if (sizeVars.length === 0) continue; // bu numara yok → gizle
       const hasStock = sizeVars.some((v: any) => Number(v.stock ?? 0) > 0);
       (hasStock ? inS : outS).push(p);
     }
     return { inStock: inS, outStock: outS };
-  }, [base, size]);
+  }, [base, effSize]);
 
   // Telefon: 2 sütun (ziyaretçilerin ~%94'ü mobil — ilk ekranda ürün görünsün)
   const gridCls = "grid grid-cols-2 md:grid-cols-4 gap-x-3 gap-y-8 sm:gap-x-6 md:gap-x-8 md:gap-y-16";
 
   return (
     <div className="space-y-4 md:space-y-8">
-      {/* Marka filtresi (en üstte) — tek marka varsa o seçili gelir */}
-      {brands.length > 0 && (
-        <div className="flex items-center gap-2 overflow-x-auto md:flex-wrap md:overflow-visible -mx-4 px-4 md:mx-0 md:px-0 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <span className="text-xs font-black uppercase tracking-widest text-slate-400 mr-1 shrink-0">Marka:</span>
-          {!singleBrand && (
-            <button
-              onClick={() => setBrand(null)}
-              className={`shrink-0 px-4 h-9 rounded-xl text-sm font-bold border-2 transition-all ${activeBrand === null ? "border-olive-600 bg-olive-600 text-white" : "border-slate-200 text-slate-600 hover:border-olive-300"}`}
-            >
-              Hepsi
-            </button>
-          )}
-          {brands.map((b) => (
-            <button
-              key={b.slug}
-              onClick={() => {
-                if (singleBrand) return;
-                setBrand((prev) => (prev === b.slug ? null : b.slug));
-                track("brand_click", { brand: b.slug, source: "filter" });
-              }}
-              className={`shrink-0 px-4 h-9 rounded-xl text-sm font-bold border-2 transition-all ${activeBrand === b.slug ? "border-olive-600 bg-olive-600 text-white" : "border-slate-200 text-slate-700 hover:border-olive-300"} ${singleBrand ? "cursor-default" : ""}`}
-            >
-              {b.name}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Kategori filtresi (numaranın üstünde) */}
+      {/* Kategori filtresi (en üstte) — seçili markada ürünü olan kategoriler */}
       {showCatFilter && (
         <div className="flex items-center gap-2 overflow-x-auto md:flex-wrap md:overflow-visible -mx-4 px-4 md:mx-0 md:px-0 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <span className="text-xs font-black uppercase tracking-widest text-slate-400 mr-1 shrink-0">Kategori:</span>
           <button
             onClick={() => setCat(null)}
-            className={`shrink-0 px-4 h-9 rounded-xl text-sm font-bold border-2 transition-all ${cat === null ? "border-olive-600 bg-olive-600 text-white" : "border-slate-200 text-slate-600 hover:border-olive-300"}`}
+            className={`shrink-0 px-4 h-9 rounded-xl text-sm font-bold border-2 transition-all ${effCat === null ? "border-olive-600 bg-olive-600 text-white" : "border-slate-200 text-slate-600 hover:border-olive-300"}`}
           >
             Hepsi
           </button>
@@ -323,9 +290,34 @@ export default function SizeFilterGrid({ products: cachedProducts, categoryName,
             <button
               key={c.id}
               onClick={() => { setCat((prev) => (prev === c.id ? null : c.id)); track("category_click", { category_id: c.id, category: c.name }); }}
-              className={`shrink-0 px-4 h-9 rounded-xl text-sm font-bold border-2 transition-all ${cat === c.id ? "border-olive-600 bg-olive-600 text-white" : "border-slate-200 text-slate-700 hover:border-olive-300"}`}
+              className={`shrink-0 px-4 h-9 rounded-xl text-sm font-bold border-2 transition-all ${effCat === c.id ? "border-olive-600 bg-olive-600 text-white" : "border-slate-200 text-slate-700 hover:border-olive-300"}`}
             >
               {c.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Marka filtresi (kategoriden sonra) — seçili kategoride tek marka varsa gizli */}
+      {showBrandFilter && (
+        <div className="flex items-center gap-2 overflow-x-auto md:flex-wrap md:overflow-visible -mx-4 px-4 md:mx-0 md:px-0 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <span className="text-xs font-black uppercase tracking-widest text-slate-400 mr-1 shrink-0">Marka:</span>
+          <button
+            onClick={() => setBrand(null)}
+            className={`shrink-0 px-4 h-9 rounded-xl text-sm font-bold border-2 transition-all ${effBrand === null ? "border-olive-600 bg-olive-600 text-white" : "border-slate-200 text-slate-600 hover:border-olive-300"}`}
+          >
+            Hepsi
+          </button>
+          {brands.map((b) => (
+            <button
+              key={b.id}
+              onClick={() => {
+                setBrand((prev) => (prev === b.id ? null : b.id));
+                track("brand_click", { brand: b.id, source: "filter" });
+              }}
+              className={`shrink-0 px-4 h-9 rounded-xl text-sm font-bold border-2 transition-all ${effBrand === b.id ? "border-olive-600 bg-olive-600 text-white" : "border-slate-200 text-slate-700 hover:border-olive-300"}`}
+            >
+              {b.name}
             </button>
           ))}
         </div>
@@ -337,7 +329,7 @@ export default function SizeFilterGrid({ products: cachedProducts, categoryName,
           <span className="text-xs font-black uppercase tracking-widest text-slate-400 mr-1 shrink-0">Numara:</span>
           <button
             onClick={() => setSize(null)}
-            className={`shrink-0 px-3 h-9 rounded-xl text-sm font-bold border-2 transition-all ${size === null ? "border-olive-600 bg-olive-600 text-white" : "border-slate-200 text-slate-600 hover:border-olive-300"}`}
+            className={`shrink-0 px-3 h-9 rounded-xl text-sm font-bold border-2 transition-all ${effSize === null ? "border-olive-600 bg-olive-600 text-white" : "border-slate-200 text-slate-600 hover:border-olive-300"}`}
           >
             Hepsi
           </button>
@@ -345,7 +337,7 @@ export default function SizeFilterGrid({ products: cachedProducts, categoryName,
             <button
               key={s}
               onClick={() => { setSize(s); track("size_filter", { size: s, category: categoryName }); }}
-              className={`shrink-0 min-w-[44px] h-9 px-2 rounded-xl text-sm font-bold border-2 transition-all ${size === s ? "border-olive-600 bg-olive-600 text-white" : "border-slate-200 text-slate-700 hover:border-olive-300"}`}
+              className={`shrink-0 min-w-[44px] h-9 px-2 rounded-xl text-sm font-bold border-2 transition-all ${effSize === s ? "border-olive-600 bg-olive-600 text-white" : "border-slate-200 text-slate-700 hover:border-olive-300"}`}
             >
               {s}
             </button>
@@ -354,12 +346,12 @@ export default function SizeFilterGrid({ products: cachedProducts, categoryName,
       )}
 
       {/* Sonuç */}
-      {!size ? (
+      {!effSize ? (
         base.length === 0 ? (
           <div className="text-center py-20 text-slate-400">Bu kategoride henüz ürün bulunmuyor.</div>
         ) : (
           <div className={gridCls}>
-            {base.map((p, i) => <ProductCard key={p.id} freeOver={freeOver} hasGift={giftCats.has(p.categories?.id)} product={p} categoryName={categoryName} size={size} priority={i < 4} />)}
+            {base.map((p, i) => <ProductCard key={p.id} freeOver={freeOver} hasGift={giftCats.has(p.categories?.id)} product={p} categoryName={categoryName} size={effSize} priority={i < 4} />)}
           </div>
         )
       ) : (
@@ -368,12 +360,12 @@ export default function SizeFilterGrid({ products: cachedProducts, categoryName,
           <div>
             <div className="flex items-center gap-2 mb-6">
               <span className="w-2.5 h-2.5 rounded-full bg-green-500" />
-              <h2 className="text-lg font-black text-slate-900 uppercase italic">{size} Numara — Stokta ({inStock.length})</h2>
+              <h2 className="text-lg font-black text-slate-900 uppercase italic">{effSize} Numara — Stokta ({inStock.length})</h2>
             </div>
             {inStock.length === 0 ? (
               <p className="text-slate-400 text-sm py-4">Bu numarada stokta ürün yok.</p>
             ) : (
-              <div className={gridCls}>{inStock.map((p, i) => <ProductCard key={p.id} freeOver={freeOver} hasGift={giftCats.has(p.categories?.id)} product={p} categoryName={categoryName} size={size} canQuickBuy onQuickBuy={quickBuy} priority={i < 4} />)}</div>
+              <div className={gridCls}>{inStock.map((p, i) => <ProductCard key={p.id} freeOver={freeOver} hasGift={giftCats.has(p.categories?.id)} product={p} categoryName={categoryName} size={effSize} canQuickBuy onQuickBuy={quickBuy} priority={i < 4} />)}</div>
             )}
           </div>
 
@@ -382,10 +374,10 @@ export default function SizeFilterGrid({ products: cachedProducts, categoryName,
             <div className="pt-4 border-t border-dashed border-slate-200">
               <div className="flex items-center gap-2 mb-6">
                 <PackageX size={16} className="text-slate-400" />
-                <h2 className="text-lg font-black text-slate-400 uppercase italic">{size} Numara — Şu An Stokta Değil ({outStock.length})</h2>
+                <h2 className="text-lg font-black text-slate-400 uppercase italic">{effSize} Numara — Şu An Stokta Değil ({outStock.length})</h2>
               </div>
               <div className={gridCls}>
-                {outStock.map((p) => <ProductCard key={p.id} freeOver={freeOver} hasGift={giftCats.has(p.categories?.id)} product={p} categoryName={categoryName} size={size} outOfStock onNotify={openNotify} />)}
+                {outStock.map((p) => <ProductCard key={p.id} freeOver={freeOver} hasGift={giftCats.has(p.categories?.id)} product={p} categoryName={categoryName} size={effSize} outOfStock onNotify={openNotify} />)}
               </div>
             </div>
           )}
