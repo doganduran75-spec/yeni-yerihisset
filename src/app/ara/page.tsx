@@ -59,6 +59,7 @@ export default async function SearchPage({
     const all = (products ?? []) as any[];
     list = all.filter((p) => {
       const variantText = (p.product_variants ?? [])
+        .filter((v: any) => v.is_active !== false) // kapalı numara aramada da yok sayılır
         .map((v: any) => `${v.variant_options?.value ?? ""} ${v.variant_options?.variant_groups?.name ?? ""}`)
         .join(" ");
       const hay = norm([

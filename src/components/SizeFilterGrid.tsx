@@ -135,15 +135,14 @@ export default function SizeFilterGrid({ products: cachedProducts, categoryName,
     return () => { active = false; document.removeEventListener("visibilitychange", onShow); window.removeEventListener("pageshow", onShow); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [productIdsKey]);
-  const products = useMemo(() => {
-    if (!liveVariants) return cachedProducts;
-    return cachedProducts.map((p) => ({
-      ...p,
-      product_variants: (p.product_variants ?? []).map((v: any) =>
-        liveVariants.has(v.id) ? { ...v, stock: liveVariants.get(v.id) } : v
-      ),
-    }));
-  }, [cachedProducts, liveVariants]);
+  // Satışa kapalı numaralar (varyantın "Aktif"i) mağazada hiç yok sayılır: numara süzgeci, stok ayrımı,
+  // hızlı sipariş ve en düşük fiyat yalnız açık numaralardan (ürün sayfası da aynı kuralı uygular)
+  const products = useMemo(() => cachedProducts.map((p) => ({
+    ...p,
+    product_variants: (p.product_variants ?? [])
+      .filter((v: any) => v.is_active !== false)
+      .map((v: any) => (liveVariants?.has(v.id) ? { ...v, stock: liveVariants.get(v.id) } : v)),
+  })), [cachedProducts, liveVariants]);
 
   const [size, setSize] = useState<string | null>(null);
   const [cat, setCat] = useState<string | null>(null); // seçili kategori id'si
