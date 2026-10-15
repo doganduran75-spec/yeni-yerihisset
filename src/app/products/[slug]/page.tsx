@@ -51,6 +51,15 @@ async function getProduct(slug: string) {
   return data;
 }
 
+// Marka hakkında (Ayarlar › Markalar › Sayfa metni): markanın bütün ürün sayfalarında aynı bölüm
+async function getBrandAbout(brandId: string | null | undefined): Promise<string | null> {
+  if (!brandId) return null;
+  const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+  const { data } = await (supabase as any).from("brands").select("about").eq("id", brandId).maybeSingle();
+  const about = String(data?.about || "").trim();
+  return about && about !== "<p></p>" ? about : null;
+}
+
 // Markanın ölçü tablosu (Ayarlar › Markalar) — "Beden tablosu · Numaramı bul"
 async function getSizeChart(brandId: string | null | undefined): Promise<SizeChart | null> {
   if (!brandId) return null;
@@ -181,7 +190,7 @@ export default async function ProductDetailPage({
 
   if (!product) notFound();
 
-  const [reviewStats, ratingSummary, sizeChart] = await Promise.all([getReviewStats(product.id), getRatingSummary(product.id), getSizeChart((product as any).brand_id)]);
+  const [reviewStats, ratingSummary, sizeChart, brandAbout] = await Promise.all([getReviewStats(product.id), getRatingSummary(product.id), getSizeChart((product as any).brand_id), getBrandAbout((product as any).brand_id)]);
 
   return (
     <>
@@ -195,7 +204,7 @@ export default async function ProductDetailPage({
       />
 
       {/* İnteraktif ürün sayfası (client component) */}
-      <ProductPageClient product={product as any} initialSize={beden ?? null} initialVariantId={variant ?? null} sizeChart={sizeChart} ratingSummary={ratingSummary} />
+      <ProductPageClient product={product as any} initialSize={beden ?? null} initialVariantId={variant ?? null} sizeChart={sizeChart} ratingSummary={ratingSummary} brandAbout={brandAbout} />
     </>
   );
 }

@@ -39,6 +39,7 @@ import { fetchLiveStocks, fetchItemStock } from "@/lib/live-stock";
 import SizeGuide from "@/components/products/SizeGuide";
 import { sortedRows, type SizeChart } from "@/lib/size-chart";
 import { productSpecs } from "@/config/product-specs";
+import { safeHtml, isPlainText } from "@/lib/safe-html";
 
 type Variant = {
   id: string;
@@ -73,11 +74,12 @@ type Product = {
   product_variants: Variant[] | null;
 };
 
-export default function ProductPageClient({ product, initialSize = null, initialVariantId = null, sizeChart = null, ratingSummary = null }: {
+export default function ProductPageClient({ product, initialSize = null, initialVariantId = null, sizeChart = null, ratingSummary = null, brandAbout = null }: {
   product: Product;
   initialSize?: string | null;
   initialVariantId?: string | null;
   sizeChart?: SizeChart | null;
+  brandAbout?: string | null; // Marka hakkında (HTML, Ayarlar › Markalar)
   ratingSummary?: { avg: number; count: number } | null; // gerçek yorumlardan; yoksa yıldız gösterilmez
 }) {
   const images =
@@ -654,9 +656,20 @@ export default function ProductPageClient({ product, initialSize = null, initial
             {product.description && (
               <section className="border-t border-slate-100 pt-8">
                 <h2 className="text-2xl font-black text-slate-900 mb-4">Ürün Açıklaması</h2>
-                <div className="text-slate-600 leading-relaxed whitespace-pre-wrap">
-                  {product.description}
-                </div>
+                {isPlainText(product.description) ? (
+                  <div className="text-slate-600 leading-relaxed whitespace-pre-wrap">{product.description}</div>
+                ) : (
+                  /* Görselli / biçimli açıklama (yönetici yazar; safeHtml ikinci emniyet katmanı) */
+                  <div className="rich-text" dangerouslySetInnerHTML={{ __html: safeHtml(product.description) }} />
+                )}
+              </section>
+            )}
+
+            {/* Marka hakkında — markanın bütün ürünlerinde aynı (Ayarlar › Markalar › Sayfa metni) */}
+            {brandAbout && (
+              <section className="border-t border-slate-100 pt-8">
+                <h2 className="text-2xl font-black text-slate-900 mb-4">{(product as any).brands?.name ? `${(product as any).brands.name} hakkında` : "Marka hakkında"}</h2>
+                <div className="rich-text" dangerouslySetInnerHTML={{ __html: safeHtml(brandAbout) }} />
               </section>
             )}
 

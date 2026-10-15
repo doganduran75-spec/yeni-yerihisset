@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { siteAlert } from "@/components/ui/site-dialog";
 import { Loader2, Plus, Trash2 } from "lucide-react";
+import RichTextEditor from "@/components/admin/RichTextEditor";
 
 // Kategori / marka sayfasının tanıtım metni + SSS (migration 20261114). Sayfada başlığın altında giriş, en altta
 // soru-cevap (+ FAQPage yapısal verisi). Kısa, net, gerçek bilgi: yapay zekâ ve arama motoru "bu sayfa ne?" sorusunu buradan anlar.
@@ -15,18 +16,20 @@ export type FaqItem = { q: string; a: string };
 
 export default function ListPageContentDialog({ table, row, onClose, onSaved }: {
   table: "categories" | "brands";
-  row: { id: string; name: string; slug: string; intro?: string | null; faq?: FaqItem[] | null };
+  row: { id: string; name: string; slug: string; intro?: string | null; faq?: FaqItem[] | null; about?: string | null };
   onClose: () => void;
   onSaved: () => void;
 }) {
   const [intro, setIntro] = useState(row.intro ?? "");
   const [faq, setFaq] = useState<FaqItem[]>(Array.isArray(row.faq) ? row.faq : []);
+  const [about, setAbout] = useState(row.about ?? ""); // yalnız marka: bütün ürün sayfalarında "Marka hakkında"
   const [saving, setSaving] = useState(false);
 
   async function save() {
     setSaving(true);
     const clean = faq.map((f) => ({ q: f.q.trim(), a: f.a.trim() })).filter((f) => f.q && f.a);
-    const { error } = await (supabase as any).from(table).update({ intro: intro.trim() || null, faq: clean.length ? clean : null }).eq("id", row.id);
+    const { error } = await (supabase as any).from(table).update({ intro: intro.trim() || null, faq: clean.length ? clean : null,
+      ...(table === "brands" ? { about: about.trim() && about.trim() !== "<p></p>" ? about : null } : {}) }).eq("id", row.id);
     setSaving(false);
     if (error) { siteAlert({ title: "Kaydedilemedi", message: error.message, tone: "danger" }); return; }
     siteAlert({ message: "Kaydedildi. Sayfada ~1 dakika içinde görünür.", tone: "success" });
@@ -46,6 +49,13 @@ export default function ListPageContentDialog({ table, row, onClose, onSaved }: 
               placeholder="Ör: Dodura, İstanbul'da el yapımı üretilen deri barefoot ayakkabı markasıdır. Tabanı 5,5 mm kauçuk…"
               className="w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
           </div>
+          {table === "brands" && (
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Marka hakkında (bu markanın bütün ürün sayfalarında, açıklamanın altında)</label>
+              <p className="text-xs text-muted-foreground">Görsel ve biçimli metin eklenebilir. Görsel: 1080–1200 px genişlik, 300 KB altı; görselin içine yazı koyma (telefonda okunmaz, Google okuyamaz) — yazıyı metin olarak yaz.</p>
+              <RichTextEditor value={about} onChange={setAbout} minHeight={200} placeholder="Ör: Dodura, İstanbul'da el yapımı üretilen…" />
+            </div>
+          )}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <label className="text-sm font-medium">Sık sorulan sorular</label>

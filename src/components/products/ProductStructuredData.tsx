@@ -6,6 +6,7 @@
 
 // JSON-LD güvenli yazım: "<" kaçışlanır → veri içindeki "</script>" bloğu kapatamaz
 import { productSpecs } from "@/config/product-specs";
+import { plain } from "@/lib/gmc-items";
 
 const safeJsonLd = (v: unknown) => JSON.stringify(v).replace(/</g, "\\u003c");
 
@@ -86,7 +87,7 @@ export default function ProductStructuredData({
     "@context": "https://schema.org",
     "@type": "Product",
     name: product.title,
-    description: product.description ?? `${product.title} - ${storeName}'de satışta.`,
+    description: plain(product.description) || `${product.title} - ${storeName}'de satışta.`, // HTML açıklama → düz metin
     url: productUrl,
     ...(product.model_code ? { mpn: product.model_code, sku: product.model_code } : {}),
     // Teknik bilgiler (taban kalınlığı, malzeme, ağırlık…) — makinelerin okuyacağı biçimde

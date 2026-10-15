@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import RichTextEditor from "@/components/admin/RichTextEditor";
+import { isPlainText, plainToHtml } from "@/lib/safe-html";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -448,13 +450,13 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Detaylı Açıklama</label>
-                <textarea
-                  className="flex min-h-[400px] w-full rounded-2xl border-2 border-slate-100 bg-slate-50/30 px-4 py-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 transition-all font-medium"
-                  placeholder="Ürünün detaylı açıklaması (sayfanın en altında görünür)..."
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                {/* Görselli / biçimli açıklama. Eski düz metin açıklamalar editöre paragraf olarak gelir. */}
+                <RichTextEditor
+                  value={isPlainText(formData.description) ? plainToHtml(formData.description) : formData.description}
+                  onChange={(html) => setFormData((f) => ({ ...f, description: html === "<p></p>" ? "" : html }))}
+                  placeholder="Ürünün detaylı açıklaması (sayfanın en altında görünür)…"
                 />
-                <p className="text-xs text-slate-400">Müşteri yorumlarının altında, sayfanın en altında görünür.</p>
+                <p className="text-xs text-slate-400">Müşteri yorumlarının altında görünür. Görsel: 1080–1200 px genişlik, 300 KB altı; görselin içine yazı koyma (telefonda okunmaz). Markaya ait ortak içerik için Ayarlar › Markalar › Sayfa metni › “Marka hakkında”.</p>
               </div>
             </div>
           </section>
