@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { siteConfirm } from "@/components/ui/site-dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -366,21 +365,16 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
         }
       } catch { /* kritik değil: dakikalık cron zaten gönderir */ }
 
-      if (createdInactive && finalId) {
-        // Fiyatsız ürün pasif kalır → doğrudan o ürünün fiyat ekranına (pasif ürün orada görünür)
-        if (await siteConfirm({ title: "Ürün pasif olarak kaydedildi", message: "Satış fiyatı girilmeden yayına alınamaz. Şimdi fiyatını girmek ister misin?", confirmText: "Fiyat gir", cancelText: "Sonra" })) {
-          router.push(`/admin/prices?urun=${finalId}`);
-          return;
-        }
+      if (createdInactive) {
+        alert("Ürün PASİF olarak oluşturuldu. Fiyatlar sayfasından satış fiyatını girip ürünü yayına alabilirsin.");
       }
       router.push("/admin/products");
       router.refresh();
     } catch (error: any) {
       const msg = String(error?.message || "");
-      if (msg.includes("PRICE_REQUIRED_TO_ACTIVATE")) {
-        if (await siteConfirm({ title: "Önce fiyat", message: "Bu ürünün satış fiyatı yok — fiyatsız ürün yayına alınamaz. Fiyatını şimdi girmek ister misin? (Ürünün diğer değişiklikleri kaydedilmedi.)", confirmText: "Fiyat gir", cancelText: "Vazgeç" })
-          && productId) router.push(`/admin/prices?urun=${productId}`);
-      } else alert("Hata: " + msg);
+      alert(msg.includes("PRICE_REQUIRED_TO_ACTIVATE")
+        ? "Bu ürünün satış fiyatı yok — fiyatsız ürün yayına alınamaz. Önce Admin › Fiyatlar sayfasından fiyat gir."
+        : "Hata: " + msg);
     } finally {
       setLoading(false);
     }
