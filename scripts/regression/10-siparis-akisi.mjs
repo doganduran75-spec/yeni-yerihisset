@@ -937,6 +937,21 @@ export default {
         ok(w === "true", "Uzun süre gelmeyip dönen üye “seni özledik” için işaretleniyor", `işaret ${w}`);
       });
 
+      await part("Varyasyon değeri başka gruba taşınıyor (ürünler etkilenmeden)", async () => {
+        const g1 = one(`INSERT INTO public.variant_groups (name) VALUES ('REGRESYON-TEST Numara') RETURNING id`);
+        const g2 = one(`INSERT INTO public.variant_groups (name) VALUES ('REGRESYON-TEST İlkadım Numara') RETURNING id`);
+        const opt = one(`INSERT INTO public.variant_options (group_id, value) VALUES (${lit(g1)}, '21,5') RETURNING id`);
+        try {
+          const mu = await rest(`variant_options?id=eq.${opt}`, { token: F.member.token, method: "PATCH", body: { group_id: g2 } });
+          ok(one(`SELECT group_id FROM public.variant_options WHERE id = ${lit(opt)}`) === g1, "Üye varyasyon değerini taşıyamıyor", `HTTP ${mu.status}`);
+          const ad = await rest(`variant_options?id=eq.${opt}`, { token: F.admin.token, method: "PATCH", body: { group_id: g2 } });
+          ok(ad.status < 300 && one(`SELECT group_id FROM public.variant_options WHERE id = ${lit(opt)}`) === g2, "Yönetici değeri başka gruba taşıyabiliyor (aynı kimlik — ürünler bağlı kalır)", `HTTP ${ad.status}`);
+        } finally {
+          sql(`DELETE FROM public.variant_options WHERE id = ${lit(opt)}`);
+          sql(`DELETE FROM public.variant_groups WHERE id IN (${lit(g1)}, ${lit(g2)})`);
+        }
+      });
+
       await part("Sipariş silme ve süresi dolan sipariş", async () => {
         if (O.del) {
           const s0 = stock();

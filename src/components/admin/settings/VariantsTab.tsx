@@ -12,7 +12,8 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { supabase } from "@/lib/supabase";
-import { Plus, Edit, Trash2, Loader2, Layers } from "lucide-react";
+import { siteAlert, siteConfirm } from "@/components/ui/site-dialog";
+import { Plus, Edit, Trash2, Loader2, Layers, ArrowRightLeft } from "lucide-react";
 import { sortByVariantValue } from "@/lib/variant-sort";
 
 type VariantGroup = {
@@ -34,6 +35,7 @@ export default function VariantsTab() {
   const [editingGroup, setEditingGroup] = useState<VariantGroup | null>(null);
   const [groupName, setGroupName] = useState("");
   const [optionsText, setOptionsText] = useState("");
+  const [moving, setMoving] = useState<string | null>(null); // taşınacak değerin id'si
 
   useEffect(() => {
     fetchGroups();
@@ -91,14 +93,47 @@ export default function VariantsTab() {
     }
   }
 
+  // Kaç ürün numarası (varyantı) bu değerleri kullanıyor? Kullanılan değer silinirse ürünlerin numarası bozulur.
+  async function usage(optionIds: string[]) {
+    if (!optionIds.length) return 0;
+    const { count } = await (supabase as any).from("product_variants").select("id", { count: "exact", head: true }).in("variant_option_id", optionIds);
+    return count ?? 0;
+  }
+
   async function handleDeleteGroup(id: string) {
-    if (!confirm("Bu varyasyon grubunu ve tüm değerlerini silmek istediğinize emin misiniz?")) return;
+    const g = groups.find((x) => x.id === id);
+    const used = await usage((g?.options || []).map((o) => o.id));
+    if (used) {
+      siteAlert({ title: "Silinemez", message: `Bu gruptaki değerler ${used} ürün numarasında kullanılıyor. Önce değerleri başka gruba taşı ya da ürünlerden kaldır.`, tone: "danger" });
+      return;
+    }
+    if (!(await siteConfirm({ title: "Grup silinsin mi?", message: "Bu varyasyon grubu ve tüm değerleri silinir.", confirmText: "Sil", tone: "danger" }))) return;
     await supabase.from("variant_groups").delete().eq("id", id);
     fetchGroups();
   }
 
   async function handleDeleteOption(id: string) {
+    const used = await usage([id]);
+    if (used) {
+      siteAlert({ title: "Silinemez", message: `Bu değer ${used} ürün numarasında kullanılıyor. Başka gruba taşımak için ⇄ düğmesini kullan.`, tone: "danger" });
+      return;
+    }
     await supabase.from("variant_options").delete().eq("id", id);
+    fetchGroups();
+  }
+
+  // Değeri başka gruba taşı: ürünler aynı değeri kullanmaya devam eder (silinip yeniden eklenmez)
+  async function moveOption(optId: string, toGroup: string) {
+    const target = groups.find((g) => g.id === toGroup);
+    const opt = groups.flatMap((g) => g.options || []).find((o) => o.id === optId);
+    if (!target || !opt) return;
+    if ((target.options || []).some((o) => o.value.trim() === opt.value.trim())) {
+      siteAlert({ message: `“${target.name}” grubunda “${opt.value}” zaten var.`, tone: "danger" });
+      return;
+    }
+    const { error } = await (supabase as any).from("variant_options").update({ group_id: toGroup }).eq("id", optId);
+    if (error) siteAlert({ title: "Taşınamadı", message: error.message, tone: "danger" });
+    setMoving(null);
     fetchGroups();
   }
 
@@ -176,8 +211,21 @@ export default function VariantsTab() {
                         className="bg-white border rounded px-2 py-0.5 text-xs flex items-center gap-1.5 group/opt shadow-sm hover:border-blue-200"
                       >
                         {opt.value}
+                        {moving === opt.id ? (
+                          <select autoFocus defaultValue="" onBlur={() => setMoving(null)} onChange={(e) => e.target.value && moveOption(opt.id, e.target.value)}
+                            className="h-5 rounded border text-[10px] bg-white">
+                            <option value="">Taşı…</option>
+                            {groups.filter((g) => g.id !== group.id).map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+                          </select>
+                        ) : groups.length > 1 && (
+                          <button onClick={() => setMoving(opt.id)} title="Başka gruba taşı (ürünler etkilenmez)"
+                            className="text-slate-300 hover:text-blue-600 opacity-0 group-hover/opt:opacity-100 transition-opacity">
+                            <ArrowRightLeft size={9} />
+                          </button>
+                        )}
                         <button
                           onClick={() => handleDeleteOption(opt.id)}
+                          title="Sil (ürünlerde kullanılıyorsa izin verilmez)"
                           className="text-slate-300 hover:text-red-500 opacity-0 group-hover/opt:opacity-100 transition-opacity"
                         >
                           <Trash2 size={9} />
