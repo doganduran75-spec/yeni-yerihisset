@@ -138,8 +138,8 @@ export default function AdminLayout({
       <SidebarInset className="min-w-0">
         <header className="h-16 flex shrink-0 items-center justify-between px-4 md:px-6 bg-background border-b transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12 shadow-sm">
           <div className="flex items-center gap-2 min-w-0">
-            {/* Mobilde sol menüyü açan hamburger — masaüstünde menü zaten sabit */}
-            <SidebarTrigger className="md:hidden -ml-1 size-9" />
+            {/* Sol menüyü aç / kapat — telefonda ve bilgisayarda (bilgisayarda Ctrl+B de aynı işi yapar) */}
+            <SidebarTrigger className="-ml-1 size-9" title="Menüyü aç / kapat (Ctrl+B)" />
             <h1 className="font-semibold text-base md:text-lg truncate">Yönetim Paneli</h1>
           </div>
           <div className="flex items-center gap-3 md:gap-4 shrink-0">
