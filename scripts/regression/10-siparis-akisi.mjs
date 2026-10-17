@@ -963,6 +963,19 @@ export default {
           "Yönetici numarayı siliyor; fiyat listelerinden de çıkıyor", `HTTP ${ad.status}`);
       });
 
+      await part("Ödeme alınmadan sevkiyat başlamıyor", async () => {
+        const r = await order([MAIN(1)]);
+        const id = r.json?.orderId;
+        if (!id) return add("fail", "Sevkiyat testi için sipariş oluşturulamadı", why(r));
+        const p = (body) => rest(`orders?id=eq.${id}`, { token: F.admin.token, method: "PATCH", body });
+        for (const st of ["preparing", "shipped"]) {
+          const x = await p({ shipment_status: st });
+          ok(x.status >= 400 && ord(id).shipment_status === "waiting", `Ödemesi bekleyen sipariş “${st}” yapılamıyor`, `HTTP ${x.status} → ${ord(id).shipment_status}`);
+        }
+        const y = await p({ payment_status: "paid", status: "processing", shipment_status: "preparing" });
+        ok(y.status < 300 && ord(id).shipment_status === "preparing", "Ödeme alındı + Hazırlanıyor birlikte yapılabiliyor", `HTTP ${y.status} → ${ord(id).shipment_status}`);
+      });
+
       await part("Sipariş silme ve süresi dolan sipariş", async () => {
         if (O.del) {
           const s0 = stock();

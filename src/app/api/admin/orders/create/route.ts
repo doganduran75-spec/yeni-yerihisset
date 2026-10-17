@@ -95,7 +95,7 @@ export async function POST(req: NextRequest) {
       shipping_cost: shippingCost,
       payment_method,
       payment_status: isBankTransfer ? "pending" : "paid",
-      shipment_status: "preparing",
+      shipment_status: isBankTransfer ? "waiting" : "preparing", // ödeme gelmeden kargo süreci başlamaz
       invoice_status: "pending",
       admin_note,
     } as any)

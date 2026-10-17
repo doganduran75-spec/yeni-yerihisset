@@ -83,6 +83,7 @@ bildirimi düşmez). Tek iz: sipariş numaraları birkaç numara atlar.
 | Üye temizliği: misafir süzgeci ve silme | Misafir + siparişsiz süzgeci çalışır; siparişi olan üye "siparişi yok"a girmez; üye silemez; yönetici siparişsiz misafiri siler (hesap + profil); siparişi olan ve yönetici hesaplar silinmez |
 | Yorum isteme + seni özledik | Yorum bağlantısı giriş gerektirmeden soruları getirir; geçersiz bağlantı 404; yorum genel puan + cevaplarla onay bekler; ikinci yorum yazılmaz; uzun süre gelmeyip dönen üye işaretlenir (geri alınan işlem) |
 | Varyasyon değeri taşıma | Üye taşıyamaz; yönetici değeri başka gruba taşır (aynı kimlik — ürünler bağlı kalır) |
+| Ödeme alınmadan sevkiyat başlamıyor | Ödemesi bekleyen site siparişi Hazırlanıyor / Kargoda yapılamaz (veritabanı kuralı); Ödeme alındı + Hazırlanıyor birlikte yapılabilir |
 | Kategori sayfa metni | Yönetici tanıtım + SSS kaydeder, üye değiştiremez, sayfada ve FAQPage yapısal verisinde görünür. Duman: ana rehber, mağaza H1, eski yazı yönlendirmesi, beslemede renk / yaş grubu |
 | Kampanya e-postası kuralı | İzinsiz üyeye kuyruktaki kampanya gitmiyor (skipped); bülten aboneliği izin; abonelikten çık bağlantısı (kişi) çalışıyor. Duman: Google Analytics onaysız yüklenmiyor; profillerde TC kimlik yok |
 | Stok bildirimi | Bot kaydı reddedilir; misafir kaydı + Kişiler; çift kayıt olmaz; üye kaydı; üye "stok geldi" gönderemez; gönderilemeyen bildirim "bekliyor" kalır |

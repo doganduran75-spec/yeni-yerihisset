@@ -404,7 +404,7 @@ export default function OrdersPage() {
       }
     } catch (e) {
       console.error(e);
-      alert("Güncelleme başarısız.");
+      alert(String((e as any)?.message || "").includes("PAYMENT_REQUIRED_TO_SHIP") ? "Ödemesi alınmamış sipariş hazırlanamaz / kargoya verilemez — önce “Ödeme alındı”." : "Güncelleme başarısız.");
     } finally {
       setUpdatingId(null);
     }
@@ -784,7 +784,15 @@ export default function OrdersPage() {
     { value: "partial_refund", label: "Kısmi iade…" },
     { value: "refunded", label: "İade edildi…" },
   ];
-  const shipmentOptions = (o: Order) => [
+  // Ödeme alınmadan kargo süreci başlamaz (site siparişi; veritabanı da denetler — trg_guard_ship_before_payment)
+  const unpaidSite = (o: Order) => !["paid", "partial_refund"].includes(o.payment_status || "pending")
+    && ((o as any).channel || "site") === "site" && !(o as any).import_source
+    && ["waiting", "preparing"].includes(o.shipment_status || "waiting");
+  const shipmentOptions = (o: Order) => unpaidSite(o) ? [
+    { value: "waiting", label: "Bekleniyor (önce ödeme)" },
+    ...(o.shipment_status === "preparing" ? [{ value: "preparing", label: "Hazırlanıyor" }] : []),
+    { value: "cancelled", label: "İptal Edildi…" },
+  ] : [
     { value: "waiting", label: "Bekleniyor" },
     { value: "preparing", label: "Hazırlanıyor" },
     ...(o.kargonomi_tracking_code ? [] : [{ value: "ship_kargonomi", label: "Kargoya Ver (Kargonomi)" }]),
@@ -934,6 +942,10 @@ export default function OrdersPage() {
     if (v === "returned") {
       if (!shippedNow) { siteAlert({ message: "Henüz kargolanmamış sipariş için “Siparişi iptal et” kullan.", tone: "danger" }); return; }
       openAction(o, "return");
+      return;
+    }
+    if (unpaidSite(o) && !["waiting", "cancelled"].includes(v)) {
+      siteAlert({ title: "Önce ödeme", message: "Ödemesi alınmamış sipariş hazırlanamaz ve kargoya verilemez. Ödeme geldiyse önce “Ödeme alındı” de.", tone: "danger" });
       return;
     }
     if (v === "ship_kargonomi") {
