@@ -17,6 +17,7 @@ import { createAdminClient } from "@/lib/supabase-admin";
 import { getTrendyolConfig, hasCredentials, updateStocks, getBatchResult, testConnection, TrendyolError } from "@/lib/marketplace/trendyol";
 import { getHepsiburadaConfig, hbHasCredentials, hbUpdateStocks, hbGetUploadResult, hbTestConnection, HepsiburadaError } from "@/lib/marketplace/hepsiburada";
 import { getAmazonConfig, amzHasCredentials, amzUpdateStocks, amzTestConnection, AmazonError, type AmazonStockResult } from "@/lib/marketplace/amazon";
+import { onePerKey, normKey } from "@/lib/marketplace/one-per-key";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 export type Channel = "trendyol" | "hepsiburada" | "amazon";
@@ -75,7 +76,7 @@ const hepsiburada: Adapter = {
     if (r.failedAll) { for (const row of rows) failures.set(row.id, r.failedAll); return { done: true, failures }; }
     for (const e of r.errors) {
       for (const row of rows) {
-        if ((e.pos != null && row.batch_pos === e.pos) || (e.key && row.barcode === e.key)) failures.set(row.id, e.reason);
+        if ((e.pos != null && row.batch_pos === e.pos) || (e.key && normKey(row.barcode) === normKey(e.key))) failures.set(row.id, e.reason);
       }
     }
     return { done: true, failures };
@@ -141,7 +142,7 @@ async function settleImmediate(
   const now = new Date().toISOString();
   const okRows: any[] = [], badRows: any[] = [];
   for (const r of rows) {
-    const res = results.get(r.barcode);
+    const res = results.get(r.barcode) ?? [...results.entries()].find(([k]) => normKey(k) === normKey(r.barcode))?.[1];
     if (res?.ok) { okRows.push(r); continue; }
     if (res?.retry) {
       await sb.from("marketplace_stock_sync")
@@ -203,18 +204,16 @@ export async function processChannel(channel: Channel, supabase: AdminClient = c
     const list = (rows as any[]) || [];
     if (!list.length) break;
 
-    // Aynı anahtar iki varyantta olursa tek kalem (sonuncusu); sıra = kalem no
-    const qtyByKey = new Map<string, number>();
-    for (const r of list) qtyByKey.set(r.barcode, Number(r.sending_qty ?? r.desired_qty ?? 0));
-    const keys = [...qtyByKey.keys()];
-    const posByKey = new Map(keys.map((k, i) => [k, i + 1]));
-    const items = keys.map((key) => ({ key, qty: qtyByKey.get(key)! }));
+    // Aynı anahtar iki varyantta olursa tek kalem (aktif varyantınki; harf / boşluk farkı da aynı sayılır); sıra = kalem no
+    const { picked, posOf, dupes } = await onePerKey(sb, list, (r: any) => r.barcode);
+    if (dupes.length) report.errors.push(`Aynı ilan kodu birden çok varyantta (tek gönderildi): ${dupes.slice(0, 5).join(", ")}`);
+    const items = picked.map((r: any) => ({ key: String(r.barcode).trim(), qty: Number(r.sending_qty ?? r.desired_qty ?? 0) }));
     const ids = list.map((r) => r.id);
 
     try {
       const sent = await a.send(cfg, items);
       const batchId = typeof sent === "string" ? sent : sent.batchId;
-      await sb.rpc("mark_marketplace_stock_sent", { p_ids: ids, p_batch: batchId, p_pos: list.map((r) => posByKey.get(r.barcode)) });
+      await sb.rpc("mark_marketplace_stock_sent", { p_ids: ids, p_batch: batchId, p_pos: list.map((r) => posOf.get(r.id)) });
       report.sent += items.length;
       report.batches += 1;
       if (typeof sent !== "string") await settleImmediate(sb, channel, batchId, sent.results, report, zeroOkVariants);

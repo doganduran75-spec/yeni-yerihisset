@@ -475,6 +475,17 @@ async function main() {
     : add("fail", "Varsayılan kargo yöntemi yok ya da pasif", "Ayarlar › Kargo Yöntemleri › Varsayılan yap");
   const mktFailed = num("SELECT count(*) FROM public.marketplace_stock_sync WHERE status='failed'");
   mktFailed ? add("warn", "Pazaryeri stok gönderim hatası", `${mktFailed} kayıt (Ayarlar › Entegrasyonlar)`) : add("ok", "Pazaryeri stok hatası yok");
+  // Aynı ilan kodu (barkod / satıcı kodu) iki varyantta → pazaryerine tek gider ama hangisinin stoğu / fiyatı doğru belli
+  // olmaz (Hepsiburada eskiden bütün paketi reddediyordu: DuplicateMerchantSkuSpecified). Harf / boşluk farkı aynı sayılır.
+  const dupKeys = sql(`SELECT ch, k, count(*), string_agg(p.title || ' (' || CASE WHEN coalesce(v.is_active,true) AND p.is_active THEN 'aktif' ELSE 'pasif' END || ')', ', ')
+    FROM public.product_variants v JOIN public.products p ON p.id = v.product_id
+    CROSS JOIN unnest(ARRAY['trendyol','hepsiburada','amazon']) ch
+    CROSS JOIN LATERAL (SELECT upper(btrim(public.marketplace_listing_key(ch, v.barcode, v.sku))) AS k) x
+    WHERE x.k IS NOT NULL AND public.marketplace_is_listed(ch, x.k)
+    GROUP BY ch, k HAVING count(*) > 1 ORDER BY ch, k LIMIT 10`);
+  dupKeys.length
+    ? add("warn", "Aynı pazaryeri kodu birden çok varyantta", dupKeys.map((r) => `${r[0]} ${r[1]}: ${r[3]}`).join(" · ").slice(0, 600) + " → fazla olanın barkod / SKU'sunu sil ya da düzelt")
+    : add("ok", "Pazaryeri kodları tekil");
   const qFailed = num("SELECT count(*) FROM public.email_queue WHERE status='failed' AND created_at > now() - interval '7 days'");
   qFailed ? add("warn", "Gönderilemeyen e-posta (son 7 gün)", `${qFailed}`) : add("ok", "E-posta kuyruğunda hata yok");
 

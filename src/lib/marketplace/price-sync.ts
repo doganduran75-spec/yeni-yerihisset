@@ -8,6 +8,7 @@ import { createAdminClient } from "@/lib/supabase-admin";
 import { getTrendyolConfig, hasCredentials, updatePrices, getBatchResult, TrendyolError } from "@/lib/marketplace/trendyol";
 import { getHepsiburadaConfig, hbHasCredentials, hbUpdatePrices, hbGetUploadResult, HepsiburadaError } from "@/lib/marketplace/hepsiburada";
 import { getAmazonConfig, amzHasCredentials, amzUpdatePrices, AmazonError, type AmazonStockResult } from "@/lib/marketplace/amazon";
+import { onePerKey, normKey } from "@/lib/marketplace/one-per-key";
 type Channel = "trendyol" | "hepsiburada" | "amazon";
 const CHANNELS: Channel[] = ["trendyol", "hepsiburada", "amazon"];
 
@@ -63,7 +64,7 @@ const ADAPTERS: Record<Channel, Adapter> = {
       if (!r.done) return { done: false, failures };
       if (r.failedAll) { for (const row of rows) failures.set(row.id, r.failedAll); return { done: true, failures }; }
       for (const e of r.errors) for (const row of rows) {
-        if ((e.pos != null && row.batch_pos === e.pos) || (e.key && row.listing_key === e.key)) failures.set(row.id, e.reason);
+        if ((e.pos != null && row.batch_pos === e.pos) || (e.key && normKey(row.listing_key) === normKey(e.key))) failures.set(row.id, e.reason);
       }
       return { done: true, failures };
     },
@@ -86,19 +87,20 @@ const ADAPTERS: Record<Channel, Adapter> = {
 /** Eşzamanlı sonuç (Amazon): kabul → ok, red → failed (istek sınırına takılanlar önceden sıraya döner) */
 async function settleImmediate(sb: any, channel: Channel, batchId: string, rows: Claimed[], results: Map<string, AmazonStockResult>, rep: PriceReport) {
   const now = new Date().toISOString();
-  const okRows = rows.filter((r) => results.get(r.listing_key)?.ok);
-  const badRows = rows.filter((r) => !results.get(r.listing_key)?.ok);
+  const get = (r: Claimed) => results.get(normKey(r.listing_key));
+  const okRows = rows.filter((r) => get(r)?.ok);
+  const badRows = rows.filter((r) => !get(r)?.ok);
   if (okRows.length) {
     await sb.from("marketplace_price_sync").update({ status: "ok", confirmed_at: now, error: null })
       .in("id", okRows.map((r) => r.id)).eq("status", "sent").eq("batch_request_id", batchId);
   }
   for (const r of badRows) {
-    await sb.from("marketplace_price_sync").update({ status: "failed", error: results.get(r.listing_key)?.reason, updated_at: now })
+    await sb.from("marketplace_price_sync").update({ status: "failed", error: get(r)?.reason, updated_at: now })
       .eq("id", r.id).eq("status", "sent").eq("batch_request_id", batchId);
   }
   const asLog = (r: Claimed) => ({ ...r, sale_price: r.sending_sale });
   await log(sb, channel, okRows.map(asLog), true, () => null, batchId);
-  await log(sb, channel, badRows.map(asLog), false, (r) => results.get(r.listing_key)?.reason || null, batchId);
+  await log(sb, channel, badRows.map(asLog), false, (r) => get(r)?.reason || null, batchId);
   rep.confirmed += okRows.length;
   rep.failed += badRows.length;
 }
@@ -128,17 +130,22 @@ export async function processPriceChannel(channel: Channel, supabase: AdminClien
     const list = (rows as Claimed[]) || [];
     if (!list.length) break;
     const ids = list.map((r) => r.id);
+    // Aynı ilan kodu iki varyantta → tek kalem (Hepsiburada aksi hâlde bütün paketi reddeder: DuplicateMerchantSkuSpecified)
+    const { picked, posOf, dupes } = await onePerKey(sb, list, (r) => r.listing_key);
+    if (dupes.length) rep.errors.push(`Aynı ilan kodu birden çok varyantta (tek gönderildi): ${dupes.slice(0, 5).join(", ")}`);
     try {
-      const sent = await a.send(cfg, list);
+      const raw = await a.send(cfg, picked.map((r) => ({ ...r, listing_key: String(r.listing_key).trim() })));
+      // Eşzamanlı sonuç (Amazon): anahtarlar normalize → aynı kodu taşıyan bütün satırlar aynı sonucu alır
+      const sent: Sent = typeof raw === "string" ? raw : { batchId: raw.batchId, results: new Map([...raw.results].map(([k, v]) => [normKey(k), v])) };
       const batchId = typeof sent === "string" ? sent : sent.batchId;
       let done = list;
       if (typeof sent !== "string") {
         // İstek sınırına takılan / sonucu gelmeyenler tekrar sıraya (durum hâlâ "sending")
-        const retry = list.filter((r) => { const x = sent.results.get(r.listing_key); return !x || (!x.ok && x.retry); });
-        if (retry.length) await sb.rpc("mark_marketplace_price_retry", { p_ids: retry.map((r) => r.id), p_error: sent.results.get(retry[0].listing_key)?.reason || "Tekrar denenecek" });
+        const retry = list.filter((r) => { const x = sent.results.get(normKey(r.listing_key)); return !x || (!x.ok && x.retry); });
+        if (retry.length) await sb.rpc("mark_marketplace_price_retry", { p_ids: retry.map((r) => r.id), p_error: sent.results.get(normKey(retry[0].listing_key))?.reason || "Tekrar denenecek" });
         done = list.filter((r) => !retry.includes(r));
       }
-      if (done.length) await sb.rpc("mark_marketplace_price_sent", { p_ids: done.map((r) => r.id), p_batch: batchId, p_pos: done.map((_, i) => i + 1) });
+      if (done.length) await sb.rpc("mark_marketplace_price_sent", { p_ids: done.map((r) => r.id), p_batch: batchId, p_pos: done.map((r) => posOf.get(r.id)!) });
       rep.sent += done.length;
       if (typeof sent !== "string") await settleImmediate(sb, channel, batchId, done, sent.results, rep);
     } catch (e: any) {

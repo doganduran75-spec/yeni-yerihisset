@@ -39,7 +39,7 @@ node scripts/regression.mjs --hizli
 - **Sayfalar:** 25+ müşteri ve admin sayfası açılıyor mu, hata metni var mı, 3 sn'den yavaş mı; gerçek bir ürün mağazada listeleniyor mu; olmayan sayfa 404 mü; ana sayfada prensip metni (panelden), kategori kutuları segment mağazasına bağlı, ilk prensip görseli açılıyor.
 - **Uç noktalar ve yetki:** cron'lar şifresiz çalışmıyor, admin uçları girişsiz çalışmıyor, bot koruması devrede, kart ödeme ucu yanıt veriyor.
 - **Veri güvenliği:** dışarıdan (anon anahtarla) üye e-postası/telefonu, gizli ayarlar, siparişler okunamıyor; sahte sipariş eklenemiyor.
-- **Veri tutarlılığı:** eksi stok, kategorisiz/görselsiz/SKU'suz ürün, ürünsüz sipariş, süresi dolmuş ödenmemiş sipariş, bozuk bilgi bankası adresi, aktif kargo yöntemi, pazaryeri ve e-posta kuyruğu hataları.
+- **Veri tutarlılığı:** eksi stok, kategorisiz/görselsiz/SKU'suz ürün, ürünsüz sipariş, süresi dolmuş ödenmemiş sipariş, bozuk bilgi bankası adresi, aktif kargo yöntemi, pazaryeri ve e-posta kuyruğu hataları, aynı pazaryeri kodunun (barkod / satıcı kodu) birden çok varyantta olması.
 - **Beden tablosu:** ölçü tabloları okunabiliyor ama dışarıdan değiştirilemiyor; aralıklar geçerli ve çakışmasız; tablolu markanın ürün sayfasında "Numaramı bul" var.
 - **Üyelik:** 'Üye' rolü yalnız şifreli + e-postası doğrulanmış hesaplarda (model: `docs/UYELIK-MODELI.md`).
 - **Ayarlar ve ortam:** SMTP, iletişim e-postası (yönetici bildirimleri buraya gider), havale bilgisi, Google Analytics, site adresi, CRON_SECRET, yönetici sayısı (`--canli` ile: e-posta kilidi, iyzico, arama motoru engeli).
