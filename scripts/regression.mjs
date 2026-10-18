@@ -269,6 +269,11 @@ async function main() {
       r?.ok ? add("ok", "Prensip görseli açılıyor", img) : add("fail", "Prensip görseli açılmıyor", `${img} HTTP ${r?.status ?? "bağlantı yok"} — Ayarlar › Ana Sayfa › Barefoot prensipleri`);
     } else add("ok", "Prensip görseli (dış adres)", img);
   }
+  // Yazı tipleri sitenin içinden (public/fonts) — derleme Google'a bağlı değil; dosya açılmazsa site sistem yazısıyla görünür
+  {
+    const r = await fetch(APP + "/fonts/inter-latin-wght-normal.woff2", { method: "HEAD" }).catch(() => null);
+    r?.ok ? add("ok", "Yazı tipi dosyaları açılıyor") : add("fail", "Yazı tipi dosyası açılmıyor", `/fonts/inter-latin-wght-normal.woff2 HTTP ${r?.status ?? "bağlantı yok"}`);
+  }
 
   // 3) Uç noktalar ve yetki
   });

@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { Outfit, Inter, Epilogue, Plus_Jakarta_Sans } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import PopupBanner from "@/components/PopupBanner";
 import ScrollToTop from "@/components/ScrollToTop";
@@ -12,33 +11,8 @@ import CookieBanner from "@/components/CookieBanner";
 import FormValidationMessages from "@/components/FormValidationMessages";
 import AffiliateRefCapture from "@/components/AffiliateRefCapture";
 import { SiteDialogHost } from "@/components/ui/site-dialog";
+import "./fonts.css";
 import "./globals.css";
-
-const outfit = Outfit({
-  variable: "--font-outfit",
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700", "800", "900"],
-});
-
-const inter = Inter({
-  variable: "--font-inter",
-  subsets: ["latin"],
-});
-
-// DESIGN.md — yeni mobil ana sayfa bölümleri için (şimdilik yalnız orada kullanılır)
-const epilogue = Epilogue({
-  variable: "--font-epilogue",
-  subsets: ["latin"],
-  weight: ["500", "600", "700"],
-  display: "swap",
-});
-
-const jakarta = Plus_Jakarta_Sans({
-  variable: "--font-jakarta",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  display: "swap",
-});
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com";
 
@@ -109,7 +83,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="tr" className={`${outfit.variable} ${inter.variable} ${epilogue.variable} ${jakarta.variable} antialiased`} data-scroll-behavior="smooth">
+    <html lang="tr" className="antialiased" data-scroll-behavior="smooth">
       <head>
         <GlobalStructuredData />
         <GoogleAnalytics />

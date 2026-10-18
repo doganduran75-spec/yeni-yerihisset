@@ -36,7 +36,7 @@ node scripts/regression.mjs --hizli
 
 ### 1a. Duman kontrolleri — her şey yerinde mi (yalnız okur)
 - **Veritabanı güncellemeleri:** her migration uygulanmış mı (unutulan migration'ı yakalar).
-- **Sayfalar:** 25+ müşteri ve admin sayfası açılıyor mu, hata metni var mı, 3 sn'den yavaş mı; gerçek bir ürün mağazada listeleniyor mu; olmayan sayfa 404 mü; ana sayfada prensip metni (panelden), kategori kutuları segment mağazasına bağlı, ilk prensip görseli açılıyor.
+- **Sayfalar:** 25+ müşteri ve admin sayfası açılıyor mu, hata metni var mı, 3 sn'den yavaş mı; gerçek bir ürün mağazada listeleniyor mu; olmayan sayfa 404 mü; ana sayfada prensip metni (panelden), kategori kutuları segment mağazasına bağlı, ilk prensip görseli ve yazı tipi dosyaları açılıyor.
 - **Uç noktalar ve yetki:** cron'lar şifresiz çalışmıyor, admin uçları girişsiz çalışmıyor, bot koruması devrede, kart ödeme ucu yanıt veriyor.
 - **Veri güvenliği:** dışarıdan (anon anahtarla) üye e-postası/telefonu, gizli ayarlar, siparişler okunamıyor; sahte sipariş eklenemiyor.
 - **Veri tutarlılığı:** eksi stok, kategorisiz/görselsiz/SKU'suz ürün, ürünsüz sipariş, süresi dolmuş ödenmemiş sipariş, bozuk bilgi bankası adresi, aktif kargo yöntemi, pazaryeri ve e-posta kuyruğu hataları, aynı pazaryeri kodunun (barkod / satıcı kodu) birden çok varyantta olması.
