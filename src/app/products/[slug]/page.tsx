@@ -51,6 +51,14 @@ async function getProduct(slug: string) {
   return data;
 }
 
+// Ürünün mağaza segmenti (kategoriden): gezinti yolu Mağaza › Yetişkin › Bot
+async function getSegment(categoryId: string | null | undefined): Promise<"yetiskin" | "ilkadim"> {
+  if (!categoryId) return "yetiskin";
+  const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+  const { data } = await (supabase as any).from("categories").select("segment").eq("id", categoryId).maybeSingle();
+  return data?.segment === "ilkadim" ? "ilkadim" : "yetiskin";
+}
+
 // Marka hakkında (Ayarlar › Markalar › Sayfa metni): markanın bütün ürün sayfalarında aynı bölüm
 async function getBrandAbout(brandId: string | null | undefined): Promise<string | null> {
   if (!brandId) return null;
@@ -190,7 +198,7 @@ export default async function ProductDetailPage({
 
   if (!product) notFound();
 
-  const [reviewStats, ratingSummary, sizeChart, brandAbout] = await Promise.all([getReviewStats(product.id), getRatingSummary(product.id), getSizeChart((product as any).brand_id), getBrandAbout((product as any).brand_id)]);
+  const [reviewStats, ratingSummary, sizeChart, brandAbout, segment] = await Promise.all([getReviewStats(product.id), getRatingSummary(product.id), getSizeChart((product as any).brand_id), getBrandAbout((product as any).brand_id), getSegment((product as any).category_id)]);
 
   return (
     <>
@@ -201,10 +209,11 @@ export default async function ProductDetailPage({
         storeName={STORE_NAME}
         currency="TRY"
         reviewStats={reviewStats ?? undefined}
+        segment={segment}
       />
 
       {/* İnteraktif ürün sayfası (client component) */}
-      <ProductPageClient product={product as any} initialSize={beden ?? null} initialVariantId={variant ?? null} sizeChart={sizeChart} ratingSummary={ratingSummary} brandAbout={brandAbout} />
+      <ProductPageClient product={product as any} initialSize={beden ?? null} initialVariantId={variant ?? null} sizeChart={sizeChart} ratingSummary={ratingSummary} brandAbout={brandAbout} segment={segment} />
     </>
   );
 }

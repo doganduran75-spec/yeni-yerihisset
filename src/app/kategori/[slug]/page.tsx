@@ -1,7 +1,8 @@
 import { ListIntro, ListFaq, introDescription } from "@/components/ListPageContent";
 import { createClient } from "@supabase/supabase-js";
 import { getFreeShippingOver } from "@/lib/free-shipping-rule";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
+import { SEGMENTS, isSegment } from "@/config/segments";
 import type { Metadata } from "next";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
@@ -44,11 +45,17 @@ export default async function KategoriPage({
 
   const { data: category } = await sb
     .from("categories")
-    .select("id, name, slug, intro, faq")
+    .select("id, name, slug, intro, faq, segment")
     .eq("slug", slug)
     .single();
 
   if (!category) notFound();
+  // İlkadım segmentinin tek kategorisi = 0–4 Yaş İlkadım mağazasıyla aynı içerik → tek asıl sayfa (çift içerik olmasın)
+  const seg = isSegment((category as any).segment) ? (category as any).segment : "yetiskin";
+  if (seg === "ilkadim") {
+    const { count } = await sb.from("categories").select("id", { count: "exact", head: true }).eq("segment", "ilkadim");
+    if ((count ?? 0) <= 1) permanentRedirect(SEGMENTS.ilkadim.path);
+  }
 
   const { data: products } = await sb
     .from("products")
@@ -70,7 +77,11 @@ export default async function KategoriPage({
         <div className="container mx-auto px-4 py-8 max-w-7xl">
           {/* Breadcrumb */}
           <nav className="flex items-center gap-2 text-sm text-slate-500 mb-8">
-            <Link href="/" className="hover:text-olive-600">Anasayfa</Link>
+            <Link href="/" className="hover:text-olive-600">Ana Sayfa</Link>
+            <ChevronRight size={14} />
+            <Link href="/magaza" className="hover:text-olive-600">Mağaza</Link>
+            <ChevronRight size={14} />
+            <Link href={SEGMENTS[seg as "yetiskin" | "ilkadim"].path} className="hover:text-olive-600">{SEGMENTS[seg as "yetiskin" | "ilkadim"].label}</Link>
             <ChevronRight size={14} />
             <span className="text-slate-900 font-medium">{category.name}</span>
           </nav>

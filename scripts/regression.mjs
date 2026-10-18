@@ -162,6 +162,7 @@ async function main() {
     ["20261026 şifresiz hesaplar", "SELECT to_regprocedure('public.mark_account_passwordless(uuid)') IS NOT NULL"],
     ["20261028 üyelik durumu (misafir/doğrulanmamış/üye)", "SELECT to_regprocedure('public.member_account_state(uuid)') IS NOT NULL AND NOT EXISTS(SELECT 1 FROM pg_trigger WHERE tgname='on_profile_created_assign_role')"],
     ["20261120 Paraşüt fatura (tahsilat işareti, kargo kalemi, kapalı PDF deposu)", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'parasut_paid') AND EXISTS(SELECT 1 FROM storage.buckets WHERE id = 'invoices' AND NOT public)"],
+    ["20261127 mağaza segmentleri (Yetişkin / 0–4 Yaş İlkadım)", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'categories' AND column_name = 'segment')"],
     ["20261126 ödeme alınmadan sevkiyat başlamaz", "SELECT EXISTS(SELECT 1 FROM pg_trigger WHERE tgname = 'trg_guard_ship_before_payment')"],
     ["20261125 marka hakkında (bütün ürün sayfalarında)", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'brands' AND column_name = 'about')"],
     ["20261124 yorum isteme + seni özledik (ayarlar, şablonlar, geri dönüş tetikleyicisi)", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'order_reviews' AND column_name = 'answers') AND EXISTS(SELECT 1 FROM pg_trigger WHERE tgname = 'trg_detect_winback') AND (SELECT count(*) FROM public.email_templates WHERE trigger IN ('review_request', 'winback')) = 2"],
@@ -201,8 +202,9 @@ async function main() {
   // 2) Sayfalar (gerçek bağlantılar veritabanından)
   });
   await part("Sayfalar", async () => {
-  const prod = sql("SELECT slug, title FROM public.products WHERE is_active AND category_id IS NOT NULL ORDER BY created_at DESC LIMIT 1")[0];
-  const cat = one("SELECT c.slug FROM public.categories c WHERE EXISTS (SELECT 1 FROM public.products p WHERE p.category_id=c.id AND p.is_active) LIMIT 1");
+  const prod = sql("SELECT p.slug, p.title, c.segment FROM public.products p JOIN public.categories c ON c.id = p.category_id WHERE p.is_active ORDER BY p.created_at DESC LIMIT 1")[0];
+  // Yetişkin kategorisi (İlkadım'ın tek kategorisi /magaza/ilkadim'e yönlenir)
+  const cat = one("SELECT c.slug FROM public.categories c WHERE c.segment = 'yetiskin' AND EXISTS (SELECT 1 FROM public.products p WHERE p.category_id=c.id AND p.is_active) LIMIT 1");
   const brand = one("SELECT b.slug FROM public.brands b WHERE EXISTS (SELECT 1 FROM public.products p WHERE p.brand_id=b.id AND p.is_active) LIMIT 1");
   const kb = one("SELECT slug FROM public.kb_articles ORDER BY created_at DESC LIMIT 1");
   const pages = [
@@ -211,7 +213,8 @@ async function main() {
     ...(cat ? [[`/kategori/${cat}`, "Kategori"]] : []), ...(brand ? [[`/marka/${brand}`, "Marka"]] : []),
     ["/ara?q=barefoot", "Arama"], ["/firsatlar", "Fırsatlar"], ["/bilgi-bankasi", "Bilgi bankası"],
     ...(kb ? [[`/bilgi-bankasi/${kb}`, "Bilgi bankası makalesi"]] : []),
-    ["/barefoot-nedir", "Barefoot nedir (ana rehber)", "Zero drop"], ["/magaza", "Mağaza başlığı (H1)", "Barefoot Ayakkabı Mağazası"], ["/sepet", "Sepet"], ["/checkout", "Ödeme"], ["/siparis-tamam", "Sipariş sonucu"],
+    ["/barefoot-nedir", "Barefoot nedir (ana rehber)", "Zero drop"], ["/magaza", "Mağaza başlığı (H1)", "Barefoot Ayakkabı Mağazası"],
+    ["/magaza/yetiskin", "Yetişkin mağazası", "Yetişkin Barefoot Ayakkabı"], ["/magaza/ilkadim", "0–4 Yaş İlkadım mağazası", "0–4 Yaş İlkadım"], ["/sepet", "Sepet"], ["/checkout", "Ödeme"], ["/siparis-tamam", "Sipariş sonucu"],
     ["/login", "Giriş"], ["/account", "Hesabım"], ["/sifre-belirle", "Şifre belirle"], ["/kampanya-izni", "Kampanya izni"], ["/deneme-sonucu", "Satış sonrası (oldu mu?)"], ["/iletisim", "İletişim", "Kromozom"], ["/hakkimizda", "Hakkımızda", "Kromozom"],
     ["/iade-degisim", "İade-değişim", "gün evde deneyin"], ["/mesafeli-satis", "Mesafeli satış + ön bilgilendirme", "on-bilgilendirme"], ["/kvkk", "KVKK", "Kromozom"], ["/gizlilik", "Gizlilik"],
     ["/cerez-politikasi", "Çerez politikası (tercih değiştirme)", "Çerez tercihlerini değiştir"], ["/admin", "Admin (kabuk)"], ["/admin/system", "Admin sistem (kabuk)"], ["/sitemap.xml", "Site haritası"], ["/robots.txt", "robots.txt"],
@@ -250,8 +253,11 @@ async function main() {
     h.text.includes(q) || h.text.includes(esc(q)) ? add("ok", "Ana sayfa metinleri panelden okunuyor") : add("fail", "Ana sayfa metni panelle uyuşmuyor", `"${q}" sayfada yok`);
   }
   if (prod) {
+    // Mağaza = seçim ekranı; ürünler segment mağazasında (Yetişkin / 0–4 Yaş İlkadım)
     const m = await get("/magaza");
-    m.text.includes(`/products/${prod[0]}`) ? add("ok", "Mağazada ürün listeleniyor") : add("fail", "Mağazada ürün yok", `${prod[1]} görünmüyor`);
+    m.text.includes("/magaza/yetiskin") && m.text.includes("/magaza/ilkadim") ? add("ok", "Mağaza seçim ekranı iki mağazaya yönlendiriyor") : add("fail", "Mağaza seçim ekranında segment bağlantıları yok", `HTTP ${m.status}`);
+    const sm = await get(`/magaza/${prod[2] === "ilkadim" ? "ilkadim" : "yetiskin"}`);
+    sm.text.includes(`/products/${prod[0]}`) ? add("ok", "Segment mağazasında ürün listeleniyor") : add("fail", "Segment mağazasında ürün yok", `${prod[1]} (${prod[2]}) görünmüyor`);
   }
 
   // 3) Uç noktalar ve yetki

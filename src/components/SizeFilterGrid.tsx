@@ -14,6 +14,7 @@ import { useCartStore } from "@/store/useCartStore";
 import { supabase } from "@/lib/supabase";
 import { track } from "@/lib/track";
 import { fetchLiveStocks, fetchItemStock } from "@/lib/live-stock";
+import { LAST_SEGMENT_KEY, type Segment } from "@/config/segments";
 
 const FALLBACK_IMG = "https://images.unsplash.com/photo-1494438639946-1ebd1d20bf85?q=80&w=400";
 
@@ -109,7 +110,13 @@ function ProductCard({ product, categoryName, size, outOfStock, onNotify, canQui
   );
 }
 
-export default function SizeFilterGrid({ products: cachedProducts, categoryName, freeOver = null }: { products: any[]; categoryName?: string; freeOver?: number | null }) {
+// Numarası olmayan ürün (aksesuar): numara seçilse de listede kalır
+const hasSizes = (p: any) => (p.product_variants ?? []).some(isSizeVariant);
+
+export default function SizeFilterGrid({ products: cachedProducts, categoryName, freeOver = null, segment }: {
+  products: any[]; categoryName?: string; freeOver?: number | null;
+  segment?: Segment; // segment mağazası: önce numara, sonra kategori; numara segment başına hatırlanır
+}) {
   // Sayfa ISR ile önbellekli → stok birkaç dk eski olabilir. Açılışta ve sekmeye
   // dönüşte varyant stokları DB'den okunup ürünlerin üstüne yazılır; böylece numara
   // filtresi "stokta" / "stokta değil" ayrımını güncel stokla yapar.
@@ -230,7 +237,19 @@ export default function SizeFilterGrid({ products: cachedProducts, categoryName,
     }
     return [...m.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name, "tr"));
   };
-  const cats = useMemo(() => listOf(products.filter((p) => !brand || p.brands?.slug === brand), "categories"), [products, brand]);
+  // Segment mağazasında sıra Numara → Kategori: numara listesi kategoriden bağımsız, kategoriler seçili numarası
+  // olan (ya da numarasız — aksesuar) ürünlerden. Genel listede (kategori / marka sayfası) eski sıra.
+  const sizeFirst = !!segment;
+  const sizeValues = (ps: any[]) => {
+    const set = new Set<string>();
+    for (const p of ps) for (const v of p.product_variants ?? []) if (isSizeVariant(v)) { const s = sizeValue(v); if (s) set.add(s); }
+    return [...set].sort(compareVariantValues);
+  };
+  const sizesFirst = useMemo(() => (sizeFirst ? sizeValues(products.filter((p) => !brand || p.brands?.slug === brand)) : []), [products, brand, sizeFirst]);
+  const sizeFirstEff = sizeFirst && size && sizesFirst.includes(size) ? size : null;
+  const cats = useMemo(() => listOf(products.filter((p) => (!brand || p.brands?.slug === brand)
+    && (!sizeFirstEff || !hasSizes(p) || (p.product_variants ?? []).some((v: any) => isSizeVariant(v) && sizeValue(v) === sizeFirstEff))), "categories"),
+  [products, brand, sizeFirstEff]);
   const effCat = cat && cats.some((c) => c.id === cat) ? cat : null;
   const brands = useMemo(() => listOf(products.filter((p) => !effCat || p.categories?.id === effCat), "brands"), [products, effCat]);
   const effBrand = brand && brands.some((b) => b.id === brand) ? brand : null;
@@ -244,17 +263,25 @@ export default function SizeFilterGrid({ products: cachedProducts, categoryName,
     [products, effCat, effBrand]
   );
 
-  // Mevcut numaralar (kategori + marka süzgecinden sonra)
-  const sizes = useMemo(() => {
-    const set = new Set<string>();
-    for (const p of base) {
-      for (const v of p.product_variants ?? []) {
-        if (isSizeVariant(v)) { const s = sizeValue(v); if (s) set.add(s); }
-      }
-    }
-    return [...set].sort(compareVariantValues);
-  }, [base]);
+  // Mevcut numaralar (genel listede kategori + marka süzgecinden sonra; segmentte kategoriden bağımsız)
+  const sizes = useMemo(() => (sizeFirst ? sizesFirst : sizeValues(base)), [base, sizeFirst, sizesFirst]);
   const effSize = size && sizes.includes(size) ? size : null;
+
+  // Segment: son seçilen segmenti ve bu segmentte seçilen numarayı hatırla (yetişkin 40, çocuk 21,5 ayrı)
+  useEffect(() => {
+    if (!segment) return;
+    try {
+      localStorage.setItem(LAST_SEGMENT_KEY, segment);
+      const q = new URLSearchParams(window.location.search).get("numara");
+      const saved = q || localStorage.getItem(`yh-size-${segment}`);
+      if (saved) setSize(saved); // eslint-disable-line react-hooks/set-state-in-effect
+    } catch { /* tarayıcı depolaması kapalı */ }
+  }, [segment]);
+  function pickSize(s: string | null) {
+    setSize(s);
+    if (segment) { try { if (s) localStorage.setItem(`yh-size-${segment}`, s); else localStorage.removeItem(`yh-size-${segment}`); } catch { /* yok */ } }
+    if (s) track("size_filter", { size: s, category: categoryName, segment });
+  }
 
   // Seçilen numaraya göre ayrım (kategori süzgecinden sonra)
   const { inStock, outStock } = useMemo(() => {
@@ -263,18 +290,52 @@ export default function SizeFilterGrid({ products: cachedProducts, categoryName,
     const outS: any[] = [];
     for (const p of base) {
       const sizeVars = (p.product_variants ?? []).filter((v: any) => isSizeVariant(v) && sizeValue(v) === effSize);
-      if (sizeVars.length === 0) continue; // bu numara yok → gizle
+      if (sizeVars.length === 0) {
+        // Numarasız ürün (aksesuar) her numarada görünür; numarası olup bu numarası olmayan gizlenir
+        if (!hasSizes(p)) {
+          const any = (p.product_variants ?? []).some((v: any) => Number(v.stock ?? 0) > 0) || Number(p.stock ?? 0) > 0;
+          (any ? inS : outS).push(p);
+        }
+        continue;
+      }
       const hasStock = sizeVars.some((v: any) => Number(v.stock ?? 0) > 0);
       (hasStock ? inS : outS).push(p);
     }
     return { inStock: inS, outStock: outS };
   }, [base, effSize]);
 
+  // Numara satırı: segment mağazasında en üstte, genel listede marka satırından sonra
+  const sizeRow = (
+    <>
+    {sizes.length > 0 && (
+        <div className="flex items-center gap-2 overflow-x-auto md:flex-wrap md:overflow-visible -mx-4 px-4 md:mx-0 md:px-0 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <span className="text-xs font-black uppercase tracking-widest text-slate-400 mr-1 shrink-0">Numara:</span>
+          <button
+            onClick={() => pickSize(null)}
+            className={`shrink-0 px-3 h-9 rounded-xl text-sm font-bold border-2 transition-all ${effSize === null ? "border-olive-600 bg-olive-600 text-white" : "border-slate-200 text-slate-600 hover:border-olive-300"}`}
+          >
+            Hepsi
+          </button>
+          {sizes.map((s) => (
+            <button
+              key={s}
+              onClick={() => pickSize(s)}
+              className={`shrink-0 min-w-[44px] h-9 px-2 rounded-xl text-sm font-bold border-2 transition-all ${effSize === s ? "border-olive-600 bg-olive-600 text-white" : "border-slate-200 text-slate-700 hover:border-olive-300"}`}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
+    </>
+  );
+
   // Telefon: 2 sütun (ziyaretçilerin ~%94'ü mobil — ilk ekranda ürün görünsün)
   const gridCls = "grid grid-cols-2 md:grid-cols-4 gap-x-3 gap-y-8 sm:gap-x-6 md:gap-x-8 md:gap-y-16";
 
   return (
     <div className="space-y-4 md:space-y-8">
+      {sizeFirst && sizeRow}
       {/* Kategori filtresi (en üstte) — seçili markada ürünü olan kategoriler */}
       {showCatFilter && (
         <div className="flex items-center gap-2 overflow-x-auto md:flex-wrap md:overflow-visible -mx-4 px-4 md:mx-0 md:px-0 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -322,27 +383,8 @@ export default function SizeFilterGrid({ products: cachedProducts, categoryName,
         </div>
       )}
 
-      {/* Numara filtresi */}
-      {sizes.length > 0 && (
-        <div className="flex items-center gap-2 overflow-x-auto md:flex-wrap md:overflow-visible -mx-4 px-4 md:mx-0 md:px-0 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <span className="text-xs font-black uppercase tracking-widest text-slate-400 mr-1 shrink-0">Numara:</span>
-          <button
-            onClick={() => setSize(null)}
-            className={`shrink-0 px-3 h-9 rounded-xl text-sm font-bold border-2 transition-all ${effSize === null ? "border-olive-600 bg-olive-600 text-white" : "border-slate-200 text-slate-600 hover:border-olive-300"}`}
-          >
-            Hepsi
-          </button>
-          {sizes.map((s) => (
-            <button
-              key={s}
-              onClick={() => { setSize(s); track("size_filter", { size: s, category: categoryName }); }}
-              className={`shrink-0 min-w-[44px] h-9 px-2 rounded-xl text-sm font-bold border-2 transition-all ${effSize === s ? "border-olive-600 bg-olive-600 text-white" : "border-slate-200 text-slate-700 hover:border-olive-300"}`}
-            >
-              {s}
-            </button>
-          ))}
-        </div>
-      )}
+      {!sizeFirst && sizeRow}
+
 
       {/* Sonuç */}
       {!effSize ? (

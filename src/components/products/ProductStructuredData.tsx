@@ -7,6 +7,7 @@
 // JSON-LD güvenli yazım: "<" kaçışlanır → veri içindeki "</script>" bloğu kapatamaz
 import { productSpecs } from "@/config/product-specs";
 import { plain } from "@/lib/gmc-items";
+import { SEGMENTS, type Segment } from "@/config/segments";
 
 const safeJsonLd = (v: unknown) => JSON.stringify(v).replace(/</g, "\\u003c");
 
@@ -45,7 +46,8 @@ export default function ProductStructuredData({
   storeName,
   currency = "TRY",
   reviewStats,
-}: ProductStructuredDataProps) {
+  segment = "yetiskin",
+}: ProductStructuredDataProps & { segment?: Segment }) {
   const productUrl = `${storeUrl}/products/${product.slug}`;
   const images = product.images?.length ? product.images : product.image_url ? [product.image_url] : [];
   const primaryImage = images[0] ?? "";
@@ -117,11 +119,14 @@ export default function ProductStructuredData({
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
     itemListElement: [
-      { "@type": "ListItem", position: 1, name: "Anasayfa", item: storeUrl },
-      ...(product.categories?.name
-        ? [{ "@type": "ListItem", position: 2, name: product.categories.name, item: product.categories.slug ? `${storeUrl}/kategori/${product.categories.slug}` : `${storeUrl}/magaza` }]
-        : []),
-      { "@type": "ListItem", position: product.categories?.name ? 3 : 2, name: product.title, item: productUrl },
+      // Ana Sayfa › Mağaza › Yetişkin / 0–4 Yaş İlkadım › Kategori › Ürün
+      ...[
+        { name: "Ana Sayfa", item: storeUrl },
+        { name: "Mağaza", item: `${storeUrl}/magaza` },
+        { name: SEGMENTS[segment].label, item: `${storeUrl}${SEGMENTS[segment].path}` },
+        ...(product.categories?.name && product.categories.slug ? [{ name: product.categories.name, item: `${storeUrl}/kategori/${product.categories.slug}` }] : []),
+        { name: product.title, item: productUrl },
+      ].map((x, i) => ({ "@type": "ListItem", position: i + 1, ...x })),
     ],
   };
 

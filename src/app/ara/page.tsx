@@ -49,7 +49,7 @@ export default async function SearchPage({
       .from("products")
       .select(`
         id, title, slug, price, images, image_url, has_variants,
-        categories(name),
+        categories(name, segment),
         brands(name, slug),
         product_variants(id, price, is_active, variant_options(value, variant_groups(name)))
       `)
@@ -148,7 +148,9 @@ export default async function SearchPage({
                     <div className="space-y-1 px-2">
                       <div className="flex items-center justify-between">
                         <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.1em]">
-                          {cat?.name ?? ""}
+                          {/* Segment etiketi: aramada iki mağaza birlikte görünür */}
+                          <span className={cat?.segment === "ilkadim" ? "text-amber-600" : "text-olive-600"}>{cat?.segment === "ilkadim" ? "0–4 Yaş İlkadım" : "Yetişkin"}</span>
+                          {cat?.name ? ` · ${cat.name}` : ""}
                         </p>
                       </div>
                       <Link href={`/products/${product.slug}`}>

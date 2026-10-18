@@ -51,6 +51,13 @@ export default function CategoriesTab() {
     }
   }
 
+  // Mağaza segmenti: Yetişkin / 0–4 Yaş İlkadım (/magaza/yetiskin, /magaza/ilkadim)
+  async function setSegment(id: string, segment: string) {
+    const { error } = await (supabase as any).from("categories").update({ segment }).eq("id", id);
+    if (error) { alert("Kaydedilemedi: " + error.message); return; }
+    setCategories((prev) => prev.map((c: any) => (c.id === id ? { ...c, segment } : c)));
+  }
+
   async function handleDelete(id: string) {
     if (!confirm("Bu kategoriyi silmek istediğinize emin misiniz? Kategorideki ürünler kategorisiz kalacaktır.")) return;
     await supabase.from("categories").delete().eq("id", id);
@@ -98,6 +105,7 @@ export default function CategoriesTab() {
                 <TableRow>
                   <TableHead>Kategori Adı</TableHead>
                   <TableHead>Slug</TableHead>
+                  <TableHead>Mağaza</TableHead>
                   <TableHead>Tarih</TableHead>
                   <TableHead className="text-right">İşlem</TableHead>
                 </TableRow>
@@ -112,6 +120,12 @@ export default function CategoriesTab() {
                       </div>
                     </TableCell>
                     <TableCell className="text-xs font-mono text-muted-foreground">{cat.slug}</TableCell>
+                    <TableCell>
+                      <select value={(cat as any).segment || "yetiskin"} onChange={(e) => setSegment(cat.id, e.target.value)} className="h-8 rounded-md border px-2 text-xs bg-white" title="Bu kategori hangi mağazada görünür">
+                        <option value="yetiskin">Yetişkin</option>
+                        <option value="ilkadim">0–4 Yaş İlkadım</option>
+                      </select>
+                    </TableCell>
                     <TableCell className="text-sm">{new Date(cat.created_at).toLocaleDateString("tr-TR")}</TableCell>
                     <TableCell className="text-right">
                       <Button variant="outline" size="sm" className="h-8 gap-1 mr-1" onClick={() => setContentFor(cat)}><FileText size={13} /> Sayfa metni</Button>

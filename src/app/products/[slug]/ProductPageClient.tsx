@@ -40,6 +40,7 @@ import SizeGuide from "@/components/products/SizeGuide";
 import { sortedRows, type SizeChart } from "@/lib/size-chart";
 import { productSpecs } from "@/config/product-specs";
 import { safeHtml, isPlainText } from "@/lib/safe-html";
+import { SEGMENTS, type Segment } from "@/config/segments";
 
 type Variant = {
   id: string;
@@ -74,12 +75,13 @@ type Product = {
   product_variants: Variant[] | null;
 };
 
-export default function ProductPageClient({ product, initialSize = null, initialVariantId = null, sizeChart = null, ratingSummary = null, brandAbout = null }: {
+export default function ProductPageClient({ product, initialSize = null, initialVariantId = null, sizeChart = null, ratingSummary = null, brandAbout = null, segment = "yetiskin" }: {
   product: Product;
   initialSize?: string | null;
   initialVariantId?: string | null;
   sizeChart?: SizeChart | null;
   brandAbout?: string | null; // Marka hakkında (HTML, Ayarlar › Markalar)
+  segment?: Segment;          // gezinti yolu: Mağaza › Yetişkin › Kategori
   ratingSummary?: { avg: number; count: number } | null; // gerçek yorumlardan; yoksa yıldız gösterilmez
 }) {
   const images =
@@ -430,10 +432,17 @@ export default function ProductPageClient({ product, initialSize = null, initial
           {/* Product Info */}
           <div className="space-y-8 animate-in fade-in slide-in-from-right duration-700">
             <div className="space-y-4">
+              {/* Gezinti yolu: Mağaza › Yetişkin / 0–4 Yaş İlkadım › Kategori */}
+              <nav className="flex flex-wrap items-center gap-1 text-xs font-semibold text-slate-400" aria-label="Gezinti yolu">
+                <Link href="/magaza" className="hover:text-olive-600">Mağaza</Link>
+                <ChevronRight size={12} />
+                <Link href={SEGMENTS[segment].path} className="hover:text-olive-600">{SEGMENTS[segment].label}</Link>
+                {product.categories?.slug && (<>
+                  <ChevronRight size={12} />
+                  <Link href={`/kategori/${product.categories.slug}`} className="text-olive-600 hover:underline">{product.categories.name}</Link>
+                </>)}
+              </nav>
               <div className="flex items-center gap-4">
-                <Badge variant="outline" className="text-olive-600 border-olive-100 bg-olive-50/50">
-                  {product.categories?.name}
-                </Badge>
                 {ratingSummary && ratingSummary.count > 0 && (
                   <a href="#yorumlar" className="flex items-center text-yellow-500 text-sm font-bold">
                     {[1, 2, 3, 4, 5].map((i) => (
