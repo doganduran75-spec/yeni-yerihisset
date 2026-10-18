@@ -479,7 +479,13 @@ async function main() {
   defShip.length === 1 && defShip[0][1] === "t" ? add("ok", "Varsayılan kargo yöntemi", defShip[0][0])
     : add("fail", "Varsayılan kargo yöntemi yok ya da pasif", "Ayarlar › Kargo Yöntemleri › Varsayılan yap");
   const mktFailed = num("SELECT count(*) FROM public.marketplace_stock_sync WHERE status='failed'");
-  mktFailed ? add("warn", "Pazaryeri stok gönderim hatası", `${mktFailed} kayıt (Ayarlar › Entegrasyonlar)`) : add("ok", "Pazaryeri stok hatası yok");
+  // Kanal + sebep kırılımı (hangi pazaryeri, ne hatası) — kapalı kanalın eski hataları da görünür, "(kapalı)" yazar
+  const mktWhy = mktFailed ? sql(`SELECT s.channel, count(*), left(coalesce(min(s.error), '—'), 140),
+      coalesce((SELECT CASE s.channel WHEN 'trendyol' THEN st.trendyol_enabled WHEN 'hepsiburada' THEN st.hepsiburada_enabled WHEN 'amazon' THEN st.amazon_enabled END
+        FROM public.settings st ORDER BY st.id LIMIT 1), false)
+    FROM public.marketplace_stock_sync s WHERE s.status='failed' GROUP BY s.channel ORDER BY 2 DESC`) : [];
+  mktFailed ? add("warn", "Pazaryeri stok gönderim hatası", `${mktFailed} kayıt — ` + mktWhy.map((r) => `${r[0]}${r[3] === "t" ? "" : " (kapalı)"} ${r[1]}: ${r[2]}`).join(" · ") + " (Ayarlar › Entegrasyonlar › Tüm stokları gönder)")
+    : add("ok", "Pazaryeri stok hatası yok");
   // Aynı ilan kodu (barkod / satıcı kodu) iki varyantta → pazaryerine tek gider ama hangisinin stoğu / fiyatı doğru belli
   // olmaz (Hepsiburada eskiden bütün paketi reddediyordu: DuplicateMerchantSkuSpecified). Harf / boşluk farkı aynı sayılır.
   const dupKeys = sql(`SELECT ch, k, count(*), string_agg(p.title || ' (' || CASE WHEN coalesce(v.is_active,true) AND p.is_active THEN 'aktif' ELSE 'pasif' END || ')', ', ')
@@ -552,8 +558,16 @@ async function main() {
   hstat === "fail" ? add("fail", "Sunucu sağlığı", "kırmızı — dashboard kartına bak") : hstat === "warn" ? add("warn", "Sunucu sağlığı", "sarı — dashboard kartına bak") : add("ok", "Sunucu sağlığı", hstat || "—");
   const S = SETTINGS();
   const mktOn = !!(S.trendyol_enabled || S.hepsiburada_enabled || S.amazon_enabled);
-  const beatM = Number(one("SELECT extract(epoch FROM now()-last_run_at)/60 FROM public.cron_heartbeats WHERE name='marketplace-sync'") || 9999);
-  if (mktOn) beatM < 10 ? add("ok", "Pazaryeri senkronu", `${beatM.toFixed(0)} dk önce`) : add("fail", "Pazaryeri senkronu durmuş", `${beatM >= 9999 ? "hiç" : beatM.toFixed(0) + " dk önce"}`);
+  const beat = () => Number(one("SELECT extract(epoch FROM now()-last_run_at)/60 FROM public.cron_heartbeats WHERE name='marketplace-sync'") || 9999);
+  let beatM = beat();
+  // Deploy sırasında site (ve dakikalık iş) birkaç dakika durur; regresyon site açılır açılmaz başlar →
+  // eski görünürse bir sonraki dakikalık çalışmayı en çok ~2 dk bekle (gerçekten durmuşsa yine HATA)
+  let waited = false;
+  if (mktOn && beatM >= 10) {
+    waited = true;
+    for (let i = 0; i < 12 && beatM >= 10; i++) { await sleep(10_000); beatM = beat(); }
+  }
+  if (mktOn) beatM < 10 ? add("ok", "Pazaryeri senkronu", waited ? "deploy sırasında durmuştu, yeniden çalışıyor" : `${beatM.toFixed(0)} dk önce`) : add("fail", "Pazaryeri senkronu durmuş", `${beatM >= 9999 ? "hiç" : beatM.toFixed(0) + " dk önce"} (2 dk beklendi) — pm2 logs yerihisset`);
   else add("ok", "Pazaryeri senkronu", "pazaryerleri kapalı");
   });
 
