@@ -16,7 +16,7 @@ import { Loader2, Save, Home, RotateCcw, ExternalLink } from "lucide-react";
 // Form varsayılan yapıdan otomatik oluşur → homeContent.ts'e yeni alan eklenince burada da çıkar.
 
 const SECTION: Record<string, string> = {
-  hero: "Karşılama", cards: "Seçim kartları", trust: "Güven çipleri", products: "Popüler ürünler", promo: "Reklam bandı",
+  principles: "Barefoot prensipleri (kartlar + telefonda ilk ziyaret hikâyesi)", categories: "Kategori kutuları", trust: "Güven çipleri", products: "Popüler ürünler", promo: "Reklam bandı",
   sizeFinder: "Doğru numarayı bul (mobil)", footer: "Alt bilgi (masaüstü ana sayfa)",
 };
 const LABEL: Record<string, string> = {
@@ -27,6 +27,9 @@ const LABEL: Record<string, string> = {
   eyebrowMobile: "Üst yazı (mobil)", seeAll: "\"Tümü\" yazısı", seeAllMobile: "\"Tümü\" yazısı (mobil)", limitDesktop: "Masaüstünde kaç ürün",
   limitMobile: "Mobilde kaç ürün", enabled: "Göster", subtitle: "Alt yazı", brandName: "Marka adı", brandDesc: "Marka açıklaması",
   columns: "Sütunlar", links: "Bağlantılar", newsletterTitle: "Bülten başlığı", newsletterBody: "Bülten açıklaması",
+  storiesEnabled: "Telefonda ilk ziyarette hikâye göster", shopButton: "\"Alışverişe geç\" düğmesi",
+  replayLink: "Hikâyeyi yeniden izleme bağlantısı", items: "Prensipler", text: "Kısa yazı",
+  image: "Görsel adresi (/principles/… ya da https://…)", seconds: "Hikâyede kaç saniye", show: "Göster",
   copyright: "Telif satırı", tagline: "Slogan", legal: "Yasal bağlantılar",
 };
 const lbl = (k: string) => LABEL[k] ?? k;
@@ -137,13 +140,13 @@ export default function HomeContentTab() {
       <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
         <div>
           <CardTitle className="flex items-center gap-2"><Home size={18} /> Ana sayfa metinleri</CardTitle>
-          <CardDescription>Karşılama, kartlar, güven çipleri, reklam bandı ve alt bilgi yazıları. Kaydedince ~1 dakika içinde yayında.</CardDescription>
+          <CardDescription>Barefoot prensipleri (süreler dahil), kategori kutuları, güven çipleri, reklam bandı ve alt bilgi yazıları. Kaydedince ~1 dakika içinde yayında.</CardDescription>
         </div>
         <a href="/" target="_blank" rel="noreferrer" className="p-2 text-slate-400 hover:text-slate-700" title="Ana sayfayı aç"><ExternalLink size={16} /></a>
       </CardHeader>
       <CardContent className="space-y-6">
         {Object.keys(content).map((sec) => (
-          <details key={sec} className="rounded-xl border p-4 group" open={sec === "hero"}>
+          <details key={sec} className="rounded-xl border p-4 group" open={sec === "principles"}>
             <summary className="cursor-pointer font-bold text-slate-800">{SECTION[sec] ?? sec}</summary>
             <div className="pt-4">
               <Node k={sec} value={content[sec]} depth={0} onChange={(v) => setContent({ ...content, [sec]: v })} />

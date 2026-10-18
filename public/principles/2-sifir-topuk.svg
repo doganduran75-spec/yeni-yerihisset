@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <rect width="400" height="300" fill="#F4EFE6"/>
+  <!-- Topuklu: eğik -->
+  <path d="M30 150 L170 175" stroke="#B9B2A5" stroke-width="6"/>
+  <path d="M30 150 L30 205 L60 205 L60 155" stroke="#B9B2A5" stroke-width="6"/>
+  <path d="M40 120 C60 105 120 120 170 165" stroke="#C0603A" stroke-width="5"/>
+  <text x="100" y="240" text-anchor="middle" font-family="system-ui,sans-serif" font-size="18" font-weight="700" fill="#8A847A">Topuk yüksek</text>
+  <!-- Barefoot: düz -->
+  <path d="M220 190 L375 190" stroke="#4B7D1E" stroke-width="8"/>
+  <path d="M228 168 C260 150 330 152 372 182" stroke="#4B7D1E" stroke-width="5"/>
+  <text x="298" y="225" text-anchor="middle" font-family="system-ui,sans-serif" font-size="26" font-weight="800" fill="#3F6D14">0 mm</text>
+  <text x="298" y="252" text-anchor="middle" font-family="system-ui,sans-serif" font-size="16" font-weight="700" fill="#3F6D14">topuk farkı</text>
+</svg>

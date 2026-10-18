@@ -2,11 +2,11 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { GraduationCap, ShoppingBag, ArrowRight, ChevronRight, BadgeCheck, Truck, Footprints, CreditCard } from "lucide-react";
+import { ChevronRight, BadgeCheck, Truck, Footprints, CreditCard } from "lucide-react";
 import { formatPriceDisplay, getMinPrice } from "@/lib/product-price";
-import { track } from "@/lib/track";
 import { useHomeContent } from "@/lib/home-content-context";
-import MobileIntro from "@/components/MobileIntro";
+import PrincipleCarousel from "@/components/PrincipleCarousel";
+import HomeCategories, { type CategoryTile } from "@/components/HomeCategories";
 
 // DESIGN.md ("YeriHisset Grounded Wellness") temelli mobil ana sayfa.
 // Yalnız mobilde gösterilir (page.tsx'te md:hidden). Epilogue başlıklar +
@@ -32,53 +32,19 @@ const JAK = "var(--font-jakarta), 'Plus Jakarta Sans', system-ui, sans-serif";
 // Güven çipi ikon anahtarı → lucide bileşeni (config data-only kalsın diye)
 const TRUST_ICON = { foot: Footprints, leaf: BadgeCheck, truck: Truck, card: CreditCard } as const;
 
-export default function MobileHome({ products }: { products: any[] }) {
+export default function MobileHome({ products, tiles = [] }: { products: any[]; tiles?: CategoryTile[] }) {
   const HC = useHomeContent(); // Ayarlar › Ana Sayfa (varsayılan: src/config/homeContent.ts)
   const popular = (products || []).slice(0, HC.products.limitMobile);
   const chips = HC.trust.slice(0, HC.trustMobileCount);
 
   return (
     <div className="md:hidden" style={{ fontFamily: JAK, background: C.base, color: C.ink }}>
-      {/* Karşılama videosu: ilk ziyarette bir kez, sayfa hazırken arka planda yüklenir (MobileIntro) */}
-      <MobileIntro />
-      {/* İki cevap kartı */}
-      <div className="px-5 pt-5 grid grid-cols-2 gap-3">
-        <Link
-          href={HC.cards.learn.href}
-          onClick={() => track("hero_click", { side: "kesif", to: HC.cards.learn.href })}
-          className="flex flex-col rounded-2xl p-4 active:scale-[0.98] transition-transform"
-          style={{ background: C.green, color: "#fff", minHeight: 168 }}
-        >
-          <GraduationCap size={30} strokeWidth={1.9} />
-          <div className="mt-auto pt-6">
-            <p style={{ fontFamily: EPI, fontWeight: 600, fontSize: 17, lineHeight: 1.2 }}>{HC.cards.learn.titleMobile}</p>
-            <p style={{ fontSize: 12.5, color: "rgba(255,255,255,0.82)", marginTop: 5 }}>{HC.cards.learn.pillMobile}</p>
-          </div>
-        </Link>
-
-        <Link
-          href={HC.cards.shop.href}
-          onClick={() => track("hero_click", { side: "magaza", to: HC.cards.shop.href })}
-          className="flex flex-col rounded-2xl p-4 active:scale-[0.98] transition-transform"
-          style={{ background: C.charcoal, color: "#fff", minHeight: 168 }}
-        >
-          <ShoppingBag size={28} strokeWidth={1.9} />
-          <div className="mt-auto pt-6">
-            <p style={{ fontFamily: EPI, fontWeight: 600, fontSize: 17, lineHeight: 1.2 }}>{HC.cards.shop.titleMobile}</p>
-            <p style={{ fontSize: 12.5, color: "rgba(255,255,255,0.7)", marginTop: 5 }}>{HC.cards.shop.pillMobile}</p>
-          </div>
-        </Link>
-      </div>
-
-      {/* Devam et */}
-      <div className="px-5 pt-4 pb-5 text-center">
-        <a href="#populer" className="inline-flex items-center gap-2" style={{ color: C.muted, fontSize: 14, fontWeight: 600 }}>
-          {HC.hero.continueLink} <ArrowRight size={17} />
-        </a>
-      </div>
+      {/* Barefoot prensipleri (ekranın ~1/3'ü, kaydırılır) + kategori kutuları */}
+      <PrincipleCarousel variant="mobile" />
+      <HomeCategories tiles={tiles} variant="mobile" />
 
       {/* Güven çipleri (yatay kaydırma) */}
-      <div className="flex gap-2.5 overflow-x-auto px-5 pb-6" style={{ scrollbarWidth: "none" }}>
+      <div className="flex gap-2.5 overflow-x-auto px-5 pt-4 pb-6" style={{ scrollbarWidth: "none" }}>
         {chips.map((c) => {
           const Icon = TRUST_ICON[c.icon];
           return (

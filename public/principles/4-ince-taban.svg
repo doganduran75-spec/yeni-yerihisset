@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <rect width="400" height="300" fill="#F4EFE6"/>
+  <path d="M70 160 C100 120 250 110 330 150 L330 165 L70 175 Z" fill="#F2CDB9" stroke="#C0603A" stroke-width="4"/>
+  <rect x="62" y="172" width="276" height="10" rx="5" fill="#4B7D1E"/>
+  <g stroke="#8A847A" stroke-width="4"><path d="M40 200 L80 196 L120 204 L160 197 L200 205 L240 198 L280 204 L320 196 L360 202"/></g>
+  <g fill="#B9B2A5"><circle cx="95" cy="214" r="5"/><circle cx="170" cy="218" r="4"/><circle cx="250" cy="215" r="6"/><circle cx="320" cy="220" r="4"/></g>
+  <text x="200" y="262" text-anchor="middle" font-family="system-ui,sans-serif" font-size="20" font-weight="800" fill="#3F6D14">Zemini hisset</text>
+</svg>

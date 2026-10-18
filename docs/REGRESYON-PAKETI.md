@@ -36,7 +36,7 @@ node scripts/regression.mjs --hizli
 
 ### 1a. Duman kontrolleri — her şey yerinde mi (yalnız okur)
 - **Veritabanı güncellemeleri:** her migration uygulanmış mı (unutulan migration'ı yakalar).
-- **Sayfalar:** 25+ müşteri ve admin sayfası açılıyor mu, hata metni var mı, 3 sn'den yavaş mı; gerçek bir ürün mağazada listeleniyor mu; olmayan sayfa 404 mü.
+- **Sayfalar:** 25+ müşteri ve admin sayfası açılıyor mu, hata metni var mı, 3 sn'den yavaş mı; gerçek bir ürün mağazada listeleniyor mu; olmayan sayfa 404 mü; ana sayfada prensip metni (panelden), kategori kutuları segment mağazasına bağlı, ilk prensip görseli açılıyor.
 - **Uç noktalar ve yetki:** cron'lar şifresiz çalışmıyor, admin uçları girişsiz çalışmıyor, bot koruması devrede, kart ödeme ucu yanıt veriyor.
 - **Veri güvenliği:** dışarıdan (anon anahtarla) üye e-postası/telefonu, gizli ayarlar, siparişler okunamıyor; sahte sipariş eklenemiyor.
 - **Veri tutarlılığı:** eksi stok, kategorisiz/görselsiz/SKU'suz ürün, ürünsüz sipariş, süresi dolmuş ödenmemiş sipariş, bozuk bilgi bankası adresi, aktif kargo yöntemi, pazaryeri ve e-posta kuyruğu hataları.
@@ -106,6 +106,7 @@ Kullanacağın e-posta **izinli listede** olmalı (Ayarlar › Genel › E-posta
 | K4 | E-posta kutusu | Sipariş e-postası (banka bilgili) + hesap aktivasyonu e-postası geldi |
 | K5 | Admin › Siparişler → bu sipariş | Listede en üstte; detayda ürünler doğru; stok düşmüş |
 | K6 | Detayın en altında **Siparişi sil** | Sipariş kalktı, stok geri geldi |
+| K7 | Telefonla `ana sayfa adresi + ?hikaye=1` | Tam ekran prensip hikâyesi: turuncu çubuklar ilerliyor, dokununca geçiyor, basılı tutunca duruyor; "Alışverişe geç" → Yetişkin / İlkadım seçimi. Ana sayfada prensip kartları kayıyor, kategori kutusu doğru mağazaya gidiyor |
 
 ---
 

@@ -245,9 +245,9 @@ async function main() {
       ? add("fail", "Google Analytics onaysız yükleniyor", "gtag.js sayfada doğrudan var")
       : add("ok", "Google Analytics yalnız çerez izniyle yükleniyor");
   }
-  // Ana sayfa metinleri panelden (Ayarlar › Ana Sayfa): kayıtlı "rehber kartı" başlığı (yoksa varsayılan) sayfada görünmeli
+  // Ana sayfa metinleri panelden (Ayarlar › Ana Sayfa): kayıtlı ilk prensip başlığı (yoksa varsayılan) sayfada görünmeli
   {
-    const q = one("SELECT coalesce(home_content->'cards'->'learn'->>'title', '') FROM public.settings ORDER BY id LIMIT 1") || "Barefoot Rehberini Keşfet";
+    const q = one("SELECT coalesce(home_content->'principles'->'items'->0->>'title', '') FROM public.settings ORDER BY id LIMIT 1") || "Geniş parmak alanı";
     const h = await get("/");
     const esc = (t) => t.replace(/&/g, "&amp;").replace(/'/g, "&#x27;").replace(/"/g, "&quot;");
     h.text.includes(q) || h.text.includes(esc(q)) ? add("ok", "Ana sayfa metinleri panelden okunuyor") : add("fail", "Ana sayfa metni panelle uyuşmuyor", `"${q}" sayfada yok`);
@@ -258,6 +258,16 @@ async function main() {
     m.text.includes("/magaza/yetiskin") && m.text.includes("/magaza/ilkadim") ? add("ok", "Mağaza seçim ekranı iki mağazaya yönlendiriyor") : add("fail", "Mağaza seçim ekranında segment bağlantıları yok", `HTTP ${m.status}`);
     const sm = await get(`/magaza/${prod[2] === "ilkadim" ? "ilkadim" : "yetiskin"}`);
     sm.text.includes(`/products/${prod[0]}`) ? add("ok", "Segment mağazasında ürün listeleniyor") : add("fail", "Segment mağazasında ürün yok", `${prod[1]} (${prod[2]}) görünmüyor`);
+  }
+  // Ana sayfa: kategori kutuları segment mağazasına gidiyor + ilk prensip görseli açılıyor (karşılama videosu kalktı)
+  {
+    const h = await get("/");
+    /href="\/magaza\/(yetiskin\?kategori=|ilkadim)/.test(h.text) ? add("ok", "Ana sayfa kategori kutuları segment mağazasına bağlı") : add("fail", "Ana sayfada kategori kutusu yok", "/magaza/yetiskin?kategori=… ya da /magaza/ilkadim bağlantısı bulunamadı");
+    const img = one("SELECT coalesce(home_content->'principles'->'items'->0->>'image', '') FROM public.settings ORDER BY id LIMIT 1") || "/principles/1-genis-parmak.svg";
+    if (img.startsWith("/")) {
+      const r = await fetch(APP + img, { method: "HEAD" }).catch(() => null);
+      r?.ok ? add("ok", "Prensip görseli açılıyor", img) : add("fail", "Prensip görseli açılmıyor", `${img} HTTP ${r?.status ?? "bağlantı yok"} — Ayarlar › Ana Sayfa › Barefoot prensipleri`);
+    } else add("ok", "Prensip görseli (dış adres)", img);
   }
 
   // 3) Uç noktalar ve yetki
@@ -497,19 +507,6 @@ async function main() {
   st.bank === "true" ? add("ok", "Havale bilgisi") : add("fail", "Havale açık ama banka bilgisi boş");
   st.ga ? add("ok", "Google Analytics kimliği", st.ga) : add("warn", "Google Analytics kimliği boş");
   liveOnly(st.lock !== "true", "E-posta kilidi açık", "canlıda müşterilere e-posta gitmez → Ayarlar › Genel › E-posta Kilidi'ni kapat");
-  // Mobil karşılama videosu açıksa dosyası açılıyor ve hafif mi (Ayarlar › Genel)
-  if (S.intro_video_enabled && S.intro_video_url) {
-    const u = String(S.intro_video_url);
-    if (u.startsWith("/") || (SB_URL && u.startsWith(SB_URL))) {
-      try {
-        const r = await fetch(u.startsWith("/") ? APP + u : u, { method: "HEAD", signal: AbortSignal.timeout(15000) });
-        const size = Number(r.headers.get("content-length") || 0);
-        r.ok && /video/.test(r.headers.get("content-type") || "")
-          ? add(size > 6_000_000 ? "warn" : "ok", "Karşılama videosu", size > 6_000_000 ? `${(size / 1e6).toFixed(1)} MB — telefonda geç yüklenir, 3 MB altı önerilir` : `${(size / 1e6).toFixed(1)} MB`)
-          : add("fail", "Karşılama videosu açılmıyor", `${u} HTTP ${r.status} — Ayarlar › Genel › Mobil karşılama videosu`);
-      } catch (e) { add("warn", "Karşılama videosu kontrol edilemedi", String(e?.message || e)); }
-    } else add("ok", "Karşılama videosu (dış adres)", u);
-  }
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "";
   /^https:\/\//.test(siteUrl) ? add("ok", "Site adresi") : add("fail", "Site adresi (NEXT_PUBLIC_SITE_URL) ayarlı değil / https değil", siteUrl || "boş");
   liveOnly(!/dev\./.test(siteUrl), "Site adresi test sitesini gösteriyor", `${siteUrl} → canlı adres olmalı (iyzico dönüşü, e-posta bağlantıları)`);

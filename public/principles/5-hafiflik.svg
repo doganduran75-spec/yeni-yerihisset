@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <rect width="400" height="300" fill="#F4EFE6"/>
+  <path d="M140 220 C170 140 230 80 300 60 C280 120 240 180 160 222 Z" fill="#fff" stroke="#4B7D1E" stroke-width="5"/>
+  <path d="M150 215 C190 170 240 120 290 70" stroke="#4B7D1E" stroke-width="4"/>
+  <g stroke="#9BC46A" stroke-width="3"><path d="M185 168 L165 160"/><path d="M205 146 L186 136"/><path d="M226 124 L208 112"/><path d="M200 172 L214 190"/><path d="M222 150 L238 166"/><path d="M244 127 L262 142"/></g>
+  <text x="200" y="265" text-anchor="middle" font-family="system-ui,sans-serif" font-size="20" font-weight="800" fill="#3F6D14">Tüy gibi hafif</text>
+</svg>

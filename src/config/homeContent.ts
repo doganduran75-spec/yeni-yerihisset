@@ -11,33 +11,29 @@
  */
 
 export const homeContent = {
-  // ── Karşılama / segmentasyon ──────────────────────────────────────────────
-  // (Eski karşılama başlığı / soru / alt yazılar tasarım değişikliğinde kalktı — yalnız bu bağlantı kullanılıyor.
-  //  Panel: Ayarlar › Ana Sayfa; burada OLMAYAN alan panelde de çıkmaz.)
-  hero: {
-    continueLink: "Veya doğrudan ana sayfaya devam et",
+  // ── Barefoot prensipleri (kullanıcı kararları 2026-10-18) ─────────────────
+  // Ana sayfanın üstünde kaydırılabilir kartlar (mobilde ekranın ~1/3'ü) + telefonda ilk ziyarette tam ekran
+  // "hikâye" (Instagram story gibi, turuncu ilerleme çubuğu). Sağlık iddiası yok; görseller çizim/illüstrasyon.
+  // image: /principles/... (sitede) ya da tam adres; seconds: hikâyede kaç saniye kalsın; show: false → gizli.
+  principles: {
+    enabled: true,          // ana sayfadaki kaydırılabilir kartlar
+    storiesEnabled: true,   // telefonda ilk ziyarette tam ekran hikâye
+    eyebrow: "BAREFOOT NEDİR?",
+    shopButton: "Alışverişe geç",
+    replayLink: "Barefoot nedir? İzle",
+    items: [
+      { title: "Geniş parmak alanı", text: "Burun kısmı geniş; parmaklar sıkışmadan doğal hâliyle yayılır.", image: "/principles/1-genis-parmak.svg", seconds: 4, show: true },
+      { title: "Sıfır topuk farkı", text: "Topuk ile parmak ucu aynı hizada; ayak düz basar.", image: "/principles/2-sifir-topuk.svg", seconds: 4, show: true },
+      { title: "Esnek taban", text: "Taban ayağınla birlikte bükülür, her adıma eşlik eder.", image: "/principles/3-esnek-taban.svg", seconds: 4, show: true },
+      { title: "İnce taban", text: "Zemini hissedersin — adı üstünde: yeri hisset.", image: "/principles/4-ince-taban.svg", seconds: 4, show: true },
+      { title: "Hafiflik", text: "Ayağında yük değil; gün boyu hafif adımlar.", image: "/principles/5-hafiflik.svg", seconds: 4, show: true },
+    ],
   },
 
-  // ── İki seçim kartı ───────────────────────────────────────────────────────
-  cards: {
-    learn: {
-      pill: "İlk Kez Başlayanlar İçin",
-      pillMobile: "İlk kez başlayanlar",
-      title: "Barefoot Rehberini Keşfet",
-      titleMobile: "Barefoot Rehberini Keşfet",
-      body: "Yalınayak felsefesi, anatomik ayak yapısı ve sağlıklı adımların biyomekaniğini keşfedin.",
-      cta: "Rehberi İncele",
-      href: "/barefoot-nedir",
-    },
-    shop: {
-      pill: "Doğrudan Alışveriş",
-      pillMobile: "Koleksiyonları incele",
-      title: "Doğrudan Mağazaya Geç",
-      titleMobile: "Doğrudan Mağazaya Geç",
-      body: "Dodura deri ayakkabılar, Attipas ilk adım modelleri ve denge barlarını hemen inceleyin.",
-      cta: "Koleksiyonları Gör",
-      href: "/magaza",
-    },
+  // ── Kategori kutuları (her kategoriden stoktaki bir ürün görseli) ─────────
+  categories: {
+    enabled: true,
+    title: "Kategoriler",
   },
 
   // ── Güven barı (icon anahtarları: foot | leaf | truck | card) ─────────────

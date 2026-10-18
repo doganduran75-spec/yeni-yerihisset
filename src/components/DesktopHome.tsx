@@ -5,11 +5,12 @@ import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
-  GraduationCap, ShoppingBag, ArrowRight, ChevronRight, Footprints, BadgeCheck,
+  ChevronRight, Footprints, BadgeCheck,
   Truck, CreditCard, Sprout, Eye, ShoppingCart, Check, Loader2,
 } from "lucide-react";
 import { formatPriceDisplay, getMinPrice } from "@/lib/product-price";
-import { track } from "@/lib/track";
+import PrincipleCarousel from "@/components/PrincipleCarousel";
+import HomeCategories, { type CategoryTile } from "@/components/HomeCategories";
 import { useHomeContent } from "@/lib/home-content-context";
 
 // DESIGN.md ("YeriHisset Grounded Wellness") temelli MASAÜSTÜ ana sayfa.
@@ -38,9 +39,10 @@ const JAK = "var(--font-jakarta), 'Plus Jakarta Sans', system-ui, sans-serif";
 const TRUST_ICON = { foot: Footprints, leaf: BadgeCheck, truck: Truck, card: CreditCard } as const;
 
 export default function DesktopHome({
-  products, loading, onQuickAdd, addedId,
+  products, tiles = [], loading, onQuickAdd, addedId,
 }: {
   products: any[];
+  tiles?: CategoryTile[];
   loading?: boolean;
   onQuickAdd?: (p: any) => void;
   addedId?: string | null;
@@ -50,34 +52,13 @@ export default function DesktopHome({
 
   return (
     <div style={{ fontFamily: JAK, background: C.base, color: C.ink }}>
-      {/* ── Karşılama / segmentasyon ── */}
-      <section className="container mx-auto px-8 pt-14 pb-4 max-w-6xl text-center">
-        {/* İki büyük kart */}
-        <div className="grid grid-cols-2 gap-6 text-left max-w-5xl mx-auto">
-          <ChoiceCard
-            href={HC.cards.learn.href} onClick={() => track("hero_click", { side: "kesif", to: HC.cards.learn.href })}
-            icon={GraduationCap} pill={HC.cards.learn.pill}
-            title={HC.cards.learn.title}
-            body={HC.cards.learn.body}
-            cta={HC.cards.learn.cta} ctaBg={C.green} ctaHover={C.greenBtnHover}
-          />
-          <ChoiceCard
-            href={HC.cards.shop.href} onClick={() => track("hero_click", { side: "magaza", to: HC.cards.shop.href })}
-            icon={ShoppingBag} pill={HC.cards.shop.pill}
-            title={HC.cards.shop.title}
-            body={HC.cards.shop.body}
-            cta={HC.cards.shop.cta} ctaBg={C.charcoal} ctaHover="#000"
-          />
-        </div>
+      {/* ── Barefoot prensipleri + kategori kutuları (mobille aynı yapı) ── */}
+      <PrincipleCarousel variant="desktop" />
+      <HomeCategories tiles={tiles} variant="desktop" />
 
-        <div className="mt-8">
-          <a href="#populer-desktop" className="inline-flex items-center gap-2" style={{ color: C.muted, fontSize: 15, fontWeight: 600 }}>
-            {HC.hero.continueLink} <ArrowRight size={17} />
-          </a>
-        </div>
-
+      <section className="container mx-auto px-8 pb-4 max-w-6xl">
         {/* Güven barı */}
-        <div className="mt-12 rounded-2xl flex items-center justify-between px-8 py-5 max-w-5xl mx-auto"
+        <div className="mt-12 rounded-2xl flex items-center justify-between px-8 py-5"
           style={{ background: C.card, border: `1px solid ${C.border}`, boxShadow: "0 4px 20px -2px rgba(39,39,36,0.05)" }}>
           {HC.trust.map((t) => {
             const Icon = TRUST_ICON[t.icon];
@@ -147,26 +128,6 @@ export default function DesktopHome({
 
       {/* ── Footer (ana sayfaya özel) ── */}
       <DesktopFooter />
-    </div>
-  );
-}
-
-function ChoiceCard({ href, onClick, icon: Icon, pill, title, body, cta, ctaBg, ctaHover }: any) {
-  const [hover, setHover] = useState(false);
-  return (
-    <div className="rounded-2xl p-8 flex flex-col" style={{ background: C.card, border: `1px solid ${C.border}`, boxShadow: "0 4px 20px -2px rgba(39,39,36,0.05)" }}>
-      <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-6" style={{ background: C.leafTint }}>
-        <Icon size={26} style={{ color: C.green }} />
-      </div>
-      <span className="self-start rounded-full px-3 py-1 mb-3" style={{ background: C.leafTint, color: C.greenText, fontSize: 11, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}>{pill}</span>
-      <h3 style={{ fontFamily: EPI, fontWeight: 600, fontSize: 24, letterSpacing: "-0.01em", color: C.ink }}>{title}</h3>
-      <p style={{ color: C.muted, fontSize: 15, lineHeight: 1.6, marginTop: 10, marginBottom: 24 }}>{body}</p>
-      <Link href={href} onClick={onClick}
-        onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
-        className="mt-auto rounded-xl h-12 flex items-center justify-between px-6 font-bold transition-colors"
-        style={{ background: hover ? ctaHover : ctaBg, color: "#fff", fontSize: 14.5 }}>
-        {cta} <ArrowRight size={18} />
-      </Link>
     </div>
   );
 }

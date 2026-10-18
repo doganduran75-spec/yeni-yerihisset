@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <rect width="400" height="300" fill="#F4EFE6"/>
+  <path d="M60 200 C130 200 170 120 200 90 C230 120 270 200 340 200" stroke="#4B7D1E" stroke-width="18"/>
+  <path d="M60 200 C130 200 170 120 200 90 C230 120 270 200 340 200" stroke="#9BC46A" stroke-width="6"/>
+  <path d="M120 120 C135 95 160 85 180 82" stroke="#D0440B" stroke-width="4"/><path d="M180 82 L168 76 M180 82 L172 93" stroke="#D0440B" stroke-width="4"/>
+  <path d="M280 120 C265 95 240 85 220 82" stroke="#D0440B" stroke-width="4"/><path d="M220 82 L232 76 M220 82 L228 93" stroke="#D0440B" stroke-width="4"/>
+  <text x="200" y="255" text-anchor="middle" font-family="system-ui,sans-serif" font-size="20" font-weight="800" fill="#3F6D14">Taban ayakla bükülür</text>
+</svg>
