@@ -263,6 +263,8 @@ async function main() {
   {
     const h = await get("/");
     /href="\/magaza\/(yetiskin\?kategori=|ilkadim)/.test(h.text) ? add("ok", "Ana sayfa kategori kutuları segment mağazasına bağlı") : add("fail", "Ana sayfada kategori kutusu yok", "/magaza/yetiskin?kategori=… ya da /magaza/ilkadim bağlantısı bulunamadı");
+    /data-tile-price[^>]*>₺\d/.test(h.text) ? add("ok", "Kategori kutularında fiyat aralığı var") : add("fail", "Kategori kutusunda fiyat yok", "en düşük – en yüksek fiyat görünmüyor (page.tsx › getCategoryTiles)");
+    h.text.includes("populer-desktop") ? add("fail", "Masaüstü ana sayfada 'Popüler Modeller' bölümü duruyor", "kaldırılmıştı (2026-10-18)") : add("ok", "Masaüstü ana sayfa: Popüler Modeller kaldırıldı");
     const img = one("SELECT coalesce(home_content->'principles'->'items'->0->>'image', '') FROM public.settings ORDER BY id LIMIT 1") || "/principles/1-genis-parmak.svg";
     if (img.startsWith("/")) {
       const r = await fetch(APP + img, { method: "HEAD" }).catch(() => null);

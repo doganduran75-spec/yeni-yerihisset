@@ -8,7 +8,11 @@ import { SEGMENTS, LAST_SEGMENT_KEY, type Segment } from "@/config/segments";
 import { useHomeContent } from "@/lib/home-content-context";
 import { track } from "@/lib/track";
 
-export type CategoryTile = { id: string; name: string; href: string; image: string | null; segment: string };
+export type CategoryTile = { id: string; name: string; href: string; image: string | null; segment: string; min?: number | null; max?: number | null };
+
+// "₺2.999 – ₺3.350" (kuruş varsa ",50" gösterilir); tek fiyatsa tek tutar
+const tl = (n: number) => `₺${n.toLocaleString("tr-TR", { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 })}`;
+const range = (t: CategoryTile) => (t.min ? (t.max && t.max !== t.min ? `${tl(t.min)} – ${tl(t.max)}` : tl(t.min)) : null);
 
 const EPI = "var(--font-epilogue), 'Epilogue', system-ui, sans-serif";
 
@@ -30,6 +34,7 @@ export default function HomeCategories({ tiles, variant }: { tiles: CategoryTile
             <div className="px-3 py-2.5">
               <p style={{ fontFamily: EPI, fontWeight: 700, fontSize: desk ? 16 : 15, color: "#1C1C19", lineHeight: 1.2 }}>{t.name}</p>
               <p style={{ color: "#76746C", fontSize: 12, fontWeight: 600, marginTop: 1 }}>{SEGMENTS[t.segment as Segment]?.label}</p>
+              {range(t) && <p data-tile-price style={{ color: "#3F6D14", fontSize: desk ? 15 : 13.5, fontWeight: 700, marginTop: 3, whiteSpace: "nowrap" }}>{range(t)}</p>}
             </div>
           </Link>
         ))}

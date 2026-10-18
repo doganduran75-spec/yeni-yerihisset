@@ -2,13 +2,10 @@
 
 import { useBotTrap } from "@/components/BotTrap";
 import { useState } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import {
-  ChevronRight, Footprints, BadgeCheck,
-  Truck, CreditCard, Sprout, Eye, ShoppingCart, Check, Loader2,
+  Footprints, BadgeCheck, Truck, CreditCard, Sprout, Loader2,
 } from "lucide-react";
-import { formatPriceDisplay, getMinPrice } from "@/lib/product-price";
 import PrincipleCarousel from "@/components/PrincipleCarousel";
 import HomeCategories, { type CategoryTile } from "@/components/HomeCategories";
 import { useHomeContent } from "@/lib/home-content-context";
@@ -38,17 +35,8 @@ const JAK = "var(--font-jakarta), 'Plus Jakarta Sans', system-ui, sans-serif";
 // Güven barı ikon anahtarı → lucide bileşeni (config data-only kalsın diye)
 const TRUST_ICON = { foot: Footprints, leaf: BadgeCheck, truck: Truck, card: CreditCard } as const;
 
-export default function DesktopHome({
-  products, tiles = [], loading, onQuickAdd, addedId,
-}: {
-  products: any[];
-  tiles?: CategoryTile[];
-  loading?: boolean;
-  onQuickAdd?: (p: any) => void;
-  addedId?: string | null;
-}) {
+export default function DesktopHome({ tiles = [] }: { tiles?: CategoryTile[] }) {
   const HC = useHomeContent(); // Ayarlar › Ana Sayfa (varsayılan: src/config/homeContent.ts)
-  const popular = (products || []).slice(0, HC.products.limitDesktop);
 
   return (
     <div style={{ fontFamily: JAK, background: C.base, color: C.ink }}>
@@ -56,7 +44,7 @@ export default function DesktopHome({
       <PrincipleCarousel variant="desktop" />
       <HomeCategories tiles={tiles} variant="desktop" />
 
-      <section className="container mx-auto px-8 pb-4 max-w-6xl">
+      <section className="container mx-auto px-8 pb-16 max-w-6xl">
         {/* Güven barı */}
         <div className="mt-12 rounded-2xl flex items-center justify-between px-8 py-5"
           style={{ background: C.card, border: `1px solid ${C.border}`, boxShadow: "0 4px 20px -2px rgba(39,39,36,0.05)" }}>
@@ -70,39 +58,6 @@ export default function DesktopHome({
             );
           })}
         </div>
-      </section>
-
-      {/* ── Popüler Modeller ── */}
-      <section id="populer-desktop" className="container mx-auto px-8 pt-16 pb-16 max-w-6xl">
-        <div className="flex items-end justify-between mb-8">
-          <div>
-            <p style={{ color: C.greenText, fontSize: 12, fontWeight: 700, letterSpacing: "0.08em" }}>{HC.products.eyebrow}</p>
-            <h2 style={{ fontFamily: EPI, fontWeight: 600, fontSize: 34, letterSpacing: "-0.015em", color: C.ink, marginTop: 4 }}>{HC.products.title}</h2>
-          </div>
-          <Link href={HC.products.href} className="inline-flex items-center gap-1.5 shrink-0" style={{ color: C.greenText, fontSize: 15, fontWeight: 700 }}>
-            {HC.products.seeAll} <ChevronRight size={17} />
-          </Link>
-        </div>
-
-        {loading ? (
-          <div className="grid grid-cols-4 gap-6">
-            {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="rounded-2xl overflow-hidden animate-pulse" style={{ background: C.card, border: `1px solid ${C.border}` }}>
-                <div style={{ aspectRatio: "4 / 3", background: C.warm }} />
-                <div className="p-4 space-y-3">
-                  <div className="h-4 rounded" style={{ background: C.warm, width: "80%" }} />
-                  <div className="h-4 rounded" style={{ background: C.warm, width: "40%" }} />
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="grid grid-cols-4 gap-6">
-            {popular.map((p) => (
-              <ProductCard key={p.id} p={p} onQuickAdd={onQuickAdd} added={addedId === p.id} />
-            ))}
-          </div>
-        )}
       </section>
 
       {/* ── Reklam bandı (Vade Farksız 3 Taksit) ── */}
@@ -128,44 +83,6 @@ export default function DesktopHome({
 
       {/* ── Footer (ana sayfaya özel) ── */}
       <DesktopFooter />
-    </div>
-  );
-}
-
-function ProductCard({ p, onQuickAdd, added }: { p: any; onQuickAdd?: (p: any) => void; added?: boolean }) {
-  const img = (p.images && p.images.length > 0) ? p.images[0] : (p.image_url || "https://images.unsplash.com/photo-1494438639946-1ebd1d20bf85?q=80&w=400");
-  const badge = p.categories?.name || p.brands?.name;
-  const code = p.sku || null;
-  return (
-    <div className="rounded-2xl overflow-hidden group" style={{ background: C.card, border: `1px solid ${C.border}` }}>
-      <Link href={`/products/${p.slug}`} className="block relative overflow-hidden" style={{ aspectRatio: "4 / 3", background: C.warm }}>
-        <Image src={img} alt={p.title} fill sizes="(max-width: 1024px) 50vw, 300px" className="object-cover transition-transform duration-700 group-hover:scale-105" />
-        {badge && (
-          <span className="absolute top-3 left-3 rounded-full px-3 py-1" style={{ background: "rgba(255,255,255,0.94)", color: C.ink, fontSize: 11.5, fontWeight: 700 }}>{badge}</span>
-        )}
-      </Link>
-      <div className="p-4">
-        <Link href={`/products/${p.slug}`}>
-          <h3 style={{ fontFamily: EPI, fontWeight: 600, fontSize: 16, color: C.ink, lineHeight: 1.3 }}>{p.title}</h3>
-        </Link>
-        {code && <p style={{ color: C.stone, fontSize: 12.5, marginTop: 3 }}>{code}</p>}
-        <div className="flex items-center justify-between mt-3">
-          <span style={{ color: C.greenText, fontSize: 20, fontWeight: 700, letterSpacing: "-0.01em" }}>{formatPriceDisplay(p)}</span>
-          {p.has_variants ? (
-            <Link href={`/products/${p.slug}`} aria-label="İncele"
-              className="w-10 h-10 rounded-full flex items-center justify-center transition-colors"
-              style={{ background: C.leafTint, color: C.greenText }}>
-              <Eye size={18} />
-            </Link>
-          ) : (
-            <button onClick={() => onQuickAdd?.(p)} aria-label="Sepete ekle"
-              className="w-10 h-10 rounded-full flex items-center justify-center transition-colors active:scale-90"
-              style={{ background: added ? C.green : C.leafTint, color: added ? "#fff" : C.greenText }}>
-              {added ? <Check size={18} /> : <ShoppingCart size={18} />}
-            </button>
-          )}
-        </div>
-      </div>
     </div>
   );
 }
