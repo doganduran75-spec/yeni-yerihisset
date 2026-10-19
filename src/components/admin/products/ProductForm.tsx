@@ -378,7 +378,7 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
           const row = {
             product_id: finalId,
             variant_option_id: v.variant_option_id,
-            sku: v.sku || `${formData.title.slice(0, 3)}-${v.value}`,
+            sku: v.sku?.trim() || null, // boşsa boş kalır (eskiden "Dod-40" gibi uydurulurdu → ürünler arası tekrar; SKU artık tekil)
             barcode: v.barcode || null,
             is_active: v.is_active,
             image_url: formData.variants_have_images ? (v.image_url || null) : null,

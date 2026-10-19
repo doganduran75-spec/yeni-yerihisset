@@ -952,7 +952,7 @@ export default {
         }
       });
 
-      await part("Aynı barkod iki kez kaydedilemez (harf / boşluk farkı dahil)", async () => {
+      await part("Aynı barkod / SKU iki kez kaydedilemez (harf / boşluk farkı dahil)", async () => {
         // Geri alınan işlem içinde: hiçbir şey kalıcı olmaz, pazaryeri kuyruğuna da bir şey kalmaz
         const r = sql(`BEGIN;
           CREATE TEMP TABLE _bc (k text, v boolean);
@@ -966,6 +966,14 @@ export default {
             INSERT INTO _bc VALUES ('ayni_kayit', true);
             INSERT INTO public.product_variants (product_id, price, stock, is_active, barcode) VALUES (${lit(F.prod)}, 1, 0, false, 'RGT-BARKOD-2'), (${lit(F.prod)}, 1, 0, false, '  ');
             INSERT INTO _bc VALUES ('farkli_ve_bos', true);
+            -- SKU: aynı kural
+            UPDATE public.product_variants SET sku = 'RGT-SKU-1' WHERE id = a;
+            BEGIN
+              INSERT INTO public.product_variants (product_id, price, stock, is_active, sku) VALUES (${lit(F.prod)}, 1, 0, false, 'rgt-sku-1 ');
+              INSERT INTO _bc VALUES ('sku_ikinci', false);
+            EXCEPTION WHEN unique_violation THEN INSERT INTO _bc VALUES ('sku_ikinci', true); END;
+            INSERT INTO public.product_variants (product_id, price, stock, is_active, sku) VALUES (${lit(F.prod)}, 1, 0, false, ''), (${lit(F.prod)}, 1, 0, false, NULL);
+            INSERT INTO _bc VALUES ('sku_bos', true);
           END $bc$;
           SELECT k, v FROM _bc;
           ROLLBACK;`);
@@ -973,6 +981,8 @@ export default {
         ok(got.ikinci === true, "Aynı barkodla ikinci varyant reddediliyor (büyük / küçük harf, boşluk farkı da)", JSON.stringify(got));
         ok(got.ayni_kayit === true, "Barkodu değişmeyen varyant kaydedilebiliyor", JSON.stringify(got));
         ok(got.farkli_ve_bos === true, "Farklı barkod ve boş barkod serbest", JSON.stringify(got));
+        ok(got.sku_ikinci === true, "Aynı SKU ile ikinci varyant reddediliyor (harf / boşluk farkı da)", JSON.stringify(got));
+        ok(got.sku_bos === true, "Boş SKU serbest", JSON.stringify(got));
       });
 
       await part("Üretilmeyen numara silinir (fiyat / stok listelerinden çıkar)", async () => {
