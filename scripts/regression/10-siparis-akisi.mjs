@@ -974,6 +974,15 @@ export default {
             EXCEPTION WHEN unique_violation THEN INSERT INTO _bc VALUES ('sku_ikinci', true); END;
             INSERT INTO public.product_variants (product_id, price, stock, is_active, sku) VALUES (${lit(F.prod)}, 1, 0, false, ''), (${lit(F.prod)}, 1, 0, false, NULL);
             INSERT INTO _bc VALUES ('sku_bos', true);
+            -- Kural gelmeden önce oluşmuş tekrar: değiştirmeden yeniden kaydetmek de reddedilir (pasif ürün de olsa)
+            ALTER TABLE public.product_variants DISABLE TRIGGER trg_variant_barcode_unique;
+            INSERT INTO public.product_variants (product_id, price, stock, is_active, barcode) VALUES (${lit(F.prod)}, 1, 0, false, 'RGT-BARKOD-3') RETURNING id INTO a;
+            INSERT INTO public.product_variants (product_id, price, stock, is_active, barcode) VALUES (${lit(F.prod)}, 1, 0, false, 'RGT-BARKOD-3');
+            ALTER TABLE public.product_variants ENABLE TRIGGER trg_variant_barcode_unique;
+            BEGIN
+              UPDATE public.product_variants SET barcode = 'RGT-BARKOD-3' WHERE id = a;
+              INSERT INTO _bc VALUES ('eski_tekrar', false);
+            EXCEPTION WHEN unique_violation THEN INSERT INTO _bc VALUES ('eski_tekrar', true); END;
           END $bc$;
           SELECT k, v FROM _bc;
           ROLLBACK;`);
@@ -983,6 +992,13 @@ export default {
         ok(got.farkli_ve_bos === true, "Farklı barkod ve boş barkod serbest", JSON.stringify(got));
         ok(got.sku_ikinci === true, "Aynı SKU ile ikinci varyant reddediliyor (harf / boşluk farkı da)", JSON.stringify(got));
         ok(got.sku_bos === true, "Boş SKU serbest", JSON.stringify(got));
+        ok(got.eski_tekrar === true, "Önceden kalmış tekrar barkod değiştirilmeden de kaydedilemiyor (pasif üründe de)", JSON.stringify(got));
+        // Ürün formunun ön kontrolü: yalnız yönetici sorabilir
+        const body = { p_product: null, p_barcodes: ["RGT-YOK-BARKOD"], p_skus: [] };
+        const m = await rest("rpc/variant_code_conflicts", { token: F.member.token, method: "POST", body });
+        ok(m.status >= 400, "Üye barkod ön kontrolünü çağıramıyor", `HTTP ${m.status}`);
+        const ad = await rest("rpc/variant_code_conflicts", { token: F.admin.token, method: "POST", body });
+        ok(ad.status === 200 && Array.isArray(ad.json) && ad.json.length === 0, "Yönetici barkod ön kontrolü çalışıyor", `HTTP ${ad.status}`);
       });
 
       await part("Üretilmeyen numara silinir (fiyat / stok listelerinden çıkar)", async () => {

@@ -165,6 +165,7 @@ async function main() {
     ["20261127 mağaza segmentleri (Yetişkin / 0–4 Yaş İlkadım)", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'categories' AND column_name = 'segment')"],
     ["20261128 aynı barkod iki kez kaydedilemez", "SELECT EXISTS(SELECT 1 FROM pg_trigger WHERE tgname = 'trg_variant_barcode_unique')"],
     ["20261129 aynı SKU iki kez kaydedilemez", "SELECT EXISTS(SELECT 1 FROM pg_trigger WHERE tgname = 'trg_variant_sku_unique')"],
+    ["20261130 barkod / SKU ön kontrolü", "SELECT to_regprocedure('public.variant_code_conflicts(uuid, text[], text[])') IS NOT NULL"],
     ["20261126 ödeme alınmadan sevkiyat başlamaz", "SELECT EXISTS(SELECT 1 FROM pg_trigger WHERE tgname = 'trg_guard_ship_before_payment')"],
     ["20261125 marka hakkında (bütün ürün sayfalarında)", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'brands' AND column_name = 'about')"],
     ["20261124 yorum isteme + seni özledik (ayarlar, şablonlar, geri dönüş tetikleyicisi)", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'order_reviews' AND column_name = 'answers') AND EXISTS(SELECT 1 FROM pg_trigger WHERE tgname = 'trg_detect_winback') AND (SELECT count(*) FROM public.email_templates WHERE trigger IN ('review_request', 'winback')) = 2"],

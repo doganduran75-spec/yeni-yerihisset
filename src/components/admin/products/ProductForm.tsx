@@ -306,11 +306,46 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
     }
   }
 
+  // Barkod / SKU tekrar kontrolü — KAYDETMEDEN önce (yarım kayıt olmasın). Veritabanı kuralı da reddeder (20261130);
+  // bu ön kontrol hangi kodun nerede kullanıldığını tek mesajda söyler. Pasif ürünler dahil.
+  async function codeProblems(): Promise<string | null> {
+    if (!formData.has_variants) return null;
+    const norm = (x: string) => (x || "").trim().toUpperCase();
+    const dupIn = (key: "barcode" | "sku") => {
+      const seen = new Map<string, string>();
+      const out: string[] = [];
+      for (const v of formData.variants) {
+        const k = norm(v[key]);
+        if (!k) continue;
+        if (seen.has(k)) out.push(`${key === "barcode" ? "Barkod" : "SKU"} ${v[key].trim()}: bu üründe hem ${seen.get(k)} hem ${v.value} numarasında`);
+        else seen.set(k, v.value);
+      }
+      return out;
+    };
+    const own = [...dupIn("barcode"), ...dupIn("sku")];
+    if (own.length) return own.join("\n");
+    const { data, error } = await (supabase as any).rpc("variant_code_conflicts", {
+      p_product: productId || null,
+      p_barcodes: formData.variants.map((v) => v.barcode).filter((x) => x && x.trim()),
+      p_skus: formData.variants.map((v) => v.sku).filter((x) => x && x.trim()),
+    });
+    if (error) return null; // ön kontrol çalışmazsa veritabanı kuralı yine korur
+    const rows = (data as any[]) || [];
+    return rows.length
+      ? rows.map((r) => `${r.kind} ${r.code} başka bir üründe kayıtlı: ${r.product_title || "ürün"}${r.size ? ` — ${r.size}` : ""}`).join("\n")
+      : null;
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
 
     try {
+      const problems = await codeProblems();
+      if (problems) {
+        alert(`Kaydedilmedi — aynı kod iki yerde olamaz:\n\n${problems}\n\nKodu düzelt ya da boşalt, sonra tekrar kaydet.`);
+        return;
+      }
       const slug = turkishToSlug(formData.title);
       // Fiyat bu sayfada YOK (Fiyatlar sayfası); stok yalnız YENİ üründe ilk değer olarak girilir,
       // sonra Stok Yönetimi'nden değişir — form açıkken pazaryeri siparişiyle değişen stok ezilmesin.
