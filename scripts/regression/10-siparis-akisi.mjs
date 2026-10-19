@@ -952,6 +952,29 @@ export default {
         }
       });
 
+      await part("Aynı barkod iki kez kaydedilemez (harf / boşluk farkı dahil)", async () => {
+        // Geri alınan işlem içinde: hiçbir şey kalıcı olmaz, pazaryeri kuyruğuna da bir şey kalmaz
+        const r = sql(`BEGIN;
+          CREATE TEMP TABLE _bc (k text, v boolean);
+          DO $bc$ DECLARE a uuid; BEGIN
+            INSERT INTO public.product_variants (product_id, price, stock, is_active, barcode) VALUES (${lit(F.prod)}, 1, 0, false, 'RGT-BARKOD-1') RETURNING id INTO a;
+            BEGIN
+              INSERT INTO public.product_variants (product_id, price, stock, is_active, barcode) VALUES (${lit(F.prod)}, 1, 0, false, ' rgt-barkod-1 ');
+              INSERT INTO _bc VALUES ('ikinci', false);
+            EXCEPTION WHEN unique_violation THEN INSERT INTO _bc VALUES ('ikinci', true); END;
+            UPDATE public.product_variants SET barcode = 'RGT-BARKOD-1' WHERE id = a;
+            INSERT INTO _bc VALUES ('ayni_kayit', true);
+            INSERT INTO public.product_variants (product_id, price, stock, is_active, barcode) VALUES (${lit(F.prod)}, 1, 0, false, 'RGT-BARKOD-2'), (${lit(F.prod)}, 1, 0, false, '  ');
+            INSERT INTO _bc VALUES ('farkli_ve_bos', true);
+          END $bc$;
+          SELECT k, v FROM _bc;
+          ROLLBACK;`);
+        const got = Object.fromEntries(r.map((x) => [x[0], x[1] === "t"]));
+        ok(got.ikinci === true, "Aynı barkodla ikinci varyant reddediliyor (büyük / küçük harf, boşluk farkı da)", JSON.stringify(got));
+        ok(got.ayni_kayit === true, "Barkodu değişmeyen varyant kaydedilebiliyor", JSON.stringify(got));
+        ok(got.farkli_ve_bos === true, "Farklı barkod ve boş barkod serbest", JSON.stringify(got));
+      });
+
       await part("Üretilmeyen numara silinir (fiyat / stok listelerinden çıkar)", async () => {
         const vid = insert("product_variants", { product_id: F.prod, price: 1000, stock: 0, is_active: false });
         sql(`INSERT INTO public.item_prices (product_id, variant_id, price_list_id, amount) SELECT ${lit(F.prod)}, ${lit(vid)}, id, 900 FROM public.price_lists WHERE code = 'trendyol_sale'`);

@@ -249,7 +249,7 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
   }
 
   async function handleClone() {
-    if (!confirm("Bu ürünü kopyalamak istediğinize emin misiniz?")) return;
+    if (!confirm("Bu ürün kopyalansın mı? Kopyada stok 0 olur; barkod ve stok kodu boş gelir, yeni ürüne girilir.")) return;
 
     setLoading(true);
     try {
@@ -260,7 +260,7 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
         title: baseTitle,
         slug: baseSlug,
         price: parseFloat(formData.price) || 0,
-        stock: parseInt(formData.stock) || 0,
+        stock: 0, // kopyada stok yok — stok gerçek mal sayısı; kopyalanırsa sayılmamış ürün satılır
         category_id: formData.category_id || null,
         brand_id: formData.brand_id || null,
         short_description: formData.short_description,
@@ -280,11 +280,12 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
         const variantsPayload = formData.variants.map((v) => ({
           product_id: newProductId,
           variant_option_id: v.variant_option_id,
-          sku: `${v.sku || `${baseTitle.slice(0, 3)}-${v.value}`}-${Math.random().toString(36).substring(2, 5)}`,
-          barcode: v.barcode || null,
+          // Barkod ve stok kodu kopyalanmaz (aynı barkod iki üründe olamaz — pazaryeri karışır); yeni ürüne girilir
+          sku: null,
+          barcode: null,
           price: parseFloat(v.price) || 0,
           compare_at_price: v.compare_at_price !== "" ? parseFloat(v.compare_at_price) : null,
-          stock: parseInt(v.stock) || 0,
+          stock: 0, // stok kopyalanmaz (varyantlar aynı olsa da)
           trendyol_psf: v.trendyol_psf !== "" ? parseFloat(v.trendyol_psf) : null,
           trendyol_price: v.trendyol_price !== "" ? parseFloat(v.trendyol_price) : null,
           is_active: v.is_active,

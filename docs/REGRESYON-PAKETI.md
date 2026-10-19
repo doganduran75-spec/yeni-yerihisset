@@ -161,5 +161,5 @@ Senaryo modülü yazım kuralları (`scripts/regression/NN-konu.mjs`, numara sı
 - Gerçek müşteriye / pazaryerine / yöneticiye dokunan hiçbir şey tetiklenmez (SKU/barkodsuz ürün, test e-posta alanı).
 - Hata açıklaması "ne bekleniyordu, ne geldi"yi söyler.
 
-Mevcut modüller: `10-siparis-akisi.mjs` (havale siparişi, kupon, stok, hediye, misafir, yetki, iade/iptal, kargo → iade al, satış ortaklığı, stok bildirimi, silme, süre dolumu).
+Mevcut modüller: `10-siparis-akisi.mjs` (havale siparişi, kupon, stok, hediye, misafir, yetki, iade/iptal, kargo → iade al, satış ortaklığı, stok bildirimi, silme, süre dolumu, aynı barkod reddi).
 Sıradaki adaylar: kart ödeme (iyzico sandbox açılınca), YeriHisset Kredisi.
