@@ -11,7 +11,9 @@ export type NextActionKey =
   | "mark_paid" | "cancel" | "ship_kargonomi" | "ship_manual" | "mark_delivered"
   | "return" | "refund" | "invoice" | "invoice_parasut" | "return_invoice" | "mp_restock"
   // satış sonrası (B aşaması — src/lib/after-sale.ts)
-  | "fit_ok" | "case_link" | "ship_alt" | "alt_delivered" | "send_label" | "close_case";
+  | "fit_ok" | "case_link" | "ship_alt" | "alt_delivered" | "send_label" | "close_case"
+  // "İade gelecek": müşteri iadeyi telefonla bildirdi → yönetici talep açar; kod gerekmiyorsa doğrudan yolda
+  | "return_expected" | "return_in_transit";
 
 export type NextAction = { key: NextActionKey; label: string; kind: "primary" | "danger" };
 
@@ -41,6 +43,7 @@ export type OrderLike = {
 
 export const TRIAL_DAYS = 14;
 export const UPS_WAIT_DAYS = 5;
+export const RETURN_WAIT_DAYS = 4; // "iade yolda"dan bu kadar gün sonra gelmediyse bekleyen işlere düşer
 const daysSince = (iso?: string | null) => (iso ? (Date.now() - new Date(iso).getTime()) / 86400000 : 0);
 
 export type NextStep = {
@@ -146,8 +149,15 @@ function coreNextStep(o: OrderLike): NextStep {
     const upsHint = upsLate ? `UPS ${UPS_WAIT_DAYS} gündür almadı — Sürat ya da Aras için yeni kod gönder.` : undefined;
     const close: NextAction = { key: "close_case", label: "Talebi kapat", kind: "danger" };
     if (c.kind === "return") {
-      if (c.status === "requested") return { stage: "İade talebi", hint: "Kargonomi'den etiket oluştur, kodu gir — müşteriye e-postayla gider.", actions: [{ key: "send_label", label: "İade kodunu gönder", kind: "primary" }, close], needsAction: true };
-      return { stage: "İade yolda", hint: upsHint ?? "Ürün gelince “İade geldi”.", actions: [{ key: "return", label: "İade geldi", kind: "danger" }, { key: "send_label", label: "Kodu değiştir / yeniden gönder", kind: "primary" }], needsAction: upsLate };
+      if (c.status === "requested") return { stage: "İade talebi", hint: "Kargonomi'den etiket oluştur, kodu gir — müşteriye e-postayla gider. Müşteri kendisi gönderiyorsa “Kod gerekmiyor”.", actions: [
+        { key: "send_label", label: "İade kodunu gönder", kind: "primary" },
+        { key: "return_in_transit", label: "Kod gerekmiyor — iade yolda", kind: "primary" }, close,
+      ], needsAction: true };
+      const late = daysSince(c.label_sent_at) > RETURN_WAIT_DAYS;
+      return { stage: "İade yolda", hint: upsHint ?? (late ? `${RETURN_WAIT_DAYS} gündür iade gelmedi — müşteriyle görüş.` : "Ürün gelince “İade geldi”."), actions: [
+        { key: "return", label: "İade geldi", kind: "danger" },
+        { key: "send_label", label: c.return_method === "self" ? "Kargo kodu gönder" : "Kodu değiştir / yeniden gönder", kind: "primary" }, close,
+      ], needsAction: upsLate || late };
     }
     switch (c.status) {
       case "requested": return { stage: "Değişim talebi", hint: "İstenen numarayı gönder.", actions: [{ key: "ship_alt", label: "Alternatifi gönder", kind: "primary" }, close], needsAction: true };
@@ -188,6 +198,7 @@ function coreNextStep(o: OrderLike): NextStep {
   if (o.fit_status === "trial" && daysSince(o.delivered_at) < TRIAL_DAYS) {
     return { stage: "Teslim edildi — müşteri deniyor", hint: `Müşteri ${TRIAL_DAYS} gün içinde “oldu / değişim / iade” diyecek.`, actions: [
       { key: "fit_ok", label: "Oldu say", kind: "primary" },
+      { key: "return_expected", label: "İade gelecek", kind: "danger" },
       { key: "case_link", label: "Müşteri adına değişim / iade aç", kind: "primary" },
       { key: "return", label: "İade al", kind: "danger" },
     ], needsAction: false };
@@ -196,6 +207,7 @@ function coreNextStep(o: OrderLike): NextStep {
   // Teslim edildi (oldu / süre doldu / eski sipariş)
   const acts: NextAction[] = [];
   if (inv === "pending") acts.push(...invoiceActs);
+  if (ship === "delivered") acts.push({ key: "return_expected", label: "İade gelecek", kind: "danger" });
   acts.push({ key: "return", label: "İade al", kind: "danger" });
   return inv === "pending"
     ? { stage: "Teslim edildi", hint: "Müşteri memnunsa faturayı kes.", actions: acts, needsAction: true }

@@ -464,6 +464,24 @@ export default {
         ok(lc.status === 200 && caseOf(C)?.return_method === "aras", "Yönetici kargo yolunu değiştirip kod gönderebiliyor (UPS almadı → Aras)", why(lc));
         const rc = await api("/api/admin/orders/action", { token: F.admin.token, body: { action: "return", orderId: C, items: [{ item_id: itC.id, qty: 1, restock: true }], refund: { amount: Number(ord(C).total_amount), method: "bank_transfer" }, confirmed: true, note: "regresyon iade" } });
         ok(rc.status === 200 && caseOf(C)?.status === "received" && !!caseOf(C)?.closed_at && ord(C).payment_status === "refunded", "İade geldi → talep kapandı, ödeme iade edildi", `${why(rc)} → ${caseOf(C)?.status}, ${ord(C).payment_status}`);
+
+        // ── "İade gelecek": müşteri telefonla bildirdi → yönetici açar (müşteriye e-posta yok) ──
+        const D = await delivered();
+        const itD = row(`SELECT id FROM public.order_items WHERE order_id = ${lit(D)} AND unit_price > 0`);
+        const mr = await api("/api/admin/orders/case", { token: F.member.token, body: { orderId: D, op: "admin_return", items: [itD.id], mode: "self" } });
+        ok(mr.status === 403 && !caseOf(D), "Üye 'İade gelecek' açamıyor", why(mr));
+        const ar = await adminCase(D, { op: "admin_return", items: [itD.id], mode: "self", reason: "Numara küçük" });
+        const cD = caseOf(D);
+        ok(ar.status === 200 && cD?.kind === "return" && cD?.status === "label_sent" && cD?.return_method === "self" && !!cD?.label_sent_at,
+          "İade gelecek (müşteri kendisi gönderiyor) → doğrudan 'iade yolda'", `${why(ar)} ${JSON.stringify(cD || {}).slice(0, 120)}`);
+        const ar2 = await adminCase(D, { op: "admin_return", items: [itD.id], mode: "self" });
+        ok(ar2.status === 400, "Açık talep varken ikinci iade talebi açılmıyor", why(ar2));
+        await adminCase(D, { op: "close" });
+        const ar3 = await adminCase(D, { op: "admin_return", items: [itD.id], mode: "code" });
+        ok(ar3.status === 200 && caseOf(D)?.status === "requested", "İade gelecek (kod göndereceğim) → 'iade talebi'", why(ar3));
+        const it = await adminCase(D, { op: "in_transit" });
+        ok(it.status === 200 && caseOf(D)?.status === "label_sent" && caseOf(D)?.return_method === "self", "İade talebinde 'Kod gerekmiyor' → iade yolda", why(it));
+        await adminCase(D, { op: "close" });
       });
 
       await part("Satış ortaklığı", async () => {

@@ -14,6 +14,9 @@ import { kickMarketplaceSync } from "@/lib/marketplace/sync";
 //   send_label    : iade / değişim geri gönderim kargo kodu → müşteriye e-posta (yöntem değiştirilebilir)
 //   close         : talebi kapat (vazgeçildi) → sipariş "deniyor"a döner
 //   link          : müşteri sayfasının bağlantısı (müşteri adına doldurmak için)
+//   admin_return  : "İade gelecek" — müşteri telefonla bildirdi; iade talebi açılır (müşteriye e-posta GİTMEZ).
+//                   mode "self" (müşteri kendisi gönderiyor) → doğrudan "iade yolda"; "code" → kod gönderilecek
+//   in_transit    : iade talebinde kod gerekmiyor → "iade yolda" (sessiz)
 export async function POST(req: NextRequest) {
   const user = await getAuthUserFromRequest(req);
   if (!user) return NextResponse.json({ error: "Yetkisiz" }, { status: 401 });
@@ -23,7 +26,7 @@ export async function POST(req: NextRequest) {
 
   const body = (await req.json().catch(() => ({}))) as any;
   const orderId = String(body.orderId || "");
-  const { data: o } = await sb.from("orders").select("id, channel, import_source, fit_status").eq("id", orderId).maybeSingle();
+  const { data: o } = await sb.from("orders").select("id, channel, import_source, fit_status, shipment_status, status").eq("id", orderId).maybeSingle();
   if (!o) return NextResponse.json({ error: "Sipariş bulunamadı" }, { status: 404 });
   const { data: c } = await sb.from("order_cases").select("*").eq("order_id", orderId).is("closed_at", null).maybeSingle();
   const now = new Date().toISOString();
@@ -79,6 +82,37 @@ export async function POST(req: NextRequest) {
       await note(`${c.kind === "exchange" ? "Değişim" : "İade"} kargo kodu: ${code} (${RETURN_METHOD_LABEL[method]}) — e-posta ${r.status === "sent" ? "gönderildi" : "gönderilemedi"}`);
       return NextResponse.json({ ok: true, email: r.status });
     }
+
+    case "admin_return": {
+      if (c) return NextResponse.json({ error: "Bu siparişte açık bir talep var" }, { status: 400 });
+      if ((o.channel || "site") !== "site" || o.status === "cancelled" || !["delivered", "shipped"].includes(o.shipment_status))
+        return NextResponse.json({ error: "İade talebi yalnız kargolanmış / teslim edilmiş site siparişinde açılır" }, { status: 400 });
+      const { data: its } = await sb.from("order_items").select("id, quantity, returned_qty").eq("order_id", orderId);
+      const open = new Set(((its as any[]) || []).filter((i) => Number(i.returned_qty || 0) < Number(i.quantity)).map((i) => i.id));
+      const ids: string[] = (Array.isArray(body.items) ? body.items : []).map(String).filter((id: string) => open.has(id));
+      if (!ids.length) return NextResponse.json({ error: "İade gelecek ürünü seç" }, { status: 400 });
+      const self = body.mode === "self";
+      let iban: string | null = null;
+      if (body.iban) {
+        iban = String(body.iban).replace(/\s+/g, "").toUpperCase();
+        if (!/^TR\d{24}$/.test(iban)) return NextResponse.json({ error: "IBAN TR ile başlayan 26 karakter olmalı" }, { status: 400 });
+      }
+      const reason = String(body.reason || "").trim().slice(0, 40) || null;
+      const { error } = await sb.from("order_cases").insert({
+        order_id: orderId, kind: "return", status: self ? "label_sent" : "requested", reason, customer_note: null,
+        items: ids.map((id) => ({ order_item_id: id })), return_method: self ? "self" : null, label_sent_at: self ? now : null, iban,
+      });
+      if (error) return NextResponse.json({ error: "Talep açılamadı (açık talep olabilir)" }, { status: 409 });
+      await sb.from("orders").update({ fit_status: "return", fit_answered_at: now }).eq("id", orderId);
+      await note(`İade gelecek (yönetici açtı${reason ? ` — ${reason}` : ""})${self ? " — müşteri kendisi gönderiyor, iade yolda" : " — kargo kodu gönderilecek"}`);
+      return NextResponse.json({ ok: true });
+    }
+
+    case "in_transit":
+      if (!c || c.kind !== "return" || c.status !== "requested") return NextResponse.json({ error: "Kod bekleyen iade talebi yok" }, { status: 400 });
+      await sb.from("order_cases").update({ status: "label_sent", return_method: "self", label_sent_at: now, updated_at: now }).eq("id", c.id);
+      await note("İade: kod gerekmiyor (müşteri kendisi gönderiyor) — iade yolda");
+      return NextResponse.json({ ok: true });
 
     case "close":
       if (!c) return NextResponse.json({ error: "Açık talep yok" }, { status: 400 });

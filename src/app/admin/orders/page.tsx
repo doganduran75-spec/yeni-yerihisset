@@ -8,6 +8,7 @@ import AdminOpsTabs from "@/components/admin/AdminOpsTabs";
 import OrderTimeline from "@/components/admin/OrderTimeline";
 import KargonomiDialog from "@/components/admin/KargonomiDialog";
 import CarrierPickDialog from "@/components/admin/CarrierPickDialog";
+import ReturnExpectedDialog from "@/components/admin/ReturnExpectedDialog";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -248,6 +249,7 @@ export default function OrdersPage() {
   // Paraşüt açık mı? Kapalıysa "Faturayı kes (Paraşüt)" düğmesi gizlenir
   const [parasutOn, setParasutOn] = useState(false);
   const [carrierFor, setCarrierFor] = useState<{ o: Order; acceptDiff: boolean } | null>(null);
+  const [returnFor, setReturnFor] = useState<Order | null>(null); // "İade gelecek" penceresi
   useEffect(() => {
     parasutApi({ op: "status" }).then((s) => setParasutOn(!!(s.enabled && s.connected))).catch(() => {});
   }, []);
@@ -878,6 +880,10 @@ export default function OrdersPage() {
         return;
       case "return_invoice": return updateField(o.id, { invoice_status: "return_invoiced" });
       case "fit_ok": await caseOp(o, { op: "fit_ok" }); return;
+      case "return_expected": setReturnFor(o); return;
+      case "return_in_transit":
+        if (await siteConfirm({ title: "Kod gerekmiyor mu?", message: "Müşteri ürünü kendisi gönderiyor: sipariş “İade yolda” olur (müşteriye e-posta gitmez). 4 gün içinde gelmezse bekleyen işlere düşer.", confirmText: "İade yolda" })) await caseOp(o, { op: "in_transit" });
+        return;
       case "case_link": {
         const d = await caseOp(o, { op: "link" }, false);
         if (d?.url) window.open(d.url, "_blank", "noopener");
@@ -1080,6 +1086,8 @@ export default function OrdersPage() {
       if (fRet !== "all") {
         const pay = o.payment_status || "pending";
         const refundedPay = pay === "refunded" || pay === "partial_refund";
+        if (fRet === "return_expected" && openCaseOf(o)?.kind !== "return") return false;
+        if (fRet === "exchange_open" && openCaseOf(o)?.kind !== "exchange") return false;
         if (fRet === "returned_unrefunded" && !(o.shipment_status === "returned" && pay === "paid")) return false;
         if (fRet === "refunded_no_return_invoice" && !(refundedPay && (o.invoice_status || "pending") === "invoiced")) return false;
         if (fRet === "cancelled_unrefunded" && !(o.status === "cancelled" && (pay === "paid" || pay === "partial_refund"))) return false;
@@ -1202,6 +1210,8 @@ export default function OrdersPage() {
               </select>
               <select value={fRet} onChange={(e) => { setFRet(e.target.value); setListPage(0); }} className={selCls}>
                 <option value="all">İade / iptal: tümü</option>
+                <option value="return_expected">İade bekleniyor (talep / yolda)</option>
+                <option value="exchange_open">Değişimde</option>
                 <option value="returned_unrefunded">İade geldi, ücret iade edilmedi</option>
                 <option value="refunded_no_return_invoice">Ücret iade edildi, iade faturası eksik</option>
                 <option value="cancelled_unrefunded">İptal, ücret iade edilmedi</option>
@@ -1333,6 +1343,11 @@ export default function OrdersPage() {
                           <div className="flex flex-col gap-1">
                             <StatusMenu label={shipmentLabels[sStatus] ?? sStatus} color={shipmentColors[sStatus] ?? shipmentColors.waiting}
                               options={shipmentOptions(order)} current={sStatus} onSelect={(v) => selectShipment(order, v)} />
+                            {openCaseOf(order) && (
+                              <span className={`text-[10px] font-bold rounded px-1.5 py-0.5 w-fit ${openCaseOf(order).kind === "return" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}>
+                                {openCaseOf(order).kind === "return" ? (openCaseOf(order).status === "requested" ? "İade talebi" : "İade bekleniyor") : "Değişimde"}
+                              </span>
+                            )}
                             {order.kargonomi_tracking_code && (
                               <span className="text-[10px] font-mono text-purple-600 flex items-center gap-1">
                                 <Truck size={9} /> {order.kargonomi_tracking_code}
@@ -1386,6 +1401,8 @@ export default function OrdersPage() {
 
       {/* ─── Kargoya Ver (Kargonomi): teklif → firma seçimi → kod bekleme ─── */}
       <KargonomiDialog order={shipDialogOrder} onClose={() => setShipDialogOrder(null)} onChanged={onKargonomiChanged} />
+      <ReturnExpectedDialog order={returnFor} onClose={() => setReturnFor(null)}
+        onSubmit={async (p) => { const o = returnFor; if (!o) return false; const d = await caseOp(o, { op: "admin_return", ...p }); return !!d; }} />
       <CarrierPickDialog open={!!carrierFor} orderLabel={carrierFor ? orderLabel(carrierFor.o as any) : undefined}
         onClose={() => setCarrierFor(null)}
         onPick={(name) => { const c = carrierFor; setCarrierFor(null); if (c) invoiceParasut(c.o, c.acceptDiff, name); }} />
@@ -2476,6 +2493,8 @@ function OrderActionDialog({ mode, order, onClose, onDone }: {
 // ─── Satış sonrası talep kutusu (değişim / iade) ─────────────────────────────
 // Müşterinin isteği, kargo yöntemi, IBAN; kod / alternatif gönderme girişleri. Kurallar: order-next-step.
 const RETURN_METHODS: Record<string, string> = { ups: "UPS adresten alım", surat: "Sürat şubesine teslim", aras: "Aras şubesine teslim" };
+// Gösterim için (kod gönderilecek yöntemlerin listesinde YOK): müşteri kendisi gönderiyor
+const RETURN_METHOD_SHOW: Record<string, string> = { ...RETURN_METHODS, self: "Müşteri kendisi gönderiyor" };
 const CASE_STATUS: Record<string, string> = {
   requested: "Talep alındı", waiting_stock: "Stok bekleniyor", alt_shipped: "Alternatif kargoda", alt_delivered: "Müşteri deniyor",
   keep_chosen: "Müşteri seçti", label_sent: "Kargo kodu gönderildi",
@@ -2483,7 +2502,7 @@ const CASE_STATUS: Record<string, string> = {
 function CaseBox({ order, kase, canSendLabel, canShipAlt, onDone }: {
   order: Order; kase: any; canSendLabel: boolean; canShipAlt: boolean; onDone: () => void;
 }) {
-  const [method, setMethod] = useState<string>(kase.return_method || "surat");
+  const [method, setMethod] = useState<string>(RETURN_METHODS[kase.return_method] ? kase.return_method : "surat");
   const [code, setCode] = useState("");
   const [tracking, setTracking] = useState("");
   const [busy, setBusy] = useState(false);
@@ -2521,7 +2540,7 @@ function CaseBox({ order, kase, canSendLabel, canShipAlt, onDone }: {
         </p>
       ))}
       {kase.keep_item_id && <p><span className="text-muted-foreground">Tuttuğu:</span> <b>{label(kase.keep_item_id)}</b> — diğeri geri gelecek</p>}
-      {kase.return_method && <p><span className="text-muted-foreground">Kargo:</span> {RETURN_METHODS[kase.return_method] ?? kase.return_method}{kase.return_code ? <> · kod <code className="font-mono">{kase.return_code}</code></> : null}</p>}
+      {kase.return_method && <p><span className="text-muted-foreground">Kargo:</span> {RETURN_METHOD_SHOW[kase.return_method] ?? kase.return_method}{kase.return_code ? <> · kod <code className="font-mono">{kase.return_code}</code></> : null}</p>}
       {kase.alt_tracking && <p><span className="text-muted-foreground">Alternatif takip:</span> <code className="font-mono">{kase.alt_tracking}</code></p>}
       {kase.iban && <p><span className="text-muted-foreground">IBAN (havale iadesi):</span> <code className="font-mono select-all">{kase.iban}</code></p>}
       {kase.customer_note && <p className="whitespace-pre-wrap"><span className="text-muted-foreground">Müşteri notu:</span> {kase.customer_note}</p>}
