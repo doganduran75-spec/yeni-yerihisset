@@ -863,7 +863,7 @@ export default {
           "Paraşüt: ödemesi alınmamış sipariş için fatura açılmıyor", why(ai));
         // Kargo firması seçtirme (entegrasyon dışı gönderim): listede olmayan firma siparişe yazılmaz
         const ac2 = await pa(F.admin.token, { op: "invoice", order_id: id, carrier: "REGRESYON-YOK kargo" });
-        ok(ac2.status >= 400 && one(`SELECT coalesce(cargo_provider, '') FROM public.orders WHERE id = ${lit(id)}`) === "",
+        ok(ac2.status >= 400 && one(`SELECT cargo_provider IS NULL FROM public.orders WHERE id = ${lit(id)}`) === "t",
           "Paraşüt: listede olmayan kargo firması siparişe yazılmıyor", why(ac2));
         const pdf = await pa(F.admin.token, { op: "invoice_pdf", order_id: id });
         ok(pdf.status === 404, "Paraşüt: faturası olmayan siparişte PDF yok", why(pdf));
