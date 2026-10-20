@@ -1042,6 +1042,7 @@ export default {
           const o = ord(O.expire);
           ok(o.status === "cancelled" && o.payment_status === "failed", "24 saatte ödenmeyen havale siparişi iptal oluyor", `${o.status}/${o.payment_status}`);
           ok(stock() === s0 + 1, "Süresi dolan siparişin stoğu geri eklendi", `stok ${s0} → ${stock()}`);
+          ok(o.invoice_status === "not_required", "İptal olan siparişte fatura 'Gerekmiyor' (süre dolumuyla iptalde de)", `fatura: ${o.invoice_status}`);
         } else add("fail", "Süre dolumu denenemedi", "kupon bölümünde sipariş oluşturulamadı");
       });
     } finally {
