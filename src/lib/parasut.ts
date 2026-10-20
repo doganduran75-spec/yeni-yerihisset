@@ -182,7 +182,14 @@ export async function listAccounts(sb: Sb) {
 /** Satış faturası kategorileri (Paraşüt'te faturadaki "Kategori" — kanal / proje ayrımı) */
 export async function listInvoiceCategories(sb: Sb) {
   const rows = await listAll(sb, "/item_categories", { "filter[category_type]": "SalesInvoice" }, 20);
-  return rows.filter((r) => !r.attributes?.archived).map((r) => ({ id: String(r.id), name: String(r.attributes?.full_path || r.attributes?.name || r.id) }));
+  // full_path Paraşüt'te dizi olabilir (üst kategoriler); boş dizi "doğru" sayıldığı için ad boş görünüyordu → önce name
+  const label = (a: any) => {
+    const fp = Array.isArray(a?.full_path) ? a.full_path.map((x: any) => (typeof x === "string" ? x : x?.name)).filter(Boolean).join(" › ") : typeof a?.full_path === "string" ? a.full_path : "";
+    return String(fp || a?.name || "").trim();
+  };
+  return rows.filter((r) => !r.attributes?.archived)
+    .map((r) => ({ id: String(r.id), name: label(r.attributes) || `Kategori ${r.id}` }))
+    .sort((a, b) => a.name.localeCompare(b.name, "tr"));
 }
 
 const KEY = (v: unknown) => String(v ?? "").trim().toUpperCase();
