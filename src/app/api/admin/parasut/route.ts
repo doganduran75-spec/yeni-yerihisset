@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
       case "invoice_pdf": {
         if (!uuid(body.order_id)) return NextResponse.json({ error: "order_id" }, { status: 400 });
         if (body.op === "invoice_pdf") return NextResponse.json({ ok: true, url: await invoicePdfUrl(sb, body.order_id) });
-        const r = body.op === "invoice" ? await invoiceOrder(sb, body.order_id, { acceptDiff: body.accept_diff === true }) : await checkInvoice(sb, body.order_id);
+        const r = body.op === "invoice" ? await invoiceOrder(sb, body.order_id, { acceptDiff: body.accept_diff === true, carrier: typeof body.carrier === "string" ? body.carrier.trim().slice(0, 80) : undefined }) : await checkInvoice(sb, body.order_id);
         return NextResponse.json({ ok: true, ...r });
       }
       default: return NextResponse.json({ error: "Geçersiz işlem" }, { status: 400 });

@@ -128,11 +128,18 @@ async function findOrCreateContact(sb: Sb, x: Awaited<ReturnType<typeof prepare>
 }
 
 /** Faturayı kes / kaldığı yerden devam et */
-export async function invoiceOrder(sb: Sb, orderId: string, opts: { acceptDiff?: boolean } = {}) {
+export async function invoiceOrder(sb: Sb, orderId: string, opts: { acceptDiff?: boolean; carrier?: string } = {}) {
   const c = await parasutConfig(sb);
   if (!c.enabled) throw new ParasutError(400, "Paraşüt kapalı (Ayarlar › Entegrasyonlar).");
   let o = await loadOrder(sb, orderId);
   if (o.parasut_status === "done") return { status: "done" };
+  // Entegrasyon dışı gönderim: siparişte kargo firması yoksa panelde seçilen firma (Kargo firmaları listesinden) kaydedilir
+  if (opts.carrier && !o.kargonomi_provider && !o.cargo_provider) {
+    const { data: known } = await (sb as any).from("cargo_carriers").select("name").eq("name", opts.carrier).maybeSingle();
+    if (!known) throw new ParasutError(400, `“${opts.carrier}” Kargo firmaları listesinde yok.`);
+    await save(sb, orderId, { cargo_provider: known.name });
+    o = { ...o, cargo_provider: known.name };
+  }
   if (opts.acceptDiff) { await save(sb, orderId, { parasut_diff_ok: true }); o = { ...o, parasut_diff_ok: true }; }
   const x = await prepare(sb, o);
   // Fatura açılmadıysa önce her şey tutmalı; açıldıysa (devam) yalnız tahsilat / e-belge adımları

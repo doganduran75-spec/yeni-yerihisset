@@ -7,6 +7,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import AdminOpsTabs from "@/components/admin/AdminOpsTabs";
 import OrderTimeline from "@/components/admin/OrderTimeline";
 import KargonomiDialog from "@/components/admin/KargonomiDialog";
+import CarrierPickDialog from "@/components/admin/CarrierPickDialog";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -246,6 +247,7 @@ export default function OrdersPage() {
   const [shipDialogOrder, setShipDialogOrder] = useState<Order | null>(null);
   // Paraşüt açık mı? Kapalıysa "Faturayı kes (Paraşüt)" düğmesi gizlenir
   const [parasutOn, setParasutOn] = useState(false);
+  const [carrierFor, setCarrierFor] = useState<{ o: Order; acceptDiff: boolean } | null>(null);
   useEffect(() => {
     parasutApi({ op: "status" }).then((s) => setParasutOn(!!(s.enabled && s.connected))).catch(() => {});
   }, []);
@@ -835,16 +837,18 @@ export default function OrdersPage() {
 
   // Sıradaki adım panelindeki düğmeler → mevcut işlemler (kurallar src/lib/order-next-step.ts)
   // Paraşüt faturası: kes / kaldığı yerden devam / durum (src/lib/parasut-invoice.ts)
-  async function invoiceParasut(o: Order, acceptDiff = false) {
+  async function invoiceParasut(o: Order, acceptDiff = false, carrier?: string) {
     const busy = (o as any).parasut_status && !["error", "done"].includes((o as any).parasut_status);
-    if (!busy && !acceptDiff && !(await siteConfirm({ title: "Fatura Paraşüt'te kesilsin mi?", message: "Müşteri, satış faturası, tahsilat (kanal ayarındaki hesap) ve e-Arşiv / e-Fatura oluşturulur. e-Belge resmîleşince geri alınamaz.", confirmText: "Faturayı kes" }))) return;
+    if (!busy && !acceptDiff && !carrier && !(await siteConfirm({ title: "Fatura Paraşüt'te kesilsin mi?", message: "Müşteri, satış faturası, tahsilat (kanal ayarındaki hesap) ve e-Arşiv / e-Fatura oluşturulur. e-Belge resmîleşince geri alınamaz.", confirmText: "Faturayı kes" }))) return;
     setUpdatingId(o.id);
     try {
-      const r = await parasutApi({ op: busy ? "check_invoice" : "invoice", order_id: o.id, ...(acceptDiff ? { accept_diff: true } : {}) });
+      const r = await parasutApi({ op: busy && !carrier ? "check_invoice" : "invoice", order_id: o.id, ...(acceptDiff ? { accept_diff: true } : {}), ...(carrier ? { carrier } : {}) });
       siteAlert({ title: "Paraşüt", message: r.status === "done" ? `Fatura kesildi${r.invoiceNo ? `: ${r.invoiceNo}` : ""}. Sipariş “Faturalandı”.` : "e-Belge hazırlanıyor; dakikada bir kontrol edilir, bitince sipariş “Faturalandı” olur.", tone: "success" });
     } catch (e: any) {
       const msg = String(e?.message || e);
-      if (/Tutarı onayla/.test(msg) && (await siteConfirm({ title: "Tutar farkı", message: msg, confirmText: "Tutarı onayla ve devam et" }))) { setUpdatingId(null); return invoiceParasut(o, true); }
+      if (/Tutarı onayla/.test(msg) && (await siteConfirm({ title: "Tutar farkı", message: msg, confirmText: "Tutarı onayla ve devam et" }))) { setUpdatingId(null); return invoiceParasut(o, true, carrier); }
+      // Kargo entegrasyonu dışı gönderim: firmayı listeden seçtir → siparişe kaydedip faturayı kes
+      if (/Kargo firması belli değil/.test(msg) && !carrier) { setCarrierFor({ o, acceptDiff }); return; }
       siteAlert({ title: "Paraşüt faturası kesilemedi", message: msg, tone: "danger" });
     } finally {
       setUpdatingId(null);
@@ -1382,6 +1386,9 @@ export default function OrdersPage() {
 
       {/* ─── Kargoya Ver (Kargonomi): teklif → firma seçimi → kod bekleme ─── */}
       <KargonomiDialog order={shipDialogOrder} onClose={() => setShipDialogOrder(null)} onChanged={onKargonomiChanged} />
+      <CarrierPickDialog open={!!carrierFor} orderLabel={carrierFor ? orderLabel(carrierFor.o as any) : undefined}
+        onClose={() => setCarrierFor(null)}
+        onPick={(name) => { const c = carrierFor; setCarrierFor(null); if (c) invoiceParasut(c.o, c.acceptDiff, name); }} />
 
       {/* ─── Detay Dialog ─────────────────────────────────────────────────── */}
       <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
