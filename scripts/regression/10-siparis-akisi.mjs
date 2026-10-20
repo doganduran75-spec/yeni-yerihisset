@@ -474,9 +474,11 @@ export default {
         const cD = caseOf(D);
         ok(ar.status === 200 && cD?.kind === "return" && cD?.status === "label_sent" && cD?.return_method === "self" && !!cD?.label_sent_at,
           "İade gelecek (müşteri kendisi gönderiyor) → doğrudan 'iade yolda'", `${why(ar)} ${JSON.stringify(cD || {}).slice(0, 120)}`);
+        ok(ord(D).invoice_status === "not_required", "Tam iade talebinde fatura 'Gerekmiyor' oldu", `fatura: ${ord(D).invoice_status}`);
         const ar2 = await adminCase(D, { op: "admin_return", items: [itD.id], mode: "self" });
         ok(ar2.status === 400, "Açık talep varken ikinci iade talebi açılmıyor", why(ar2));
         await adminCase(D, { op: "close" });
+        ok(ord(D).invoice_status === "pending", "Müşteri vazgeçti (talep kapandı) → fatura yeniden 'Bekleniyor'", `fatura: ${ord(D).invoice_status}`);
         const ar3 = await adminCase(D, { op: "admin_return", items: [itD.id], mode: "code" });
         ok(ar3.status === 200 && caseOf(D)?.status === "requested", "İade gelecek (kod göndereceğim) → 'iade talebi'", why(ar3));
         const it = await adminCase(D, { op: "in_transit" });

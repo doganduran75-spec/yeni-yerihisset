@@ -966,14 +966,21 @@ export default function OrdersPage() {
     updateField(o.id, { shipment_status: v });
   }
 
-  function selectInvoice(o: Order, v: string) {
+  async function selectInvoice(o: Order, v: string) {
     const inv = o.invoice_status || "pending";
+    const returnCase = openCaseOf(o)?.kind === "return";
     if (v === "return_invoiced" && inv !== "invoiced") {
       siteAlert({ message: "İade faturası yalnız faturalanmış siparişte işaretlenebilir.", tone: "danger" }); return;
     }
-    if (v === "not_required" && !(o.status === "cancelled" || o.payment_status === "failed")) {
-      siteAlert({ message: "“Gerekmiyor” yalnız iptal edilmiş ya da ödemesi alınmamış siparişte seçilebilir.", tone: "danger" }); return;
+    if (v === "not_required" && !(o.status === "cancelled" || o.payment_status === "failed" || returnCase)) {
+      siteAlert({ message: "“Gerekmiyor” yalnız iptal edilmiş, ödemesi alınmamış ya da iadesi beklenen siparişte seçilebilir.", tone: "danger" }); return;
     }
+    // Açık iade talebi varken fatura kesildi işareti: engellenmez (müşteri vazgeçmiş olabilir), uyarılır
+    if (v === "invoiced" && returnCase && !(await siteConfirm({
+      title: "Bu siparişin iadesi bekleniyor",
+      message: "Açık bir iade talebi var. Müşteri vazgeçtiyse önce “Talebi kapat”. Yine de “Faturalandı” işaretlensin mi?",
+      confirmText: "Evet, faturalandı", tone: "danger",
+    }))) return;
     updateField(o.id, { invoice_status: v });
   }
 
