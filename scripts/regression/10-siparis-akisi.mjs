@@ -838,6 +838,8 @@ export default {
         ok(a.status === 401, "Paraşüt: girişsiz istek reddediliyor", why(a));
         const m = await pa(F.member.token, { op: "status" });
         ok(m.status === 403, "Paraşüt: üye erişemiyor", why(m));
+        const mk = await pa(F.member.token, { op: "categories" });
+        ok(mk.status === 403, "Paraşüt: üye fatura kategorilerini göremiyor", why(mk));
         const s = await pa(F.admin.token, { op: "status" });
         ok(s.status === 200 && s.json?.ok === true && !("clientSecret" in (s.json || {})), "Paraşüt: yönetici bağlantı durumunu görüyor (gizli bilgi dönmeden)", why(s));
         // Gizli bilgiler tarayıcıya kapalı: settings'teki secret, oturum tablosu

@@ -153,13 +153,15 @@ export async function invoiceOrder(sb: Sb, orderId: string, opts: { acceptDiff?:
       const contactId = await findOrCreateContact(sb, x);
       const no = o.channel === "site" || !o.channel ? (o.order_number ? `YH${o.order_number}` : o.id.slice(0, 8)) : String(o.external_order_number || o.order_number || o.id.slice(0, 8));
       const j = await parasutCall(sb, "POST", "/sales_invoices", { data: { type: "sales_invoices", attributes: {
-        item_type: "invoice", description: `${x.ch?.payment_platform && x.channel !== "site" ? x.ch.payment_platform + " " : ""}Sipariş ${no}`,
+        item_type: "invoice", description: no, // fatura adı yalnız sipariş numarası (ör. YH24127)
         issue_date: day(), due_date: day(), currency: "TRL", shipment_included: c.shipmentIncluded,
         billing_address: x.bill.address, billing_phone: x.phone ? String(x.phone) : undefined, city: x.bill.city, district: x.bill.district || undefined,
         tax_number: x.taxNo || "11111111111", ...(x.bill.tax_office ? { tax_office: x.bill.tax_office } : {}),
         order_no: no, order_date: day(o.created_at),
       }, relationships: {
         contact: { data: { id: contactId, type: "contacts" } },
+        // Kanalın fatura kategorisi (Ayarlar › Paraşüt › Satış kanalına göre); seçilmemişse kategorisiz
+        ...(x.ch?.category_id ? { category: { data: { id: String(x.ch.category_id), type: "item_categories" } } } : {}),
         details: { data: x.lines.map((l) => ({ type: "sales_invoice_details", attributes: {
           quantity: l.qty, vat_rate: l.vat, unit_price: r4(l.gross / l.qty / (1 + l.vat / 100)), description: l.title,
         }, relationships: { product: { data: { id: l.productId, type: "products" } } } })) },

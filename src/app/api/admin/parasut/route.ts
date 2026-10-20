@@ -3,12 +3,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { getAuthUserFromRequest } from "@/lib/auth-from-request";
 import {
-  ParasutError, connectionStatus, connectWithCode, disconnect, listAccounts, syncProducts, matchProducts, pushCodesToParasut,
+  ParasutError, connectionStatus, connectWithCode, disconnect, listAccounts, listInvoiceCategories, syncProducts, matchProducts, pushCodesToParasut,
 } from "@/lib/parasut";
 import { invoiceOrder, checkInvoice, invoicePdfUrl } from "@/lib/parasut-invoice";
 
 // Paraşüt (yalnız yönetici) — src/lib/parasut.ts
-//   status · connect {code} · disconnect · accounts · sync_products · match · link {variant_id, parasut_id} · push_codes {variant_ids}
+//   status · connect {code} · disconnect · accounts · categories · sync_products · match · link {variant_id, parasut_id} · push_codes {variant_ids}
 //   invoice {order_id, accept_diff?} · check_invoice {order_id} · invoice_pdf {order_id} (src/lib/parasut-invoice.ts)
 export const maxDuration = 300;
 
@@ -30,6 +30,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true, ...(await connectionStatus(sb)) });
       case "disconnect": await disconnect(sb); return NextResponse.json({ ok: true });
       case "accounts": return NextResponse.json({ ok: true, accounts: await listAccounts(sb) });
+      case "categories": return NextResponse.json({ ok: true, categories: await listInvoiceCategories(sb) });
       case "sync_products": return NextResponse.json({ ok: true, ...(await syncProducts(sb)) });
       case "match": return NextResponse.json({ ok: true, ...(await matchProducts(sb)) });
       case "link": {

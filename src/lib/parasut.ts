@@ -179,6 +179,12 @@ export async function listAccounts(sb: Sb) {
   }));
 }
 
+/** Satış faturası kategorileri (Paraşüt'te faturadaki "Kategori" — kanal / proje ayrımı) */
+export async function listInvoiceCategories(sb: Sb) {
+  const rows = await listAll(sb, "/item_categories", { "filter[category_type]": "SalesInvoice" }, 20);
+  return rows.filter((r) => !r.attributes?.archived).map((r) => ({ id: String(r.id), name: String(r.attributes?.full_path || r.attributes?.name || r.id) }));
+}
+
 const KEY = (v: unknown) => String(v ?? "").trim().toUpperCase();
 
 /** Paraşüt ürünlerini çek (parasut_products) ve site numaralarıyla eşleştir: barkod → SKU, Paraşüt'te kod ya da barkod */

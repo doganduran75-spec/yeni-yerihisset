@@ -36,7 +36,7 @@ const PAY_TYPES = [
   ["KAPIDAODEME", "Kapıda ödeme"],
 ];
 
-type Ch = { channel: string; account_id: string | null; account_name: string | null; mark_paid: boolean; payment_type: string | null; payment_platform: string | null; internet_url: string | null };
+type Ch = { channel: string; account_id: string | null; account_name: string | null; category_id?: string | null; category_name?: string | null; mark_paid: boolean; payment_type: string | null; payment_platform: string | null; internet_url: string | null };
 type Carrier = { name: string; vkn: string | null };
 
 export default function ParasutCard() {
@@ -47,6 +47,7 @@ export default function ParasutCard() {
   const [busy, setBusy] = useState<string | null>(null);
   const [chs, setChs] = useState<Ch[]>([]);
   const [accounts, setAccounts] = useState<{ id: string; name: string; type: string | null }[]>([]);
+  const [cats, setCats] = useState<{ id: string; name: string }[]>([]);
   const [carriers, setCarriers] = useState<Carrier[]>([]);
   const [newCarrier, setNewCarrier] = useState("");
 
@@ -70,7 +71,10 @@ export default function ParasutCard() {
     try {
       const s = await api({ op: "status" });
       setSt(s);
-      if (s.connected) setAccounts((await api({ op: "accounts" })).accounts || []);
+      if (s.connected) {
+        setAccounts((await api({ op: "accounts" })).accounts || []);
+        setCats((await api({ op: "categories" }).catch(() => ({ categories: [] }))).categories || []);
+      }
     } catch (e: any) { setSt({ error: e?.message }); }
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -178,13 +182,22 @@ export default function ParasutCard() {
           <div className="overflow-x-auto rounded-lg border">
             <table className="w-full text-xs">
               <thead className="bg-slate-50 text-left text-slate-500"><tr>
-                <th className="px-2 py-2">Kanal</th><th className="px-2 py-2">Tahsilat hesabı (kasa / banka)</th><th className="px-2 py-2">Tahsil edildi</th>
+                <th className="px-2 py-2">Kanal</th><th className="px-2 py-2">Fatura kategorisi</th><th className="px-2 py-2">Tahsilat hesabı (kasa / banka)</th><th className="px-2 py-2">Tahsil edildi</th>
                 <th className="px-2 py-2">Ödeme tipi (e-Arşiv)</th><th className="px-2 py-2">Platform</th><th className="px-2 py-2">İnternet adresi</th>
               </tr></thead>
               <tbody className="divide-y">
                 {chs.map((c) => (
                   <tr key={c.channel}>
                     <td className="px-2 py-1.5 font-semibold whitespace-nowrap">{CH_LABEL[c.channel] ?? c.channel}</td>
+                    <td className="px-2 py-1.5">
+                      {cats.length ? (
+                        <select value={c.category_id ?? ""} className="h-8 rounded-md border px-1 bg-white max-w-[180px]"
+                          onChange={(e) => { const k = cats.find((x) => x.id === e.target.value); saveChannel(c.channel, { category_id: k?.id ?? null, category_name: k?.name ?? null }); }}>
+                          <option value="">— kategorisiz —</option>
+                          {cats.map((k) => <option key={k.id} value={k.id}>{k.name}</option>)}
+                        </select>
+                      ) : <span className="text-muted-foreground">{c.category_name || "bağlanınca seçilir"}</span>}
+                    </td>
                     <td className="px-2 py-1.5">
                       {accounts.length ? (
                         <select value={c.account_id ?? ""} className="h-8 rounded-md border px-1 bg-white max-w-[200px]"
