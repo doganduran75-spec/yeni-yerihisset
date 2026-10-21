@@ -193,9 +193,16 @@ export async function invoiceOrder(sb: Sb, orderId: string, opts: { acceptDiff?:
     // 2) Tahsilat (kanal ayarı)
     if (x.ch?.mark_paid && x.ch.account_id && !o.parasut_paid) {
       const pdate = o.payment_method === "bank_transfer" ? day() : pastDay(o.created_at);
-      await parasutCall(sb, "POST", `/sales_invoices/${o.parasut_invoice_id}/payments`, { data: { type: "payments", attributes: {
-        account_id: Number(x.ch.account_id), date: pdate, amount: x.total,
-      } } });
+      // Tutar = faturanın Paraşüt'teki KALAN tutarı (KDV hariç birim fiyattan hesaplanan toplam kuruş farkıyla
+      // sipariş tutarından küçük olabilir → "amount can not be bigger than remaining"; daha önce tahsil edildiyse 0)
+      const cur = await parasutCall(sb, "GET", `/sales_invoices/${o.parasut_invoice_id}`);
+      const rem = Number(cur?.data?.attributes?.remaining);
+      const amount = Number.isFinite(rem) ? r2(Math.min(rem, x.total)) : x.total;
+      if (amount > 0) {
+        await parasutCall(sb, "POST", `/sales_invoices/${o.parasut_invoice_id}/payments`, { data: { type: "payments", attributes: {
+          account_id: Number(x.ch.account_id), date: pdate, amount,
+        } } });
+      }
       await save(sb, orderId, { parasut_paid: true });
     }
 
