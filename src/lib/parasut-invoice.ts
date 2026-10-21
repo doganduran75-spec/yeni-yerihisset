@@ -256,8 +256,8 @@ export async function checkInvoice(sb: Sb, orderId: string) {
   const up = await (sb as any).storage.from("invoices").upload(path, Buffer.from(await res.arrayBuffer()), { contentType: "application/pdf", upsert: true });
   if (up.error) throw new ParasutError(500, `PDF kaydedilemedi: ${up.error.message}`);
   await save(sb, orderId, { parasut_pdf_path: path, parasut_status: "done", parasut_error: null, parasut_invoiced_at: new Date().toISOString(), invoice_status: "invoiced" });
-  // Trendyol siparişi: faturayı Trendyol'a da yükle (olmazsa hata siparişe yazılır, "Trendyol'a yükle" ile yeniden)
-  if (o.channel === "trendyol") await pushInvoiceToMarketplace(sb, orderId).catch(() => {});
+  // Trendyol / Hepsiburada siparişi: faturayı pazaryerine de yükle (olmazsa hata siparişe yazılır, "Trendyol'a yükle" ile yeniden)
+  if (o.channel === "trendyol" || o.channel === "hepsiburada") await pushInvoiceToMarketplace(sb, orderId).catch(() => {});
   return { status: "done", invoiceNo };
 }
 

@@ -862,9 +862,10 @@ export default function OrdersPage() {
     setUpdatingId(o.id);
     try {
       const r = await parasutApi({ op: "push_marketplace_invoice", order_id: o.id });
-      siteAlert({ message: r.already ? "Trendyol'da bu siparişin faturası zaten vardı." : "Fatura Trendyol'a yüklendi.", tone: "success" });
+      const mp = o.channel === "hepsiburada" ? "Hepsiburada" : "Trendyol";
+      siteAlert({ message: r.already ? `${mp}'da bu siparişin faturası zaten vardı.` : `Fatura ${mp}'a yüklendi.`, tone: "success" });
     } catch (e: any) {
-      siteAlert({ title: "Trendyol'a yüklenemedi", message: String(e?.message || e), tone: "danger" });
+      siteAlert({ title: "Pazaryerine yüklenemedi", message: String(e?.message || e), tone: "danger" });
     } finally {
       setUpdatingId(null);
       refreshOrder(o.id);
@@ -1648,19 +1649,20 @@ export default function OrdersPage() {
                         {(o as any).parasut_pdf_path && <button className="ml-2 underline font-semibold text-emerald-700" onClick={() => openInvoicePdf(o)}>PDF</button>}
                       </p>
                     )}
-                    {/* Trendyol: fatura Trendyol'a yüklendi mi (Paraşüt bitince otomatik; olmadıysa elle) */}
-                    {o.channel === "trendyol" && (o as any).parasut_pdf_path && (
-                      (o as any).mp_invoice_sent_at ? (
-                        <p className="text-xs text-emerald-700">✓ Fatura Trendyol'a yüklendi ({new Date((o as any).mp_invoice_sent_at).toLocaleString("tr-TR")})</p>
+                    {/* Trendyol / Hepsiburada: fatura pazaryerine yüklendi mi (Paraşüt bitince otomatik; olmadıysa elle) */}
+                    {(o.channel === "trendyol" || o.channel === "hepsiburada") && (o as any).parasut_pdf_path && (() => {
+                      const mp = o.channel === "trendyol" ? "Trendyol" : "Hepsiburada";
+                      return (o as any).mp_invoice_sent_at ? (
+                        <p className="text-xs text-emerald-700">✓ Fatura {mp}'a yüklendi ({new Date((o as any).mp_invoice_sent_at).toLocaleString("tr-TR")})</p>
                       ) : (
                         <div className="text-xs flex flex-wrap items-center gap-2">
                           <span className={(o as any).mp_invoice_error ? "text-red-700" : "text-amber-700"}>
-                            {(o as any).mp_invoice_error ? `Trendyol'a yüklenemedi: ${(o as any).mp_invoice_error}` : "Fatura henüz Trendyol'a yüklenmedi (dakikada bir denenir)."}
+                            {(o as any).mp_invoice_error ? `${mp}'a yüklenemedi: ${(o as any).mp_invoice_error}` : `Fatura henüz ${mp}'a yüklenmedi (dakikada bir denenir).`}
                           </span>
-                          <Button size="sm" variant="outline" className="h-7 text-xs" disabled={updatingId === o.id} onClick={() => pushTrendyolInvoice(o)}>Trendyol'a yükle</Button>
+                          <Button size="sm" variant="outline" className="h-7 text-xs" disabled={updatingId === o.id} onClick={() => pushTrendyolInvoice(o)}>{mp}'a yükle</Button>
                         </div>
-                      )
-                    )}
+                      );
+                    })()}
                   </div>
                 );
               })()}

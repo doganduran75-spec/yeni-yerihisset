@@ -1,12 +1,21 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// PAZARYERİNE FATURA YÜKLEME (kullanıcı isteği 2026-10-21) — şimdilik Trendyol.
-// Paraşüt faturası bitince (src/lib/parasut-invoice.ts › checkInvoice "done") PDF özel depodan (invoices) alınıp
-// Trendyol'a dosya olarak yüklenir → Trendyol'daki "fatura bekleniyor" kalkar, müşteri faturayı uygulamada görür.
-// Yükleyemezse hata siparişe yazılır; siparişte "Trendyol'a yükle" ile yeniden denenir (cron ilk denemeyi yapar).
+// PAZARYERİNE FATURA YÜKLEME (kullanıcı istekleri 2026-10-21) — Trendyol + Hepsiburada.
+// Paraşüt faturası bitince (src/lib/parasut-invoice.ts › checkInvoice "done") PDF özel depodan (invoices) alınır:
+//   * Trendyol    : PDF DOSYA olarak yüklenir (seller-invoice-file).
+//   * Hepsiburada : yalnız BAĞLANTI alır (PUT …/packagenumber/{paket}/invoice, invoiceLink) → faturanın özel
+//                   depodaki dosyasına 10 yıl geçerli imzalı bağlantı (supabase.yerihisset.com; site şifre
+//                   kapısının dışında). Bağlantı Supabase JWT anahtarı değişirse geçersiz olur (anahtar döndürülmez).
+// Yükleyemezse hata siparişe yazılır; siparişte "<Pazaryeri>'ya yükle" ile yeniden denenir (cron ilk denemeyi yapar).
 import { createAdminClient } from "@/lib/supabase-admin";
 import { getTrendyolConfig, hasCredentials, sendInvoiceFile } from "@/lib/marketplace/trendyol";
+import { getHepsiburadaConfig, hbHasCredentials, hbSendInvoiceLink } from "@/lib/marketplace/hepsiburada";
 
 type Sb = ReturnType<typeof createAdminClient>;
+
+export const INVOICE_UPLOAD_CHANNELS = ["trendyol", "hepsiburada"] as const;
+export const MP_LABEL: Record<string, string> = { trendyol: "Trendyol", hepsiburada: "Hepsiburada" };
+const NO_PACKAGE = "Hepsiburada paket numarası henüz yok";
+const LINK_SECONDS = 10 * 365 * 86400;
 
 export class MarketplaceInvoiceError extends Error {
   constructor(public status: number, message: string) { super(message); }
@@ -15,52 +24,69 @@ export class MarketplaceInvoiceError extends Error {
 export async function pushInvoiceToMarketplace(sb: Sb, orderId: string): Promise<{ sent: boolean; already?: boolean }> {
   const s = sb as any;
   const { data: o } = await s.from("orders")
-    .select("id, channel, import_source, external_package_id, parasut_pdf_path, mp_invoice_sent_at").eq("id", orderId).maybeSingle();
+    .select("id, channel, import_source, external_package_id, mp_package_number, parasut_pdf_path, parasut_invoice_no, parasut_invoiced_at, mp_invoice_sent_at")
+    .eq("id", orderId).maybeSingle();
   if (!o) throw new MarketplaceInvoiceError(404, "Sipariş bulunamadı.");
-  if (o.channel !== "trendyol" || o.import_source) throw new MarketplaceInvoiceError(400, "Fatura yükleme şimdilik yalnız Trendyol siparişinde.");
+  if (!(INVOICE_UPLOAD_CHANNELS as readonly string[]).includes(o.channel) || o.import_source)
+    throw new MarketplaceInvoiceError(400, "Fatura yükleme yalnız Trendyol ve Hepsiburada siparişinde.");
   if (o.mp_invoice_sent_at) return { sent: true, already: true };
   if (!o.parasut_pdf_path) throw new MarketplaceInvoiceError(400, "Faturanın PDF'i yok (önce Paraşüt faturası kesilmeli).");
-  if (!o.external_package_id) throw new MarketplaceInvoiceError(400, "Trendyol paket numarası yok.");
+  const label = MP_LABEL[o.channel];
 
   const fail = async (msg: string, status = 502) => {
     await s.from("orders").update({ mp_invoice_error: msg.slice(0, 500) }).eq("id", orderId);
     throw new MarketplaceInvoiceError(status, msg);
   };
-  const cfg = await getTrendyolConfig(sb);
-  if (!hasCredentials(cfg)) return fail("Trendyol bağlantı bilgileri eksik (Ayarlar › Entegrasyonlar).", 400);
-
-  const { data: file, error } = await s.storage.from("invoices").download(o.parasut_pdf_path);
-  if (error || !file) return fail(`Fatura PDF'i okunamadı: ${error?.message || "dosya yok"}`, 500);
-  const pdf = Buffer.from(await file.arrayBuffer());
+  const done = async (note: string, already = false) => {
+    await s.from("orders").update({ mp_invoice_sent_at: new Date().toISOString(), mp_invoice_error: null }).eq("id", orderId);
+    await s.from("order_events").insert({ order_id: orderId, type: "note", note });
+    return { sent: true, already };
+  };
 
   try {
-    await sendInvoiceFile(cfg, String(o.external_package_id), pdf, `${o.external_package_id}.pdf`);
-  } catch (e: any) {
-    const msg = String(e?.message || e);
-    // Daha önce (elle / eski firma) yüklenmişse: Trendyol'da fatura var demektir → gönderildi say
-    if (/already been sent|zaten gönderil|daha önce gönderil/i.test(msg)) {
-      await s.from("orders").update({ mp_invoice_sent_at: new Date().toISOString(), mp_invoice_error: null }).eq("id", orderId);
-      await s.from("order_events").insert({ order_id: orderId, type: "note", note: "Trendyol'da bu paketin faturası zaten vardı (önceden yüklenmiş)" });
-      return { sent: true, already: true };
+    if (o.channel === "trendyol") {
+      const cfg = await getTrendyolConfig(sb);
+      if (!hasCredentials(cfg)) return await fail("Trendyol bağlantı bilgileri eksik (Ayarlar › Entegrasyonlar).", 400);
+      if (!o.external_package_id) return await fail("Trendyol paket numarası yok.", 400);
+      const { data: file, error } = await s.storage.from("invoices").download(o.parasut_pdf_path);
+      if (error || !file) return await fail(`Fatura PDF'i okunamadı: ${error?.message || "dosya yok"}`, 500);
+      await sendInvoiceFile(cfg, String(o.external_package_id), Buffer.from(await file.arrayBuffer()), `${o.external_package_id}.pdf`);
+    } else {
+      const cfg = await getHepsiburadaConfig(sb);
+      if (!hbHasCredentials(cfg)) return await fail("Hepsiburada bağlantı bilgileri eksik (Ayarlar › Entegrasyonlar).", 400);
+      if (!o.mp_package_number) return await fail(`${NO_PACKAGE} — paketlenince kendiliğinden yüklenir.`, 400);
+      const { data: link, error } = await s.storage.from("invoices").createSignedUrl(o.parasut_pdf_path, LINK_SECONDS);
+      if (error || !link?.signedUrl) return await fail(`Fatura bağlantısı oluşturulamadı: ${error?.message || ""}`, 500);
+      // e-Arşiv / e-Fatura numarası: 3 harf seri + 13 hane sıra (ör. YHA2026000000123)
+      const no = String(o.parasut_invoice_no || "");
+      const m = /^([A-Z0-9]{3})(\d{13})$/.exec(no);
+      await hbSendInvoiceLink(cfg, String(o.mp_package_number), {
+        invoiceLink: link.signedUrl,
+        ...(m ? { serialNumber: m[1], rowNumber: m[2] } : {}),
+      });
     }
+  } catch (e: any) {
+    if (e instanceof MarketplaceInvoiceError) throw e;
+    const msg = String(e?.message || e);
+    // Daha önce (elle / eski firma) yüklenmişse: pazaryerinde fatura var demektir → gönderildi say
+    if (/already been sent|already exist|zaten|daha önce/i.test(msg)) return done(`${label}'da bu paketin faturası zaten vardı (önceden yüklenmiş)`, true);
     return fail(msg);
   }
-  await s.from("orders").update({ mp_invoice_sent_at: new Date().toISOString(), mp_invoice_error: null }).eq("id", orderId);
-  await s.from("order_events").insert({ order_id: orderId, type: "note", note: "Fatura Trendyol'a yüklendi" });
-  return { sent: true };
+  return done(`Fatura ${label}'a yüklendi`);
 }
 
-/** Cron (dakikada bir): Paraşüt faturası bitmiş, Trendyol'a henüz hiç denenmemiş siparişler (hata alanlar elle yeniden) */
+/** Cron (dakikada bir): Paraşüt faturası bitmiş, pazaryerine henüz gitmemiş siparişler. Hata alanlar elle yeniden
+ *  denenir; yalnız "paket numarası henüz yok" (Hepsiburada paketlemesini bekliyor) kendiliğinden yeniden denenir. */
 export async function pollMarketplaceInvoices(sb: Sb = createAdminClient()) {
   const { data } = await (sb as any).from("orders").select("id")
-    .eq("channel", "trendyol").is("import_source", null).eq("parasut_status", "done")
-    .is("mp_invoice_sent_at", null).is("mp_invoice_error", null)
-    .gte("updated_at", new Date(Date.now() - 7 * 86400_000).toISOString()).limit(10);
+    .in("channel", INVOICE_UPLOAD_CHANNELS as unknown as string[]).is("import_source", null).eq("parasut_status", "done")
+    .is("mp_invoice_sent_at", null).or(`mp_invoice_error.is.null,mp_invoice_error.like."${NO_PACKAGE}*"`)
+    .gte("parasut_invoiced_at", new Date(Date.now() - 14 * 86400_000).toISOString()).limit(10);
   const errors: string[] = [];
   let sent = 0;
   for (const r of (data as any[]) || []) {
     try { if ((await pushInvoiceToMarketplace(sb, r.id)).sent) sent++; }
-    catch (e: any) { errors.push(e?.message || String(e)); }
+    catch (e: any) { if (!String(e?.message).startsWith(NO_PACKAGE)) errors.push(e?.message || String(e)); }
   }
   return { sent, errors };
 }

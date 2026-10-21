@@ -889,9 +889,9 @@ export default {
           "Paraşüt: listede olmayan kargo firması siparişe yazılmıyor", why(ac2));
         // Faturayı pazaryerine yükleme: üye yapamaz; site siparişinde reddedilir (yalnız Trendyol)
         const mt = await pa(F.member.token, { op: "push_marketplace_invoice", order_id: id });
-        ok(mt.status === 403, "Paraşüt: üye faturayı Trendyol'a yükleyemiyor", why(mt));
+        ok(mt.status === 403, "Paraşüt: üye faturayı pazaryerine (Trendyol / Hepsiburada) yükleyemiyor", why(mt));
         const st2 = await pa(F.admin.token, { op: "push_marketplace_invoice", order_id: id });
-        ok(st2.status === 400 && one(`SELECT mp_invoice_sent_at IS NULL FROM public.orders WHERE id = ${lit(id)}`) === "t", "Site siparişi Trendyol'a fatura olarak gönderilmiyor", why(st2));
+        ok(st2.status === 400 && one(`SELECT mp_invoice_sent_at IS NULL FROM public.orders WHERE id = ${lit(id)}`) === "t", "Site siparişinin faturası pazaryerine gönderilmiyor", why(st2));
         const pdf = await pa(F.admin.token, { op: "invoice_pdf", order_id: id });
         ok(pdf.status === 404, "Paraşüt: faturası olmayan siparişte PDF yok", why(pdf));
       });

@@ -84,6 +84,33 @@ async function call(c: HepsiburadaConfig, method: "GET" | "POST", path: string, 
   return json;
 }
 
+/** Paketin faturası (BAĞLANTI): PUT oms-external …/packages/merchantid/{merchantId}/packagenumber/{paket}/invoice
+ *  gövde: { invoiceLink, serialNumber?, rowNumber?, arrangementDate? } (dosya almaz; yalnız bağlantı) */
+export async function hbSendInvoiceLink(c: HepsiburadaConfig, packageNumber: string,
+  body: { invoiceLink: string; serialNumber?: string; rowNumber?: string; arrangementDate?: string }): Promise<void> {
+  const host = c.stage ? "https://oms-external-sit.hepsiburada.com" : "https://oms-external.hepsiburada.com";
+  let res: Response;
+  try {
+    res = await fetch(`${host}/packages/merchantid/${encodeURIComponent(c.merchantId)}/packagenumber/${encodeURIComponent(packageNumber)}/invoice`, {
+      method: "PUT",
+      headers: {
+        Authorization: "Basic " + Buffer.from(`${c.merchantId}:${c.serviceKey}`).toString("base64"),
+        "User-Agent": c.username, "Content-Type": "application/json", Accept: "application/json",
+      },
+      body: JSON.stringify(body), signal: AbortSignal.timeout(20000), cache: "no-store",
+    });
+  } catch (e: any) {
+    throw new HepsiburadaError(0, `Hepsiburada'ya bağlanılamadı: ${e?.message || e}`);
+  }
+  if (res.ok) return;
+  const text = await res.text();
+  let json: any = null;
+  try { json = text ? JSON.parse(text) : null; } catch { /* düz metin */ }
+  const msg = (Array.isArray(json?.errors) ? json.errors.map((e: any) => e?.message || e?.errorMessage || e).join("; ") : null)
+    || json?.message || json?.title || json?.error || text?.slice(0, 300) || res.statusText;
+  throw new HepsiburadaError(res.status, `Hepsiburada fatura ${res.status}: ${msg}`);
+}
+
 // ── Test (SIT) ortamı: Hepsiburada'nın canlıya geçiş için istediği adımlar ──
 // HER ZAMAN "-sit" adreslerine gider (canlı sisteme dokunamaz). Hata da olsa
 // ham yanıtı döner — Test Merkezi ekranında gösterilir, Hepsiburada'ya iletilir.

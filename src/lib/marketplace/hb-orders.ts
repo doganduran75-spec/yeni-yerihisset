@@ -306,7 +306,7 @@ type Matcher = ReturnType<typeof makeMatcher>;
 async function upsertHbOrder(sb: any, orderNumber: string, lines: Line[], since: number, match: Matcher) {
   const out = { imported: false, added: 0, changed: false, warnings: [] as string[] };
   const first = lines[0];
-  let { data: order } = await sb.from("orders").select("id, cargo_tracking_number, external_status").eq("channel", "hepsiburada").eq("external_package_id", orderNumber).maybeSingle();
+  let { data: order } = await sb.from("orders").select("id, cargo_tracking_number, external_status, mp_package_number").eq("channel", "hepsiburada").eq("external_package_id", orderNumber).maybeSingle();
 
   if (!order) {
     if (first.orderDate && new Date(first.orderDate).getTime() < since) return out; // entegrasyon açılmadan önceki sipariş
@@ -352,6 +352,11 @@ async function upsertHbOrder(sb: any, orderNumber: string, lines: Line[], since:
   // Toplam tutar + paket/takip bilgisi
   const tracking = lines.find((l) => l.tracking)?.tracking ?? null;
   const pkgNo = lines.find((l) => l.packageNumber)?.packageNumber ?? null;
+  // Paket numarası: fatura bağlantısı pakete gönderilir (src/lib/marketplace-invoice.ts)
+  if (pkgNo && pkgNo !== order.mp_package_number) {
+    await sb.from("orders").update({ mp_package_number: pkgNo }).eq("id", order.id);
+    order.mp_package_number = pkgNo;
+  }
   if (out.added || (tracking && tracking !== order.cargo_tracking_number)) {
     const { data: its } = await sb.from("order_items").select("quantity, unit_price, external_status").eq("order_id", order.id);
     const total = ((its as any[]) || []).filter((i) => i.external_status !== "Cancelled").reduce((s, i) => s + n(i.unit_price) * n(i.quantity), 0);
