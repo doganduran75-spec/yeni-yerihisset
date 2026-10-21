@@ -18,6 +18,8 @@ type Sb = ReturnType<typeof createAdminClient>;
 const r2 = (n: number) => Math.round(n * 100) / 100;
 const r4 = (n: number) => Math.round(n * 10000) / 10000;
 const day = (d: Date | string = new Date()) => new Date(d).toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" });
+// Sipariş / ödeme tarihi faturada bugünden ileri olamaz (Paraşüt reddeder) — eski Trendyol kayıtlarında saat +3 kaymıştı
+const pastDay = (d: Date | string) => day(new Date(Math.min(new Date(d).getTime(), Date.now())));
 const norm = (s: unknown) => String(s ?? "").toLocaleLowerCase("tr").replace(/[^a-z0-9çğıöşü]/g, "");
 const parse = (v: any) => { try { return typeof v === "string" ? JSON.parse(v) : v || {}; } catch { return {}; } };
 
@@ -158,7 +160,7 @@ export async function invoiceOrder(sb: Sb, orderId: string, opts: { acceptDiff?:
         issue_date: day(), due_date: day(), currency: "TRL", shipment_included: c.shipmentIncluded,
         billing_address: x.bill.address, billing_phone: x.phone ? String(x.phone) : undefined, city: x.bill.city, district: x.bill.district || undefined,
         tax_number: x.taxNo || "11111111111", ...(x.bill.tax_office ? { tax_office: x.bill.tax_office } : {}),
-        order_no: no, order_date: day(o.created_at),
+        order_no: no, order_date: pastDay(o.created_at),
       }, relationships: {
         contact: { data: { id: contactId, type: "contacts" } },
         // Kanalın fatura kategorisi (Ayarlar › Paraşüt › Satış kanalına göre); seçilmemişse kategorisiz
@@ -178,7 +180,7 @@ export async function invoiceOrder(sb: Sb, orderId: string, opts: { acceptDiff?:
 
     // 2) Tahsilat (kanal ayarı)
     if (x.ch?.mark_paid && x.ch.account_id && !o.parasut_paid) {
-      const pdate = o.payment_method === "bank_transfer" ? day() : day(o.created_at);
+      const pdate = o.payment_method === "bank_transfer" ? day() : pastDay(o.created_at);
       await parasutCall(sb, "POST", `/sales_invoices/${o.parasut_invoice_id}/payments`, { data: { type: "payments", attributes: {
         account_id: Number(x.ch.account_id), date: pdate, amount: x.total,
       } } });
@@ -204,7 +206,7 @@ export async function invoiceOrder(sb: Sb, orderId: string, opts: { acceptDiff?:
             url: x.ch?.internet_url || "https://yerihisset.com",
             payment_type: x.ch?.payment_type || (card ? "KREDIKARTI/BANKAKARTI" : "EFT/HAVALE"),
             payment_platform: x.ch?.payment_platform || (card ? "iyzico" : "Banka"),
-            payment_date: o.payment_method === "bank_transfer" ? day() : day(o.created_at),
+            payment_date: o.payment_method === "bank_transfer" ? day() : pastDay(o.created_at),
           },
           shipment: { title: x.carrier!.name, vkn: x.carrier!.vkn, date: day() },
         }, relationships: { sales_invoice: { data: { id: o.parasut_invoice_id, type: "sales_invoices" } } } } });

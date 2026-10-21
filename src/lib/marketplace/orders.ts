@@ -199,7 +199,10 @@ async function upsertTrendyolPackage(sb: any, pkg: any, since: number, match: Ma
 
   // ── Yeni paket ──
   if (!existing) {
-    if (n(pkg.orderDate) && n(pkg.orderDate) < since) return "skipped"; // entegrasyon açılmadan önceki sipariş
+    // Trendyol orderDate Türkiye saatiyle (GMT+3) yazılmış zaman damgası → gerçek an = değer − 3 saat
+    // (çevrilmezse gece verilen sipariş ertesi güne kayar; Paraşüt "sipariş tarihi bugünden ileri olamaz" der)
+    const orderAt = n(pkg.orderDate) ? n(pkg.orderDate) - 3 * 3600_000 : 0;
+    if (orderAt && orderAt < since) return "skipped"; // entegrasyon açılmadan önceki sipariş
     const total = n(pkg.packageTotalPrice ?? pkg.totalPrice);
     const name = [pkg.customerFirstName, pkg.customerLastName].filter(Boolean).join(" ") || pkg.shipmentAddress?.fullName || "Trendyol Müşterisi";
 
@@ -210,7 +213,7 @@ async function upsertTrendyolPackage(sb: any, pkg: any, since: number, match: Ma
       external_package_id: packageId,
       external_status: tyStatus,
       external_updated_at: lastMod,
-      created_at: new Date(n(pkg.orderDate) || Date.now()).toISOString(),
+      created_at: new Date(orderAt || Date.now()).toISOString(),
       status: mapped.status,
       payment_status: "paid",
       shipment_status: mapped.shipment_status,
