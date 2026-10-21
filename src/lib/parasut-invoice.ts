@@ -144,6 +144,18 @@ export async function invoiceOrder(sb: Sb, orderId: string, opts: { acceptDiff?:
     o = { ...o, cargo_provider: known.name };
   }
   if (opts.acceptDiff) { await save(sb, orderId, { parasut_diff_ok: true }); o = { ...o, parasut_diff_ok: true }; }
+  // Hatalı fatura Paraşüt'te silindiyse (işletme kuralı: e-belge oluşmadan hata → Paraşüt'te sil, "yeniden dene")
+  // kaldığı yerden devam edilemez → kayıt sıfırlanır, fatura güncel bilgilerle BAŞTAN kesilir.
+  if (o.parasut_invoice_id && !o.parasut_e_doc_id) {
+    try { await parasutCall(sb, "GET", `/sales_invoices/${o.parasut_invoice_id}`); }
+    catch (e: any) {
+      if (!(e instanceof ParasutError && e.status === 404)) throw e;
+      const reset = { parasut_invoice_id: null, parasut_status: null, parasut_job_id: null, parasut_paid: false, parasut_error: null };
+      await save(sb, orderId, reset);
+      await (sb as any).from("order_events").insert({ order_id: orderId, type: "note", note: `Paraşüt faturası (${o.parasut_invoice_id}) Paraşüt'te silinmiş — baştan kesiliyor` });
+      o = { ...o, ...reset };
+    }
+  }
   const x = await prepare(sb, o);
   // Fatura açılmadıysa önce her şey tutmalı; açıldıysa (devam) yalnız tahsilat / e-belge adımları
   if (!o.parasut_invoice_id && x.errs.length) throw new ParasutError(422, x.errs.join("\n"));
@@ -231,7 +243,7 @@ export async function checkInvoice(sb: Sb, orderId: string) {
       const st = j?.data?.attributes?.status;
       if (st === "error") {
         const msg = ((j?.data?.attributes?.errors as string[]) || []).join("; ") || "e-belge oluşturulamadı";
-        await save(sb, orderId, { parasut_status: "error", parasut_error: `${msg} — düzeltip yeniden dene`, parasut_job_id: null });
+        await save(sb, orderId, { parasut_status: "error", parasut_error: `${msg} — e-belge oluşmadı: sebebi düzelt, Paraşüt'te bu taslak faturayı (ve tahsilatını) sil, sonra “yeniden dene” (fatura baştan kesilir)`, parasut_job_id: null });
         return { status: "error", error: msg };
       }
       if (st !== "done") return { status: "job_pending" };
