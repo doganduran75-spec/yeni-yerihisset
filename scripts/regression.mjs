@@ -489,6 +489,10 @@ async function main() {
   const defShip = sql("SELECT name, is_active FROM public.shipping_methods WHERE is_default");
   defShip.length === 1 && defShip[0][1] === "t" ? add("ok", "Varsayılan kargo yöntemi", defShip[0][0])
     : add("fail", "Varsayılan kargo yöntemi yok ya da pasif", "Ayarlar › Kargo Yöntemleri › Varsayılan yap");
+  // Gelecek tarihli sipariş (pazaryeri saat dilimi hatası — Trendyol orderDate GMT+3; Paraşüt "sipariş tarihi ileri olamaz" der)
+  const future = sql("SELECT channel, count(*) FROM public.orders WHERE created_at > now() + interval '5 minutes' GROUP BY channel");
+  future.length ? add("warn", "Gelecek tarihli sipariş var", future.map((r) => `${r[0]}: ${r[1]}`).join(" · ") + " — saat dilimi çevirisi hatalı olabilir")
+    : add("ok", "Gelecek tarihli sipariş yok");
   const mktFailed = num("SELECT count(*) FROM public.marketplace_stock_sync WHERE status='failed'");
   // Kanal + sebep kırılımı (hangi pazaryeri, ne hatası) — kapalı kanalın eski hataları da görünür, "(kapalı)" yazar
   const mktWhy = mktFailed ? sql(`SELECT s.channel, count(*), left(coalesce(min(s.error), '—'), 140),
