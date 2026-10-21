@@ -170,6 +170,7 @@ async function main() {
     ["20261132 Paraşüt fatura kategorisi (kanala göre)", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'parasut_channel_settings' AND column_name = 'category_id')"],
     ["20261133 iade gelecek (müşteri kendisi gönderiyor)", "SELECT pg_get_constraintdef(oid) LIKE '%self%' FROM pg_constraint WHERE conname = 'order_cases_return_method_check'"],
     ["20261134 iade talebinde fatura gerekmiyor", "SELECT EXISTS(SELECT 1 FROM pg_trigger WHERE tgname = 'trg_order_case_invoice_rule')"],
+    ["20261135 faturayı Trendyol'a yükleme", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'mp_invoice_sent_at')"],
     ["20261126 ödeme alınmadan sevkiyat başlamaz", "SELECT EXISTS(SELECT 1 FROM pg_trigger WHERE tgname = 'trg_guard_ship_before_payment')"],
     ["20261125 marka hakkında (bütün ürün sayfalarında)", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'brands' AND column_name = 'about')"],
     ["20261124 yorum isteme + seni özledik (ayarlar, şablonlar, geri dönüş tetikleyicisi)", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'order_reviews' AND column_name = 'answers') AND EXISTS(SELECT 1 FROM pg_trigger WHERE tgname = 'trg_detect_winback') AND (SELECT count(*) FROM public.email_templates WHERE trigger IN ('review_request', 'winback')) = 2"],

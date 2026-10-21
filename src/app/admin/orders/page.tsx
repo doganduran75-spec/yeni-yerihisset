@@ -858,6 +858,19 @@ export default function OrdersPage() {
     }
   }
 
+  async function pushTrendyolInvoice(o: Order) {
+    setUpdatingId(o.id);
+    try {
+      const r = await parasutApi({ op: "push_marketplace_invoice", order_id: o.id });
+      siteAlert({ message: r.already ? "Trendyol'da bu siparişin faturası zaten vardı." : "Fatura Trendyol'a yüklendi.", tone: "success" });
+    } catch (e: any) {
+      siteAlert({ title: "Trendyol'a yüklenemedi", message: String(e?.message || e), tone: "danger" });
+    } finally {
+      setUpdatingId(null);
+      refreshOrder(o.id);
+    }
+  }
+
   async function openInvoicePdf(o: Order) {
     try { const r = await parasutApi({ op: "invoice_pdf", order_id: o.id }); window.open(r.url, "_blank", "noopener"); }
     catch (e: any) { siteAlert({ message: String(e?.message || e), tone: "danger" }); }
@@ -1634,6 +1647,19 @@ export default function OrdersPage() {
                         Paraşüt faturası <b className="font-mono">{(o as any).parasut_invoice_no}</b>
                         {(o as any).parasut_pdf_path && <button className="ml-2 underline font-semibold text-emerald-700" onClick={() => openInvoicePdf(o)}>PDF</button>}
                       </p>
+                    )}
+                    {/* Trendyol: fatura Trendyol'a yüklendi mi (Paraşüt bitince otomatik; olmadıysa elle) */}
+                    {o.channel === "trendyol" && (o as any).parasut_pdf_path && (
+                      (o as any).mp_invoice_sent_at ? (
+                        <p className="text-xs text-emerald-700">✓ Fatura Trendyol'a yüklendi ({new Date((o as any).mp_invoice_sent_at).toLocaleString("tr-TR")})</p>
+                      ) : (
+                        <div className="text-xs flex flex-wrap items-center gap-2">
+                          <span className={(o as any).mp_invoice_error ? "text-red-700" : "text-amber-700"}>
+                            {(o as any).mp_invoice_error ? `Trendyol'a yüklenemedi: ${(o as any).mp_invoice_error}` : "Fatura henüz Trendyol'a yüklenmedi (dakikada bir denenir)."}
+                          </span>
+                          <Button size="sm" variant="outline" className="h-7 text-xs" disabled={updatingId === o.id} onClick={() => pushTrendyolInvoice(o)}>Trendyol'a yükle</Button>
+                        </div>
+                      )
                     )}
                   </div>
                 );

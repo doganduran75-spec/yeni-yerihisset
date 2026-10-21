@@ -84,6 +84,30 @@ async function call(c: TrendyolConfig, method: "GET" | "POST", path: string, bod
   return json;
 }
 
+/** Müşteri faturasını DOSYA olarak yükle (seller-invoice-file; PDF ≤ 10 MB). Yurt içi pakette fatura no / tarih
+ *  istenmez. Aynı pakete ikinci kez: "The invoice for the package number … has already been sent." */
+export async function sendInvoiceFile(c: TrendyolConfig, shipmentPackageId: string, pdf: Buffer, filename: string): Promise<void> {
+  const form = new FormData();
+  form.append("shipmentPackageId", shipmentPackageId);
+  form.append("file", new Blob([new Uint8Array(pdf)], { type: "application/pdf" }), filename);
+  const { "Content-Type": _ct, ...h } = headers(c); // çok parçalı gövdenin sınırını fetch yazar
+  void _ct;
+  let res: Response;
+  try {
+    res = await fetch(`${base(c)}/integration/sellers/${encodeURIComponent(c.sellerId)}/seller-invoice-file`, {
+      method: "POST", headers: h, body: form, signal: AbortSignal.timeout(30000), cache: "no-store",
+    });
+  } catch (e: any) {
+    throw new TrendyolError(0, `Trendyol'a bağlanılamadı: ${e?.message || e}`);
+  }
+  if (res.ok) return;
+  const text = await res.text();
+  let json: any = null;
+  try { json = text ? JSON.parse(text) : null; } catch { /* düz metin */ }
+  const msg = json?.errors?.map((e: any) => e?.message || e?.key).filter(Boolean).join("; ") || json?.message || text?.slice(0, 300) || res.statusText;
+  throw new TrendyolError(res.status, `Trendyol fatura yükleme ${res.status}: ${msg}`);
+}
+
 /** Bağlantı testi: ürün listesinin ilk sayfası. Trendyol'daki toplam ürün sayısını döner. */
 export async function testConnection(c: TrendyolConfig): Promise<{ totalProducts: number | null; services: { name: string; ok: boolean; detail: string }[] }> {
   const j = await call(c, "GET", `/integration/product/sellers/${encodeURIComponent(c.sellerId)}/products?page=0&size=1`);

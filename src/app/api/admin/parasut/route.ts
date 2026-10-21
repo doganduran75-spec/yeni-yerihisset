@@ -6,6 +6,7 @@ import {
   ParasutError, connectionStatus, connectWithCode, disconnect, listAccounts, listInvoiceCategories, syncProducts, matchProducts, pushCodesToParasut,
 } from "@/lib/parasut";
 import { invoiceOrder, checkInvoice, invoicePdfUrl } from "@/lib/parasut-invoice";
+import { pushInvoiceToMarketplace, MarketplaceInvoiceError } from "@/lib/marketplace-invoice";
 
 // Paraşüt (yalnız yönetici) — src/lib/parasut.ts
 //   status · connect {code} · disconnect · accounts · categories · sync_products · match · link {variant_id, parasut_id} · push_codes {variant_ids}
@@ -47,6 +48,11 @@ export async function POST(req: NextRequest) {
         const ids = ((body.variant_ids as unknown[]) || []).filter(uuid) as string[];
         if (!ids.length) return NextResponse.json({ error: "Seçili satır yok" }, { status: 400 });
         return NextResponse.json({ ok: true, ...(await pushCodesToParasut(sb, ids)) });
+      }
+      case "push_marketplace_invoice": {
+        if (!uuid(body.order_id)) return NextResponse.json({ error: "order_id" }, { status: 400 });
+        try { return NextResponse.json({ ok: true, ...(await pushInvoiceToMarketplace(sb, body.order_id)) }); }
+        catch (e: any) { if (e instanceof MarketplaceInvoiceError) return NextResponse.json({ error: e.message }, { status: e.status }); throw e; }
       }
       case "invoice":
       case "check_invoice":

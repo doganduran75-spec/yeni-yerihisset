@@ -8,6 +8,7 @@ import { syncMarketplaceListings } from "@/lib/marketplace/listings";
 import { evaluateHealthAlerts } from "@/lib/server-health-alerts";
 import { pollKargonomi } from "@/lib/kargonomi-flow";
 import { pollParasut } from "@/lib/parasut-invoice";
+import { pollMarketplaceInvoices } from "@/lib/marketplace-invoice";
 import { processGmcQueue } from "@/lib/gmc-sync";
 import { processReviewRequests, processWinback } from "@/lib/review-winback";
 
@@ -51,6 +52,9 @@ async function run(req: NextRequest) {
   // 5) Paraşüt: e-Arşiv / e-Fatura işi + PDF bekleyen faturalar (bitince sipariş "Faturalandı")
   const fatura = await pollParasut(supabase).catch((e: any) => ({ checked: 0, done: 0, errors: [e?.message || String(e)] }));
   if (fatura.errors.length) console.error("[cron/parasut]", fatura.errors.join(" | "));
+  // 5b) Paraşüt faturası bitmiş Trendyol siparişleri → faturayı Trendyol'a yükle (ilk deneme; hata olursa elle)
+  const tyInv = await pollMarketplaceInvoices(supabase).catch((e: any) => ({ sent: 0, errors: [e?.message || String(e)] }));
+  if (tyInv.errors.length) console.error("[cron/marketplace-invoice]", tyInv.errors.join(" | "));
   // 6) Google Merchant API: değişen ürünler (besleme günlük tam eşitlemeyi sürdürür)
   const google = await processGmcQueue(supabase).catch((e: any) => ({ products: 0, sent: 0, deleted: 0, failed: 0, skipped: "", errors: [e?.message || String(e)] }));
   if (google.errors.length) console.error("[cron/gmc]", google.errors.slice(0, 5).join(" | "));

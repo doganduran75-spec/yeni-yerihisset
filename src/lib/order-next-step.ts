@@ -104,6 +104,11 @@ function coreNextStep(o: OrderLike): NextStep {
     if (inv === "pending" && !SHIPPED.includes(ship)) {
       return { stage: "Yeni sipariş", hint: "Kargodan önce faturayı kes.", actions: invoiceActs, needsAction: true };
     }
+    // Kargolanmış ama faturası kesilmemiş (unutuldu / eski firmadan geçiş): düğme kalır; yalnız son 7 günün
+    // siparişi bekleyen işlere düşer (eski firmanın faturaladığı geçmiş siparişler listeyi doldurmasın)
+    if (inv === "pending") {
+      return { stage: "Fatura kesilmedi (pazaryeri)", hint: "Kargoya verilmiş; faturası kesilmediyse kes. Eski firma faturaladıysa “Fatura kesildi” işaretle.", actions: invoiceActs, needsAction: daysSince(o.created_at) <= 7 };
+    }
     return { stage: SHIPPED.includes(ship) ? "Kargoda / teslim (pazaryeri)" : "Kargo bekleniyor (pazaryeri)", hint: "Durum pazaryerinden gelir.", actions: [], needsAction: false };
   }
 
