@@ -4,6 +4,7 @@
 // Stok/fiyat: POST /integration/inventory/sellers/{id}/products/price-and-inventory
 //   (istek başına en çok 1000 barkod; stok en çok 20.000; aynı gövde 15 dk içinde tekrar gönderilemez)
 // Sonuç: GET /integration/product/sellers/{id}/products/batch-requests/{batchRequestId} (4 saat saklanır)
+// İlan listesi: GET /integration/product/sellers/{id}/products/approved (Product v2)
 // Belge: https://developers.trendyol.com/docs/stok-ve-fiyat-g%C3%BCncelleme-updatepriceandinventory
 
 import type { createAdminClient } from "@/lib/supabase-admin";
@@ -110,7 +111,8 @@ export async function sendInvoiceFile(c: TrendyolConfig, shipmentPackageId: stri
 
 /** Bağlantı testi: ürün listesinin ilk sayfası. Trendyol'daki toplam ürün sayısını döner. */
 export async function testConnection(c: TrendyolConfig): Promise<{ totalProducts: number | null; services: { name: string; ok: boolean; detail: string }[] }> {
-  const j = await call(c, "GET", `/integration/product/sellers/${encodeURIComponent(c.sellerId)}/products?page=0&size=1`);
+  // Product v2 (eski /products ucu 2026-10'da kapatılıyor — "brownout 426")
+  const j = await call(c, "GET", `/integration/product/sellers/${encodeURIComponent(c.sellerId)}/products/approved?page=0&size=1`);
   const totalProducts = typeof j?.totalElements === "number" ? j.totalElements : null;
   // Servis bazında tanı: aynı anahtar ürün servisinde çalışıp sipariş servisinde reddedilebiliyor
   // (hesap/anahtar yetkisi). Sonuç Trendyol desteğine iletilebilecek netlikte gösterilir.
@@ -160,15 +162,24 @@ export async function getBatchResult(c: TrendyolConfig, batchId: string): Promis
 
 /** İLANDAKİ ürünlerin barkodları (arşivlenmemiş, kara listede olmayan) — ilan eşitleme. */
 export async function listTrendyolBarcodes(c: TrendyolConfig): Promise<string[]> {
+  // Product v2 — onaylı ürünler (GET …/products/approved): barkod varyantta (content[].variants[].barcode),
+  // sayfa en çok 100; page × size 10.000'i geçince nextPageToken ile devam edilir.
   const out: string[] = [];
-  for (let page = 0; page < 1000; page++) {
-    const j = await call(c, "GET", `/integration/product/sellers/${encodeURIComponent(c.sellerId)}/products?page=${page}&size=200&archived=false`);
+  const root = `/integration/product/sellers/${encodeURIComponent(c.sellerId)}/products/approved`;
+  let token: string | null = null;
+  for (let page = 0; page < 2000; page++) {
+    const q = token ? `size=100&nextPageToken=${encodeURIComponent(token)}` : `page=${page}&size=100`;
+    const j = await call(c, "GET", `${root}?${q}`);
     const items: any[] = Array.isArray(j?.content) ? j.content : [];
     for (const p of items) {
-      if (p?.barcode && !p.archived && !p.blacklisted) out.push(String(p.barcode));
+      for (const v of (Array.isArray(p?.variants) ? p.variants : [p])) { // varyant listesi yoksa ürünün kendisi
+        if (v?.barcode && !v.archived && !v.blacklisted) out.push(String(v.barcode));
+      }
     }
     const totalPages = Number(j?.totalPages ?? 0);
-    if (!items.length || page + 1 >= totalPages) break;
+    if (!items.length) break;
+    if ((page + 2) * 100 > 10000 || token) { token = j?.nextPageToken || null; if (!token) break; }
+    else if (page + 1 >= totalPages) break;
   }
-  return out;
+  return [...new Set(out)];
 }
