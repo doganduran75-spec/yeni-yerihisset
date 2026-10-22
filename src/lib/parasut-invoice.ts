@@ -27,7 +27,7 @@ const ORDER_COLS = `id, order_number, external_order_number, channel, status, cr
   total_amount, shipping_cost, coupon_discount, credit_used, billing_address, shipping_address, customer_name, customer_email, customer_phone,
   cargo_provider, kargonomi_provider, shipping_method, parasut_invoice_id, parasut_status, parasut_job_id, parasut_e_doc_id, parasut_e_doc_type,
   parasut_paid, parasut_diff_ok, profiles(email, first_name, last_name, phone),
-  order_items(quantity, unit_price, product_id, variant_id, variant_name, products(title, parasut_product_id), product_variants(parasut_product_id))`;
+  order_items(quantity, unit_price, product_id, variant_id, variant_name, title, products(title, parasut_product_id), product_variants(parasut_product_id))`;
 
 async function loadOrder(sb: Sb, id: string) {
   const { data, error } = await (sb as any).from("orders").select(ORDER_COLS).eq("id", id).maybeSingle();
@@ -54,7 +54,9 @@ async function prepare(sb: Sb, o: any) {
 
   const lines: Line[] = [];
   for (const i of items) {
-    const title = `${i.products?.title ?? "Ürün"}${i.variant_name ? ` — ${i.variant_name}` : ""}`;
+    const title = `${i.products?.title ?? i.title ?? "Ürün"}${i.variant_name ? ` — ${i.variant_name}` : ""}`;
+    // Pazaryeri satırı sitedeki ürüne hiç bağlanmamışsa (gelirken eşleşmedi) sorun Paraşüt'te değil, satırda
+    if (!i.variant_id && !i.product_id) { errs.push(`Satır sitedeki ürüne bağlı değil: ${title} — siparişte o satırın SKU kutusuna sitedeki SKU'yu (ya da barkodu) gir, sonra yeniden dene.`); continue; }
     const pid = i.product_variants?.parasut_product_id || i.products?.parasut_product_id;
     if (!pid) { errs.push(`Paraşüt ürünüyle eşleşmemiş: ${title} (Paraşüt ürün eşleştirme sayfası)`); continue; }
     const v = vat.get(pid);
