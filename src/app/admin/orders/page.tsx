@@ -700,7 +700,8 @@ export default function OrdersPage() {
   async function handleSkuLookup(itemId: string, newSku: string) {
     const trimmed = newSku.trim();
     const prevItem: any = selectedOrder?.order_items?.find((i) => i.id === itemId);
-    if (prevItem && String(prevItem.sku ?? "").trim() === trimmed) return;
+    // Kod aynı ve satır zaten bir ürüne bağlıysa iş yok; pazaryeri satırı kodla gelip eşleşmediyse (ürünsüz) aynı kodla da ara
+    if (prevItem && String(prevItem.sku ?? "").trim() === trimmed && (prevItem.variant_id || prevItem.product_id)) return;
     setSkuEdits(prev => ({ ...prev, [itemId]: { ...prev[itemId], sku: trimmed, error: "", saving: true } }));
 
     if (!trimmed) {
