@@ -712,11 +712,13 @@ export default function OrdersPage() {
     const { data: variant } = await (supabase
       .from("product_variants")
       .select("id, sku, product_id, products(title), variant_options(value, variant_groups(name))")
-      .eq("sku", trimmed)
+      // büyük / küçük harf farkı yok sayılır (SKU tekil kuralı da öyle); SKU yoksa barkodla da bulunur
+      .or(`sku.ilike.${trimmed.replace(/[%_,()]/g, "")},barcode.ilike.${trimmed.replace(/[%_,()]/g, "")}`)
+      .limit(1)
       .maybeSingle() as any) as { data: any };
 
     if (!variant) {
-      setSkuEdits(prev => ({ ...prev, [itemId]: { ...prev[itemId], saving: false, error: `"${trimmed}" SKU bulunamadı` } }));
+      setSkuEdits(prev => ({ ...prev, [itemId]: { ...prev[itemId], saving: false, error: `"${trimmed}" sitede bulunamadı (SKU ya da barkod) — ürün formunda o numaranın SKU'sunu kontrol et` } }));
       return;
     }
 

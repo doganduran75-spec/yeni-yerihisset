@@ -80,7 +80,10 @@ function makeMatcher(sb: any, c: HepsiburadaConfig) {
   const cache = new Map<string, { variant_id: string; product_id: string } | null>();
   const hbToMerchant = new Map<string, string | null>();
   const byField = async (field: "sku" | "barcode", val: string) => {
-    const { data } = await sb.from("product_variants").select("id, product_id").eq(field, val).limit(1).maybeSingle();
+    // büyük / küçük harf ve baş / son boşluk farkı yok sayılır (pazaryeri kodları ile site kodları farklı yazılabiliyor)
+    const v = val.trim().replace(/[%_]/g, "");
+    if (!v) return null;
+    const { data } = await sb.from("product_variants").select("id, product_id").ilike(field, v).limit(1).maybeSingle();
     return data ? { variant_id: data.id, product_id: data.product_id } : null;
   };
   return async (merchantSku: string | null, hbSku: string | null) => {
