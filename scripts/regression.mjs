@@ -172,6 +172,7 @@ async function main() {
     ["20261134 iade talebinde fatura gerekmiyor", "SELECT EXISTS(SELECT 1 FROM pg_trigger WHERE tgname = 'trg_order_case_invoice_rule')"],
     ["20261135 faturayı Trendyol'a yükleme", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'mp_invoice_sent_at')"],
     ["20261136 Hepsiburada paket numarası (fatura bağlantısı)", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'mp_package_number')"],
+    ["20261138 kart ödemesi aç / kapa", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'settings' AND column_name = 'card_payment_enabled')"],
     ["20261137 Trendyol sipariş saati (GMT+3)", "SELECT NOT EXISTS(SELECT 1 FROM public.orders WHERE channel = 'trendyol' AND import_source IS NULL AND coalesce(external_raw->>'orderDate', '') ~ '^[0-9]{10,13}$' AND abs(extract(epoch FROM created_at - (to_timestamp((external_raw->>'orderDate')::bigint / 1000.0) - interval '3 hours'))) > 60)"],
     ["20261126 ödeme alınmadan sevkiyat başlamaz", "SELECT EXISTS(SELECT 1 FROM pg_trigger WHERE tgname = 'trg_guard_ship_before_payment')"],
     ["20261125 marka hakkında (bütün ürün sayfalarında)", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'brands' AND column_name = 'about')"],
@@ -307,7 +308,7 @@ async function main() {
   }
   const iyz = await get("/api/checkout/iyzico/initialize", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
   iyz.status >= 500 && iyz.status !== 503 ? add("fail", "Kart ödeme başlatma", `HTTP ${iyz.status}`)
-    : iyz.status === 503 ? liveOnly(false, "Kart ödeme kapalı", "iyzico anahtarları tanımlı değil")
+    : iyz.status === 503 ? liveOnly(false, "Kart ödeme kapalı", "iyzico anahtarları tanımlı değil ya da Ayarlar › Ödeme Yöntemleri'nde kart kapalı")
     : add("ok", "Kart ödeme başlatma ucu yanıt veriyor", `HTTP ${iyz.status}`);
 
   // 4) Dışarıdan veri erişimi (anon anahtarla, Supabase üzerinden)
@@ -558,6 +559,12 @@ async function main() {
       : add("warn", "Bakım sayfası Caddy'de tanımlı değil", "deploy sırasında ziyaretçi hata görür → docs/BAKIM-SAYFASI.md");
   }
   liveOnly(!!process.env.IYZICO_API_KEY, "iyzico anahtarı yok", "kartla ödeme kapalı");
+  liveOnly(S.card_payment_enabled === true, "Kart ödemesi kapalı", "Ayarlar › Ödeme Yöntemleri › Kredi / Banka Kartı'nı aç");
+  // Ödeme sayfası kart seçeneğini tarayıcıdan okur → sütun dışarıya açık olmalı (yalnız bu sütun)
+  {
+    const r = await rest("settings?select=card_payment_enabled&limit=1");
+    r.status === 200 ? add("ok", "Kart ödemesi ayarı ödeme sayfasından okunuyor") : add("fail", "Kart ödemesi ayarı okunamıyor", `HTTP ${r.status} — GRANT SELECT (card_payment_enabled) eksik`);
+  }
   liveOnly(!/sandbox/i.test(process.env.IYZICO_BASE_URL || "sandbox"), "iyzico TEST (sandbox) modunda", "IYZICO_BASE_URL=https://api.iyzipay.com + canlı anahtarlar");
   liveOnly(process.env.NEXT_PUBLIC_NOINDEX !== "true", "Arama motoru engeli açık (NEXT_PUBLIC_NOINDEX=true)", "canlıda kaldır, yoksa Google siteyi listelemez");
   const admins = sql("SELECT email FROM public.profiles WHERE role='admin' ORDER BY email").map((r) => r[0]);

@@ -100,6 +100,7 @@ export default function CheckoutPage() {
   // Ödeme yöntemi
   const [paymentMethod, setPaymentMethod] = useState<"credit_card" | "bank_transfer">("credit_card");
   const [bankTransferEnabled, setBankTransferEnabled] = useState(false);
+  const [cardEnabled, setCardEnabled] = useState(false); // Ayarlar › Ödeme Yöntemleri › Kredi / Banka Kartı
   const [bankTransferInfo, setBankTransferInfo] = useState("");
   // iyzico form içeriği (ödeme widgetı)
   const [iyzicoFormHtml, setIyzicoFormHtml] = useState<string | null>(null);
@@ -175,11 +176,15 @@ export default function CheckoutPage() {
   async function loadPaymentSettings() {
     const { data: paySettings } = await (supabase
       .from("settings")
-      .select("bank_transfer_enabled, bank_transfer_info")
-      .single() as any) as { data: { bank_transfer_enabled?: boolean; bank_transfer_info?: string } | null };
+      .select("bank_transfer_enabled, bank_transfer_info, card_payment_enabled")
+      .single() as any) as { data: { bank_transfer_enabled?: boolean; bank_transfer_info?: string; card_payment_enabled?: boolean } | null };
     if (paySettings) {
       setBankTransferEnabled(paySettings.bank_transfer_enabled ?? false);
       setBankTransferInfo(paySettings.bank_transfer_info ?? "");
+      // Kart kapalıysa (Ayarlar › Ödeme Yöntemleri) yalnız havale; seçili yöntem de havaleye geçer
+      const card = !!paySettings.card_payment_enabled;
+      setCardEnabled(card);
+      if (!card && paySettings.bank_transfer_enabled) setPaymentMethod("bank_transfer");
     }
   }
 
@@ -227,11 +232,14 @@ export default function CheckoutPage() {
     // Ödeme ayarlarını yükle
     const { data: paySettings } = await (supabase
       .from("settings")
-      .select("bank_transfer_enabled, bank_transfer_info")
-      .single() as any) as { data: { bank_transfer_enabled?: boolean; bank_transfer_info?: string } | null };
+      .select("bank_transfer_enabled, bank_transfer_info, card_payment_enabled")
+      .single() as any) as { data: { bank_transfer_enabled?: boolean; bank_transfer_info?: string; card_payment_enabled?: boolean } | null };
     if (paySettings) {
       setBankTransferEnabled(paySettings.bank_transfer_enabled ?? false);
       setBankTransferInfo(paySettings.bank_transfer_info ?? "");
+      const card = !!paySettings.card_payment_enabled;
+      setCardEnabled(card);
+      if (!card && paySettings.bank_transfer_enabled) setPaymentMethod("bank_transfer");
     }
 
     setLoading(false);
@@ -1056,8 +1064,9 @@ export default function CheckoutPage() {
                   <div className="w-10 h-10 bg-olive-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-olive-100"><CreditCard size={18} /></div>
                   <h3 className="text-2xl font-black text-slate-900 uppercase italic tracking-tighter">Ödeme Yöntemi</h3>
                </div>
-               <div className={cn("grid gap-6", bankTransferEnabled ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1")}>
-                  {/* Kredi Kartı */}
+               <div className={cn("grid gap-6", bankTransferEnabled && cardEnabled ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1")}>
+                  {/* Kredi Kartı — Ayarlar › Ödeme Yöntemleri'nde açıksa */}
+                  {cardEnabled && (
                   <div
                     onClick={() => setPaymentMethod("credit_card")}
                     className={cn(
@@ -1083,6 +1092,7 @@ export default function CheckoutPage() {
                        </div>
                      )}
                   </div>
+                  )}
 
                   {/* Havale / EFT — sadece admin aktif ettiyse göster */}
                   {bankTransferEnabled && (

@@ -28,6 +28,11 @@ export async function POST(req: NextRequest) {
   if (!process.env.IYZICO_API_KEY || !process.env.IYZICO_SECRET_KEY) {
     return NextResponse.json({ error: "Kartla ödeme şu an kullanılamıyor. Lütfen Havale/EFT ile devam edin." }, { status: 503 });
   }
+  // Ayarlar › Ödeme Yöntemleri'nde kart kapalıysa (ödeme sayfası göstermez; doğrudan istek de reddedilir)
+  {
+    const { data: ps } = await (createAdminClient() as any).from("settings").select("card_payment_enabled").order("id").limit(1).maybeSingle();
+    if (!ps?.card_payment_enabled) return NextResponse.json({ error: "Kartla ödeme şu an kapalı. Lütfen Havale/EFT ile devam edin." }, { status: 503 });
+  }
   const authUser = await getAuthUserFromRequest(req);
 
   const body = await req.json();

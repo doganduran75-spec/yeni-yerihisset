@@ -24,7 +24,12 @@ export async function GET(req: NextRequest) {
   const { data, error } = await (supabase as any)
     .from("settings").select("*").order("id", { ascending: true }).limit(1);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ ok: true, settings: data?.[0] ?? null });
+  // Kart ödemesi: anahtarlar sunucuda (.env) — panel yalnız var mı / test mi canlı mı bilgisini görür (anahtar dönmez)
+  const iyzico = {
+    configured: !!(process.env.IYZICO_API_KEY && process.env.IYZICO_SECRET_KEY),
+    sandbox: !/^https:\/\/api\.iyzipay\.com/.test(process.env.IYZICO_BASE_URL ?? "https://sandbox-api.iyzipay.com"),
+  };
+  return NextResponse.json({ ok: true, settings: data?.[0] ?? null, iyzico });
 }
 
 // Kaydet: güncellenecek satırı SUNUCU bulur (istemciden gelen id'ye güvenilmez).

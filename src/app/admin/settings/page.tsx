@@ -48,6 +48,7 @@ type Settings = {
   email_allowlist: string;
   // Ödeme
   bank_transfer_enabled: boolean;
+  card_payment_enabled?: boolean;
   bank_transfer_info: string;
   // Kargonomi
   kargonomi_api_token: string;
@@ -130,6 +131,7 @@ function SettingsPageInner() {
   const [showSmtpPass, setShowSmtpPass] = useState(false);
   const [copiedFeed, setCopiedFeed] = useState(false);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const [iyzico, setIyzico] = useState<{ configured: boolean; sandbox: boolean } | null>(null); // kart ödemesi anahtar durumu (sunucudan)
   const [loadError, setLoadError] = useState<string | null>(null);
 
   // Genel sekmesine her dönüşte tazele: başka sekmede (Künye: adres / telefon / e-posta) değişen değer eskisiyle ezilmesin
@@ -151,6 +153,7 @@ function SettingsPageInner() {
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "Ayarlar okunamadı");
       if (d.settings) setSettings({ ...DEFAULT_SETTINGS, ...d.settings } as Settings);
+      if (d.iyzico) setIyzico(d.iyzico);
     } catch (error: any) {
       console.error("Error fetching settings:", error);
       // Yüklenemediyse kaydetmeye izin verme — boş formla mevcut ayarların üstüne yazılmasın
@@ -805,22 +808,42 @@ Açıklama: Sipariş numaranızı açıklamaya yazmayı unutmayın.`}
               )}
             </div>
 
-            {/* Kredi Kartı */}
-            <div className="border rounded-xl overflow-hidden opacity-60">
+            {/* Kredi / Banka Kartı (iyzico) — anahtarlar sunucuda (.env); burada yalnız aç / kapa */}
+            <div className="border rounded-xl overflow-hidden">
               <div className="flex items-center justify-between p-4 bg-slate-50">
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 bg-white border rounded-lg flex items-center justify-center">
-                    <CreditCard size={18} className="text-slate-400" />
+                    <CreditCard size={18} className="text-slate-600" />
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-slate-500">Kredi / Banka Kartı</p>
-                    <p className="text-xs text-muted-foreground">Sanal POS entegrasyonu</p>
+                    <p className="text-sm font-semibold">Kredi / Banka Kartı</p>
+                    <p className="text-xs text-muted-foreground">
+                      iyzico — {iyzico == null ? "…" : !iyzico.configured ? "anahtarlar sunucuda tanımlı değil" : iyzico.sandbox ? "TEST (sandbox) anahtarları" : "CANLI anahtarlar"}
+                    </p>
                   </div>
                 </div>
-                <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-400 px-3 py-1 rounded-full">
-                  Yakında
-                </span>
+                <label className={`relative inline-flex items-center ${iyzico?.configured ? "cursor-pointer" : "opacity-50 cursor-not-allowed"}`}>
+                  <input
+                    type="checkbox"
+                    className="sr-only peer"
+                    disabled={!iyzico?.configured}
+                    checked={!!settings.card_payment_enabled && !!iyzico?.configured}
+                    onChange={(e) => set({ card_payment_enabled: e.target.checked })}
+                  />
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  <span className="ml-2 text-xs font-semibold text-muted-foreground">
+                    {settings.card_payment_enabled && iyzico?.configured ? "Aktif" : "Pasif"}
+                  </span>
+                </label>
               </div>
+              {!iyzico?.configured && iyzico != null && (
+                <p className="px-4 py-3 text-xs text-muted-foreground border-t">
+                  Açmak için sunucudaki <code>.env.local</code> dosyasına IYZICO_API_KEY, IYZICO_SECRET_KEY ve IYZICO_BASE_URL girilip site yeniden başlatılmalı.
+                </p>
+              )}
+              {iyzico?.configured && iyzico.sandbox && settings.card_payment_enabled && (
+                <p className="px-4 py-3 text-xs text-amber-700 border-t">Test anahtarları: gerçek para çekilmez. Canlıya geçişte canlı anahtarlarla değiştir.</p>
+              )}
             </div>
 
           </CardContent>
