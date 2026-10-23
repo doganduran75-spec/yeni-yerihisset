@@ -144,7 +144,10 @@ export default function CheckoutPage() {
   useEffect(() => {
     if (!iyzicoFormHtml || !iyzicoContainerRef.current) return;
     const container = iyzicoContainerRef.current;
-    container.innerHTML = iyzicoFormHtml;
+    // iyzico formu bu kutuyu arar; yoksa kendini sayfanın en altına "popup" olarak ekler (pencere boş kalırdı).
+    // "responsive" → form penceremizin İÇİNDE, ekran genişliğine uyarak açılır.
+    document.querySelectorAll("#iyzipay-checkout-form").forEach((el) => { if (!container.contains(el)) el.remove(); });
+    container.innerHTML = `<div id="iyzipay-checkout-form" class="responsive"></div>${iyzicoFormHtml}`;
     // <script> tag'leri innerHTML ile eklenmez — manuel çalıştır
     container.querySelectorAll("script").forEach((oldScript) => {
       const newScript = document.createElement("script");
@@ -589,9 +592,9 @@ export default function CheckoutPage() {
     <div className="min-h-screen bg-[#F8FAFC]">
       {/* iyzico ödeme formu overlay */}
       {iyzicoFormHtml && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg relative overflow-hidden">
-            <div className="bg-slate-900 px-6 py-4 flex items-center justify-between">
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-stretch sm:items-center justify-center sm:p-4">
+          <div className="bg-white sm:rounded-3xl shadow-2xl w-full max-w-lg relative flex flex-col max-h-[100dvh] sm:max-h-[92vh]">
+            <div className="bg-slate-900 px-6 py-4 flex items-center justify-between shrink-0 sm:rounded-t-3xl">
               <span className="text-white font-black text-sm uppercase tracking-widest">Güvenli Ödeme — iyzico</span>
               <button
                 onClick={() => setIyzicoFormHtml(null)}
@@ -601,7 +604,7 @@ export default function CheckoutPage() {
                 <X size={20} />
               </button>
             </div>
-            <div ref={iyzicoContainerRef} className="p-4" />
+            <div ref={iyzicoContainerRef} className="p-2 sm:p-4 overflow-y-auto flex-1 min-h-0" />
           </div>
         </div>
       )}
