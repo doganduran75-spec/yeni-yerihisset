@@ -57,7 +57,7 @@ function headers(c: TrendyolConfig) {
   };
 }
 
-async function call(c: TrendyolConfig, method: "GET" | "POST", path: string, body?: unknown) {
+async function call(c: TrendyolConfig, method: "GET" | "POST" | "PUT", path: string, body?: unknown) {
   let res: Response;
   try {
     res = await fetch(base(c) + path, {
@@ -107,6 +107,13 @@ export async function sendInvoiceFile(c: TrendyolConfig, shipmentPackageId: stri
   try { json = text ? JSON.parse(text) : null; } catch { /* düz metin */ }
   const msg = json?.errors?.map((e: any) => e?.message || e?.key).filter(Boolean).join("; ") || json?.message || text?.slice(0, 300) || res.statusText;
   throw new TrendyolError(res.status, `Trendyol fatura yükleme ${res.status}: ${msg}`);
+}
+
+/** Paket durumu: "Picking" (= panelde "İşleme al") ya da "Invoiced". Picking, Invoiced'dan önce gönderilmeli.
+ *  PUT /integration/order/sellers/{id}/shipment-packages/{packageId} { lines: [{ lineId, quantity }], params: {}, status } */
+export async function updatePackageStatus(c: TrendyolConfig, packageId: string, lines: { lineId: number; quantity: number }[],
+  status: "Picking" | "Invoiced", params: Record<string, string> = {}): Promise<void> {
+  await call(c, "PUT", `/integration/order/sellers/${encodeURIComponent(c.sellerId)}/shipment-packages/${encodeURIComponent(packageId)}`, { lines, params, status });
 }
 
 /** Bağlantı testi: ürün listesinin ilk sayfası. Trendyol'daki toplam ürün sayısını döner. */

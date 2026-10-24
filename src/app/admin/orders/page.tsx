@@ -71,6 +71,19 @@ async function parasutApi(body: Record<string, unknown>) {
   return j;
 }
 
+// "Paket hazır" akışı: paket hazır · kurye aldı · Trendyol işleme al (src/app/api/admin/orders/ship-flow)
+async function shipFlowApi(body: Record<string, unknown>) {
+  const { data: { session } } = await supabase.auth.getSession();
+  const r = await fetch("/api/admin/orders/ship-flow", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
+    body: JSON.stringify(body),
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || "İşlem yapılamadı");
+  return j;
+}
+
 // Sıradaki adım + açık satış sonrası talep (order_cases — src/lib/after-sale.ts)
 const openCaseOf = (o: any) => ((o?.order_cases as any[]) || []).find((c) => !c.closed_at) ?? null;
 const nx = (o: any) => orderNextStep({ ...o, open_case: openCaseOf(o) });
@@ -125,6 +138,9 @@ type Order = {
   cargo_tracking_url?: string | null;
   label_printed_code?: string | null; // kargo etiketine basılan kod (değişirse "yeniden yazdır")
   label_printed_at?: string | null;
+  packed_at?: string | null;          // "Paket hazır"
+  mp_picking_at?: string | null;      // Trendyol "İşleme al" yapıldı
+  mp_picking_error?: string | null;
   mp_warning?: string | null;
   mp_warning_ack?: boolean | null;
   stock_reduced_at?: string | null;
@@ -829,6 +845,45 @@ export default function OrdersPage() {
     }
   }
 
+  // Paket hazır: pazaryerinde fatura hemen kesilir (→ yükleme → Trendyol "İşleme al"); sitede "Kargo bekliyor"
+  async function markPacked(o: Order) {
+    const site = !isMarketplace(o);
+    const code = o.cargo_tracking_number || o.kargonomi_tracking_code;
+    if (site && !code && !(await siteConfirm({ title: "Kargo kodu yok", message: "Bu siparişin kargo kodu (etiketi) yok. Yine de “Paket hazır” denilsin mi?", confirmText: "Paket hazır" }))) return;
+    if (site && code && !o.label_printed_at && !(await siteConfirm({ title: "Etiket basılmadı", message: "Bu siparişin kargo etiketi henüz yazdırılmadı. Yine de “Paket hazır” denilsin mi?", confirmText: "Paket hazır" }))) return;
+    setUpdatingId(o.id);
+    try {
+      const r = await shipFlowApi({ op: "packed", orderId: o.id });
+      const inv = r.invoice as { status?: string; error?: string } | null;
+      if (inv?.status === "error") {
+        // Tutar farkı / kargo firması gibi onay isteyen durumlar eski fatura akışından devam eder
+        if (/Tutarı onayla|Kargo firması belli değil/.test(inv.error || "")) { setUpdatingId(null); return invoiceParasut(o); }
+        siteAlert({ title: "Paket hazır — fatura kesilemedi", message: `${inv.error}
+
+Siparişte “Paraşüt — yeniden dene” ile tekrar dene.`, tone: "danger" });
+      } else if (site) siteAlert({ message: "Paket hazır — kurye alınca “Kurye aldı” de (müşteriye e-posta o an gider).", tone: "success" });
+      else siteAlert({ message: inv?.status === "done" ? "Paket hazır — fatura kesildi, pazaryerine yükleniyor." : inv?.status === "off" ? "Paket hazır. Paraşüt kapalı: faturayı elle kes." : "Paket hazır — fatura hazırlanıyor; bitince pazaryerine kendiliğinden yüklenir.", tone: "success" });
+    } catch (e: any) {
+      siteAlert({ title: "Paket hazır denilemedi", message: String(e?.message || e), tone: "danger" });
+    } finally {
+      setUpdatingId(null);
+      refreshOrder(o.id);
+    }
+  }
+
+  // Kurye aldı (site): Kargoda + kargo e-postası
+  async function pickedUp(ids: string[]) {
+    try {
+      const r = await shipFlowApi({ op: "picked_up", ids });
+      const shipped: string[] = r.shipped || [];
+      setOrders((prev) => prev.map((x) => (shipped.includes(x.id) ? { ...x, shipment_status: "shipped" } : x)));
+      setSelectedOrder((prev) => (prev && shipped.includes(prev.id) ? { ...prev, shipment_status: "shipped" } : prev));
+      siteAlert({ message: `${shipped.length} sipariş kargoda — müşterilere kargo e-postası gitti.${r.skipped?.length ? ` ${r.skipped.length} sipariş atlandı.` : ""}`, tone: shipped.length ? "success" : undefined });
+    } catch (e: any) {
+      siteAlert({ title: "Kurye aldı işaretlenemedi", message: String(e?.message || e), tone: "danger" });
+    }
+  }
+
   async function pushTrendyolInvoice(o: Order) {
     setUpdatingId(o.id);
     try {
@@ -860,6 +915,16 @@ export default function OrdersPage() {
         return;
       case "mark_delivered": return updateField(o.id, { shipment_status: "delivered" });
       case "invoice_parasut": return invoiceParasut(o);
+      case "packed": return markPacked(o);
+      case "picked_up":
+        if (await siteConfirm({ title: "Kurye aldı mı?", message: "Sipariş “Kargoda” olur ve müşteriye takip numaralı kargo e-postası gider.", confirmText: "Kurye aldı" })) await pickedUp([o.id]);
+        return;
+      case "mp_picking":
+        setUpdatingId(o.id);
+        try { await shipFlowApi({ op: "mp_picking", orderId: o.id }); siteAlert({ message: "Trendyol'da paket “İşleme al” yapıldı.", tone: "success" }); }
+        catch (e: any) { siteAlert({ title: "Trendyol", message: String(e?.message || e), tone: "danger" }); }
+        finally { setUpdatingId(null); refreshOrder(o.id); }
+        return;
       case "invoice":
         if (await siteConfirm({ title: "Fatura kesildi mi?", message: "Faturayı kestiysen işaretle.", confirmText: "Fatura kesildi" })) updateField(o.id, { invoice_status: "invoiced" });
         return;
@@ -1125,6 +1190,9 @@ export default function OrdersPage() {
     !!(o.cargo_tracking_number || o.kargonomi_tracking_code) && o.status !== "cancelled" && !isImported(o)
     && !["shipped", "delivered", "undelivered", "returned", "cancelled"].includes(o.shipment_status || "")
     && (!o.label_printed_code || labelOutdated(o)));
+  // Kurye bekleyen site paketleri (Paket hazır, henüz kargoda değil) — sabah toplu "Kurye aldı"
+  const courierQueue = orders.filter((o) => !isMarketplace(o) && !isImported(o) && !!o.packed_at && o.status !== "cancelled"
+    && !["shipped", "delivered", "undelivered", "returned", "cancelled"].includes(o.shipment_status || ""));
   async function printLabelQueue() {
     const list = labelQueue.slice(0, 200);
     const r = await printShippingLabels(list.map((o) => o.id));
@@ -1251,6 +1319,19 @@ export default function OrdersPage() {
                   className="h-9 px-3 rounded-lg text-xs font-bold text-muted-foreground hover:text-foreground"
                 >
                   Temizle
+                </button>
+              )}
+              {courierQueue.length > 0 && (
+                <button
+                  onClick={async () => {
+                    if (await siteConfirm({ title: `Kurye aldı (${courierQueue.length})`, message: `Paketi hazır ${courierQueue.length} site siparişi “Kargoda” olur ve müşterilere kargo e-postası gider:
+${courierQueue.slice(0, 20).map((o) => orderLabel(o)).join(", ")}${courierQueue.length > 20 ? "…" : ""}`, confirmText: "Kurye aldı" }))
+                      await pickedUp(courierQueue.map((o) => o.id));
+                  }}
+                  title="Paketi hazır (Kargo bekliyor) site siparişleri — kurye alınca"
+                  className="h-9 px-3 rounded-lg text-xs font-bold border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 flex items-center gap-1.5"
+                >
+                  <Truck size={13} /> Kurye aldı ({courierQueue.length})
                 </button>
               )}
               {labelQueue.length > 0 && (

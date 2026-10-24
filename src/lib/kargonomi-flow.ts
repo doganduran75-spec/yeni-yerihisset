@@ -4,12 +4,11 @@
 //   2) Yönetici firmayı seçer → confirm-shipping-price (confirmOrder) → "Kargo kodu bekleniyor"
 //   3) Kod firmaya göre birkaç saniye – 10+ dk sürer → dakikada bir sorgu (pollKargonomi; cron) +
 //      siparişte "Şimdi sorgula"
-//   4) Kod gelince: sipariş "Kargoda" + kargo kodu kaydedilir + müşteriye takip numaralı e-posta (bir kez)
+//   4) Kod gelince: kod + firma kaydedilir (Kargoda YAPILMAZ — etiket → "Paket hazır" → kurye alınca "Kurye aldı")
 //   Firma gönderiyi oluşturamazsa (webservice_order_failed) hata siparişte görünür → "İptal et" → yeniden teklif.
 // Kod gelmeden sipariş kargolanmış sayılmaz (stok / iptal kuralları değişmez).
 
 import { createAdminClient } from "@/lib/supabase-admin";
-import { sendOrderNotification } from "@/lib/notifications";
 import {
   KargonomiError, createShipment, getOffers, confirmProvider, getShipment, cancelShipment,
   findStateId, findCityId, trackingOf, phone10, FAILED_STATUSES, type KargonomiOffer,
@@ -142,15 +141,13 @@ export async function checkOrder(sb: Sb, orderId: string, token?: string) {
   return { tracking, status: sh.status ?? null, provider: sh.shipping_provider_name ?? null, failed };
 }
 
-/** Kod geldi: sipariş "Kargoda" + kod + müşteriye e-posta (yalnız ilk kez — koşullu güncelleme) */
+/** Kod geldi: kod + firma siparişe yazılır (yalnız ilk kez — koşullu güncelleme). Sipariş "Kargoda" YAPILMAZ ve
+ *  e-posta GİTMEZ ("Paket hazır" akışı, 2026-10-24): etiket basılır → "Paket hazır" → kurye alınca "Kurye aldı"
+ *  (/api/admin/orders/ship-flow) → Kargoda + kargo e-postası o an. */
 async function markShipped(sb: Sb, o: any, tracking: string, provider: string) {
-  const ship = SHIPPED.includes(o.shipment_status || "") ? {} : { shipment_status: "shipped" };
-  const { data: done } = await (sb as any).from("orders")
-    .update({ kargonomi_tracking_code: tracking, cargo_tracking_number: tracking, ...(provider ? { cargo_provider: provider } : {}), ...ship })
-    .eq("id", o.id).is("kargonomi_tracking_code", null).select("id");
-  if (!done?.length || !o.user_id || (o.channel || "site") !== "site" || !("shipment_status" in ship)) return;
-  await sendOrderNotification("order_shipped", { orderId: o.id, userId: o.user_id, trackingNumber: provider ? `${tracking} (${provider})` : tracking })
-    .catch((e: any) => console.error("[kargonomi] kargo e-postası", e?.message || e));
+  await (sb as any).from("orders")
+    .update({ kargonomi_tracking_code: tracking, cargo_tracking_number: tracking, ...(provider ? { cargo_provider: provider } : {}) })
+    .eq("id", o.id).is("kargonomi_tracking_code", null);
 }
 
 /** Cron (dakikada bir): firma seçilmiş, kodu gelmemiş siparişler */

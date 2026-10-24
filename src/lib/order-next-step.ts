@@ -3,9 +3,10 @@
 // bunu kullanır. Sunucu tarafı kurallar (/api/admin/orders/action, order_* fonksiyonları) aynı sırayı
 // ayrıca denetler — burada gösterilmeyen işlem doğrudan istekle de yapılamaz.
 //
-// Site:      Ödeme bekleniyor → Hazırlanıyor → Kargoda → Teslim edildi → (Fatura kes) → Tamamlandı
+// Site:      Ödeme bekleniyor → Hazırlanıyor → [Paket hazır] → Kargo bekliyor → [Kurye aldı] → Kargoda → Teslim edildi → (Fatura kes) → Tamamlandı
 //            iptal yalnız kargodan ÖNCE; kargodan sonra "İade al" (para iadesi aynı pencerede, ürün geldikten sonra)
-// Pazaryeri: Fatura kes (kargodan önce) → kargo/teslim/iade pazaryerinden → İade geldi → Stoğa ekle
+// Pazaryeri: [Paket hazır] → fatura kendiliğinden (Paraşüt → pazaryerine yükle → Trendyol "İşleme al") →
+//            kargo/teslim/iade pazaryerinden → İade geldi → Stoğa ekle   ("Paket hazır" akışı, 2026-10-24)
 
 export type NextActionKey =
   | "mark_paid" | "cancel" | "ship_kargonomi" | "ship_manual" | "mark_delivered"
@@ -13,7 +14,9 @@ export type NextActionKey =
   // satış sonrası (B aşaması — src/lib/after-sale.ts)
   | "fit_ok" | "case_link" | "ship_alt" | "alt_delivered" | "send_label" | "close_case"
   // "İade gelecek": müşteri iadeyi telefonla bildirdi → yönetici talep açar; kod gerekmiyorsa doğrudan yolda
-  | "return_expected" | "return_in_transit";
+  | "return_expected" | "return_in_transit"
+  // "Paket hazır" akışı (src/app/api/admin/orders/ship-flow)
+  | "packed" | "picked_up" | "mp_picking";
 
 export type NextAction = { key: NextActionKey; label: string; kind: "primary" | "danger" };
 
@@ -34,6 +37,10 @@ export type OrderLike = {
   parasut_status?: string | null;          // Paraşüt faturası (src/lib/parasut-invoice.ts)
   parasut_error?: string | null;
   mp_restocked_at?: string | null;
+  packed_at?: string | null;               // "Paket hazır"
+  mp_picking_at?: string | null;           // Trendyol "İşleme al" yapıldı
+  mp_picking_error?: string | null;
+  cargo_tracking_number?: string | null;
   order_items?: { quantity: number; returned_qty?: number | null }[] | null;
   created_at?: string | null;
   fit_status?: string | null;      // trial · ok · exchange · return
@@ -92,6 +99,7 @@ function coreNextStep(o: OrderLike): NextStep {
   const invoiceAction: NextAction = { key: "invoice", label: "Fatura kesildi", kind: "primary" };
   // Paraşüt açıksa ilk düğme (kapalıysa sipariş ekranı gizler)
   const invoiceActs: NextAction[] = [{ key: "invoice_parasut", label: "Faturayı kes (Paraşüt)", kind: "primary" }, invoiceAction];
+  const packedAction: NextAction = { key: "packed", label: "Paket hazır", kind: "primary" };
 
   // ── Pazaryeri: durumları pazaryeri yönetir ──
   if (isMarketplaceOrder(o)) {
@@ -102,7 +110,11 @@ function coreNextStep(o: OrderLike): NextStep {
         : { stage: "İade (pazaryeri)", hint: "Ürün depoya döndüyse stoğa ekle; para iadesini pazaryeri yapar.", actions: [{ key: "mp_restock", label: "İade geldi, stoğa ekle", kind: "danger" }], needsAction: true };
     }
     if (inv === "pending" && !SHIPPED.includes(ship)) {
-      return { stage: "Yeni sipariş", hint: "Kargodan önce faturayı kes.", actions: invoiceActs, needsAction: true };
+      if (!o.packed_at) return { stage: "Yeni sipariş", hint: "Etiketi bas, paketi hazırla, “Paket hazır” de — fatura kendiliğinden kesilir ve pazaryerine yüklenir.", actions: [packedAction], needsAction: true };
+      return { stage: "Paket hazır — fatura kesilecek", hint: "Fatura kendiliğinden kesilmedi (Paraşüt kapalı ya da hata) — kes ya da kesildiyse işaretle.", actions: invoiceActs, needsAction: true };
+    }
+    if (o.channel === "trendyol" && o.packed_at && !o.mp_picking_at && o.mp_picking_error && !SHIPPED.includes(ship)) {
+      return { stage: "Trendyol'da “İşleme al” yapılamadı", hint: o.mp_picking_error, actions: [{ key: "mp_picking", label: "Trendyol — işleme al", kind: "primary" }], needsAction: true };
     }
     // Kargolanmış ama faturası kesilmemiş (unutuldu / eski firmadan geçiş): düğme kalır; yalnız son 7 günün
     // siparişi bekleyen işlere düşer (eski firmanın faturaladığı geçmiş siparişler listeyi doldurmasın)
@@ -137,12 +149,21 @@ function coreNextStep(o: OrderLike): NextStep {
           ], needsAction: true }
         : { stage: `Kargo kodu bekleniyor${firm}`, hint: late
             ? "1 saattir kod gelmedi — Kargonomi panelinden kontrol et."
-            : "Kod gelince sipariş kendiliğinden “Kargoda” olur ve müşteriye takip numarası gider (dakikada bir sorgulanır).",
+            : "Kod gelince siparişe yazılır (dakikada bir sorgulanır); sonra etiketi bas, “Paket hazır” de.",
           actions: [{ key: "ship_kargonomi", label: "Kargonomi durumu", kind: "primary" }], needsAction: late };
     }
-    return { stage: o.kargonomi_shipment_id ? "Hazırlanıyor — kargo firması seçilmedi" : "Hazırlanıyor", hint: "Kargoya ver.", actions: [
-      ...(o.kargonomi_tracking_code ? [] : [{ key: "ship_kargonomi", label: o.kargonomi_shipment_id ? "Kargo firmasını seç (Kargonomi)" : "Kargoya ver (Kargonomi)", kind: "primary" } as NextAction]),
-      { key: "ship_manual", label: "Kargoya verildi (elle)", kind: "primary" },
+    // Paket hazır → kurye bekleniyor (müşteriye e-posta "Kurye aldı"da gider; listede toplu düğme)
+    if (o.packed_at) {
+      return { stage: "Kargo bekliyor — paket hazır", hint: "Kurye alınca “Kurye aldı” — müşteriye kargo e-postası o an gider.", actions: [
+        { key: "picked_up", label: "Kurye aldı", kind: "primary" },
+        { key: "cancel", label: "Siparişi iptal et + para iadesi", kind: "danger" },
+      ], needsAction: daysSince(o.packed_at) > 1 };
+    }
+    const hasCode = !!(o.kargonomi_tracking_code || o.cargo_tracking_number);
+    return { stage: o.kargonomi_shipment_id && !hasCode ? "Hazırlanıyor — kargo firması seçilmedi" : "Hazırlanıyor",
+      hint: hasCode ? "Etiketi bas, paketi hazırla, “Paket hazır” de." : "Kargo kodunu al (Kargonomi ya da etiket kutusundan elle), etiketi bas, “Paket hazır” de.", actions: [
+      ...(hasCode ? [] : [{ key: "ship_kargonomi", label: o.kargonomi_shipment_id ? "Kargo firmasını seç (Kargonomi)" : "Kargoya ver (Kargonomi)", kind: "primary" } as NextAction]),
+      packedAction,
       { key: "cancel", label: "Siparişi iptal et + para iadesi", kind: "danger" },
     ], needsAction: true };
   }

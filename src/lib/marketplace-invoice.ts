@@ -7,7 +7,7 @@
 //                   kapısının dışında). Bağlantı Supabase JWT anahtarı değişirse geçersiz olur (anahtar döndürülmez).
 // Yükleyemezse hata siparişe yazılır; siparişte "<Pazaryeri>'ya yükle" ile yeniden denenir (cron ilk denemeyi yapar).
 import { createAdminClient } from "@/lib/supabase-admin";
-import { getTrendyolConfig, hasCredentials, sendInvoiceFile } from "@/lib/marketplace/trendyol";
+import { getTrendyolConfig, hasCredentials, sendInvoiceFile, updatePackageStatus } from "@/lib/marketplace/trendyol";
 import { getHepsiburadaConfig, hbHasCredentials, hbSendInvoiceLink } from "@/lib/marketplace/hepsiburada";
 
 type Sb = ReturnType<typeof createAdminClient>;
@@ -24,7 +24,7 @@ export class MarketplaceInvoiceError extends Error {
 export async function pushInvoiceToMarketplace(sb: Sb, orderId: string): Promise<{ sent: boolean; already?: boolean }> {
   const s = sb as any;
   const { data: o } = await s.from("orders")
-    .select("id, channel, import_source, external_package_id, mp_package_number, parasut_pdf_path, parasut_invoice_no, parasut_invoiced_at, mp_invoice_sent_at")
+    .select("id, channel, import_source, external_package_id, mp_package_number, parasut_pdf_path, parasut_invoice_no, parasut_invoiced_at, mp_invoice_sent_at, packed_at")
     .eq("id", orderId).maybeSingle();
   if (!o) throw new MarketplaceInvoiceError(404, "Sipariş bulunamadı.");
   if (!(INVOICE_UPLOAD_CHANNELS as readonly string[]).includes(o.channel) || o.import_source)
@@ -40,6 +40,8 @@ export async function pushInvoiceToMarketplace(sb: Sb, orderId: string): Promise
   const done = async (note: string, already = false) => {
     await s.from("orders").update({ mp_invoice_sent_at: new Date().toISOString(), mp_invoice_error: null }).eq("id", orderId);
     await s.from("order_events").insert({ order_id: orderId, type: "note", note });
+    // "Paket hazır" akışı: fatura Trendyol'a gidince paket "İşleme al" (hata siparişe yazılır, cron / düğmeyle yeniden)
+    if (o.channel === "trendyol" && o.packed_at) await trendyolPicking(sb, orderId).catch(() => {});
     return { sent: true, already };
   };
 
@@ -75,6 +77,36 @@ export async function pushInvoiceToMarketplace(sb: Sb, orderId: string): Promise
   return done(`Fatura ${label}'a yüklendi`);
 }
 
+/** Trendyol paketini "İşleme al" (Picking). Paket zaten ilerlemişse (Created değil) dokunmaz, yapıldı sayar. */
+export async function trendyolPicking(sb: Sb, orderId: string): Promise<{ ok: boolean; skipped?: boolean }> {
+  const s = sb as any;
+  const { data: o } = await s.from("orders").select("id, channel, external_package_id, external_status, mp_picking_at").eq("id", orderId).maybeSingle();
+  if (!o || o.channel !== "trendyol") throw new MarketplaceInvoiceError(400, "Yalnız Trendyol siparişi.");
+  if (o.mp_picking_at) return { ok: true, skipped: true };
+  const mark = (fields: Record<string, unknown>) => s.from("orders").update(fields).eq("id", orderId);
+  if (o.external_status && o.external_status !== "Created") {
+    await mark({ mp_picking_at: new Date().toISOString(), mp_picking_error: null });
+    return { ok: true, skipped: true };
+  }
+  try {
+    const cfg = await getTrendyolConfig(sb);
+    if (!hasCredentials(cfg)) throw new Error("Trendyol bağlantı bilgileri eksik (Ayarlar › Entegrasyonlar).");
+    if (!o.external_package_id) throw new Error("Trendyol paket numarası yok.");
+    const { data: items } = await s.from("order_items").select("external_line_id, quantity").eq("order_id", orderId);
+    const lines = ((items as any[]) || []).filter((i) => /^\d+$/.test(String(i.external_line_id || "")))
+      .map((i) => ({ lineId: Number(i.external_line_id), quantity: Number(i.quantity) || 1 }));
+    if (!lines.length) throw new Error("Trendyol satır numaraları yok.");
+    await updatePackageStatus(cfg, String(o.external_package_id), lines, "Picking");
+  } catch (e: any) {
+    const msg = `Trendyol'da “İşleme al” yapılamadı: ${String(e?.message || e)}`.slice(0, 500);
+    await mark({ mp_picking_error: msg });
+    throw new MarketplaceInvoiceError(502, msg);
+  }
+  await mark({ mp_picking_at: new Date().toISOString(), mp_picking_error: null, external_status: "Picking" });
+  await s.from("order_events").insert({ order_id: orderId, type: "note", note: "Trendyol'da paket “İşleme al” yapıldı" });
+  return { ok: true };
+}
+
 /** Cron (dakikada bir): Paraşüt faturası bitmiş, pazaryerine henüz gitmemiş siparişler. Hata alanlar elle yeniden
  *  denenir; yalnız "paket numarası henüz yok" (Hepsiburada paketlemesini bekliyor) kendiliğinden yeniden denenir. */
 export async function pollMarketplaceInvoices(sb: Sb = createAdminClient()) {
@@ -87,6 +119,13 @@ export async function pollMarketplaceInvoices(sb: Sb = createAdminClient()) {
   for (const r of (data as any[]) || []) {
     try { if ((await pushInvoiceToMarketplace(sb, r.id)).sent) sent++; }
     catch (e: any) { if (!String(e?.message).startsWith(NO_PACKAGE)) errors.push(e?.message || String(e)); }
+  }
+  // Fatura yüklenmiş, paket hazır, "İşleme al" henüz yapılmamış Trendyol siparişleri (hata alan elle yeniden denenir)
+  const { data: pick } = await (sb as any).from("orders").select("id")
+    .eq("channel", "trendyol").not("packed_at", "is", null).not("mp_invoice_sent_at", "is", null)
+    .is("mp_picking_at", null).is("mp_picking_error", null).limit(10);
+  for (const r of (pick as any[]) || []) {
+    try { await trendyolPicking(sb, r.id); } catch (e: any) { errors.push(e?.message || String(e)); }
   }
   return { sent, errors };
 }

@@ -1159,6 +1159,25 @@ export default {
         ok(["a5", "100x150"].includes(s0.json?.size) && bad.status === 400, "Etiket boyutu ayarı okunuyor, geçersiz boyut reddediliyor", `${why(s0)} / ${why(bad)}`);
       });
 
+      await part("Paket hazır → kurye aldı (gece paketlenir, e-posta kurye alınca)", async () => {
+        const r = await order([MAIN(1)]);
+        const id = r.json?.orderId;
+        if (!id) return add("fail", "Paket hazır testi için sipariş oluşturulamadı", why(r));
+        const flow = (token, body) => api("/api/admin/orders/ship-flow", { token, body });
+        const m = await flow(F.member.token, { op: "packed", orderId: id });
+        ok(m.status === 403, "Üye 'Paket hazır' diyemiyor", why(m));
+        const unpaid = await flow(F.admin.token, { op: "packed", orderId: id });
+        ok(unpaid.status === 400 && one(`SELECT packed_at IS NULL FROM public.orders WHERE id = ${lit(id)}`) === "t", "Ödemesi alınmamış site siparişi paketlenemiyor", why(unpaid));
+        await rest(`orders?id=eq.${id}`, { token: F.admin.token, method: "PATCH", body: { payment_status: "paid", status: "processing", shipment_status: "preparing" } });
+        const p = await flow(F.admin.token, { op: "packed", orderId: id });
+        const o1 = ord(id);
+        ok(p.status === 200 && !!o1.packed_at && o1.shipment_status === "preparing", "Paket hazır: kargo bekliyor, sipariş henüz 'Kargoda' değil (e-posta gitmez)", `${why(p)} → ${o1.shipment_status}, packed_at ${o1.packed_at}`);
+        const k = await flow(F.admin.token, { op: "picked_up", ids: [id] });
+        ok(k.status === 200 && (k.json?.shipped || []).includes(id) && ord(id).shipment_status === "shipped", "Kurye aldı: sipariş kargoda", `${why(k)} → ${ord(id).shipment_status}`);
+        const k2 = await flow(F.admin.token, { op: "picked_up", ids: [id] });
+        ok(k2.status === 200 && !(k2.json?.shipped || []).includes(id), "Kurye aldı ikinci kez: tekrar işlenmiyor (e-posta bir kez)", why(k2));
+      });
+
       await part("Ödeme alınmadan sevkiyat başlamıyor", async () => {
         const r = await order([MAIN(1)]);
         const id = r.json?.orderId;
