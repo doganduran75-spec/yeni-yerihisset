@@ -55,7 +55,8 @@ export default {
         DELETE FROM public.products WHERE title LIKE 'REGRESYON-TEST%';
         DELETE FROM public.categories WHERE slug = 'regresyon-test';
         DELETE FROM public.partner_opportunities WHERE title LIKE 'REGRESYON-TEST%';
-        DELETE FROM public.coupons WHERE code LIKE 'RGT%';
+        DELETE FROM public.coupons WHERE code LIKE 'RGT%' OR description LIKE 'CRM kampanyası: REGRESYON-TEST%';
+        DELETE FROM public.email_campaigns WHERE recipient_type = 'crm' AND subject LIKE 'REGRESYON-TEST%';
         DELETE FROM public.client_errors WHERE message LIKE 'REGRESYON-TEST%';
         DELETE FROM public.consent_log WHERE session_id IN (SELECT session_id FROM public.analytics_sessions WHERE landing_path = '/regresyon-test');
         DELETE FROM public.analytics_sessions WHERE landing_path = '/regresyon-test';
@@ -1183,6 +1184,36 @@ export default {
         ok(k.status === 200 && (k.json?.shipped || []).includes(id) && ord(id).shipment_status === "shipped", "Kurye aldı: sipariş kargoda", `${why(k)} → ${ord(id).shipment_status}`);
         const k2 = await flow(F.admin.token, { op: "picked_up", ids: [id] });
         ok(k2.status === 200 && !(k2.json?.shipped || []).includes(id), "Kurye aldı ikinci kez: tekrar işlenmiyor (e-posta bir kez)", why(k2));
+      });
+
+      await part("CRM kampanyası: kitle, kişiye özel süreli kupon, hatırlatma listesi, rapor", async () => {
+        const crm = (token, body) => api("/api/admin/crm/campaigns", { token, body });
+        const m = await crm(F.member.token, { op: "audience", filters: {} });
+        ok(m.status === 403, "Üye kampanya kitlesini göremiyor", why(m));
+        const a = await crm(F.admin.token, { op: "audience", filters: { categories: [F.cat], purchase: "buyers" } });
+        const me = (a.json?.rows || []).find((r) => r.user_id === F.member.id);
+        ok(a.status === 200 && !!me && me.order_count >= 1 && !!me.last_order_at, "Kitle: kategoriden alışveriş yapan üye bulunuyor (son alışveriş + sipariş sayısı)", `${why(a)} → ${JSON.stringify(me || {}).slice(0, 160)}`);
+        const none = await crm(F.admin.token, { op: "audience", filters: { categories: [F.cat], purchase: "non_buyers" } });
+        ok(none.status === 200 && !(none.json?.rows || []).some((r) => r.user_id === F.member.id), "Kitle: 'hiç alışveriş yapmamış' süzgeci alışveriş yapanı getirmiyor", why(none));
+        const c = await crm(F.admin.token, { op: "create", name: `REGRESYON-TEST ${RUN}`, userIds: [F.member.id], assignUnconsented: true,
+          coupon: { type: "fixed", amount: 50, valid_days: 7, category_ids: [F.cat] }, email: null });
+        const uc = row(`SELECT id, expires_at, campaign_id FROM public.user_coupons WHERE user_id = ${lit(F.member.id)} AND coupon_id = ${lit(c.json?.couponId || "00000000-0000-0000-0000-000000000000")}`);
+        const daysLeft = uc?.expires_at ? (new Date(uc.expires_at).getTime() - Date.now()) / 86400000 : 0;
+        ok(c.status === 200 && !!uc && daysLeft > 6.9 && daysLeft < 7.1 && uc.campaign_id === c.json?.campaignId, "Kupon kişiye tanımlandı; süre atandığı andan (7 gün)", `${why(c)} → ${JSON.stringify(uc || {})}`);
+        const code = one(`SELECT code FROM public.coupons WHERE id = ${lit(c.json?.couponId || "00000000-0000-0000-0000-000000000000")}`);
+        const items = [{ product_id: F.prod, quantity: 1, price: 1000 }];
+        const v = await api("/api/coupons/validate", { token: F.member.token, body: { codes: [code], cartTotal: 1000, items } });
+        ok(v.status === 200 && eq(v.json?.discount_amount, 50), "Kampanya kuponu sepette geçerli", why(v));
+        sql(`UPDATE public.user_coupons SET expires_at = now() + interval '2 days' WHERE id = ${lit(uc?.id)};
+             UPDATE public.profiles SET marketing_consent = true WHERE id = ${lit(F.member.id)};`);
+        ok(num(`SELECT count(*) FROM public.coupons_to_remind(3) WHERE uc_id = ${lit(uc?.id)}`) === 1, "Bitmesine 3 gün kalan kupon hatırlatma listesinde (izinli, kullanılmamış)", "listede yok");
+        sql(`UPDATE public.user_coupons SET reminded_at = now(), expires_at = now() - interval '1 minute' WHERE id = ${lit(uc?.id)};
+             UPDATE public.profiles SET marketing_consent = false WHERE id = ${lit(F.member.id)};`);
+        const v2 = await api("/api/coupons/validate", { token: F.member.token, body: { codes: [code], cartTotal: 1000, items } });
+        ok(v2.status === 400, "Kişiye özel süresi dolan kupon reddediliyor", why(v2));
+        const rp = await crm(F.admin.token, { op: "report" });
+        const mine = (rp.json?.campaigns || []).find((x) => x.id === c.json?.campaignId);
+        ok(rp.status === 200 && mine?.assigned_count === 1, "Kampanya raporunda görünüyor (tanımlanan 1)", `${why(rp)} → ${JSON.stringify(mine || {}).slice(0, 160)}`);
       });
 
       await part("Ödeme alınmadan sevkiyat başlamıyor", async () => {

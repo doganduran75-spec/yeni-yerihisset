@@ -78,8 +78,10 @@ export async function evaluateCoupon(
   }
 
   const { data: uc } = await (supabase as any)
-    .from("user_coupons").select("id, use_count, max_uses")
+    .from("user_coupons").select("id, use_count, max_uses, expires_at")
     .eq("user_id", opts.userId).eq("coupon_id", coupon.id).maybeSingle();
+  // CRM kampanyası: kişiye özel süre atandığı andan başlar (user_coupons.expires_at)
+  if (uc?.expires_at && new Date(uc.expires_at) < now) return { ok: false, error: "Bu kuponun süresi dolmuş", status: 400 };
   // Kişiye tanınan hak (max_uses) varsa onu, yoksa kuponun kişi başı limitini kullan
   const limit = uc?.max_uses ?? coupon.per_user_limit;
   if (coupon.is_personal) {

@@ -223,6 +223,11 @@ function CouponSection({
       if (!user) return;
       const { data: uc } = await supabase.from("user_coupons").select("*, coupons(*)").eq("user_id", user.id);
       const now = new Date();
+      // Kişiye özel süre (CRM kampanyası — atandığı andan başlar): kupon süresinden erken olan geçerli
+      for (const x of (uc as any[]) || []) {
+        if (x.coupons && x.expires_at && (!x.coupons.expires_at || new Date(x.expires_at) < new Date(x.coupons.expires_at)))
+          x.coupons = { ...x.coupons, expires_at: x.expires_at };
+      }
       const list = ((uc as any[]) || []).filter((x) => {
         const c = x.coupons;
         if (!c || !c.is_active) return false;

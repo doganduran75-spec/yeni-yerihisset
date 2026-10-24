@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase-admin";
 import { buildSmtpConfig } from "@/lib/smtp-config";
 import { createMailTransport, isEmailLockedError } from "@/lib/mail-guard";
 import { MARKETING_KINDS, marketingEligible, unsubscribeUrl, withUnsubscribeFooter } from "@/lib/marketing-mail";
+import { queueCouponReminders } from "@/lib/crm-campaign";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -32,6 +33,9 @@ async function run(req: NextRequest) {
   const fromName = settings.smtp_from_name || storeName;
   const smtpConfig = buildSmtpConfig(settings);
 
+  // Kişiye özel kuponun bitmesine 3 gün kala hatırlatma (izinli + kullanılmamış, bir kez) → kuyruğa
+  const reminders = await queueCouponReminders(supabase).catch(() => 0);
+
   // Bekleyenleri al (tüm kuyruk, en eski önce)
   const { data: pending } = await (supabase as any)
     .from("email_queue")
@@ -41,7 +45,7 @@ async function run(req: NextRequest) {
     .limit(BATCH);
 
   const items: any[] = pending || [];
-  if (items.length === 0) return NextResponse.json({ ok: true, processed: 0, sent: 0, failed: 0 });
+  if (items.length === 0) return NextResponse.json({ ok: true, processed: 0, sent: 0, failed: 0, reminders });
 
   await (supabase as any).from("email_queue").update({ status: "processing" }).in("id", items.map((i) => i.id));
 

@@ -102,6 +102,11 @@ export default function AdminLayout({
                 </SidebarMenuItem>
                 <SidebarMenuItem>
                   <SidebarMenuButton
+                    render={<Link href="/admin/crm/campaigns"><Ticket size={18} className="mr-2" /> Kampanyalar</Link>}
+                  />
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
                     render={<Link href="/admin/crm/bulk-email"><Send size={18} className="mr-2" /> Toplu Email</Link>}
                   />
                 </SidebarMenuItem>

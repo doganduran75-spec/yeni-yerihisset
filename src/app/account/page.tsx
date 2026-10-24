@@ -438,7 +438,10 @@ function AccountPageInner() {
       .select("*, coupons(*)")
       .eq("user_id", user.id)
       .order("added_at", { ascending: false });
-    setUserCoupons(data || []);
+    // Kişiye özel süre (CRM kampanyası — atandığı andan başlar): kupon süresinden erken olan geçerli
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    setUserCoupons(((data as any[]) || []).map((x) => (x.coupons && x.expires_at && (!x.coupons.expires_at || new Date(x.expires_at) < new Date(x.coupons.expires_at))
+      ? { ...x, coupons: { ...x.coupons, expires_at: x.expires_at } } : x)));
     setCouponsLoading(false);
   }
 
