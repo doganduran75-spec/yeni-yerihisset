@@ -308,6 +308,13 @@ async function main() {
     const r = await get(path, opts);
     r.status === want ? add("ok", name) : add("fail", name, `HTTP ${r.status} (beklenen ${want})`);
   }
+  // Kart ödemesi dönüşü (3D Secure sonrası): yönlendirme değil, çerçeveden (iframe) çıkıp üst pencereyi götüren sayfa
+  {
+    const cb = await get("/api/checkout/iyzico/callback", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: "" });
+    cb.status === 200 && /window\.top/.test(cb.text) && /hatali=1/.test(cb.text)
+      ? add("ok", "Kart ödemesi dönüş sayfası çerçeveden çıkıyor (3D Secure sonrası beyaz ekran olmaz)")
+      : add("fail", "Kart ödemesi dönüşü", `HTTP ${cb.status} — üst pencereye yönlendiren sayfa bekleniyordu`);
+  }
   const iyz = await get("/api/checkout/iyzico/initialize", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
   iyz.status >= 500 && iyz.status !== 503 ? add("fail", "Kart ödeme başlatma", `HTTP ${iyz.status}`)
     : iyz.status === 503 ? liveOnly(false, "Kart ödeme kapalı", "iyzico anahtarları tanımlı değil ya da Ayarlar › Ödeme'de kart kapalı")

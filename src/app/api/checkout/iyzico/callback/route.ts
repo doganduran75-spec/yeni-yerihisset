@@ -6,6 +6,21 @@ import { restoreOrderCredit } from "@/lib/store-credit";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://yerihisset.com";
 
+// Dönüş: yönlendirme yerine küçük bir sayfa. 3D Secure doğrulaması iyzico formunun içindeki bir çerçevede (iframe)
+// tamamlanırsa 303 yönlendirmesi sonuç sayfasını o çerçevenin İÇİNDE açıyordu (beyaz ekran). Bu sayfa en üst
+// pencereyi hedefe götürür; çerçeve yoksa aynı pencerede açar. Script çalışmazsa meta yenileme + bağlantı yedek.
+function go(url: string) {
+  const u = JSON.stringify(url).replace(/</g, "\\u003c");
+  const esc = url.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+  const html = `<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">`
+    + `<meta http-equiv="refresh" content="2;url=${esc}"><title>Yönlendiriliyor…</title></head>`
+    + `<body style="font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;color:#3f6212">`
+    + `<p>Ödeme sonucu açılıyor… <a href="${esc}" target="_top" style="color:#3f6212">devam</a></p>`
+    + `<script>try{if(window.top&&window.top!==window.self){window.top.location.href=${u}}else{window.location.replace(${u})}}catch(e){window.location.replace(${u})}</script>`
+    + `</body></html>`;
+  return new NextResponse(html, { status: 200, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+}
+
 export async function POST(req: NextRequest) {
   // iyzico form POST olarak gönderir — token form field'ında gelir
   let token: string | null = null;
@@ -25,7 +40,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (!token) {
-    return NextResponse.redirect(`${SITE_URL}/checkout?hatali=1`, 303);
+    return go(`${SITE_URL}/checkout?hatali=1`);
   }
 
   const supabase = createAdminClient();
@@ -35,7 +50,7 @@ export async function POST(req: NextRequest) {
     iyzipay.checkoutFormAuth.retrieve({ locale: "tr", token }, async (err: any, result: any) => {
       if (err) {
         console.error("[iyzico/callback] retrieve error:", err);
-        resolve(NextResponse.redirect(`${SITE_URL}/checkout?hatali=1`, 303));
+        resolve(go(`${SITE_URL}/checkout?hatali=1`));
         return;
       }
 
@@ -52,7 +67,7 @@ export async function POST(req: NextRequest) {
 
       if (!order) {
         console.error("[iyzico/callback] order not found for conversationId:", conversationId);
-        resolve(NextResponse.redirect(`${SITE_URL}/checkout?hatali=1`, 303));
+        resolve(go(`${SITE_URL}/checkout?hatali=1`));
         return;
       }
 
@@ -62,7 +77,7 @@ export async function POST(req: NextRequest) {
         // Aynı ödeme için İKİNCİ dönüş (iyzico tekrarı / tarayıcı yenileme) → yan etki yok
         // (stok, kupon sayacı ve e-postalar iki kez işlenmesin)
         if (order.payment_status === "paid") {
-          resolve(NextResponse.redirect(successUrl, 303));
+          resolve(go(successUrl));
           return;
         }
         const wasCancelled = order.status === "cancelled"; // 30 dk dolup otomatik iptal edilmişti
@@ -179,11 +194,11 @@ export async function POST(req: NextRequest) {
           }
         })().catch((e) => console.error("[guest-activation]", e?.message || e));
 
-        resolve(NextResponse.redirect(successUrl, 303));
+        resolve(go(successUrl));
       } else {
         // Sipariş zaten ödendi / iptal edildi (tekrar gelen dönüş) → dokunma
         if (order.payment_status !== "pending") {
-          resolve(NextResponse.redirect(order.payment_status === "paid" ? successUrl : `${SITE_URL}/checkout?hatali=1`, 303));
+          resolve(go(order.payment_status === "paid" ? successUrl : `${SITE_URL}/checkout?hatali=1`));
           return;
         }
         // Ödeme başarısız / iptal → siparişi iptal et + rezerve stoğu iade et (F9)
@@ -203,7 +218,7 @@ export async function POST(req: NextRequest) {
           order_id: order.id, type: "note", note: `Kart ödemesi başarısız: ${reason}`,
         });
 
-        resolve(NextResponse.redirect(`${SITE_URL}/checkout?hatali=1`, 303));
+        resolve(go(`${SITE_URL}/checkout?hatali=1`));
       }
     });
   });
@@ -212,7 +227,7 @@ export async function POST(req: NextRequest) {
 // iyzico bazen GET ile de callback gönderebilir
 export async function GET(req: NextRequest) {
   const token = new URL(req.url).searchParams.get("token");
-  if (!token) return NextResponse.redirect(`${SITE_URL}/checkout?hatali=1`, 303);
+  if (!token) return go(`${SITE_URL}/checkout?hatali=1`);
 
   const fakeReq = new NextRequest(req.url, {
     method: "POST",

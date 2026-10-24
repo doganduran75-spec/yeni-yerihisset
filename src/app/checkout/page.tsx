@@ -149,6 +149,8 @@ export default function CheckoutPage() {
     // "responsive" → form penceremizin İÇİNDE, ekran genişliğine uyarak açılır.
     document.querySelectorAll("#iyzipay-checkout-form").forEach((el) => { if (!container.contains(el)) el.remove(); });
     container.innerHTML = `<div id="iyzipay-checkout-form" class="responsive"></div>${iyzicoFormHtml}`;
+    // Form ödeme sayfasının içinde açılır → görünür olsun
+    setTimeout(() => document.getElementById("iyzico-form")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
     // <script> tag'leri innerHTML ile eklenmez — manuel çalıştır
     container.querySelectorAll("script").forEach((oldScript) => {
       const newScript = document.createElement("script");
@@ -597,27 +599,65 @@ export default function CheckoutPage() {
   const creditApplied = Math.min(Math.max(0, Number(creditInput) || 0), creditBalance, preCreditTotal);
   const finalTotal = Math.max(0, Math.round((preCreditTotal - creditApplied) * 100) / 100);
 
+  // Ortak parçalar: özet satırları (bilgisayar sağ sütunu + telefon "Sipariş özeti") ve ödeme düğmesi bloğu
+  const summaryRows = (<>
+                      <div className="flex justify-between text-slate-500 text-sm">
+                        <span>Ürün Toplamı</span>
+                        <span className="text-slate-900 text-lg">₺{totalPrice.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
+                      </div>
+                      <div className="flex justify-between text-slate-500 text-sm">
+                        <span className="flex flex-col">
+                          <span>Kargo Ücreti</span>
+                          {_selMethodSummary?.name && <span className="text-[10px] font-medium normal-case not-italic tracking-normal text-slate-400">{_selMethodSummary.name}</span>}
+                        </span>
+                        <span className={cn(shippingCost === 0 ? "text-green-600" : "text-slate-900", "text-lg")}>
+                          {shippingCost === 0 ? "ÜCRETSİZ" : `₺${shippingCost.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`}
+                        </span>
+                      </div>
+                      {couponData && (
+                        <div className="flex justify-between text-green-600 text-sm">
+                          <span className="flex flex-col">
+                            <span>Kupon İndirimi</span>
+                            <span className="text-[10px] font-medium normal-case not-italic tracking-normal text-slate-400">
+                              {couponCode} · <Link href="/sepet" className="underline hover:text-olive-600">Sepette değiştir</Link>
+                            </span>
+                          </span>
+                          <span className="text-lg">{couponData.free_shipping && couponDiscount === 0 ? "Ücretsiz kargo" : `-₺${couponDiscount.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}`}</span>
+                        </div>
+                      )}
+                      {creditApplied > 0 && (
+                        <div className="flex justify-between text-emerald-600 text-sm">
+                          <span>YeriHisset Kredisi</span>
+                          <span className="text-lg">-₺{creditApplied.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
+                        </div>
+                      )}
+                    </>);
+  const payBlock = (<>
+                    <div className="flex items-baseline justify-between lg:hidden rounded-2xl bg-olive-50/60 border-2 border-olive-100 px-4 py-3">
+                      <span className="text-[11px] font-black text-olive-500 uppercase tracking-widest">Ödenecek tutar</span>
+                      <span className="text-2xl font-black text-olive-700">₺{finalTotal.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    {/* Kampanya e-postası izni (ticari ileti) — işaretsiz gelir; zaten izinliyse gösterilmez */}
+                    {!marketingAlready && (
+                      <label className="flex items-start gap-2.5 px-2 text-xs text-slate-600 cursor-pointer select-none">
+                        <input type="checkbox" checked={marketingOptIn} onChange={(e) => setMarketingOptIn(e.target.checked)} className="mt-0.5 h-4 w-4 shrink-0 accent-olive-600" />
+                        <span>Kampanya ve indirimlerden e-posta ile haberdar olmak istiyorum.</span>
+                      </label>
+                    )}
+                    <Button
+                      onClick={handlePlaceOrder}
+                      disabled={placing}
+                      className="w-full h-20 rounded-[2rem] bg-olive-600 hover:bg-olive-700 text-xl font-black shadow-2xl shadow-olive-100 uppercase tracking-tighter group mt-2 transition-all active:scale-95 disabled:opacity-50"
+                    >
+                      {placing ? (paymentMethod === "credit_card" ? "Ödemeye yönlendiriliyor…" : "Sipariş işleniyor…") : <>SİPARİŞİ TAMAMLA <ArrowRight size={24} className="ml-2 group-hover:translate-x-3 transition-transform duration-500" /></>}
+                    </Button>
+                    <p className="text-[11px] text-slate-500 font-medium leading-relaxed text-center px-2 -mt-1">
+                      “Siparişi Tamamla” butonuna basarak <Link href="/mesafeli-satis#on-bilgilendirme" target="_blank" className="font-bold text-olive-600 underline">Ön Bilgilendirme Formu</Link>’nu ve <Link href="/mesafeli-satis" target="_blank" className="font-bold text-olive-600 underline">Mesafeli Satış Sözleşmesi</Link>’ni okuduğunuzu, ödeme yükümlülüğü altına girdiğinizi kabul edersiniz. Kişisel verileriniz <Link href="/kvkk" target="_blank" className="font-bold text-olive-600 underline">Aydınlatma Metni</Link> kapsamında işlenir.
+                    </p>
+  </>);
+
   return (
     <div className="min-h-screen bg-[#F8FAFC]">
-      {/* iyzico ödeme formu overlay */}
-      {iyzicoFormHtml && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-stretch sm:items-center justify-center sm:p-4">
-          <div className="bg-white sm:rounded-3xl shadow-2xl w-full max-w-lg relative flex flex-col max-h-[100dvh] sm:max-h-[92vh]">
-            <div className="bg-slate-900 px-6 py-4 flex items-center justify-between shrink-0 sm:rounded-t-3xl">
-              <span className="text-white font-black text-sm uppercase tracking-widest">Güvenli Ödeme — iyzico</span>
-              <button
-                onClick={() => setIyzicoFormHtml(null)}
-                className="text-slate-400 hover:text-white transition-colors"
-                title="Kapat"
-              >
-                <X size={20} />
-              </button>
-            </div>
-            <div ref={iyzicoContainerRef} className="p-2 sm:p-4 overflow-y-auto flex-1 min-h-0" />
-          </div>
-        </div>
-      )}
-
       {/* Ödeme hatası banner */}
       {paymentFailed && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-red-600 text-white px-6 py-3 rounded-2xl shadow-xl font-bold text-sm flex items-center gap-2 w-[calc(100%-2rem)] max-w-xl animate-in slide-in-from-top-4">
@@ -684,7 +724,10 @@ export default function CheckoutPage() {
           <div className="lg:col-span-8 space-y-12">
             
             {step === "teslimat" && (<>
-            {/* Step 0: Personal Info */}
+            {/* Üye: e-posta sabit, ad soyad adreste → iletişim bölümü yerine tek satır (adı eksikse bölüm görünür) */}
+            {!isGuest && personalInfo.firstName.trim() && personalInfo.lastName.trim() ? (
+              <p className="text-sm text-slate-500 -mb-6">Sipariş bilgileri <b className="text-slate-800 break-all">{personalInfo.email}</b> adresine gönderilecek.</p>
+            ) : (
             <section className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
                <div className="flex items-center gap-4">
                   <div className="w-10 h-10 bg-olive-600 text-white rounded-2xl flex items-center justify-center font-black shadow-lg shadow-olive-100 italic">01</div>
@@ -759,6 +802,7 @@ export default function CheckoutPage() {
                   </div>
                </div>
             </section>
+            )}
 
             {/* Step 1: Shipping Address */}
             <section id="f-shipping" className="space-y-6 animate-in fade-in slide-in-from-bottom-6">
@@ -986,46 +1030,20 @@ export default function CheckoutPage() {
             </>)}
 
             {step === "odeme" && (<>
-            {/* Teslimat özeti — değiştirmek için teslimat adımına dön */}
-            <section className="space-y-4 animate-in fade-in">
-               <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 bg-olive-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-olive-100"><Truck size={18} /></div>
-                    <h3 className="text-2xl font-black text-slate-900 uppercase italic tracking-tighter">Teslimat</h3>
-                  </div>
-                  <button type="button" onClick={goToTeslimat} className="text-olive-600 font-black text-xs uppercase tracking-widest hover:underline">Düzenle</button>
-               </div>
-               {(() => {
-                 const addr = isGuest ? null : addresses.find((a) => a.id === selectedShippingId);
-                 const bill = !isGuest && !isSameAsShipping ? addresses.find((a) => a.id === selectedBillingId) : null;
-                 return (
-                   <div className="bento-card bg-white !p-6 grid grid-cols-1 md:grid-cols-3 gap-5 text-sm">
-                     <div>
-                       <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">İletişim</p>
-                       <p className="font-bold text-slate-900">{personalInfo.firstName} {personalInfo.lastName}</p>
-                       <p className="text-slate-500 break-all">{personalInfo.email}</p>
-                       {isGuest && guestAddr.phone && <p className="text-slate-500">{guestAddr.phone}</p>}
-                     </div>
-                     <div>
-                       <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Adres</p>
-                       {isGuest ? (
-                         <p className="text-slate-700">{guestAddr.addressDetail}<br /><b>{guestAddr.district} / {guestAddr.city}</b></p>
-                       ) : addr ? (
-                         <p className="text-slate-700">{addr.address_detail}<br /><b>{addr.district} / {addr.city}</b></p>
-                       ) : <p className="text-slate-400">—</p>}
-                       <p className="text-xs text-slate-400 mt-1">Fatura: {isGuest || isSameAsShipping ? "teslimat adresiyle aynı" : (bill?.is_corporate ? `${bill.company_name}` : bill?.address_name || "—")}</p>
-                     </div>
-                     <div>
-                       <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Kargo</p>
-                       <p className="font-bold text-slate-900">{_selMethodSummary?.name || "Kargo"}</p>
-                       <p className={cn("font-bold", shippingCost === 0 ? "text-green-600" : "text-slate-700")}>
-                         {shippingCost === 0 ? "Ücretsiz" : `₺${shippingCost.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`}
-                       </p>
-                     </div>
-                   </div>
-                 );
-               })()}
-            </section>
+            {/* Teslimat: tek satır (tekrar etmesin) — değiştirmek için teslimat adımına dön */}
+            {(() => {
+              const addr = isGuest ? null : addresses.find((a) => a.id === selectedShippingId);
+              const place = isGuest ? `${guestAddr.district} / ${guestAddr.city}` : addr ? `${addr.district} / ${addr.city}` : "";
+              return (
+                <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm">
+                  <p className="min-w-0 text-slate-600 truncate">
+                    <Truck size={14} className="inline -mt-0.5 mr-1.5 text-olive-600" />
+                    <b className="text-slate-900">{personalInfo.firstName} {personalInfo.lastName}</b>{place ? `, ${place}` : ""} · {_selMethodSummary?.name || "Kargo"}
+                  </p>
+                  <button type="button" onClick={goToTeslimat} className="shrink-0 text-olive-600 font-black text-xs uppercase tracking-widest hover:underline">Değiştir</button>
+                </div>
+              );
+            })()}
 
             {creditBalance > 0 && (
             <section className="space-y-4">
@@ -1070,7 +1088,20 @@ export default function CheckoutPage() {
             </section>
             )}
 
+            {/* Kart formu (iyzico) — ödeme sayfasının İÇİNDE açılır (üst menü, adımlar yerinde kalır) */}
+            {iyzicoFormHtml && (
+              <section className="space-y-4 animate-in fade-in" id="iyzico-form">
+                <button type="button" onClick={() => setIyzicoFormHtml(null)} className="inline-flex items-center gap-1.5 text-sm font-bold text-olive-700 hover:underline">
+                  ← Ödeme yöntemine dön
+                </button>
+                <div className="bento-card bg-white !p-2 sm:!p-4">
+                  <div ref={iyzicoContainerRef} />
+                </div>
+              </section>
+            )}
+
             {/* Step 3: Payment */}
+            {!iyzicoFormHtml && (
             <section className="space-y-6 animate-in fade-in slide-in-from-bottom-10">
                <div className="flex items-center gap-4">
                   <div className="w-10 h-10 bg-olive-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-olive-100"><CreditCard size={18} /></div>
@@ -1153,11 +1184,23 @@ export default function CheckoutPage() {
                  </div>
                )}
             </section>
+            )}
+
+            {/* TELEFON: tutar + onay + "Siparişi Tamamla" ödeme yönteminin hemen altında; özet kapalı satır */}
+            {!iyzicoFormHtml && (
+              <section className="lg:hidden space-y-4">
+                <details className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm">
+                  <summary className="cursor-pointer font-bold text-slate-700">Sipariş özeti ({items.filter((i) => !i.is_gift).reduce((n, i) => n + i.quantity, 0)} ürün)</summary>
+                  <div className="pt-3 space-y-2">{summaryRows}</div>
+                </details>
+                {payBlock}
+              </section>
+            )}
             </>)}
           </div>
 
-          {/* SIDEBAR SUMMARY */}
-          <div className="lg:col-span-4 relative">
+          {/* SIDEBAR SUMMARY — yalnız bilgisayarda (telefonda tekrar etmesin: teslimatta alt şerit, ödemede yöntemin altında) */}
+          <div className="hidden lg:block lg:col-span-4 relative">
             <div className="sticky top-40 space-y-8 animate-in fade-in slide-in-from-right duration-1000">
                <div className="bento-card !p-0 bg-white shadow-2xl shadow-slate-200/50">
                   <div className="bg-slate-900 p-8 text-white relative overflow-hidden">
@@ -1167,38 +1210,7 @@ export default function CheckoutPage() {
                   </div>
                   
                   <div className="p-8 space-y-8">
-                    <div className="space-y-4 font-bold uppercase italic tracking-tighter italic">
-                      <div className="flex justify-between text-slate-500 text-sm">
-                        <span>Ürün Toplamı</span>
-                        <span className="text-slate-900 text-lg">₺{totalPrice.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
-                      </div>
-                      <div className="flex justify-between text-slate-500 text-sm">
-                        <span className="flex flex-col">
-                          <span>Kargo Ücreti</span>
-                          {_selMethodSummary?.name && <span className="text-[10px] font-medium normal-case not-italic tracking-normal text-slate-400">{_selMethodSummary.name}</span>}
-                        </span>
-                        <span className={cn(shippingCost === 0 ? "text-green-600" : "text-slate-900", "text-lg")}>
-                          {shippingCost === 0 ? "ÜCRETSİZ" : `₺${shippingCost.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`}
-                        </span>
-                      </div>
-                      {couponData && (
-                        <div className="flex justify-between text-green-600 text-sm">
-                          <span className="flex flex-col">
-                            <span>Kupon İndirimi</span>
-                            <span className="text-[10px] font-medium normal-case not-italic tracking-normal text-slate-400">
-                              {couponCode} · <Link href="/sepet" className="underline hover:text-olive-600">Sepette değiştir</Link>
-                            </span>
-                          </span>
-                          <span className="text-lg">{couponData.free_shipping && couponDiscount === 0 ? "Ücretsiz kargo" : `-₺${couponDiscount.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}`}</span>
-                        </div>
-                      )}
-                      {creditApplied > 0 && (
-                        <div className="flex justify-between text-emerald-600 text-sm">
-                          <span>YeriHisset Kredisi</span>
-                          <span className="text-lg">-₺{creditApplied.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
-                        </div>
-                      )}
-                    </div>
+                    <div className="space-y-4 font-bold uppercase italic tracking-tighter italic">{summaryRows}</div>
 
                     {/* Kupon — yalnız sepette girilir; burada salt okunur */}
                     {couponError && storeCouponCode && !couponData && (
@@ -1224,25 +1236,7 @@ export default function CheckoutPage() {
                     >
                       Ödeme adımına geç <ArrowRight size={22} className="ml-2 group-hover:translate-x-2 transition-transform" />
                     </Button>
-                    ) : (<>
-                    {/* Kampanya e-postası izni (ticari ileti) — işaretsiz gelir; zaten izinliyse gösterilmez */}
-                    {!marketingAlready && (
-                      <label className="flex items-start gap-2.5 px-2 text-xs text-slate-600 cursor-pointer select-none">
-                        <input type="checkbox" checked={marketingOptIn} onChange={(e) => setMarketingOptIn(e.target.checked)} className="mt-0.5 h-4 w-4 shrink-0 accent-olive-600" />
-                        <span>Kampanya ve indirimlerden e-posta ile haberdar olmak istiyorum.</span>
-                      </label>
-                    )}
-                    <Button
-                      onClick={handlePlaceOrder}
-                      disabled={placing}
-                      className="w-full h-20 rounded-[2rem] bg-olive-600 hover:bg-olive-700 text-xl font-black shadow-2xl shadow-olive-100 uppercase tracking-tighter group mt-2 transition-all active:scale-95 disabled:opacity-50"
-                    >
-                      {placing ? (paymentMethod === "credit_card" ? "Ödemeye yönlendiriliyor…" : "Sipariş işleniyor…") : <>SİPARİŞİ TAMAMLA <ArrowRight size={24} className="ml-2 group-hover:translate-x-3 transition-transform duration-500" /></>}
-                    </Button>
-                    <p className="text-[11px] text-slate-500 font-medium leading-relaxed text-center px-2 -mt-1">
-                      “Siparişi Tamamla” butonuna basarak <Link href="/mesafeli-satis#on-bilgilendirme" target="_blank" className="font-bold text-olive-600 underline">Ön Bilgilendirme Formu</Link>’nu ve <Link href="/mesafeli-satis" target="_blank" className="font-bold text-olive-600 underline">Mesafeli Satış Sözleşmesi</Link>’ni okuduğunuzu, ödeme yükümlülüğü altına girdiğinizi kabul edersiniz. Kişisel verileriniz <Link href="/kvkk" target="_blank" className="font-bold text-olive-600 underline">Aydınlatma Metni</Link> kapsamında işlenir.
-                    </p>
-                    </>)}
+                    ) : !iyzicoFormHtml ? payBlock : null}
 
                     <div className="grid grid-cols-2 gap-4">
                       <div className="flex items-center gap-3 text-[9px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 p-3 rounded-2xl">
@@ -1260,6 +1254,20 @@ export default function CheckoutPage() {
           </div>
         </div>
       </main>
+      {step === "teslimat" && (
+        <div className="lg:hidden fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 backdrop-blur px-4 pt-3" style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 12px)" }}>
+          <div className="flex items-center gap-3">
+            <div className="min-w-0">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Toplam</p>
+              <p className="text-xl font-black text-olive-700">₺{finalTotal.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</p>
+            </div>
+            <Button onClick={goToOdeme} className="ml-auto h-12 rounded-2xl bg-olive-600 hover:bg-olive-700 font-black px-6">
+              Ödemeye geç <ArrowRight size={18} className="ml-1.5" />
+            </Button>
+          </div>
+        </div>
+      )}
+      {step === "teslimat" && <div className="lg:hidden h-24" />}
       {/* Ödeme akışında mobilde alt bilgi gösterilmez (dikkat dağıtmasın) */}
       <div className="hidden md:block"><Footer /></div>
     </div>
