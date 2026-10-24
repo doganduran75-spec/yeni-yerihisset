@@ -309,7 +309,7 @@ async function main() {
   }
   const iyz = await get("/api/checkout/iyzico/initialize", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
   iyz.status >= 500 && iyz.status !== 503 ? add("fail", "Kart ödeme başlatma", `HTTP ${iyz.status}`)
-    : iyz.status === 503 ? liveOnly(false, "Kart ödeme kapalı", "iyzico anahtarları tanımlı değil ya da Ayarlar › Ödeme Yöntemleri'nde kart kapalı")
+    : iyz.status === 503 ? liveOnly(false, "Kart ödeme kapalı", "iyzico anahtarları tanımlı değil ya da Ayarlar › Ödeme'de kart kapalı")
     : add("ok", "Kart ödeme başlatma ucu yanıt veriyor", `HTTP ${iyz.status}`);
 
   // 4) Dışarıdan veri erişimi (anon anahtarla, Supabase üzerinden)
@@ -491,7 +491,7 @@ async function main() {
   shipping ? add("ok", "Aktif kargo yöntemi var", `${shipping}`) : add("fail", "Aktif kargo yöntemi YOK", "ödeme yapılamaz");
   const defShip = sql("SELECT name, is_active FROM public.shipping_methods WHERE is_default");
   defShip.length === 1 && defShip[0][1] === "t" ? add("ok", "Varsayılan kargo yöntemi", defShip[0][0])
-    : add("fail", "Varsayılan kargo yöntemi yok ya da pasif", "Ayarlar › Kargo Yöntemleri › Varsayılan yap");
+    : add("fail", "Varsayılan kargo yöntemi yok ya da pasif", "Ayarlar › Kargo › Varsayılan yap");
   // Çift kart siparişi: aynı alıcının aynı anda birden çok açık (ödenmemiş) kart denemesi olmamalı (yeni deneme eskisini kapatır)
   const dupCard = num("SELECT count(*) FROM (SELECT user_id FROM public.orders WHERE payment_method = 'iyzico' AND status = 'pending' AND payment_status = 'pending' AND user_id IS NOT NULL GROUP BY user_id HAVING count(*) > 1) x");
   dupCard ? add("warn", "Aynı alıcıda birden çok açık kart denemesi", `${dupCard} alıcı — yeni deneme eskisini kapatmalıydı (iyzico/initialize)`) : add("ok", "Çift kart denemesi yok");
@@ -563,7 +563,7 @@ async function main() {
       : add("warn", "Bakım sayfası Caddy'de tanımlı değil", "deploy sırasında ziyaretçi hata görür → docs/BAKIM-SAYFASI.md");
   }
   liveOnly(!!process.env.IYZICO_API_KEY, "iyzico anahtarı yok", "kartla ödeme kapalı");
-  liveOnly(S.card_payment_enabled === true, "Kart ödemesi kapalı", "Ayarlar › Ödeme Yöntemleri › Kredi / Banka Kartı'nı aç");
+  liveOnly(S.card_payment_enabled === true, "Kart ödemesi kapalı", "Ayarlar › Ödeme › Kredi / Banka Kartı'nı aç");
   // Ödeme sayfası kart seçeneğini tarayıcıdan okur → sütun dışarıya açık olmalı (yalnız bu sütun)
   {
     const r = await rest("settings?select=card_payment_enabled&limit=1");

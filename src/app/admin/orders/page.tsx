@@ -2127,7 +2127,7 @@ export default function OrdersPage() {
             <div className="space-y-1.5">
               <label className="text-sm font-semibold">Kargo Yöntemi</label>
               {shipMethods.length === 0 ? (
-                <p className="text-xs text-muted-foreground">Aktif kargo yöntemi yok (Ayarlar › Genel › Kargo Yöntemleri).</p>
+                <p className="text-xs text-muted-foreground">Aktif kargo yöntemi yok (Ayarlar › Kargo).</p>
               ) : (
                 <div className="flex flex-wrap gap-2">
                   {shipMethods.map((m) => {

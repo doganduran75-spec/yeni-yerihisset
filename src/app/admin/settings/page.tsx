@@ -25,7 +25,7 @@ import AdLinksCard from "@/components/admin/settings/AdLinksCard";
 import TestMailButton from "@/components/admin/TestMailButton";
 import { siteAlert } from "@/components/ui/site-dialog";
 
-type SettingsTab = "general" | "variants" | "roles" | "brands" | "categories" | "kb-categories" | "member-tags" | "popup" | "email-templates" | "integrations" | "cookies" | "pages" | "home";
+type SettingsTab = "general" | "shipping" | "payment" | "variants" | "roles" | "brands" | "categories" | "kb-categories" | "member-tags" | "popup" | "email-templates" | "integrations" | "cookies" | "pages" | "home";
 
 type Settings = {
   id: string;
@@ -136,7 +136,7 @@ function SettingsPageInner() {
 
   // Genel sekmesine her dönüşte tazele: başka sekmede (Künye: adres / telefon / e-posta) değişen değer eskisiyle ezilmesin
   useEffect(() => {
-    if (loading || activeTab === "general") fetchSettings(); // ilk açılışta her sekmede bir kez (sayfa yükleniyor ekranı kalksın)
+    if (loading || activeTab === "general" || activeTab === "payment") fetchSettings(); // ilk açılışta her sekmede bir kez (sayfa yükleniyor ekranı kalksın)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
@@ -205,6 +205,8 @@ function SettingsPageInner() {
 
   const tabs: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
     { id: "general",       label: "Genel Ayarlar",           icon: <Store size={16} /> },
+    { id: "shipping",      label: "Kargo",                   icon: <Truck size={16} /> },
+    { id: "payment",       label: "Ödeme",                   icon: <CreditCard size={16} /> },
     { id: "integrations",  label: "Entegrasyonlar",          icon: <Plug size={16} /> },
     { id: "email-templates", label: "E-posta Şablonları",    icon: <Mail size={16} /> },
     { id: "home",          label: "Ana Sayfa",               icon: <Home size={16} /> },
@@ -749,6 +751,26 @@ function SettingsPageInner() {
           </CardContent>
         </Card>
 
+        <div className="flex justify-end">
+          <Button type="submit" disabled={saving} className="gap-2 px-8">
+            {saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
+            Değişiklikleri Kaydet
+          </Button>
+        </div>
+      </form>
+      )}
+
+      {/* Kargo sekmesi: kargo yöntemleri (kendi kaydet düğmeleriyle) */}
+      {activeTab === "shipping" && <ShippingMethodsManager />}
+
+      {/* Ödeme sekmesi: ödeme yöntemleri (genel ayarlarla aynı kayıt — handleSaveSettings) */}
+      {activeTab === "payment" && loadError && (
+        <div className="mb-4 rounded-xl border-2 border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <b>Ayarlar yüklenemedi:</b> {loadError}. Kaydetme kapalı — sayfayı yenile (Ctrl+Shift+R).
+        </div>
+      )}
+      {activeTab === "payment" && (
+      <form onSubmit={handleSaveSettings} className="space-y-6">
         {/* ─── Ödeme Yöntemleri ─── */}
         <Card className="shadow-sm border-muted">
           <CardHeader>
@@ -850,16 +872,12 @@ Açıklama: Sipariş numaranızı açıklamaya yazmayı unutmayın.`}
         </Card>
 
         <div className="flex justify-end">
-          <Button type="submit" disabled={saving} className="gap-2 px-8">
+          <Button type="submit" disabled={saving || !!loadError} className="gap-2 px-8">
             {saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
             Değişiklikleri Kaydet
           </Button>
         </div>
       </form>
-      )}
-
-      {activeTab === "general" && (
-        <div className="mt-6"><ShippingMethodsManager /></div>
       )}
     </div>
   );
