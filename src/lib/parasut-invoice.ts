@@ -27,7 +27,7 @@ const ORDER_COLS = `id, order_number, external_order_number, channel, status, cr
   total_amount, shipping_cost, coupon_discount, credit_used, billing_address, shipping_address, customer_name, customer_email, customer_phone,
   cargo_provider, kargonomi_provider, shipping_method, parasut_invoice_id, parasut_status, parasut_job_id, parasut_e_doc_id, parasut_e_doc_type,
   parasut_paid, parasut_diff_ok, profiles(email, first_name, last_name, phone),
-  order_items(quantity, unit_price, product_id, variant_id, variant_name, title, products(title, parasut_product_id), product_variants(parasut_product_id))`;
+  order_items(id, quantity, unit_price, product_id, variant_id, variant_name, title, sku, barcode, products(title, parasut_product_id), product_variants(parasut_product_id))`;
 
 async function loadOrder(sb: Sb, id: string) {
   const { data, error } = await (sb as any).from("orders").select(ORDER_COLS).eq("id", id).maybeSingle();
@@ -137,6 +137,23 @@ export async function invoiceOrder(sb: Sb, orderId: string, opts: { acceptDiff?:
   const c = await parasutConfig(sb);
   if (!c.enabled) throw new ParasutError(400, "Paraşüt kapalı (Ayarlar › Entegrasyonlar).");
   let o = await loadOrder(sb, orderId);
+  // Pazaryerinden ürünsüz gelmiş satır (geldiği anda kod sitede yoktu, sonradan girildi): faturadan önce SKU / barkodla
+  // sitedeki numaraya bağla (büyük / küçük harf yok sayılır). Stoğa DOKUNMAZ — not düşer.
+  if (!o.parasut_invoice_id) {
+    let linked = 0;
+    for (const it of (o.order_items as any[]) || []) {
+      if (it.variant_id || it.product_id) continue;
+      const code = String(it.sku || it.barcode || "").trim().replace(/[%_,()]/g, "");
+      if (!code) continue;
+      const { data: v } = await (sb as any).from("product_variants").select("id, product_id")
+        .or(`sku.ilike.${code},barcode.ilike.${code}`).limit(1).maybeSingle();
+      if (!v) continue;
+      await (sb as any).from("order_items").update({ variant_id: v.id, product_id: v.product_id }).eq("id", it.id).is("variant_id", null);
+      await (sb as any).from("order_events").insert({ order_id: orderId, type: "note", note: `Satır "${code}" koduyla sitedeki ürüne bağlandı (fatura için; stok değişmedi)` });
+      linked++;
+    }
+    if (linked) o = await loadOrder(sb, orderId);
+  }
   if (o.parasut_status === "done") return { status: "done" };
   // Entegrasyon dışı gönderim: siparişte kargo firması yoksa panelde seçilen firma (Kargo firmaları listesinden) kaydedilir
   if (opts.carrier && !o.kargonomi_provider && !o.cargo_provider) {
