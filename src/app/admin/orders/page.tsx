@@ -703,79 +703,41 @@ export default function OrdersPage() {
     const prevItem: any = selectedOrder?.order_items?.find((i) => i.id === itemId);
     // Kod aynı ve satır zaten bir ürüne bağlıysa iş yok; pazaryeri satırı kodla gelip eşleşmediyse (ürünsüz) aynı kodla da ara
     if (prevItem && String(prevItem.sku ?? "").trim() === trimmed && (prevItem.variant_id || prevItem.product_id)) return;
+    if (!trimmed) return;
     setSkuEdits(prev => ({ ...prev, [itemId]: { ...prev[itemId], sku: trimmed, error: "", saving: true } }));
 
-    if (!trimmed) {
-      setSkuEdits(prev => ({ ...prev, [itemId]: { ...prev[itemId], saving: false } }));
-      return;
-    }
-
-    // SKU'ya göre varyasyonu, ürünü ve varyasyon seçeneklerini bul
-    const { data: variant } = await (supabase
-      .from("product_variants")
-      .select("id, sku, product_id, products(title), variant_options(value, variant_groups(name))")
-      // büyük / küçük harf farkı yok sayılır (SKU tekil kuralı da öyle); SKU yoksa barkodla da bulunur
-      .or(`sku.ilike.${trimmed.replace(/[%_,()]/g, "")},barcode.ilike.${trimmed.replace(/[%_,()]/g, "")}`)
-      .limit(1)
-      .maybeSingle() as any) as { data: any };
-
-    if (!variant) {
-      setSkuEdits(prev => ({ ...prev, [itemId]: { ...prev[itemId], saving: false, error: `"${trimmed}" sitede bulunamadı (SKU ya da barkod) — ürün formunda o numaranın SKU'sunu kontrol et` } }));
-      return;
-    }
-
-    const newTitle = variant.products?.title ?? "";
-
-    // Varyasyon adını oluştur (ör. "Beden: 36" veya "Renk: Kırmızı")
-    const opt = variant.variant_options;
-    const newVariantName: string = opt?.value && opt?.variant_groups?.name
-      ? `${opt.variant_groups.name}: ${opt.value}`
-      : (opt?.value ?? "");
-
-    // order_items satırını güncelle (variant_name dahil)
-    await (supabase
-      .from("order_items")
-      .update({ sku: trimmed, variant_id: variant.id, product_id: variant.product_id, variant_name: newVariantName } as any)
-      .eq("id", itemId) as any);
-
-    setSkuEdits(prev => ({ ...prev, [itemId]: { sku: trimmed, title: newTitle, saving: false, error: "" } }));
-
-    // Sipariş geçmişine not + (stoğu düşülmüş siparişte) elle stok hatırlatması
-    if (selectedOrder) {
-      const oldLabel = `${prevItem?.sku || "—"}${prevItem?.variant_name ? ` (${prevItem.variant_name})` : ""}`;
-      const newLabel = `${trimmed}${newVariantName ? ` (${newVariantName})` : ""}`;
-      const stockTaken = !!selectedOrder.stock_reduced_at || !!prevItem?.stock_applied_at;
-      const { data: { user } } = await supabase.auth.getUser();
-      await (supabase as any).from("order_events").insert({
-        order_id: selectedOrder.id,
-        type: "corrected",
-        note: `Satır değiştirildi: ${oldLabel} → ${newLabel}.${stockTaken ? " Stok otomatik değişmedi — elle düzenlenmeli." : ""}`,
-        created_by: user?.id ?? null,
-      });
-      setTimelineTick((t) => t + 1);
-      if (stockTaken) {
-        const open = await siteConfirm({
-          title: "Stok otomatik değişmedi",
-          message: `Bu siparişin stoğu daha önce düşülmüştü. Stok Yönetimi'nde:\n• ${oldLabel} → +1\n• ${newLabel} → −1\n(Değişimde yeni ürünü gönderdiğinde düş, eski ürün geri geldiğinde ekle.)`,
-          confirmText: "Stok Yönetimi'ni aç",
-          cancelText: "Tamam",
-        });
-        if (open) window.open("/admin/stock", "_blank");
-      }
-    }
-
-    // Lokal order_items state'ini de güncelle (variant_name dahil)
-    setSelectedOrder(prev => {
-      if (!prev) return null;
-      return {
-        ...prev,
-        order_items: (prev.order_items ?? []).map(i =>
-          i.id === itemId
-            ? { ...i, sku: trimmed, product_id: variant.product_id, variant_id: variant.id, variant_name: newVariantName, products: { title: newTitle } }
-            : i
-        ),
-      };
+    // Sunucuda kaydet (order_items'a tarayıcıdan yazma izni yok — eskiden sessizce kaydolmuyordu)
+    const { data: { session } } = await supabase.auth.getSession();
+    const r = await fetch("/api/admin/orders/item-sku", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
+      body: JSON.stringify({ itemId, code: trimmed }),
     });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || !d.ok) {
+      setSkuEdits(prev => ({ ...prev, [itemId]: { ...prev[itemId], saving: false, error: d.error || "Kaydedilemedi" } }));
+      return;
+    }
+    const v = d.variant;
+    setSkuEdits(prev => ({ ...prev, [itemId]: { sku: v.sku, title: v.title, saving: false, error: "" } }));
+    setTimelineTick((t) => t + 1);
+    setSelectedOrder(prev => prev ? {
+      ...prev,
+      order_items: (prev.order_items ?? []).map(i =>
+        i.id === itemId ? { ...i, sku: v.sku, product_id: v.product_id, variant_id: v.id, variant_name: v.variant_name, products: { title: v.title } } as any : i),
+    } : null);
+    if (d.stockTaken) {
+      const open = await siteConfirm({
+        title: "Stok otomatik değişmedi",
+        message: `Bu siparişin stoğu daha önce düşülmüştü. Stok Yönetimi'nde:
+• ${d.oldLabel} → +1
+• ${d.newLabel} → −1
+(Değişimde yeni ürünü gönderdiğinde düş, eski ürün geri geldiğinde ekle.)`,
+        confirmText: "Stok Yönetimi'ni aç",
+        cancelText: "Tamam",
+      });
+      if (open) window.open("/admin/stock", "_blank");
+    }
   }
 
   // ─── Kargoya Ver (Kargonomi) — pencere: src/components/admin/KargonomiDialog.tsx ──

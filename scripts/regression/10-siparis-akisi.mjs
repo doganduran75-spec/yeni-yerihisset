@@ -1076,6 +1076,28 @@ export default {
         }
       });
 
+      await part("Sipariş satırı ürün koduyla bağlanır (kayıt gerçekten yazılır)", async () => {
+        // Eskiden tarayıcıdan yazılıyordu, order_items'ta yönetici yazma kuralı olmadığından SESSİZCE kaydolmuyordu
+        const r = await order([MAIN(1)]);
+        const id = r.json?.orderId;
+        if (!id) return add("fail", "Satır bağlama testi için sipariş oluşturulamadı", why(r));
+        const item = row(`SELECT id, variant_id FROM public.order_items WHERE order_id = ${lit(id)} AND unit_price > 0 LIMIT 1`);
+        const code = `RGT-LINK-${RUN}`;
+        sql(`UPDATE public.product_variants SET sku = ${lit(code)} WHERE id = ${lit(item.variant_id)}`);
+        sql(`UPDATE public.order_items SET variant_id = NULL, product_id = NULL, sku = NULL WHERE id = ${lit(item.id)}`);
+        try {
+          const m = await api("/api/admin/orders/item-sku", { token: F.member.token, body: { itemId: item.id, code } });
+          ok(m.status === 403, "Üye sipariş satırını değiştiremiyor", why(m));
+          const a = await api("/api/admin/orders/item-sku", { token: F.admin.token, body: { itemId: item.id, code: code.toLowerCase() } });
+          const after = row(`SELECT variant_id, sku FROM public.order_items WHERE id = ${lit(item.id)}`);
+          ok(a.status === 200 && after.variant_id === item.variant_id && after.sku === code, "Yönetici satırı ürün koduyla bağlıyor (harf farkı yok sayılıyor, veritabanına yazılıyor)", `${why(a)} → ${JSON.stringify(after)}`);
+          const nf = await api("/api/admin/orders/item-sku", { token: F.admin.token, body: { itemId: item.id, code: "RGT-YOK-KOD" } });
+          ok(nf.status === 404, "Sitede olmayan kod reddediliyor", why(nf));
+        } finally {
+          sql(`UPDATE public.product_variants SET sku = NULL WHERE id = ${lit(item.variant_id)} AND sku = ${lit(code)}`);
+        }
+      });
+
       await part("Ödeme alınmadan sevkiyat başlamıyor", async () => {
         const r = await order([MAIN(1)]);
         const id = r.json?.orderId;
