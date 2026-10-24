@@ -5,7 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import {
   ShoppingBag, Trash2, Plus, Minus, ArrowLeft, ChevronRight,
-  ShieldCheck, CreditCard, User, Gift, X, Check, Ticket, Loader2,
+  ShieldCheck, CreditCard, User, Gift, X, Check, Ticket, Loader2, Banknote,
 } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -185,199 +185,182 @@ function CartCard({
   );
 }
 
-// ── Kupon bölümü (panel içi, dış Card yok) ───────────────────────────────────
+// ── İndirimlerin: hesaptaki kuponlar + YeriHisset Kredisi (kullanıcı kararları 2026-10-24) ─────────────
+// Müşteri kod YAZMAZ: hesabına tanımlı kuponları listeden seçer (birden çok — aynı tür dahil birleşir);
+// kampanya bağlantısından gelen kod da burada görünür. Kredi "Kullan" ile sepette uygulanır, ödeme adımı bunu alır.
+// Geçersiz kalan kupon (alt limit, kapsam dışı ürün…) sebebiyle gösterilir ve seçimden çıkar.
 function CouponSection({
   cartTotal,
   onApplied,
+  onCredit,
 }: {
   cartTotal: number;
   onApplied: (discount: number, freeShipping: boolean) => void;
+  onCredit: (amount: number) => void;
 }) {
-  const { couponCode, setCouponCode } = useCartStore();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { couponCode, setCouponCode, creditUse, setCreditUse, items } = useCartStore();
+  /* eslint-disable @typescript-eslint/no-explicit-any */
   const [userCoupons, setUserCoupons] = useState<any[]>([]);
-  const [input, setInput] = useState("");
-  const [applied, setApplied] = useState<{ name: string; discount: number; free_shipping: boolean } | null>(null);
-  const [error, setError] = useState("");
+  const [scopeNames, setScopeNames] = useState<Record<string, string>>({});
+  const [results, setResults] = useState<Record<string, { ok: boolean; discount?: number; free_shipping?: boolean; error?: string; name?: string }>>({});
   const [loading, setLoading] = useState(false);
   const [loggedIn, setLoggedIn] = useState<boolean | null>(null);
-  // Kod alanı varsayılan KAPALI: kuponu olmayan müşteri "kodum yok" hissine kapılmasın;
-  // kodu olan (ortak / kampanya kodu) küçük bağlantıdan açar
-  const [open, setOpen] = useState(false);
+  const [creditBalance, setCreditBalance] = useState(0);
+  const [discountTotal, setDiscountTotal] = useState(0);
 
   const onAppliedRef = useRef(onApplied);
   onAppliedRef.current = onApplied;
-  // coupon_apply event'i kod başına bir kez (cartTotal değişimiyle tekrar etmesin)
-  const lastTrackedCode = useRef<string | null>(null);
+  const onCreditRef = useRef(onCredit);
+  onCreditRef.current = onCredit;
+  const tracked = useRef<Set<string>>(new Set());
+  const selected = couponCode.split(",").map((c) => c.trim().toUpperCase()).filter(Boolean);
 
-  // Kullanıcı + hesabına tanımlı kuponları yükle
+  // Kullanıcı + hesabına tanımlı kuponlar + kredi bakiyesi
   useEffect(() => {
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
       setLoggedIn(!!user);
       if (!user) return;
-      const { data: uc } = await supabase
-        .from("user_coupons")
-        .select("*, coupons(*)")
-        .eq("user_id", user.id);
+      const { data: uc } = await supabase.from("user_coupons").select("*, coupons(*)").eq("user_id", user.id);
       const now = new Date();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      setUserCoupons(((uc as any[]) || []).filter((x) => {
+      const list = ((uc as any[]) || []).filter((x) => {
         const c = x.coupons;
         if (!c || !c.is_active) return false;
         if (c.expires_at && new Date(c.expires_at) < now) return false;
-        if (x.use_count >= c.per_user_limit) return false;
+        if (x.use_count >= (x.max_uses ?? c.per_user_limit)) return false;
         return true;
-      }));
+      });
+      setUserCoupons(list);
+      // Kapsam adları (marka / kategori)
+      const bIds = [...new Set(list.flatMap((x) => x.coupons?.brand_ids || []))];
+      const cIds = [...new Set(list.flatMap((x) => x.coupons?.category_ids || []))];
+      const names: Record<string, string> = {};
+      if (bIds.length) for (const b of ((await supabase.from("brands").select("id, name").in("id", bIds)).data as any[]) || []) names[b.id] = b.name;
+      if (cIds.length) for (const c of ((await supabase.from("categories").select("id, name").in("id", cIds)).data as any[]) || []) names[c.id] = c.name;
+      setScopeNames(names);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) {
+          const r = await fetch("/api/affiliate/stats", { headers: { Authorization: `Bearer ${session.access_token}` } });
+          const d = await r.json();
+          setCreditBalance(Number(d?.affiliate?.credit_balance || 0));
+        }
+      } catch { /* kredi yoksa görünmez */ }
     })();
   }, []);
 
-  // couponCode veya sepet toplamı değişince doğrula (indirim tutara bağlı)
+  // Seçili kuponları doğrula (sepet değişince de) — geçersiz olan seçimden çıkar, sebebi görünür kalır
+  const itemsKey = items.map((i) => `${i.id}:${i.quantity}`).join("|");
   useEffect(() => {
-    if (!couponCode) {
-      setApplied(null);
-      onAppliedRef.current(0, false);
-      return;
-    }
+    if (!selected.length) { setResults({}); setDiscountTotal(0); onAppliedRef.current(0, false); return; }
     let active = true;
     (async () => {
       setLoading(true);
-      setError("");
       try {
         const { data: { session } } = await supabase.auth.getSession();
         const res = await fetch("/api/coupons/validate", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-          },
-          body: JSON.stringify({ code: couponCode, cartTotal }),
+          headers: { "Content-Type": "application/json", ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
+          body: JSON.stringify({ codes: selected, cartTotal, items: items.map((i) => ({ product_id: i.product_id, quantity: i.quantity, price: i.price, is_gift: i.is_gift })) }),
         });
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        let d: any = {};
-        try { d = await res.json(); } catch { /* JSON değil */ }
+        const d: any = await res.json().catch(() => ({}));
         if (!active) return;
-        const firstTimeForCode = lastTrackedCode.current !== couponCode;
-        if (res.ok && d.valid) {
-          setApplied({ name: d.name || "İndirim", discount: d.discount_amount || 0, free_shipping: !!d.free_shipping });
-          onAppliedRef.current(d.discount_amount || 0, !!d.free_shipping);
-          if (firstTimeForCode) { trackCouponApply({ code: couponCode, success: true, discount: d.discount_amount || 0 }); lastTrackedCode.current = couponCode; }
-        } else {
-          setApplied(null);
-          onAppliedRef.current(0, false);
-          setError(d.error || (res.status === 401 ? "Kupon için giriş yapın." : `Kupon uygulanamadı (${res.status})`));
-          if (firstTimeForCode) { trackCouponApply({ code: couponCode, success: false, reason: d.error || String(res.status) }); lastTrackedCode.current = couponCode; }
-          setCouponCode("");
+        const map: Record<string, any> = {};
+        for (const r of (d.results as any[]) || []) map[r.code] = r.ok ? { ok: true, discount: r.discount_amount, free_shipping: r.free_shipping, name: r.name } : { ok: false, error: r.error };
+        setResults((prev) => ({ ...prev, ...map }));
+        for (const r of (d.results as any[]) || []) {
+          if (tracked.current.has(r.code)) continue;
+          tracked.current.add(r.code);
+          trackCouponApply(r.ok ? { code: r.code, success: true, discount: r.discount_amount || 0 } : { code: r.code, success: false, reason: r.error });
         }
+        const good = ((d.results as any[]) || []).filter((r) => r.ok);
+        const bad = ((d.results as any[]) || []).filter((r) => !r.ok).map((r) => r.code);
+        if (bad.length) setCouponCode(selected.filter((c) => !bad.includes(c)).join(","));
+        const total = good.reduce((a, r) => a + Number(r.discount_amount || 0), 0);
+        setDiscountTotal(Math.min(total, cartTotal));
+        onAppliedRef.current(Math.min(total, cartTotal), good.some((r) => r.free_shipping));
       } catch {
-        if (!active) return;
-        setApplied(null);
-        onAppliedRef.current(0, false);
-        setError("Bağlantı hatası, tekrar deneyin.");
+        if (active) onAppliedRef.current(0, false);
       } finally {
         if (active) setLoading(false);
       }
     })();
     return () => { active = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [couponCode, cartTotal]);
+  }, [couponCode, cartTotal, itemsKey]);
 
-  function apply() {
-    const c = input.trim().toUpperCase();
-    if (c) setCouponCode(c);
-  }
-  function remove() {
-    setCouponCode("");
-    setInput("");
-    setError("");
-  }
+  // Kredi: kullanılan tutar bakiye ve (indirim sonrası) sepet tutarını geçemez
+  const creditMax = Math.max(0, Math.min(creditBalance, cartTotal - discountTotal));
+  const creditApplied = Math.min(creditUse, creditMax);
+  useEffect(() => { onCreditRef.current(creditApplied); }, [creditApplied]);
 
-  const codeInput = (
-    <div className="space-y-2">
-      <div className="flex gap-2">
-        <input
-          type="text"
-          value={input}
-          autoFocus
-          onChange={(e) => setInput(e.target.value.toUpperCase())}
-          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); apply(); } }}
-          placeholder="Kupon kodu"
-          className="w-full h-12 px-4 rounded-xl border-2 border-slate-200 focus:outline-none focus:border-olive-500 bg-white transition-all font-medium uppercase placeholder:normal-case"
-        />
-        <Button onClick={apply} disabled={loading || !input.trim()} className="h-12 px-6 rounded-xl font-bold bg-slate-900">
-          {loading ? <Loader2 size={16} className="animate-spin" /> : "UYGULA"}
-        </Button>
-      </div>
-    </div>
-  );
+  const toggle = (code: string) => {
+    const c = code.toUpperCase();
+    setCouponCode((selected.includes(c) ? selected.filter((x) => x !== c) : [...selected, c]).join(","));
+  };
+  const tl = (n: number) => `₺${Number(n).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`;
+  const detail = (c: any) => {
+    const parts: string[] = [];
+    parts.push(c.type === "percentage" ? `%${Number(c.amount)} indirim` : c.type === "fixed" ? `${tl(c.amount)} indirim` : "Ücretsiz kargo");
+    const scope = [...(c.brand_ids || []), ...(c.category_ids || [])].map((id: string) => scopeNames[id]).filter(Boolean);
+    if (scope.length) parts.push(`yalnız ${scope.join(", ")}`);
+    if (Number(c.min_order_amount || 0) > 0) parts.push(`${tl(c.min_order_amount)} ve üstü`);
+    if (c.expires_at) {
+      const days = Math.ceil((new Date(c.expires_at).getTime() - Date.now()) / 86400000);
+      parts.push(days <= 1 ? "bugün bitiyor" : `${days} gün kaldı`);
+    }
+    return parts.join(" · ");
+  };
 
-  // Kupon uygulanmış
-  if (applied) {
+  if (loggedIn === null) return null;
+  if (loggedIn === false) {
     return (
-      <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-2xl px-4 py-3">
-        <div>
-          <p className="text-xs font-black text-green-800 flex items-center gap-1.5"><Ticket size={13} /> {applied.name}</p>
-          <p className="text-[10px] text-green-600 font-mono font-bold">
-            {couponCode}
-            {applied.free_shipping
-              ? " · Ücretsiz kargo"
-              : applied.discount > 0
-              ? ` · -₺${applied.discount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`
-              : ""}
-          </p>
-        </div>
-        <button onClick={remove} className="text-green-500 hover:text-red-500 transition-colors p-1" aria-label="Kuponu kaldır">
-          <X size={16} />
-        </button>
-      </div>
+      <p className="text-xs text-slate-500 flex items-center gap-1.5">
+        <Ticket size={13} className="text-olive-600" /> Kuponun ya da YeriHisset Kredin varsa{" "}
+        <Link href="/login?redirect=/sepet" className="font-bold text-olive-600 underline">giriş yap</Link>.
+      </p>
     );
   }
+  // Hesaptaki kuponlar + kampanya bağlantısından gelen (hesapta olmayan) kodlar
+  const known = new Set(userCoupons.map((x) => String(x.coupons?.code || "").toUpperCase()));
+  const extra = selected.filter((c) => !known.has(c));
+  if (!userCoupons.length && !extra.length && creditBalance <= 0) return null;
 
-  // Hesabında kullanılabilir kupon var → doğrudan seçilebilir kartlar
-  if (userCoupons.length > 0) {
-    return (
-      <div className="space-y-2">
-        <h4 className="text-xs font-black uppercase tracking-wider flex items-center gap-2 text-olive-700">
-          <Ticket size={14} className="text-olive-600" /> Kuponların
-        </h4>
-        {userCoupons.map((uc) => (
-          <button
-            key={uc.id}
-            onClick={() => { setError(""); setCouponCode(String(uc.coupons?.code || "").toUpperCase()); }}
-            disabled={loading}
-            className="w-full flex items-center justify-between gap-3 rounded-2xl border-2 border-dashed border-olive-300 bg-olive-50/50 px-4 py-3 text-left hover:bg-olive-50 transition-colors"
-          >
-            <span className="min-w-0">
-              <span className="block text-sm font-bold text-slate-900 truncate">{uc.coupons?.name || uc.coupons?.code}</span>
-              <span className="block text-[11px] font-mono font-bold text-olive-700">{uc.coupons?.code}</span>
-            </span>
-            <span className="shrink-0 text-xs font-black text-white bg-olive-600 rounded-full px-3 py-1.5">Uygula</span>
-          </button>
-        ))}
-        {error && <p className="text-xs text-red-500 font-medium">{error}</p>}
-        {open ? codeInput : (
-          <button onClick={() => setOpen(true)} className="text-xs font-semibold text-slate-500 hover:text-olive-700 underline">
-            Başka bir kodun var mı?
-          </button>
-        )}
-      </div>
-    );
-  }
-
-  // Kuponu yok → yalnız küçük bağlantı (kodu olan açar)
   return (
-    <div className="space-y-2">
-      {!open ? (
-        <button onClick={() => setOpen(true)} className="text-sm font-semibold text-slate-500 hover:text-olive-700 flex items-center gap-1.5">
-          <Ticket size={14} /> İndirim kodun var mı?
-        </button>
-      ) : loggedIn === false ? (
-        <p className="text-xs text-slate-500">
-          İndirim kodunu kullanmak için{" "}
-          <Link href="/login?redirect=/sepet" className="font-bold text-olive-600 underline">giriş yap</Link>.
-        </p>
-      ) : codeInput}
-      {error && <p className="text-xs text-red-500 font-medium">{error}</p>}
+    <div className="space-y-2.5">
+      <h4 className="text-xs font-black uppercase tracking-wider flex items-center gap-2 text-olive-700">
+        <Ticket size={14} className="text-olive-600" /> İndirimlerin {loading && <Loader2 size={12} className="animate-spin" />}
+      </h4>
+      {[...userCoupons.map((x) => ({ code: String(x.coupons?.code || "").toUpperCase(), c: x.coupons })), ...extra.map((code) => ({ code, c: null as any }))].map(({ code, c }) => {
+        const on = selected.includes(code);
+        const r = results[code];
+        return (
+          <label key={code} className={cn("flex items-start gap-3 rounded-2xl border-2 px-3 py-2.5 cursor-pointer transition-colors",
+            on ? "border-olive-400 bg-olive-50/60" : "border-dashed border-slate-200 bg-white hover:border-olive-200")}>
+            <input type="checkbox" checked={on} onChange={() => toggle(code)} className="mt-1 h-4 w-4 accent-olive-600 shrink-0" />
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-bold text-slate-900">{c?.name || r?.name || "Kampanya indirimi"}</span>
+              <span className="block text-[11px] text-slate-500">{c ? detail(c) : code}</span>
+              {r && !r.ok && <span className="block text-[11px] font-bold text-red-600">{r.error}</span>}
+            </span>
+            {on && r?.ok && (
+              <span className="shrink-0 text-xs font-black text-green-700">{r.free_shipping && !r.discount ? "Kargo ücretsiz" : `-${tl(r.discount || 0)}`}</span>
+            )}
+          </label>
+        );
+      })}
+      {creditBalance > 0 && (
+        <div className={cn("flex items-center gap-3 rounded-2xl border-2 px-3 py-2.5", creditApplied > 0 ? "border-emerald-300 bg-emerald-50/60" : "border-dashed border-slate-200")}>
+          <Banknote size={16} className="text-emerald-600 shrink-0" />
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-bold text-slate-900">YeriHisset Kredin</span>
+            <span className="block text-[11px] text-slate-500">Bakiye {tl(creditBalance)}{creditApplied > 0 ? ` · ${tl(creditApplied)} kullanılıyor` : ""}</span>
+          </span>
+          {creditApplied > 0
+            ? <button type="button" onClick={() => setCreditUse(0)} className="text-xs font-bold text-slate-500 underline">Kaldır</button>
+            : <button type="button" disabled={creditMax <= 0} onClick={() => setCreditUse(creditBalance)} className="text-xs font-black text-white bg-emerald-600 rounded-full px-3 py-1.5 disabled:opacity-40">Kullan</button>}
+        </div>
+      )}
     </div>
   );
 }
@@ -529,14 +512,16 @@ function RewardRows({ onPickVariant }: { onPickVariant: (p: PendingGift) => void
 function RewardsAndCouponPanel({
   cartTotal,
   onApplied,
+  onCredit,
 }: {
   cartTotal: number;
   onApplied: (discount: number, freeShipping: boolean) => void;
+  onCredit: (amount: number) => void;
 }) {
   return (
-    // Hediyeler artık sepet listesinde ürünlerin altında (kullanıcı notu 6); burada yalnız kupon
-    <Card className="border-none shadow-sm bg-white rounded-3xl px-6 py-4">
-      <CouponSection cartTotal={cartTotal} onApplied={onApplied} />
+    // Hediyeler artık sepet listesinde ürünlerin altında (kullanıcı notu 6); burada indirimler (kupon + kredi)
+    <Card className="border-none shadow-sm bg-white rounded-3xl px-6 py-4 empty:hidden">
+      <CouponSection cartTotal={cartTotal} onApplied={onApplied} onCredit={onCredit} />
     </Card>
   );
 }
@@ -558,6 +543,7 @@ export default function CartPage() {
   const [mounted, setMounted] = useState(false);
   const [activePending, setActivePending] = useState<string | null>(null);
   const [couponDiscount, setCouponDiscount] = useState(0);
+  const [creditApplied, setCreditApplied] = useState(0); // YeriHisset Kredisi (İndirimlerin kutusundan)
   const [couponFreeShip, setCouponFreeShip] = useState(false);
   // F10: canlı stok doğrulama (sepette bekleyen ürün başkası tarafından tükenmiş olabilir)
   const [liveStock, setLiveStock] = useState<Record<string, number> | null>(null);
@@ -642,7 +628,7 @@ export default function CartPage() {
   const toFreeShip = couponFreeShip ? null : amountToFreeShipping(baseMethod, totalPrice);
   const baseFree = !couponFreeShip && !!baseMethod && Number(baseMethod.fee || 0) > 0 && toFreeShip === null
     && baseMethod.free_over != null;
-  const finalTotal = Math.max(0, totalPrice - couponDiscount); // kargo hariç
+  const finalTotal = Math.max(0, totalPrice - couponDiscount - creditApplied); // kargo hariç
 
   const regularItems = items.filter((i) => !i.is_gift);
   const safePending = pendingGifts ?? [];
@@ -791,6 +777,7 @@ export default function CartPage() {
             <RewardsAndCouponPanel
               cartTotal={totalPrice}
               onApplied={(d, fs) => { setCouponDiscount(d); setCouponFreeShip(fs); }}
+              onCredit={setCreditApplied}
             />
 
             <Card className="border-none shadow-lg shadow-olive-900/5 bg-white rounded-3xl overflow-hidden">
@@ -832,6 +819,12 @@ export default function CartPage() {
                     <div className="flex justify-between text-green-600">
                       <span className="flex items-center gap-1"><Ticket size={12} /> İndirim</span>
                       <span>-₺{couponDiscount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span>
+                    </div>
+                  )}
+                  {creditApplied > 0 && (
+                    <div className="flex justify-between text-emerald-600">
+                      <span className="flex items-center gap-1"><Banknote size={12} /> YeriHisset Kredisi</span>
+                      <span>-₺{creditApplied.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span>
                     </div>
                   )}
                 </div>

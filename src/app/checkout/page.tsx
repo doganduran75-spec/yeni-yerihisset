@@ -230,6 +230,9 @@ export default function CheckoutPage() {
         const d = await r.json();
         const bal = Number(d?.affiliate?.credit_balance || 0);
         if (bal > 0) setCreditBalance(bal);
+        // Kredi sepette "Kullan" ile seçilir; ödeme adımı o tutarı alır (bakiyeyi geçemez)
+        const want = Number(useCartStore.getState().creditUse || 0);
+        if (want > 0 && bal > 0) setCreditInput(String(Math.min(want, bal)));
       }
     } catch { /* kritik değil */ }
 
@@ -537,7 +540,7 @@ export default function CheckoutPage() {
     router.push(remaining > 0 ? "/sepet" : "/magaza");
   }
 
-  // Kupon YALNIZ sepette girilir; burada sepetteki kod doğrulanıp tutarı hesaplanır.
+  // Kuponlar YALNIZ sepette seçilir ("KOD1,KOD2"); burada hepsi birlikte doğrulanıp toplam indirim hesaplanır.
   async function handleApplyCoupon(codeArg: string) {
     const code = codeArg.trim().toUpperCase();
     if (!code) return;
@@ -551,13 +554,16 @@ export default function CheckoutPage() {
           "Content-Type": "application/json",
           ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
         },
-        body: JSON.stringify({ code, cartTotal: getTotalPrice() }),
+        body: JSON.stringify({ codes: code, cartTotal: getTotalPrice(), items: items.map((i) => ({ product_id: i.product_id, quantity: i.quantity, price: i.price, is_gift: i.is_gift })) }),
       });
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let data: any = {};
       try { data = await res.json(); } catch { /* JSON değil */ }
       if (res.ok && data.valid) {
-        setCouponCode(code);
+        // Yalnız geçen kuponlar siparişe gider (geçmeyen biri siparişi reddettirmesin)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const okCodes = ((data.results as any[]) || []).filter((r) => r.ok).map((r) => r.code);
+        setCouponCode(okCodes.length ? okCodes.join(",") : code);
         setCouponData(data);
       } else {
         setCouponError(data.error || (res.status === 401 ? "Kupon için giriş yapın." : "Geçersiz kupon kodu"));
@@ -1068,33 +1074,15 @@ export default function CheckoutPage() {
                         <p className="text-[9px] font-black uppercase tracking-[0.2em] text-emerald-600 flex items-center gap-1.5">
                           <Banknote size={12} /> YERİHİSSET KREDİSİ · BAKİYE ₺{creditBalance.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
                         </p>
-                        <div className="flex gap-2">
-                          <Input
-                            type="text"
-                            inputMode="decimal"
-                            value={creditInput}
-                            onChange={(e) => {
-                              const v = e.target.value.replace(/[^0-9.,]/g, "").replace(",", ".");
-                              setCreditInput(v);
-                            }}
-                            placeholder="Kullanılacak tutar (₺)"
-                            className="h-10 rounded-xl font-bold text-sm"
-                          />
-                          <Button
-                            type="button" variant="outline" size="sm"
-                            className="h-10 px-4 font-bold shrink-0 rounded-xl border-emerald-200 text-emerald-700"
-                            onClick={() => setCreditInput(String(Math.min(creditBalance, preCreditTotal)))}
-                          >
-                            Tümü
-                          </Button>
-                        </div>
                         {creditApplied > 0 ? (
                           <p className="text-[11px] text-emerald-700 font-bold">
-                            ₺{creditApplied.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} uygulandı ·{" "}
-                            <button type="button" onClick={() => setCreditInput("")} className="underline hover:text-red-500">Kaldır</button>
+                            ₺{creditApplied.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} bu siparişte kullanılıyor ·{" "}
+                            <Link href="/sepet" className="underline hover:text-olive-600">Sepette değiştir</Link>
                           </p>
                         ) : (
-                          <p className="text-[11px] text-emerald-600/80">Bakiyenin tamamını veya bir kısmını bu siparişte indirim olarak kullanabilirsin.</p>
+                          <p className="text-[11px] text-emerald-600/80">
+                            Bakiyeni bu siparişte kullanmak istersen <Link href="/sepet" className="underline font-bold">sepette “Kullan”a dokun</Link>.
+                          </p>
                         )}
                       </div>
                     )}

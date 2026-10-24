@@ -35,6 +35,8 @@ type Coupon = {
   is_active: boolean;
   campaign_slug: string | null;
   affiliate_id: string | null; // bu kodu kullanan siparişler bu satış ortağına komisyon üretir
+  brand_ids: string[] | null;    // kapsam: boş = bütün markalar
+  category_ids: string[] | null; // kapsam: boş = bütün kategoriler
 };
 
 const EMPTY: Omit<Coupon, "id" | "used_count"> = {
@@ -54,6 +56,8 @@ const EMPTY: Omit<Coupon, "id" | "used_count"> = {
   is_active: true,
   campaign_slug: null,
   affiliate_id: null,
+  brand_ids: null,
+  category_ids: null,
 };
 
 const TYPE_LABEL: Record<string, string> = {
@@ -94,8 +98,20 @@ export default function CouponsManager() {
   const [affiliates, setAffiliates] = useState<{ id: string; code: string; name: string }[]>([]);
   // Kupon → atanmış üyeler (user_coupons) — tabloda "Kişi" kolonu
   const [assignees, setAssignees] = useState<Record<string, { name: string; email: string }[]>>({});
+  const [brands, setBrands] = useState<{ id: string; name: string }[]>([]);
+  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
 
-  useEffect(() => { fetchCoupons(); fetchTagOptions(); fetchAffiliates(); fetchAssignees(); }, []);
+  useEffect(() => { fetchCoupons(); fetchTagOptions(); fetchAffiliates(); fetchAssignees(); fetchScopes(); }, []);
+
+  // Kupon kapsamı seçenekleri (marka / kategori)
+  async function fetchScopes() {
+    const [{ data: b }, { data: c }] = await Promise.all([
+      supabase.from("brands").select("id, name").order("name"),
+      supabase.from("categories").select("id, name").order("name"),
+    ]);
+    setBrands(((b as any[]) || []).map((x) => ({ id: x.id, name: x.name })));
+    setCategories(((c as any[]) || []).map((x) => ({ id: x.id, name: x.name })));
+  }
 
   async function fetchAssignees() {
     const rows: { coupon_id: string; user_id: string }[] = [];
@@ -185,6 +201,8 @@ export default function CouponsManager() {
         expires_at: editingCoupon.expires_at || null,
         starts_at: editingCoupon.starts_at || new Date().toISOString(),
         affiliate_id: editingCoupon.affiliate_id || null,
+        brand_ids: editingCoupon.brand_ids?.length ? editingCoupon.brand_ids : null,
+        category_ids: editingCoupon.category_ids?.length ? editingCoupon.category_ids : null,
         updated_at: new Date().toISOString(),
       };
       delete (payload as any).id;
@@ -510,6 +528,31 @@ export default function CouponsManager() {
                   <Input type="number" min={0} value={editingCoupon.max_discount_amount ?? ""} onChange={(e) => setEditingCoupon((p) => ({ ...p, max_discount_amount: e.target.value ? Number(e.target.value) : null }))} placeholder="Sınırsız" />
                 </div>
               )}
+            </div>
+
+            {/* Kapsam: seçilmezse kupon bütün ürünlerde geçerli; seçilirse indirim + alt limit yalnız o ürünlerin tutarına bakar */}
+            <div className="space-y-2 rounded-xl border border-slate-100 p-3 bg-slate-50/50">
+              <p className="text-xs font-semibold">Geçerli olduğu ürünler <span className="font-normal text-muted-foreground">(boş = hepsi)</span></p>
+              {([["brand_ids", "Marka", brands], ["category_ids", "Kategori", categories]] as const).map(([key, label, list]) => {
+                const sel: string[] = (editingCoupon[key] as string[] | null | undefined) || [];
+                return (
+                  <div key={key} className="space-y-1">
+                    <p className="text-[11px] text-muted-foreground">{label}</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {list.map((o) => {
+                        const on = sel.includes(o.id);
+                        return (
+                          <button key={o.id} type="button"
+                            onClick={() => setEditingCoupon((p) => ({ ...p, [key]: on ? sel.filter((x) => x !== o.id) : [...sel, o.id] }))}
+                            className={`text-[11px] px-2 py-1 rounded-full border ${on ? "bg-olive-600 text-white border-olive-600" : "bg-white text-slate-600 border-slate-200"}`}>
+                            {o.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
             <div className="grid grid-cols-2 gap-3">

@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase-admin";
 import { getAuthUserFromRequest } from "@/lib/auth-from-request";
 import { createIyzicoClient, formatPrice, newConversationId } from "@/lib/iyzico";
 import { validateCartPricing } from "@/lib/order-pricing";
-import { evaluateCoupon } from "@/lib/coupon-rules";
+import { evaluateCoupons, parseCouponCodes, saveOrderCoupons } from "@/lib/coupon-rules";
 import { resolveCreditApply, deductCreditForOrder, restoreOrderCredit } from "@/lib/store-credit";
 import { resolveGuest, type GuestInput } from "@/lib/guest-checkout";
 import { rateLimited, clientIp, TOO_MANY } from "@/lib/rate-limit";
@@ -133,14 +133,19 @@ export async function POST(req: NextRequest) {
   let freeShipping = false;
   let validatedCoupon: any = null;
 
-  if (couponCode) {
-    // Kupon kuralları tek yerde (src/lib/coupon-rules.ts) — sepetteki doğrulamayla aynı
-    const cr = await evaluateCoupon(supabase, { code: couponCode, userId, productTotal: pricing.productTotal });
+  // Kuponlar (birden çok — "KOD1,KOD2"; kapsam: marka / kategori) — kural tek yerde (src/lib/coupon-rules.ts)
+  let appliedCoupons: { coupon: any; discount: number; freeShipping: boolean }[] = [];
+  if (parseCouponCodes(couponCode).length) {
+    const cr = await evaluateCoupons(supabase, {
+      codes: parseCouponCodes(couponCode), userId, productTotal: pricing.productTotal,
+      lines: pricedItems.map((i) => ({ product_id: i.product_id, quantity: i.quantity, price: i.price, is_gift: i.is_gift })),
+    });
     if (!cr.ok) {
-      return NextResponse.json({ error: `Kupon uygulanamadı: ${cr.error}. Kuponu kaldırıp tekrar deneyin.` }, { status: 400 });
+      return NextResponse.json({ error: `Kupon uygulanamadı${cr.code ? ` (${cr.code})` : ""}: ${cr.error}. Kuponu sepetten kaldırıp tekrar deneyin.` }, { status: 400 });
     }
-    couponId = cr.coupon.id;
-    validatedCoupon = cr.coupon;
+    appliedCoupons = cr.applied;
+    couponId = cr.applied[0]?.coupon.id ?? null;
+    validatedCoupon = cr.applied[0]?.coupon ?? null;
     couponDiscount = cr.discount;
     freeShipping = cr.freeShipping;
   }
@@ -235,6 +240,9 @@ export async function POST(req: NextRequest) {
     console.error("[iyzico/initialize] orderError:", orderError);
     return NextResponse.json({ error: "Sipariş oluşturulamadı", detail: orderError?.message }, { status: 500 });
   }
+
+  // Kuponlar siparişe yazılır; kullanım ÖDEME ONAYINDA sayılır (callback › countOrderCoupons)
+  if (appliedCoupons.length) await saveOrderCoupons(supabase, order.id, appliedCoupons);
 
   // YeriHisset Kredisi düşümü (sipariş oluştu). Ödeme başarısız/iptal olursa
   // aşağıdaki hata dalları restoreOrderCredit ile geri yükler.

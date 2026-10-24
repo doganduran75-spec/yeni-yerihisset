@@ -26,7 +26,7 @@ function discountText(c: Coupon): string {
 
 export default function CampaignClient({ slug, coupon }: { slug: string; coupon: Coupon | null }) {
   const router = useRouter();
-  const { setCouponCode } = useCartStore();
+  const { addCouponCode } = useCartStore();
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -34,7 +34,7 @@ export default function CampaignClient({ slug, coupon }: { slug: string; coupon:
     setCampaign("kampanya", slug);
     track("campaign_landing", { slug, code: coupon?.code, found: !!coupon });
     // Kodu sepete tanımla (sepette otomatik uygulanır)
-    if (coupon?.code) setCouponCode(coupon.code);
+    if (coupon?.code) addCouponCode(coupon.code); // sepetteki diğer kuponlar silinmez (birleşir)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

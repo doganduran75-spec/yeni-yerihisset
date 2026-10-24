@@ -171,33 +171,8 @@ async function handle(req: NextRequest) {
           import("@/lib/notifications").then(({ alertOutOfStockForOrder }) =>
             alertOutOfStockForOrder(order.id)
           ),
-          // Kupon kullanımını kaydet (supabase üzerinden)
-          (async () => {
-            const { data: ord } = await (supabase as any)
-              .from("orders")
-              .select("coupon_id, coupon_discount")
-              .eq("id", order.id)
-              .single();
-            if (ord?.coupon_id) {
-              const { data: coupon } = await supabase
-                .from("coupons").select("used_count, per_user_limit").eq("id", ord.coupon_id).single();
-              if (coupon) {
-                await supabase.from("coupons").update({ used_count: coupon.used_count + 1 }).eq("id", ord.coupon_id);
-                const { data: uc } = await supabase.from("user_coupons")
-                  .select("id, use_count").eq("user_id", order.user_id).eq("coupon_id", ord.coupon_id).maybeSingle();
-                if (uc) {
-                  await supabase.from("user_coupons").update({
-                    use_count: uc.use_count + 1, last_used_at: new Date().toISOString(), last_order_id: order.id,
-                  }).eq("id", uc.id);
-                } else {
-                  await supabase.from("user_coupons").insert({
-                    user_id: order.user_id, coupon_id: ord.coupon_id,
-                    use_count: 1, last_used_at: new Date().toISOString(), last_order_id: order.id,
-                  });
-                }
-              }
-            }
-          })(),
+          // Kupon kullanımını say (order_coupons; birden çok kupon — src/lib/coupon-rules.ts)
+          import("@/lib/coupon-rules").then(({ countOrderCoupons }) => countOrderCoupons(supabase, order.id, order.user_id)),
         ]).catch(() => {});
 
         // Misafir (şifresiz hesap) → "hesabını aktifleştir" e-postası (havale akışındaki gibi)

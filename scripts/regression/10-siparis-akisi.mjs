@@ -256,6 +256,43 @@ export default {
         ok(r6.status === 400, "Kişi başı limit dolunca siparişte reddediliyor", why(r6));
       });
 
+      await part("Kupon kapsamı (marka / kategori) + birden çok kupon + tam iadede kupon geri", async () => {
+        const mk = (sfx, o) => insert("coupons", {
+          code: `RGT${RUN.toUpperCase()}${sfx}`, name: `REGRESYON-TEST ${sfx}`, type: "percentage", amount: 10,
+          min_order_amount: 0, per_user_limit: 99, is_active: true, is_personal: false, auto_assign_on_signup: false, ...o,
+        }) && `RGT${RUN.toUpperCase()}${sfx}`;
+        const cOut = mk("KAPDIS", {});   // başka kategoride geçerli → bu sepette geçersiz
+        const cIn = mk("KAPIC", {});     // ürünün kategorisinde geçerli
+        const cFix = mk("YIG", { type: "fixed", amount: 100 });
+        sql(`UPDATE public.coupons SET category_ids = ARRAY[gen_random_uuid()] WHERE code = ${lit(cOut)};
+             UPDATE public.coupons SET category_ids = ARRAY[${lit(F.cat)}::uuid] WHERE code = ${lit(cIn)};`);
+        const items = [{ product_id: F.prod, quantity: 1, price: 1000 }];
+        const v = await api("/api/coupons/validate", { token: F.member.token, body: { codes: [cIn, cOut], cartTotal: 1000, items } });
+        const res = Object.fromEntries((v.json?.results || []).map((r) => [r.code, r]));
+        ok(res[cIn]?.ok === true && eq(res[cIn]?.discount_amount, 100) && res[cOut]?.ok === false,
+          "Kapsamlı kupon: kendi kategorisinde geçerli, başka kategoride reddediliyor", `${why(v)} → ${JSON.stringify(v.json?.results || []).slice(0, 200)}`);
+        const n0 = memberOrders();
+        const rOut = await order([MAIN(1)], { couponCode: cOut });
+        ok(rOut.status === 400 && memberOrders() === n0, "Kapsam dışı kupon siparişte reddediliyor", why(rOut));
+
+        // İki kupon birlikte: %10 (100) + 100 TL = 200 indirim; her biri order_coupons'ta ayrı satır, ikisi de sayıldı
+        const rS = await order([MAIN(1)], { couponCode: `${cIn},${cFix}` });
+        const oid = rS.json?.orderId;
+        if (!oid) return add("fail", "İki kuponlu sipariş oluşturulamadı", why(rS));
+        const o = ord(oid);
+        ok(eq(o.coupon_discount, 200) && eq(o.total_amount, 800 + S1000), "İki kupon birlikte uygulanıyor", `indirim ${o.coupon_discount}, tutar ${o.total_amount} (200 / ${800 + S1000} olmalı)`);
+        const oc = num(`SELECT count(*) FROM public.order_coupons WHERE order_id = ${lit(oid)} AND counted`);
+        const used = () => num(`SELECT coalesce(sum(used_count), 0) FROM public.coupons WHERE code IN (${lit(cIn)}, ${lit(cFix)})`);
+        ok(oc === 2 && used() === 2, "Her kupon ayrı kaydedildi ve kullanımı sayıldı", `order_coupons ${oc}, kullanım ${used()} (2/2 olmalı)`);
+
+        // Tam iade (ödenmiş sipariş iptali) → iki kupon da geri verilir
+        await rest(`orders?id=eq.${oid}`, { token: F.admin.token, method: "PATCH", body: { payment_status: "paid", status: "processing", shipment_status: "preparing" } });
+        const c = await api("/api/admin/orders/action", { token: F.admin.token, body: { action: "cancel", orderId: oid, method: "bank_transfer", confirmed: true, note: "regresyon" } });
+        const mine = num(`SELECT coalesce(sum(use_count), 0) FROM public.user_coupons u JOIN public.coupons c ON c.id = u.coupon_id WHERE u.user_id = ${lit(F.member.id)} AND c.code IN (${lit(cIn)}, ${lit(cFix)})`);
+        ok(c.status === 200 && ord(oid).payment_status === "refunded" && used() === 0 && mine === 0,
+          "Tam iadede kuponlar geri verildi", `${why(c)} → ödeme ${ord(oid).payment_status}, toplam kullanım ${used()}, üyenin ${mine} (0/0 olmalı)`);
+      });
+
       await part("Misafir siparişi", async () => {
         const H = { "x-forwarded-for": F.ip };
         const guest = {

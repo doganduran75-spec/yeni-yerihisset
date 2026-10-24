@@ -51,7 +51,8 @@ interface CartStore {
   items: CartItem[];
   pendingGifts: PendingGift[];  // Seçim bekleyen hediyeler (renk/numara ya da "birini seç") — sayfa yenilense de durur
   dismissedRules: string[];     // Müşterinin "Vazgeç" dediği kurallar
-  couponCode: string;           // Sepette seçilen/uygulanan kupon kodu (checkout'a taşınır)
+  couponCode: string;           // Sepette seçilen kupon kodları, virgülle ("KOD1,KOD2") — checkout'a taşınır
+  creditUse: number;            // Sepette "Kullan" denen YeriHisset Kredisi (tutar; ödeme adımı bunu uygular)
   shippingMethodId: string;     // Sepette seçilen kargo yöntemi (checkout'a taşınır)
 
   addItem: (item: CartItem) => void;
@@ -60,6 +61,8 @@ interface CartStore {
   syncStock: (map: Record<string, number>) => void;
   clearCart: () => void;
   setCouponCode: (code: string) => void;
+  addCouponCode: (code: string) => void;      // listeye ekle (kampanya sayfası)
+  setCreditUse: (amount: number) => void;
   setShippingMethodId: (id: string) => void;
   getTotalItems: () => number;
   getTotalPrice: () => number;
@@ -79,6 +82,14 @@ export const useCartStore = create<CartStore>()(
       couponCode: '',
 
       setCouponCode: (code) => set({ couponCode: code }),
+      addCouponCode: (code) => {
+        const c = String(code || "").trim().toUpperCase();
+        if (!c) return;
+        const list = get().couponCode.split(",").map((x) => x.trim()).filter(Boolean);
+        if (!list.includes(c)) set({ couponCode: [...list, c].join(",") });
+      },
+      creditUse: 0,
+      setCreditUse: (amount) => set({ creditUse: Math.max(0, Math.round((Number(amount) || 0) * 100) / 100) }),
       shippingMethodId: '',
       setShippingMethodId: (id) => set({ shippingMethodId: id }),
 
@@ -198,7 +209,7 @@ export const useCartStore = create<CartStore>()(
         });
       },
 
-      clearCart: () => set({ items: [], pendingGifts: [], dismissedRules: [], couponCode: '' }),
+      clearCart: () => set({ items: [], pendingGifts: [], dismissedRules: [], couponCode: '', creditUse: 0 }),
 
       getTotalItems: () =>
         get().items.reduce((total, item) => total + item.quantity, 0),
@@ -412,7 +423,7 @@ export const useCartStore = create<CartStore>()(
       name: 'shopping-cart',
       // Bekleyen hediyeler ve "vazgeç"ler de saklanır → sayfa yenilenince hediye teklifi kaybolmaz
       partialize: (state) => ({
-        items: state.items, couponCode: state.couponCode, shippingMethodId: state.shippingMethodId,
+        items: state.items, couponCode: state.couponCode, creditUse: state.creditUse, shippingMethodId: state.shippingMethodId,
         pendingGifts: state.pendingGifts, dismissedRules: state.dismissedRules,
       }),
       // Merge: localStorage'dan sadece items alınır, geri kalanlar her zaman
@@ -421,6 +432,7 @@ export const useCartStore = create<CartStore>()(
         ...current,
         items: (persisted as any)?.items ?? [],
         couponCode: (persisted as any)?.couponCode ?? '',
+        creditUse: Number((persisted as any)?.creditUse) || 0,
         pendingGifts: Array.isArray((persisted as any)?.pendingGifts) ? (persisted as any).pendingGifts : [],
         dismissedRules: Array.isArray((persisted as any)?.dismissedRules) ? (persisted as any).dismissedRules : [],
       }),

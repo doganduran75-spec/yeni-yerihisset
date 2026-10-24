@@ -486,6 +486,8 @@ export type Database = {
       coupons: {
         Row: {
           affiliate_id: string | null
+          brand_ids: string[] | null
+          category_ids: string[] | null
           amount: number
           auto_assign_on_signup: boolean
           campaign_slug: string | null
@@ -508,6 +510,8 @@ export type Database = {
         }
         Insert: {
           affiliate_id?: string | null
+          brand_ids?: string[] | null
+          category_ids?: string[] | null
           amount?: number
           auto_assign_on_signup?: boolean
           campaign_slug?: string | null
@@ -530,6 +534,8 @@ export type Database = {
         }
         Update: {
           affiliate_id?: string | null
+          brand_ids?: string[] | null
+          category_ids?: string[] | null
           amount?: number
           auto_assign_on_signup?: boolean
           campaign_slug?: string | null
@@ -1086,6 +1092,33 @@ export type Database = {
           },
         ]
       }
+      order_coupons: {
+        Row: {
+          counted: boolean
+          coupon_id: string
+          created_at: string
+          discount: number
+          free_shipping: boolean
+          order_id: string
+        }
+        Insert: {
+          counted?: boolean
+          coupon_id: string
+          created_at?: string
+          discount?: number
+          free_shipping?: boolean
+          order_id: string
+        }
+        Update: {
+          counted?: boolean
+          coupon_id?: string
+          created_at?: string
+          discount?: number
+          free_shipping?: boolean
+          order_id?: string
+        }
+        Relationships: []
+      }
       order_events: {
         Row: {
           created_at: string | null
@@ -1250,6 +1283,7 @@ export type Database = {
           completed_at: string | null
           coupon_discount: number | null
           coupon_id: string | null
+          coupons_restored_at: string | null
           created_at: string
           credit_restored: boolean
           credit_used: number
@@ -1287,6 +1321,7 @@ export type Database = {
           completed_at?: string | null
           coupon_discount?: number | null
           coupon_id?: string | null
+          coupons_restored_at?: string | null
           created_at?: string
           credit_restored?: boolean
           credit_used?: number
@@ -1324,6 +1359,7 @@ export type Database = {
           completed_at?: string | null
           coupon_discount?: number | null
           coupon_id?: string | null
+          coupons_restored_at?: string | null
           created_at?: string
           credit_restored?: boolean
           credit_used?: number
