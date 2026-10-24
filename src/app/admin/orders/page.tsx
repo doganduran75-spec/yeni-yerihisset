@@ -296,6 +296,7 @@ export default function OrdersPage() {
   const [fShip, setFShip] = useState("all");
   const [fInv, setFInv] = useState("all");
   const [fRet, setFRet] = useState("all"); // iade/iptal hazır filtreleri
+  const [showAbandoned, setShowAbandoned] = useState(false); // yarım kalan kart denemelerini göster
   const [fTodo, setFTodo] = useState(() => searchParams.get("todo") === "1"); // "Bekleyen işlerim" (order-next-step); panodan ?todo=1
   const [fMethod, setFMethod] = useState("all");
   const [fChannel, setFChannel] = useState("all"); // sales_channels.code
@@ -1104,6 +1105,8 @@ export default function OrdersPage() {
   const visibleOrders = (() => {
     const needle = trNorm(q.trim()).replace(/^#/, "");
     const list = orders.filter((o) => {
+      // Yarım kalan kart denemeleri (iyzico'da ödenmeden kapandı: iptal + ödeme alınmadı) varsayılan olarak gizli
+      if (!showAbandoned && o.payment_method === "iyzico" && o.status === "cancelled" && o.payment_status === "failed" && !q.trim()) return false;
       if (fPay !== "all" && (o.payment_status || "pending") !== fPay) return false;
       if (fShip !== "all" && (o.shipment_status || "waiting") !== fShip) return false;
       if (fInv !== "all" && (o.invoice_status || "pending") !== fInv) return false;
@@ -1241,6 +1244,10 @@ export default function OrdersPage() {
                 <option value="cancelled_unrefunded">İptal, ücret iade edilmedi</option>
                 <option value="any_refund">Ücret iadesi olanlar</option>
               </select>
+              <label className="inline-flex items-center gap-1.5 text-xs text-muted-foreground px-1" title="Kartla ödeme başlatılıp tamamlanmayan (iptal + ödeme alınmadı) siparişler">
+                <input type="checkbox" checked={showAbandoned} onChange={(e) => { setShowAbandoned(e.target.checked); setListPage(0); }} />
+                Yarım kalan kart denemeleri
+              </label>
               <select value={fInv} onChange={(e) => { setFInv(e.target.value); setListPage(0); }} className={selCls}>
                 <option value="all">Fatura: tümü</option>
                 {Object.entries(invoiceLabels).map(([k, l]) => <option key={k} value={k}>Fatura: {l}</option>)}

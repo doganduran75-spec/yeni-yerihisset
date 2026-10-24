@@ -491,6 +491,9 @@ async function main() {
   const defShip = sql("SELECT name, is_active FROM public.shipping_methods WHERE is_default");
   defShip.length === 1 && defShip[0][1] === "t" ? add("ok", "Varsayılan kargo yöntemi", defShip[0][0])
     : add("fail", "Varsayılan kargo yöntemi yok ya da pasif", "Ayarlar › Kargo Yöntemleri › Varsayılan yap");
+  // Çift kart siparişi: aynı alıcının aynı anda birden çok açık (ödenmemiş) kart denemesi olmamalı (yeni deneme eskisini kapatır)
+  const dupCard = num("SELECT count(*) FROM (SELECT user_id FROM public.orders WHERE payment_method = 'iyzico' AND status = 'pending' AND payment_status = 'pending' AND user_id IS NOT NULL GROUP BY user_id HAVING count(*) > 1) x");
+  dupCard ? add("warn", "Aynı alıcıda birden çok açık kart denemesi", `${dupCard} alıcı — yeni deneme eskisini kapatmalıydı (iyzico/initialize)`) : add("ok", "Çift kart denemesi yok");
   // Gelecek tarihli sipariş (pazaryeri saat dilimi hatası — Trendyol orderDate GMT+3; Paraşüt "sipariş tarihi ileri olamaz" der)
   const future = sql("SELECT channel, count(*) FROM public.orders WHERE created_at > now() + interval '5 minutes' GROUP BY channel");
   future.length ? add("warn", "Gelecek tarihli sipariş var", future.map((r) => `${r[0]}: ${r[1]}`).join(" · ") + " — saat dilimi çevirisi hatalı olabilir")

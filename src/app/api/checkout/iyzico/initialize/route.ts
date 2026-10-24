@@ -187,6 +187,22 @@ export async function POST(req: NextRequest) {
   }
   const billingAddressJson = JSON.stringify(billingSnap);
 
+  // ÇİFT SİPARİŞ ÖNLEME: aynı alıcının ödenmemiş, yarım kalmış kart denemeleri (son 30 dk) yeni deneme açılınca
+  // kapatılır — ayrılan stok ve kredi geri gelir. ("Siparişi Tamamla"ya tekrar basılınca her seferinde yeni
+  // sipariş açılıp stok ayrılıyordu.) Kapatılan denemenin formu sonradan ödenirse callback bunu not düşer.
+  if (userId) {
+    const { data: prevTries } = await (supabase as any).from("orders").select("id")
+      .eq("user_id", userId).eq("payment_method", "iyzico").eq("payment_status", "pending").eq("status", "pending")
+      .gte("created_at", new Date(Date.now() - 30 * 60_000).toISOString());
+    for (const t of (prevTries as any[]) || []) {
+      await (supabase as any).rpc("restore_order_stock", { p_order_id: t.id });
+      await restoreOrderCredit(supabase, t.id);
+      await (supabase as any).from("orders").update({ status: "cancelled", payment_status: "failed" }).eq("id", t.id).eq("payment_status", "pending");
+      await (supabase as any).from("order_events").insert({ order_id: t.id, type: "note", note: "Yarım kalan kart denemesi — müşteri yeniden ödeme başlattı, bu deneme kapatıldı (stok geri eklendi)" });
+    }
+    if (prevTries?.length) kickMarketplaceSync();
+  }
+
   // conversationId → sipariş kaydından önce üret
   const conversationId = newConversationId();
 
