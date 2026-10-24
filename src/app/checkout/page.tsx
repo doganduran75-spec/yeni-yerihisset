@@ -1030,8 +1030,8 @@ export default function CheckoutPage() {
             </>)}
 
             {step === "odeme" && (<>
-            {/* Teslimat: tek satır (tekrar etmesin) — değiştirmek için teslimat adımına dön */}
-            {(() => {
+            {/* Teslimat: tek satır (tekrar etmesin) — değiştirmek için teslimat adımına dön. Kart formu açıkken gizli (form en üstte) */}
+            {!iyzicoFormHtml && (() => {
               const addr = isGuest ? null : addresses.find((a) => a.id === selectedShippingId);
               const place = isGuest ? `${guestAddr.district} / ${guestAddr.city}` : addr ? `${addr.district} / ${addr.city}` : "";
               return (
@@ -1090,13 +1090,13 @@ export default function CheckoutPage() {
 
             {/* Kart formu (iyzico) — ödeme sayfasının İÇİNDE açılır (üst menü, adımlar yerinde kalır) */}
             {iyzicoFormHtml && (
-              <section className="space-y-4 animate-in fade-in" id="iyzico-form">
-                <button type="button" onClick={() => setIyzicoFormHtml(null)} className="inline-flex items-center gap-1.5 text-sm font-bold text-olive-700 hover:underline">
-                  ← Ödeme yöntemine dön
-                </button>
+              <section className="space-y-3 animate-in fade-in" id="iyzico-form">
                 <div className="bento-card bg-white !p-2 sm:!p-4">
                   <div ref={iyzicoContainerRef} />
                 </div>
+                <button type="button" onClick={() => setIyzicoFormHtml(null)} className="block mx-auto text-xs font-semibold text-slate-400 hover:text-olive-700 underline">
+                  Vazgeç, ödeme yöntemini değiştir
+                </button>
               </section>
             )}
 

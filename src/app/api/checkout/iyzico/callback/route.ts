@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from "next/server";
 import { kickMarketplaceSync } from "@/lib/marketplace/sync";
 import { createAdminClient } from "@/lib/supabase-admin";
@@ -21,7 +22,18 @@ function go(url: string) {
   return new NextResponse(html, { status: 200, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
 }
 
+// Dış sarmal: beklenmeyen bir hata 500 sayfası göstermesin — hata kaydedilir, müşteri ödeme sayfasına döner
+// (para çekildiyse sipariş iyzico token'ı ile yeniden sorgulanabilir; ayrıntı pm2 loglarında "[iyzico/callback] HATA")
 export async function POST(req: NextRequest) {
+  try {
+    return await handle(req);
+  } catch (e: any) {
+    console.error("[iyzico/callback] HATA:", e?.stack || e?.message || e);
+    return go(`${SITE_URL}/checkout?hatali=1`);
+  }
+}
+
+async function handle(req: NextRequest) {
   // iyzico form POST olarak gönderir — token form field'ında gelir
   let token: string | null = null;
 
@@ -48,6 +60,7 @@ export async function POST(req: NextRequest) {
 
   return new Promise<NextResponse>((resolve) => {
     iyzipay.checkoutFormAuth.retrieve({ locale: "tr", token }, async (err: any, result: any) => {
+     try {
       if (err) {
         console.error("[iyzico/callback] retrieve error:", err);
         resolve(go(`${SITE_URL}/checkout?hatali=1`));
@@ -220,6 +233,10 @@ export async function POST(req: NextRequest) {
 
         resolve(go(`${SITE_URL}/checkout?hatali=1`));
       }
+     } catch (e: any) {
+      console.error("[iyzico/callback] HATA (sonuç işlenirken):", e?.stack || e?.message || e);
+      resolve(go(`${SITE_URL}/checkout?hatali=1`));
+     }
     });
   });
 }
