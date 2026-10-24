@@ -1107,27 +1107,27 @@ export default function CheckoutPage() {
                   <div className="w-10 h-10 bg-olive-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-olive-100"><CreditCard size={18} /></div>
                   <h3 className="text-2xl font-black text-slate-900 uppercase italic tracking-tighter">Ödeme Yöntemi</h3>
                </div>
-               <div className={cn("grid gap-6", bankTransferEnabled && cardEnabled ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1")}>
+               <div className={cn("grid gap-3 md:gap-6", bankTransferEnabled && cardEnabled ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1")}>
                   {/* Kredi Kartı — Ayarlar › Ödeme Yöntemleri'nde açıksa */}
                   {cardEnabled && (
                   <div
                     style={{ order: payOrder.indexOf("credit_card") + 1 }}
                     onClick={() => setPaymentMethod("credit_card")}
                     className={cn(
-                      "bento-card flex flex-col items-center justify-center gap-6 py-12 cursor-pointer transition-all duration-300 group relative",
+                      "bento-card flex flex-row md:flex-col items-center justify-start md:justify-center gap-4 md:gap-6 !py-5 md:!py-12 cursor-pointer transition-all duration-300 group relative",
                       paymentMethod === "credit_card"
                         ? "!bg-slate-900 border-none ring-0"
                         : "bg-white hover:border-slate-300"
                     )}
                   >
                      <div className={cn(
-                       "w-20 h-20 rounded-[2rem] flex items-center justify-center transition-transform group-hover:scale-110",
+                       "w-12 h-12 md:w-20 md:h-20 rounded-2xl md:rounded-[2rem] flex items-center justify-center shrink-0 transition-transform group-hover:scale-110",
                        paymentMethod === "credit_card" ? "bg-white/10 text-olive-400" : "bg-slate-100 text-slate-500"
                      )}>
-                        <CreditCard size={40} />
+                        <CreditCard className="w-6 h-6 md:w-10 md:h-10" />
                      </div>
-                     <div className="text-center space-y-2">
-                        <p className={cn("font-black text-xl uppercase italic tracking-tight", paymentMethod === "credit_card" ? "text-white" : "text-slate-800")}>Kredi / Banka Kartı</p>
+                     <div className="text-left md:text-center space-y-0.5 md:space-y-2">
+                        <p className={cn("font-black text-base md:text-xl uppercase italic tracking-tight", paymentMethod === "credit_card" ? "text-white" : "text-slate-800")}>Kredi / Banka Kartı</p>
                         <p className={cn("text-[10px] font-bold uppercase tracking-widest", paymentMethod === "credit_card" ? "text-slate-400" : "text-slate-400")}>iyzico Güvencesiyle Ödeyin</p>
                      </div>
                      {paymentMethod === "credit_card" && (
@@ -1144,20 +1144,20 @@ export default function CheckoutPage() {
                       style={{ order: payOrder.indexOf("bank_transfer") + 1 }}
                       onClick={() => setPaymentMethod("bank_transfer")}
                       className={cn(
-                        "bento-card flex flex-col items-center justify-center gap-6 py-12 cursor-pointer transition-all duration-300 group relative",
+                        "bento-card flex flex-row md:flex-col items-center justify-start md:justify-center gap-4 md:gap-6 !py-5 md:!py-12 cursor-pointer transition-all duration-300 group relative",
                         paymentMethod === "bank_transfer"
                           ? "!bg-amber-50 border-amber-300 ring-4 ring-amber-50"
                           : "bg-white hover:border-amber-200"
                       )}
                     >
                        <div className={cn(
-                         "w-20 h-20 rounded-[2rem] flex items-center justify-center transition-transform group-hover:scale-110",
+                         "w-12 h-12 md:w-20 md:h-20 rounded-2xl md:rounded-[2rem] flex items-center justify-center shrink-0 transition-transform group-hover:scale-110",
                          paymentMethod === "bank_transfer" ? "bg-amber-100 text-amber-600" : "bg-slate-100 text-slate-500"
                        )}>
-                          <Landmark size={40} />
+                          <Landmark className="w-6 h-6 md:w-10 md:h-10" />
                        </div>
-                       <div className="text-center space-y-2">
-                          <p className={cn("font-black text-xl uppercase italic tracking-tight", paymentMethod === "bank_transfer" ? "text-amber-900" : "text-slate-800")}>Havale / EFT</p>
+                       <div className="text-left md:text-center space-y-0.5 md:space-y-2">
+                          <p className={cn("font-black text-base md:text-xl uppercase italic tracking-tight", paymentMethod === "bank_transfer" ? "text-amber-900" : "text-slate-800")}>Havale / EFT</p>
                           <p className={cn("text-[10px] font-bold uppercase tracking-widest", paymentMethod === "bank_transfer" ? "text-amber-600" : "text-slate-400")}>Banka Havalesiyle Ödeyin</p>
                        </div>
                        {paymentMethod === "bank_transfer" && (
