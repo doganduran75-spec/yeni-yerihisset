@@ -234,7 +234,7 @@ async function main() {
     ...(kb ? [[`/bilgi-bankasi/${kb}`, "Bilgi bankası makalesi"]] : []),
     ["/barefoot-nedir", "Barefoot nedir (ana rehber)", "Zero drop"], ["/magaza", "Mağaza başlığı (H1)", "Barefoot Ayakkabı Mağazası"],
     ["/magaza/yetiskin", "Yetişkin mağazası", "Yetişkin Barefoot Ayakkabı"], ["/magaza/ilkadim", "0–4 Yaş İlkadım mağazası", "0–4 Yaş İlkadım"], ["/sepet", "Sepet"], ["/checkout", "Ödeme"], ["/siparis-tamam", "Sipariş sonucu"],
-    ["/login", "Giriş"], ["/account", "Hesabım"], ["/sifre-belirle", "Şifre belirle"], ["/kampanya-izni", "Kampanya izni"], ["/deneme-sonucu", "Satış sonrası (oldu mu?)"], ["/iletisim", "İletişim", "Kromozom"], ["/hakkimizda", "Hakkımızda", "Kromozom"],
+    ["/login", "Giriş"], ["/account", "Hesabım"], ["/sifre-belirle", "Şifre belirle"], ["/kampanya-izni", "Kampanya izni"], ["/deneme-sonucu", "Satış sonrası (oldu mu?)"], ["/iletisim", "İletişim", "Kromozom"], ["/hakkimizda", "Hakkımızda", "Sana sözümüz"],
     ["/iade-degisim", "İade-değişim", "gün evde deneyin"], ["/mesafeli-satis", "Mesafeli satış + ön bilgilendirme", "on-bilgilendirme"], ["/kvkk", "KVKK", "Kromozom"], ["/gizlilik", "Gizlilik"],
     ["/cerez-politikasi", "Çerez politikası (tercih değiştirme)", "Çerez tercihlerini değiştir"], ["/admin", "Admin (kabuk)"], ["/admin/system", "Admin sistem (kabuk)"], ["/sitemap.xml", "Site haritası"], ["/robots.txt", "robots.txt"],
   ];
