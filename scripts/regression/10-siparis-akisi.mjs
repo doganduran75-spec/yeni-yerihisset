@@ -1238,6 +1238,23 @@ export default {
         ok(none.status === 404, "Olmayan / bitmiş kampanya reddediliyor", why(none));
       });
 
+      await part("E-posta denemesi: yalnız yöneticiye, müşteri kaydına iz bırakmadan", async () => {
+        const m = await api("/api/admin/email-test", { token: F.member.token, body: { list: true } });
+        ok(m.status === 403, "Üye e-posta denemesi yapamıyor", why(m));
+        const l = await api("/api/admin/email-test", { token: F.admin.token, body: { list: true } });
+        ok(l.status === 200 && (l.json?.kinds || []).length >= 20 && l.json?.to === F.admin.email, "Deneme listesi geliyor, alıcı yöneticinin kendisi", `${why(l)} → ${(l.json?.kinds || []).length} tür, ${l.json?.to}`);
+        const r = await order([MAIN(1)]);
+        const id = r.json?.orderId;
+        if (!id) return add("fail", "E-posta denemesi için sipariş oluşturulamadı", why(r));
+        const label = `YH${one(`SELECT order_number FROM public.orders WHERE id = ${lit(id)}`)}`;
+        const n0 = num(`SELECT count(*) FROM public.notification_log WHERE order_id = ${lit(id)}`);
+        const t = await api("/api/admin/email-test", { token: F.admin.token, body: { kind: "order_paid", order: label } });
+        ok(t.status === 200 && t.json?.order === label && num(`SELECT count(*) FROM public.notification_log WHERE order_id = ${lit(id)}`) === n0,
+          "Deneme siparişin verisiyle hazırlanıyor ve müşterinin bildirim kaydına yazılmıyor", `${why(t)} → ${JSON.stringify(t.json || {}).slice(0, 160)}`);
+        const bad = await api("/api/admin/email-test", { token: F.admin.token, body: { kind: "order_paid", order: "YH999999999" } });
+        ok(bad.status === 404, "Olmayan sipariş numarası reddediliyor", why(bad));
+      });
+
       await part("Ödeme alınmadan sevkiyat başlamıyor", async () => {
         const r = await order([MAIN(1)]);
         const id = r.json?.orderId;

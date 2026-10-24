@@ -28,3 +28,18 @@ export async function sendSiteMail(to: string, subject: string, bodyHtml: string
 
 export const mailButton = (href: string, label: string) =>
   `<div style="text-align:center;margin:22px 0"><a href="${href}" style="display:inline-block;background:#4d7c0f;color:#fff;text-decoration:none;padding:13px 30px;border-radius:12px;font-weight:800;font-size:15px">${label}</a></div>`;
+
+/** Hazır (tam belge) HTML'i olduğu gibi gönder — şablonlu e-postaların denemesi için (Pano › E-posta denemesi). */
+export async function sendRawSiteMail(to: string, subject: string, html: string): Promise<{ status: "sent" | "failed"; error?: string }> {
+  const sb = createAdminClient() as any;
+  const { data: st } = await sb.from("settings").select("*").limit(1).maybeSingle();
+  const storeName = st?.store_name || "YeriHisset";
+  const cfg = buildSmtpConfig({ smtp_host: st?.smtp_host || "", smtp_port: st?.smtp_port, smtp_secure: st?.smtp_secure, smtp_user: st?.smtp_user, smtp_password: st?.smtp_password });
+  if (!cfg.host || !cfg.auth.user) return { status: "failed", error: "SMTP ayarları eksik" };
+  try {
+    await createMailTransport(cfg).sendMail({ from: `"${st?.smtp_from_name || storeName}" <${st?.smtp_from_email || cfg.auth.user}>`, to, subject, html, text: htmlToText(html) });
+    return { status: "sent" };
+  } catch (e: any) {
+    return { status: "failed", error: e?.message || "E-posta gönderilemedi" };
+  }
+}

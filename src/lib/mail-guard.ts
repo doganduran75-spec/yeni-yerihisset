@@ -10,6 +10,7 @@
 // Ayar okunamazsa kilit KAPALI sayılmaz (güvenli taraf): yalnız yöneticilere gider.
 
 import nodemailer, { type SendMailOptions } from "nodemailer";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { createAdminClient } from "./supabase-admin";
 
 export class EmailLockedError extends Error {
@@ -64,11 +65,22 @@ function recordMailResult(ok: boolean, error?: string) {
     .catch(() => { /* kritik değil */ });
 }
 
+// E-POSTA DENEMESİ (Pano › CRM › E-posta denemesi): bu blok içinde giden HER e-posta yöneticinin adresine gider
+// (asıl alıcı konuya yazılır); kayıt / işaret yazan yerler mailRedirectActive() ile atlar (müşteri kaydına iz kalmaz).
+const redirectStore = new AsyncLocalStorage<{ to: string }>();
+export const runWithMailRedirect = <T>(to: string, fn: () => Promise<T>) => redirectStore.run({ to }, fn);
+export const mailRedirectActive = () => !!redirectStore.getStore();
+
 /** nodemailer.createTransport yerine: aynı sendMail, kilit kontrolüyle. */
 export function createMailTransport(config: any) {
   const transport = nodemailer.createTransport(config);
   return {
     async sendMail(opts: SendMailOptions) {
+      const r = redirectStore.getStore();
+      if (r) {
+        const orig = [opts.to].flatMap(addresses).join(", ") || "—";
+        opts = { ...opts, to: r.to, cc: undefined, bcc: undefined, subject: `[DENEME → ${orig}] ${opts.subject || ""}` };
+      }
       const testRcpt = [opts.to, opts.cc, opts.bcc].flatMap(addresses).filter((e) => isTestEmail(e));
       if (testRcpt.length) throw new EmailLockedError(testRcpt, true);
       const st = await lockState();

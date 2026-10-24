@@ -1,5 +1,5 @@
 import { randomBytes } from "crypto";
-import { createMailTransport, isTestEmail } from "./mail-guard";
+import { createMailTransport, isTestEmail, mailRedirectActive } from "./mail-guard";
 import { consentUrl } from "./marketing-consent";
 import { fitBoxHtml } from "./after-sale";
 import { createAdminClient } from "./supabase-admin";
@@ -554,6 +554,7 @@ async function logNotification(
     error?: string;
   }
 ) {
+  if (mailRedirectActive()) return; // e-posta denemesi: müşterinin bildirim kaydına yazma
   await supabase.from("notification_log").insert({
     order_id: data.orderId,
     user_id: data.userId,

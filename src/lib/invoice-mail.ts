@@ -6,6 +6,7 @@ import { createAdminClient } from "./supabase-admin";
 import { escapeHtml } from "./notifications";
 import { sendSiteMail } from "./site-mail";
 import { orderLabel } from "./order-label";
+import { mailRedirectActive } from "./mail-guard";
 
 type Sb = ReturnType<typeof createAdminClient>;
 
@@ -15,7 +16,8 @@ export async function sendInvoiceEmail(sb: Sb, orderId: string): Promise<{ statu
     .select("id, order_number, channel, import_source, user_id, customer_email, customer_name, parasut_pdf_path, parasut_invoice_no, invoice_emailed_at")
     .eq("id", orderId).maybeSingle();
   if (!o || (o.channel || "site") !== "site" || o.import_source) return { status: "skipped" };
-  if (o.invoice_emailed_at) return { status: "skipped" };
+  const trial = mailRedirectActive(); // e-posta denemesi: işaret / not yazılmaz, daha önce gönderilmiş olsa da gider
+  if (o.invoice_emailed_at && !trial) return { status: "skipped" };
   if (!o.parasut_pdf_path) return { status: "failed", error: "Faturanın PDF'i yok" };
   const { data: p } = o.user_id ? await s.from("profiles").select("email, first_name").eq("id", o.user_id).maybeSingle() : { data: null };
   const email = p?.email || o.customer_email;
@@ -32,6 +34,7 @@ export async function sendInvoiceEmail(sb: Sb, orderId: string): Promise<{ statu
   const r = await sendSiteMail(email, `${label} faturan`, body, [
     { filename: `${o.parasut_invoice_no || label}.pdf`, content: Buffer.from(await file.arrayBuffer()), contentType: "application/pdf" },
   ]);
+  if (trial) return r;
   if (r.status === "sent") {
     await s.from("orders").update({ invoice_emailed_at: new Date().toISOString() }).eq("id", orderId);
     await s.from("order_events").insert({ order_id: orderId, type: "note", note: "Fatura müşteriye e-postayla gönderildi" });

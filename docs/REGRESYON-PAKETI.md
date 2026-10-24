@@ -68,6 +68,7 @@ bildirimi düşmez). Tek iz: sipariş numaraları birkaç numara atlar.
 | Otomatik fatura (site) | Müşteri 'oldu' deyince / değişim tamamlanınca fatura kendiliğinden kesilir — test siparişinde (@….test üye) Paraşüt'e GİTMEZ (gerçek fatura kesilmez) |
 | CRM kampanyası | Üye kitleyi göremez; kategoriden alışveriş yapan üye kitlede (son alışveriş + sipariş sayısı), 'hiç almamış' süzgeci onu getirmez; kupon kişiye 7 gün süreyle (atandığı andan) tanımlanır, sepette geçerli; 3 gün kala hatırlatma listesinde; kişiye özel süresi dolunca reddedilir; raporda görünür |
 | Kuponu hesabına ekle | Üye kampanya bağlantısındaki kuponu tek tıkla ekler (süre eklendiği andan, ikinci eklemede uzamaz); formsuz (bot) istekle hesap açılmaz; misafir e-postasıyla şifresiz hesap açılır ve kupon eklenir; olmayan kampanya reddedilir |
+| E-posta denemesi | Üye deneme yapamaz; liste gelir, alıcı yöneticinin kendisi; deneme siparişin verisiyle hazırlanır, müşterinin bildirim kaydına yazılmaz; olmayan sipariş no reddedilir |
 | Misafir siparişi | Bot isteği reddedilir; misafir siparişi açılır; sonuç sayfası verisi (havale bekliyor); e-posta kontrolü; üyenin e-postasıyla misafir siparişi reddedilir |
 | Yetki | Üye yönetici işlemi / silme yapamaz, başkasının siparişini göremez, kendi siparişini "ödendi" yapamaz |
 | Ödeme onayı, iade, iptal | Ödenmemiş iptal (stok geri, fatura "gerekmiyor"); yönetici "Ödendi" → üye **Müşteri** rolü; ürün gelmeden tek başına ücret iadesi reddedilir (sıra kuralı); ödenmiş sipariş iptali (kalan iade, stok geri); çift iptal reddedilir |
