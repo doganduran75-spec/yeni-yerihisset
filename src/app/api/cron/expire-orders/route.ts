@@ -7,8 +7,8 @@ import { restoreOrderCredit } from "@/lib/store-credit";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 // F9: Ödenmemiş siparişleri otomatik iptal + stok iade.
-// Ek: iptal edilenlere "ödeme yarıda kaldı → siparişin hesabında" kurtarma
-// e-postası kuyruğa atılır (müşteri tek tıkla tekrar oluşturabilsin).
+// Ek: iptal edilenlere "ödeme yarıda kaldı → siparişin hesabında" kurtarma e-postası SONRAKİ SABAH 10:00'da
+// (arada yeni sipariş verdiyse gönderilmez; ürün tükendiyse "alternatiflere bak" e-postası).
 // Dış zamanlayıcı (sistem cron) çağırır. CRON_SECRET ile korunur.
 
 function recoveryHtml(storeName: string, storeUrl: string, name: string, orderNo: string) {
@@ -22,46 +22,72 @@ function recoveryHtml(storeName: string, storeUrl: string, name: string, orderNo
   </div>`;
 }
 
-async function queueRecoveryEmails(supabase: any, ids: string[]) {
-  if (!ids?.length) return;
+function recoveryAltHtml(storeName: string, storeUrl: string, name: string, items: { title: string; href: string }[]) {
+  const rows = items.slice(0, 4).map((it) =>
+    `<li style="margin:0 0 6px;font-size:14px;color:#334155"><a href="${it.href}" style="color:#3f6212;font-weight:700">${it.title}</a></li>`).join("");
+  return `<div style="font-family:system-ui,Arial,sans-serif;max-width:560px;margin:0 auto;padding:8px">
+    <h1 style="font-size:22px;font-weight:800;color:#3f6212;margin:0 0 12px">Baktığın ürün tükendi 😔</h1>
+    <p style="font-size:15px;color:#374151;line-height:1.6;margin:0 0 14px">Merhaba ${name}, ödemesi tamamlanmayan siparişindeki ürün o arada tükendi. Diğer renk ve numaralara ya da benzer modellere göz atmak ister misin?</p>
+    <ul style="margin:0 0 20px;padding:0 0 0 18px">${rows}</ul>
+    <div style="text-align:center;margin:8px 0 4px">
+      <a href="${storeUrl}/magaza" style="display:inline-block;background:#4d7c0f;color:#fff;text-decoration:none;padding:13px 30px;border-radius:12px;font-weight:800;font-size:14px">Alternatiflere Bak</a>
+    </div>
+    <p style="font-size:12px;color:#94a3b8;text-align:center;margin:16px 0 0">${storeName}</p>
+  </div>`;
+}
+
+// Zamanlama veritabanında: expire_unpaid_orders iptal ederken recovery_due_at = sonraki sabah 10:00 (20261139)
+
+// Zamanı gelen hatırlatmalar: arada yeni sipariş verdiyse gönderme; ürün tükendiyse "alternatif" e-postası
+async function processDueRecoveries(supabase: any) {
+  const { data: due } = await supabase.from("orders")
+    .select("id, order_number, user_id, created_at, order_items(product_id, variant_id, quantity, products(title, slug), product_variants(stock, is_active))")
+    .lte("recovery_due_at", new Date().toISOString()).is("recovery_sent_at", null).limit(50);
+  const list = (due as any[]) || [];
+  if (!list.length) return;
   const { data: settings } = await supabase.from("settings").select("*").limit(1).maybeSingle();
   const storeName = settings?.store_name || "YeriHisset";
   const storeUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com";
   const fromEmail = settings?.smtp_from_email || settings?.smtp_user || "";
   const fromName = settings?.smtp_from_name || storeName;
+  const mark = (id: string, result: string) =>
+    supabase.from("orders").update({ recovery_sent_at: new Date().toISOString(), recovery_result: result }).eq("id", id);
 
-  const { data: orders } = await supabase
-    .from("orders").select("id, order_number, user_id").in("id", ids);
-  const list = (orders as any[]) || [];
-  const userIds = [...new Set(list.map((o) => o.user_id).filter(Boolean))];
-  if (!userIds.length) return;
-
-  const { data: profiles } = await supabase.from("profiles").select("id, email, first_name").in("id", userIds);
-  const profById: Record<string, any> = {};
-  for (const p of (profiles as any[]) || []) profById[p.id] = p;
-
-  const rows = (await Promise.all(list.map(async (o) => {
-    const prof = profById[o.user_id];
-    if (!prof?.email) return null;
+  for (const o of list) {
+    // Arada başka sipariş verdi mi (iptal edilmemiş)
+    const { count } = await supabase.from("orders").select("id", { count: "exact", head: true })
+      .eq("user_id", o.user_id).neq("id", o.id).neq("status", "cancelled").gt("created_at", o.created_at);
+    if (count) { await mark(o.id, "skipped_new_order"); continue; }
+    const { data: prof } = await supabase.from("profiles").select("email, first_name").eq("id", o.user_id).maybeSingle();
+    if (!prof?.email) { await mark(o.id, "skipped_no_email"); continue; }
     const orderNo = o.order_number ? `YH${o.order_number}` : o.id.slice(0, 8).toUpperCase();
     const custName = prof.first_name || "Değerli Müşterimiz";
-    // Düzenlenebilir şablon (email_templates) varsa onu kullan; yoksa hardcoded.
-    const tpl = await renderEmailTemplate("order_recovery", {
-      customer_name: custName, order_id: orderNo, store_url: storeUrl, store_name: storeName,
+    const items = (o.order_items as any[]) || [];
+    // Tükenen ürün: varyantın stoğu siparişteki adetten az ya da numara pasif
+    const gone = items.filter((it) => it.variant_id && (it.product_variants?.is_active === false || Number(it.product_variants?.stock ?? 0) < Number(it.quantity || 1)));
+    let row: any;
+    if (gone.length) {
+      row = {
+        kind: "order_recovery_alt",
+        subject: `${storeName} — Baktığın ürün tükendi, alternatiflere göz atmak ister misin?`,
+        html_body: recoveryAltHtml(storeName, storeUrl, custName, gone.map((it) => ({
+          title: it.products?.title || "Ürün", href: it.products?.slug ? `${storeUrl}/products/${it.products.slug}` : `${storeUrl}/magaza`,
+        }))),
+      };
+    } else {
+      // Düzenlenebilir şablon (email_templates) varsa onu kullan; yoksa hardcoded
+      const tpl = await renderEmailTemplate("order_recovery", { customer_name: custName, order_id: orderNo, store_url: storeUrl, store_name: storeName });
+      row = {
+        kind: "order_recovery",
+        subject: tpl?.subject ?? `${storeName} — Siparişini tamamlamak ister misin? (${orderNo})`,
+        html_body: tpl?.html ?? recoveryHtml(storeName, storeUrl, custName, orderNo),
+      };
+    }
+    await supabase.from("email_queue").insert({
+      ...row, recipient_email: prof.email, to_name: prof.first_name || null, from_name: fromName, from_email: fromEmail, status: "pending",
     });
-    return {
-      kind: "order_recovery",
-      recipient_email: prof.email,
-      to_name: prof.first_name || null,
-      subject: tpl?.subject ?? `${storeName} — Siparişini tamamlamak ister misin? (${orderNo})`,
-      html_body: tpl?.html ?? recoveryHtml(storeName, storeUrl, custName, orderNo),
-      from_name: fromName,
-      from_email: fromEmail,
-      status: "pending",
-    };
-  }))).filter(Boolean);
-
-  if (rows.length) await supabase.from("email_queue").insert(rows);
+    await mark(o.id, gone.length ? "sent_alt" : "sent");
+  }
 }
 
 async function run(req: NextRequest) {
@@ -87,9 +113,10 @@ async function run(req: NextRequest) {
     console.error("[cron/expire-orders] kredi iade hata:", e?.message || e);
   }
 
-  // Kurtarma e-postaları (mevcut process-email-queue cron'u gönderir)
+  // "Yarıda mı kaldı?" hatırlatması: iptal anında değil, sonraki sabah 10:00 (kullanıcı kararı 2026-10-24).
+  // Zamanı gelenler her çalışmada gönderilir (mevcut process-email-queue cron'u e-postayı yollar).
   try {
-    await queueRecoveryEmails(supabase, ids);
+    await processDueRecoveries(supabase);
   } catch (e: any) {
     console.error("[cron/expire-orders] recovery mail hata:", e?.message || e);
   }

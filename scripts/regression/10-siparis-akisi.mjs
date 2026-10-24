@@ -1074,6 +1074,9 @@ export default {
           ok(o.status === "cancelled" && o.payment_status === "failed", "24 saatte ödenmeyen havale siparişi iptal oluyor", `${o.status}/${o.payment_status}`);
           ok(stock() === s0 + 1, "Süresi dolan siparişin stoğu geri eklendi", `stok ${s0} → ${stock()}`);
           ok(o.invoice_status === "not_required", "İptal olan siparişte fatura 'Gerekmiyor' (süre dolumuyla iptalde de)", `fatura: ${o.invoice_status}`);
+          // "Yarıda mı kaldı?" hatırlatması iptal anında gitmez, sonraki sabaha zamanlanır
+          const due = one(`SELECT extract(epoch FROM recovery_due_at - now()) / 3600 FROM public.orders WHERE id = ${lit(O.expire)}`);
+          ok(due != null && Number(due) >= 8 && Number(due) <= 32, "Yarım kalan sipariş hatırlatması sonraki sabah 10:00'a zamanlandı", `kalan saat: ${due ?? "zamanlanmadı"}`);
         } else add("fail", "Süre dolumu denenemedi", "kupon bölümünde sipariş oluşturulamadı");
       });
     } finally {

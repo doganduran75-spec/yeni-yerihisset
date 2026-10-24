@@ -172,6 +172,7 @@ async function main() {
     ["20261134 iade talebinde fatura gerekmiyor", "SELECT EXISTS(SELECT 1 FROM pg_trigger WHERE tgname = 'trg_order_case_invoice_rule')"],
     ["20261135 faturayı Trendyol'a yükleme", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'mp_invoice_sent_at')"],
     ["20261136 Hepsiburada paket numarası (fatura bağlantısı)", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'mp_package_number')"],
+    ["20261139 yarım kalan sipariş hatırlatması (sabah 10:00)", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'recovery_due_at')"],
     ["20261138 kart ödemesi aç / kapa", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'settings' AND column_name = 'card_payment_enabled')"],
     ["20261137 Trendyol sipariş saati (GMT+3)", "SELECT NOT EXISTS(SELECT 1 FROM public.orders WHERE channel = 'trendyol' AND import_source IS NULL AND coalesce(external_raw->>'orderDate', '') ~ '^[0-9]{10,13}$' AND abs(extract(epoch FROM created_at - (to_timestamp((external_raw->>'orderDate')::bigint / 1000.0) - interval '3 hours'))) > 60)"],
     ["20261126 ödeme alınmadan sevkiyat başlamaz", "SELECT EXISTS(SELECT 1 FROM pg_trigger WHERE tgname = 'trg_guard_ship_before_payment')"],
