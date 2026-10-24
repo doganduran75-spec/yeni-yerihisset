@@ -1135,6 +1135,30 @@ export default {
         }
       });
 
+      await part("Kargo etiketi: kodsuz basılmaz, yazdırılan kod saklanır, kod değişince fark görünür", async () => {
+        const r1 = await order([MAIN(1)]);
+        const r2 = await order([MAIN(1)]);
+        const a = r1.json?.orderId, b = r2.json?.orderId;
+        if (!a || !b) return add("fail", "Etiket testi için sipariş oluşturulamadı", why(r1.json?.orderId ? r2 : r1));
+        const code = `RGT${RUN.toUpperCase()}KARGO1`;
+        sql(`UPDATE public.orders SET cargo_provider = 'Yurtiçi Kargo', cargo_tracking_number = ${lit(code)} WHERE id = ${lit(a)}`);
+        const m = await api("/api/admin/orders/labels", { token: F.member.token, body: { ids: [a] } });
+        ok(m.status === 403, "Üye kargo etiketi verisi alamıyor (adres / telefon)", why(m));
+        const p = await api("/api/admin/orders/labels", { token: F.admin.token, body: { ids: [a, b], mark: true } });
+        const l = p.json?.labels?.[0];
+        ok(p.status === 200 && p.json?.labels?.length === 1 && l?.code === code && l?.items?.length >= 1 && !!l?.to?.city,
+          "Kargo kodu olan siparişin etiketi geliyor (adres + paket içeriği)", `${why(p)} → ${JSON.stringify(l || {}).slice(0, 160)}`);
+        ok((p.json?.skipped || []).some((s) => s.reason === "kargo kodu yok"), "Kargo kodu olmayan siparişe etiket basılmıyor", JSON.stringify(p.json?.skipped || []));
+        ok(one(`SELECT label_printed_code FROM public.orders WHERE id = ${lit(a)}`) === code && one(`SELECT label_printed_code IS NULL FROM public.orders WHERE id = ${lit(b)}`) === "t",
+          "Yazdırılan kargo kodu siparişe kaydedildi (basılmayana kaydedilmedi)", "label_printed_code yazılmadı");
+        sql(`UPDATE public.orders SET cargo_tracking_number = ${lit(code + "X")} WHERE id = ${lit(a)}`);
+        ok(one(`SELECT label_printed_code IS DISTINCT FROM cargo_tracking_number FROM public.orders WHERE id = ${lit(a)}`) === "t",
+          "Kargo kodu değişince eski etiket fark ediliyor ('etiketi yeniden yazdır')", "kod karşılaştırması tutmadı");
+        const s0 = await api("/api/admin/orders/labels", { token: F.admin.token, body: { getSize: true } });
+        const bad = await api("/api/admin/orders/labels", { token: F.admin.token, body: { size: "a4" } });
+        ok(["a5", "100x150"].includes(s0.json?.size) && bad.status === 400, "Etiket boyutu ayarı okunuyor, geçersiz boyut reddediliyor", `${why(s0)} / ${why(bad)}`);
+      });
+
       await part("Ödeme alınmadan sevkiyat başlamıyor", async () => {
         const r = await order([MAIN(1)]);
         const id = r.json?.orderId;

@@ -18,6 +18,7 @@ import PopupTab from "@/components/admin/settings/PopupTab";
 import EmailTemplatesTab from "@/components/admin/settings/EmailTemplatesTab";
 import IntegrationsTab from "@/components/admin/settings/IntegrationsTab";
 import ShippingMethodsManager from "@/components/admin/ShippingMethodsManager";
+import LabelSizeCard from "@/components/admin/settings/LabelSizeCard";
 import CookieConsentTab from "@/components/admin/settings/CookieConsentTab";
 import StaticPagesTab from "@/components/admin/settings/StaticPagesTab";
 import HomeContentTab from "@/components/admin/settings/HomeContentTab";
@@ -778,7 +779,7 @@ function SettingsPageInner() {
       )}
 
       {/* Kargo sekmesi: kargo yöntemleri (kendi kaydet düğmeleriyle) */}
-      {activeTab === "shipping" && <ShippingMethodsManager />}
+      {activeTab === "shipping" && <><LabelSizeCard /><ShippingMethodsManager /></>}
 
       {/* Ödeme sekmesi: ödeme yöntemleri (genel ayarlarla aynı kayıt — handleSaveSettings) */}
       {activeTab === "payment" && loadError && (

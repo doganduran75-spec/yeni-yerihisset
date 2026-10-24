@@ -9,6 +9,8 @@ import OrderTimeline from "@/components/admin/OrderTimeline";
 import KargonomiDialog from "@/components/admin/KargonomiDialog";
 import CarrierPickDialog from "@/components/admin/CarrierPickDialog";
 import ReturnExpectedDialog from "@/components/admin/ReturnExpectedDialog";
+import ShippingLabelBox from "@/components/admin/ShippingLabelBox";
+import { printShippingLabels, labelOutdated } from "@/lib/shipping-label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -34,7 +36,7 @@ import { CITIES, DISTRICTS } from "@/lib/turkey-geo";
 import {
   Eye, MoreVertical, Loader2, Package, Truck, CheckCircle, XCircle,
   MapPin, Phone, Mail, ShoppingBag, Copy, ExternalLink,
-  Landmark, FileText, ChevronDown, AlertCircle, Send, Search, Fingerprint, Building2, UserPlus, Trash2,
+  Landmark, FileText, ChevronDown, AlertCircle, Send, Search, Fingerprint, Building2, UserPlus, Trash2, Printer,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -121,6 +123,8 @@ type Order = {
   cargo_provider?: string | null;
   cargo_tracking_number?: string | null;
   cargo_tracking_url?: string | null;
+  label_printed_code?: string | null; // kargo etiketine basılan kod (değişirse "yeniden yazdır")
+  label_printed_at?: string | null;
   mp_warning?: string | null;
   mp_warning_ack?: boolean | null;
   stock_reduced_at?: string | null;
@@ -1115,6 +1119,24 @@ export default function OrdersPage() {
     });
   })();
   const listPageCount = Math.max(1, Math.ceil(visibleOrders.length / LIST_PAGE));
+
+  // Toplu kargo etiketi: listede görünen, kargo kodu olan, gönderilmemiş ve etiketi basılmamış / kodu değişmiş siparişler
+  const labelQueue = visibleOrders.filter((o) =>
+    !!(o.cargo_tracking_number || o.kargonomi_tracking_code) && o.status !== "cancelled" && !isImported(o)
+    && !["shipped", "delivered", "undelivered", "returned", "cancelled"].includes(o.shipment_status || "")
+    && (!o.label_printed_code || labelOutdated(o)));
+  async function printLabelQueue() {
+    const list = labelQueue.slice(0, 200);
+    const r = await printShippingLabels(list.map((o) => o.id));
+    if (r.error) return siteAlert({ title: "Etiket yazdırılamadı", message: r.error, tone: "danger" });
+    if (r.printed) {
+      const now = new Date().toISOString();
+      const skip = new Set(r.skipped.map((x) => x.order));
+      setOrders((prev) => prev.map((o) => list.some((x) => x.id === o.id) && !skip.has(orderLabel(o))
+        ? { ...o, label_printed_code: o.cargo_tracking_number || o.kargonomi_tracking_code || null, label_printed_at: now } : o));
+    }
+    if (r.skipped.length) siteAlert({ message: `Basılmayan: ${r.skipped.map((x) => `${x.order} (${x.reason})`).join(", ")}` });
+  }
   const safeListPage = Math.min(listPage, listPageCount - 1);
   const pagedOrders = visibleOrders.slice(safeListPage * LIST_PAGE, safeListPage * LIST_PAGE + LIST_PAGE);
   const filtersActive = fTodo || !!q.trim() || fPay !== "all" || fShip !== "all" || fInv !== "all" || fMethod !== "all" || fChannel !== "all" || fRet !== "all";
@@ -1231,6 +1253,15 @@ export default function OrdersPage() {
                   Temizle
                 </button>
               )}
+              {labelQueue.length > 0 && (
+                <button
+                  onClick={printLabelQueue}
+                  title="Listede görünen, kargo kodu olan ve etiketi henüz basılmamış (ya da kodu değişmiş) gönderilmemiş siparişler"
+                  className="h-9 px-3 rounded-lg text-xs font-bold border border-slate-200 bg-white hover:bg-slate-50 flex items-center gap-1.5"
+                >
+                  <Printer size={13} /> Etiketleri yazdır ({labelQueue.length})
+                </button>
+              )}
               <span className="text-xs text-muted-foreground ml-auto">{visibleOrders.length} / {orders.length} sipariş</span>
             </div>
             {visibleOrders.length === 0 ? (
@@ -1332,6 +1363,7 @@ export default function OrdersPage() {
                                 <Truck size={9} /> {order.cargo_tracking_number}
                               </span>
                             )}
+                            {labelOutdated(order) && <span className="text-[10px] font-bold rounded px-1.5 py-0.5 w-fit bg-red-50 text-red-700">Etiketi yeniden yazdır</span>}
                           </div>
                         ) : isUpdating ? (
                           <Loader2 size={14} className="animate-spin text-muted-foreground" />
@@ -1344,11 +1376,12 @@ export default function OrdersPage() {
                                 {openCaseOf(order).kind === "return" ? (openCaseOf(order).status === "requested" ? "İade talebi" : "İade bekleniyor") : "Değişimde"}
                               </span>
                             )}
-                            {order.kargonomi_tracking_code && (
+                            {(order.kargonomi_tracking_code || order.cargo_tracking_number) && (
                               <span className="text-[10px] font-mono text-purple-600 flex items-center gap-1">
-                                <Truck size={9} /> {order.kargonomi_tracking_code}
+                                <Truck size={9} /> {order.cargo_tracking_number || order.kargonomi_tracking_code}
                               </span>
                             )}
+                            {labelOutdated(order) && <span className="text-[10px] font-bold rounded px-1.5 py-0.5 w-fit bg-red-50 text-red-700">Etiketi yeniden yazdır</span>}
                           </div>
                         )}
                       </TableCell>
@@ -1428,6 +1461,17 @@ export default function OrdersPage() {
                     setOrders((prev) => prev.map((o) => (o.id === selectedOrder.id ? { ...o, ...fields } : o)));
                   }}
                   onRestocked={() => handleViewDetails(selectedOrder)}
+                />
+              )}
+
+              {/* Kargo etiketi (site + pazaryeri ortak) */}
+              {!isImported(selectedOrder) && (
+                <ShippingLabelBox
+                  order={selectedOrder}
+                  onChange={(fields) => {
+                    setSelectedOrder((prev) => (prev ? { ...prev, ...fields } : prev));
+                    setOrders((prev) => prev.map((o) => (o.id === selectedOrder.id ? { ...o, ...fields } : o)));
+                  }}
                 />
               )}
 
