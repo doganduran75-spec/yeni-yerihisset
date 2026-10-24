@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { ArrowUp } from "lucide-react";
 
 /**
@@ -10,6 +11,7 @@ import { ArrowUp } from "lucide-react";
  */
 export default function ScrollToTop() {
   const [show, setShow] = useState(false);
+  const pathname = usePathname() || "";
 
   useEffect(() => {
     const onScroll = () => setShow(window.scrollY > 400);
@@ -18,7 +20,8 @@ export default function ScrollToTop() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  if (!show) return null;
+  // Ödeme akışında gösterilmez (telefonda alttaki "Ödemeye geç" şeridinin üstüne biniyor, kafa karıştırıyor)
+  if (!show || pathname.startsWith("/checkout")) return null;
 
   return (
     <button
