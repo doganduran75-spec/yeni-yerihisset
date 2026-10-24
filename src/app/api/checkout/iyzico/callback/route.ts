@@ -59,7 +59,7 @@ async function handle(req: NextRequest) {
   const iyzipay = createIyzicoClient();
 
   return new Promise<NextResponse>((resolve) => {
-    iyzipay.checkoutFormAuth.retrieve({ locale: "tr", token }, async (err: any, result: any) => {
+    iyzipay.checkoutForm.retrieve({ locale: "tr", token }, async (err: any, result: any) => {
      try {
       if (err) {
         console.error("[iyzico/callback] retrieve error:", err);

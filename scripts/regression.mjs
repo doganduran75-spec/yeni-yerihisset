@@ -308,6 +308,14 @@ async function main() {
     const r = await get(path, opts);
     r.status === want ? add("ok", name) : add("fail", name, `HTTP ${r.status} (beklenen ${want})`);
   }
+  // iyzico kütüphanesinde kullandığımız servis adları gerçekten var mı (checkoutFormAuth diye bir servis yoktu → ödeme dönüşü 500)
+  try {
+    const { readdirSync: rd } = await import("node:fs");
+    const have = new Set(rd(new URL("../node_modules/iyzipay/lib/resources/", import.meta.url)).filter((f) => f.endsWith(".js")).map((f) => f[0].toLowerCase() + f.slice(1, -3)));
+    const used = ["checkoutForm", "checkoutFormInitialize", "payment", "refund"];
+    const miss = used.filter((u) => !have.has(u));
+    miss.length ? add("fail", "iyzico servis adı bulunamadı", miss.join(", ")) : add("ok", "iyzico servis adları kütüphaneyle uyumlu");
+  } catch (e) { add("warn", "iyzico kütüphanesi kontrol edilemedi", String(e?.message || e)); }
   // Kart ödemesi dönüşü (3D Secure sonrası): yönlendirme değil, çerçeveden (iframe) çıkıp üst pencereyi götüren sayfa
   {
     const cb = await get("/api/checkout/iyzico/callback", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: "" });
