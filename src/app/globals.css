@@ -175,3 +175,6 @@ body {
 .rich-text blockquote { border-left: 3px solid rgb(203 213 225); padding-left: 1rem; font-style: italic; }
 .rich-text table { display: block; overflow-x: auto; border-collapse: collapse; font-size: 0.9em; }
 .rich-text th, .rich-text td { border: 1px solid rgb(226 232 240); padding: 0.4em 0.6em; text-align: left; }
+
+/* Kart ödeme formu açıkken mobil alt menü gizli (ödemenin ortasında çıkılmasın) — src/app/checkout/page.tsx */
+body[data-paying] .yh-tabbar { display: none; }

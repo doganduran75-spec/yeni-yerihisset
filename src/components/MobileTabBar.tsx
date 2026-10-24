@@ -24,13 +24,13 @@ export default function MobileTabBar() {
 
   // Admin panelinde site alt menüsü gösterilmez (admin kendi menüsünü kullanır).
   if (pathname.startsWith("/admin")) return null;
-  // Ödeme sırasında gizli: dikkat dağıtmasın, "Siparişi tamamla"ya yakın yanlış dokunma olmasın
-  if (pathname.startsWith("/checkout")) return null;
+  // Ödeme akışında da görünür (uygulama hissi — kullanıcı kararı 2026-10-24). Yalnız kart formu açıkken gizli
+  // (ödemenin ortasında yanlışlıkla çıkılmasın): ödeme sayfası body'ye data-paying koyar → globals.css gizler.
 
   return (
     <>
     <nav
-      className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-white/95 backdrop-blur border-t border-[#E8E4DC]"
+      className="yh-tabbar md:hidden fixed bottom-0 inset-x-0 z-50 bg-white/95 backdrop-blur border-t border-[#E8E4DC]"
       style={{ fontFamily: "var(--font-jakarta), system-ui, sans-serif", paddingBottom: "env(safe-area-inset-bottom)" }}
       aria-label="Alt menü"
     >

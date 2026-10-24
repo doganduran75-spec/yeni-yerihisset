@@ -143,8 +143,10 @@ export default function CheckoutPage() {
 
   // iyzico form HTML'i gelince script'leri çalıştır
   useEffect(() => {
-    if (!iyzicoFormHtml || !iyzicoContainerRef.current) return;
+    if (!iyzicoFormHtml) { delete document.body.dataset.paying; return; }
+    if (!iyzicoContainerRef.current) return;
     const container = iyzicoContainerRef.current;
+    document.body.dataset.paying = "1"; // kart formu açık → alt menü gizli (globals.css .yh-tabbar)
     // iyzico formu bu kutuyu arar; yoksa kendini sayfanın en altına "popup" olarak ekler (pencere boş kalırdı).
     // "responsive" → form penceremizin İÇİNDE, ekran genişliğine uyarak açılır.
     document.querySelectorAll("#iyzipay-checkout-form").forEach((el) => { if (!container.contains(el)) el.remove(); });
@@ -161,6 +163,7 @@ export default function CheckoutPage() {
       oldScript.parentNode?.replaceChild(newScript, oldScript);
     });
   }, [iyzicoFormHtml]);
+  useEffect(() => () => { delete document.body.dataset.paying; }, []);
 
   // GA4: begin_checkout — sayfa yüklenince (sepette ürün varsa)
   useEffect(() => {
@@ -659,11 +662,6 @@ export default function CheckoutPage() {
   return (
     <div className="min-h-screen bg-[#F8FAFC]">
       {/* Ödeme hatası banner */}
-      {paymentFailed && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-red-600 text-white px-6 py-3 rounded-2xl shadow-xl font-bold text-sm flex items-center gap-2 w-[calc(100%-2rem)] max-w-xl animate-in slide-in-from-top-4">
-          <X size={16} className="shrink-0" /> Ödeme tamamlanamadı, kartından para çekilmedi. Sepetin duruyor — tekrar deneyebilir ya da Havale/EFT seçebilirsin.
-        </div>
-      )}
 
       <Navbar variant="minimal" />
 
@@ -719,6 +717,12 @@ export default function CheckoutPage() {
             <CheckoutStepper current={step} onGoTeslimat={goToTeslimat} />
           </div>
         </div>
+        {/* Ödeme başarısız → adımların hemen altında, sayfanın içinde (üstte sabit duran uyarı üst menünün altında kalıyordu) */}
+        {paymentFailed && (
+          <div className="max-w-6xl mx-auto mb-6 bg-red-600 text-white px-5 py-3 rounded-2xl font-bold text-sm flex items-start gap-2 animate-in fade-in">
+            <X size={16} className="shrink-0 mt-0.5" /> Ödeme tamamlanamadı, kartından para çekilmedi. Sepetin duruyor — tekrar deneyebilir ya da Havale/EFT seçebilirsin.
+          </div>
+        )}
         {/* grid-cols-1 = minmax(0,1fr) + min-w-0: tek satırlık (truncate) metin sütunu genişletip telefonda sayfayı yana taşırmasın */}
         <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12">
           {/* MAIN FLOW */}
@@ -1256,7 +1260,7 @@ export default function CheckoutPage() {
         </div>
       </main>
       {step === "teslimat" && (
-        <div className="lg:hidden fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 backdrop-blur px-4 pt-3" style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 12px)" }}>
+        <div className="lg:hidden fixed inset-x-0 z-40 border-t border-slate-200 bg-white/95 backdrop-blur px-4 py-3" style={{ bottom: "calc(4rem + env(safe-area-inset-bottom))" }}>
           <div className="flex items-center gap-3">
             <div className="min-w-0">
               <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Toplam</p>
@@ -1268,7 +1272,7 @@ export default function CheckoutPage() {
           </div>
         </div>
       )}
-      {step === "teslimat" && <div className="lg:hidden h-24" />}
+      {step === "teslimat" && <div className="lg:hidden h-20" />}
       {/* Ödeme akışında mobilde alt bilgi gösterilmez (dikkat dağıtmasın) */}
       <div className="hidden md:block"><Footer /></div>
     </div>

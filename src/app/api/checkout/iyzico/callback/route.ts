@@ -67,6 +67,8 @@ async function handle(req: NextRequest) {
         return;
       }
 
+      // Teşhis: her dönüşte iyzico'nun cevabının özeti (kart bilgisi yok)
+      console.log("[iyzico/callback] sonuç:", JSON.stringify({ status: result?.status, paymentStatus: result?.paymentStatus, errorCode: result?.errorCode, errorMessage: result?.errorMessage, conversationId: result?.conversationId, price: result?.paidPrice ?? result?.price }));
       const conversationId: string = result?.conversationId ?? "";
       const paymentStatus: string = result?.paymentStatus ?? "";
       const paymentId: string = result?.paymentId ?? "";
