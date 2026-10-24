@@ -4,6 +4,7 @@ import { getAuthUserFromRequest } from "@/lib/auth-from-request";
 import { afterSaleUrl } from "@/lib/after-sale";
 import { sendAltDeliveredEmail, sendReturnLabelEmail, RETURN_METHOD_LABEL } from "@/lib/after-sale-mail";
 import { kickMarketplaceSync } from "@/lib/marketplace/sync";
+import { autoInvoiceSiteOrder } from "@/lib/parasut-invoice";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -40,7 +41,7 @@ export async function POST(req: NextRequest) {
       if (c) return NextResponse.json({ error: "Açık talep var; önce onu kapat" }, { status: 400 });
       await sb.from("orders").update({ fit_status: "ok", fit_answered_at: now }).eq("id", orderId);
       await note("Ayakkabı oldu (yönetici işaretledi)");
-      return NextResponse.json({ ok: true });
+      return NextResponse.json({ ok: true, invoice: await autoInvoiceSiteOrder(sb, orderId, "“oldu say”") });
 
     case "ship_alt": {
       if (!c || c.kind !== "exchange" || !["requested", "waiting_stock"].includes(c.status)) return NextResponse.json({ error: "Gönderilecek değişim talebi yok" }, { status: 400 });

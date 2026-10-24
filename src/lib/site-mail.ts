@@ -6,7 +6,8 @@ import { createMailTransport } from "./mail-guard";
 import { buildSmtpConfig } from "./smtp-config";
 import { buildEmailDocument, htmlToText } from "./notifications";
 
-export async function sendSiteMail(to: string, subject: string, bodyHtml: string): Promise<{ status: "sent" | "failed"; error?: string }> {
+export async function sendSiteMail(to: string, subject: string, bodyHtml: string,
+  attachments?: { filename: string; content: Buffer; contentType?: string }[]): Promise<{ status: "sent" | "failed"; error?: string }> {
   const sb = createAdminClient() as any;
   const { data: st } = await sb.from("settings").select("*").limit(1).maybeSingle();
   const storeName = st?.store_name || "YeriHisset";
@@ -17,6 +18,7 @@ export async function sendSiteMail(to: string, subject: string, bodyHtml: string
       from: `"${st?.smtp_from_name || storeName}" <${st?.smtp_from_email || cfg.auth.user}>`,
       to, subject: `${storeName} — ${subject}`,
       html: buildEmailDocument(bodyHtml, storeName), text: htmlToText(bodyHtml),
+      ...(attachments?.length ? { attachments } : {}),
     });
     return { status: "sent" };
   } catch (e: any) {

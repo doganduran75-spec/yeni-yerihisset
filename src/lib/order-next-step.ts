@@ -235,7 +235,10 @@ function coreNextStep(o: OrderLike): NextStep {
   if (inv === "pending") acts.push(...invoiceActs);
   if (ship === "delivered") acts.push({ key: "return_expected", label: "İade gelecek", kind: "danger" });
   acts.push({ key: "return", label: "İade al", kind: "danger" });
+  const silent = o.fit_status === "trial"; // 14 gün doldu, müşteri cevap vermedi → fatura otomatik DEĞİL, yönetici onaylar
   return inv === "pending"
-    ? { stage: "Teslim edildi", hint: "Müşteri memnunsa faturayı kes.", actions: acts, needsAction: true }
+    ? { stage: silent ? `${TRIAL_DAYS} gün doldu, cevap yok — fatura kesilsin mi?` : o.fit_status === "ok" ? "Oldu — fatura kesilecek" : "Teslim edildi",
+        hint: silent ? "Müşteri oldu / değişim / iade demedi. Uygunsa faturayı kes (PDF müşteriye e-postayla gider)." : "Fatura kendiliğinden kesilmediyse (Paraşüt kapalı / hata) kes.",
+        actions: acts, needsAction: true }
     : { stage: "Tamamlandı", actions: acts, needsAction: false };
 }

@@ -468,6 +468,10 @@ export default {
         ok(k.status === 200 && ord(A).fit_status === "ok", "Müşteri 'oldu' dedi → fatura sırası", `${why(k)} → ${ord(A).fit_status}`);
         const k2 = await cust(A, { action: "ok" });
         ok(k2.status === 400, "Cevap ikinci kez verilemiyor", why(k2));
+        // "Oldu" → fatura kendiliğinden kesilir; ama test siparişinde Paraşüt'te GERÇEK fatura kesilmemeli
+        await new Promise((res) => setTimeout(res, 1500));
+        ok(one(`SELECT parasut_invoice_id IS NULL AND parasut_status IS NULL FROM public.orders WHERE id = ${lit(A)}`) === "t",
+          "Test siparişinde otomatik fatura kesilmiyor (Paraşüt'e gitmiyor)", "test siparişi Paraşüt'e gönderildi!");
 
         // ── Değişim döngüsü ──
         const B = await delivered();
@@ -494,6 +498,9 @@ export default {
         const cB = caseOf(B);
         ok(rb.status === 200 && cB?.status === "resolved" && !!cB?.closed_at && ord(B).fit_status === "ok", "Tutulmayan ürün geldi → değişim tamam, sipariş 'oldu'", `${why(rb)} → ${cB?.status}, ${ord(B).fit_status}`);
         ok(stock() === s1 + 1 && ord(B).shipment_status === "delivered" && Number(ord(B).refunded_amount || 0) === 0, "Değişimde geri gelen stoğa eklendi, para iadesi yok", `stok ${s1} → ${stock()}, kargo ${ord(B).shipment_status}, iade ${ord(B).refunded_amount}`);
+        await new Promise((res) => setTimeout(res, 1500));
+        ok(one(`SELECT parasut_invoice_id IS NULL AND parasut_status IS NULL FROM public.orders WHERE id = ${lit(B)}`) === "t",
+          "Değişim tamamlanınca test siparişi Paraşüt'e gitmiyor", "test siparişi Paraşüt'e gönderildi!");
 
         // ── İade (havale → IBAN) ──
         const C = await delivered();

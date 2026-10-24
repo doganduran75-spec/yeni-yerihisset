@@ -4,6 +4,7 @@ import { getAuthUserFromRequest } from "@/lib/auth-from-request";
 import { rateLimited, clientIp, TOO_MANY } from "@/lib/rate-limit";
 import { loadAfterSale, verifyAfterSaleToken, exchangeOptions, validIban } from "@/lib/after-sale";
 import { sendAdminCaseEmail, RETURN_METHOD_LABEL } from "@/lib/after-sale-mail";
+import { autoInvoiceSiteOrder } from "@/lib/parasut-invoice";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -54,6 +55,8 @@ export async function POST(req: NextRequest) {
     if (!view.canAnswer) return NextResponse.json({ error: "Bu sipariş için cevap verilemiyor" }, { status: 400 });
     await sb.from("orders").update({ fit_status: "ok", fit_answered_at: now }).eq("id", orderId);
     await sb.from("order_events").insert({ order_id: orderId, type: "note", note: "Müşteri: ayakkabı oldu 👍" });
+    // Karar net → fatura kendiliğinden (müşteri beklemesin; hata siparişe yazılır)
+    void autoInvoiceSiteOrder(sb, orderId, "müşteri “oldu” dedi");
     return NextResponse.json({ ok: true, fitStatus: "ok" });
   }
 

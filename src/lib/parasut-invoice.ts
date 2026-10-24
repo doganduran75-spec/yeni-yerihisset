@@ -13,6 +13,8 @@
 import { createAdminClient } from "@/lib/supabase-admin";
 import { parasutCall, parasutConfig, ParasutError } from "@/lib/parasut";
 import { pushInvoiceToMarketplace } from "@/lib/marketplace-invoice";
+import { sendInvoiceEmail } from "@/lib/invoice-mail";
+import { isTestOrder } from "@/lib/notifications";
 
 type Sb = ReturnType<typeof createAdminClient>;
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -26,8 +28,8 @@ const parse = (v: any) => { try { return typeof v === "string" ? JSON.parse(v) :
 const ORDER_COLS = `id, order_number, external_order_number, channel, status, created_at, payment_method, payment_status, invoice_status,
   total_amount, shipping_cost, coupon_discount, credit_used, billing_address, shipping_address, customer_name, customer_email, customer_phone,
   cargo_provider, kargonomi_provider, shipping_method, parasut_invoice_id, parasut_status, parasut_job_id, parasut_e_doc_id, parasut_e_doc_type,
-  parasut_paid, parasut_diff_ok, profiles(email, first_name, last_name, phone),
-  order_items(id, quantity, unit_price, product_id, variant_id, variant_name, title, sku, barcode, products(title, parasut_product_id), product_variants(parasut_product_id))`;
+  parasut_paid, parasut_diff_ok, refunded_amount, profiles(email, first_name, last_name, phone),
+  order_items(id, quantity, returned_qty, unit_price, product_id, variant_id, variant_name, title, sku, barcode, products(title, parasut_product_id), product_variants(parasut_product_id))`;
 
 async function loadOrder(sb: Sb, id: string) {
   const { data, error } = await (sb as any).from("orders").select(ORDER_COLS).eq("id", id).maybeSingle();
@@ -44,7 +46,7 @@ async function prepare(sb: Sb, o: any) {
   const channel = o.channel || "site";
   const errs: string[] = [];
   if (o.status === "cancelled") errs.push("İptal edilmiş sipariş faturalanmaz.");
-  if (o.payment_status !== "paid") errs.push("Ödemesi alınmamış sipariş faturalanmaz.");
+  if (!["paid", "partial_refund"].includes(o.payment_status)) errs.push("Ödemesi alınmamış sipariş faturalanmaz.");
   if (o.invoice_status && o.invoice_status !== "pending") errs.push(`Fatura durumu “${o.invoice_status}” — zaten faturalanmış.`);
 
   const items = (o.order_items as any[]) || [];
@@ -54,6 +56,9 @@ async function prepare(sb: Sb, o: any) {
 
   const lines: Line[] = [];
   for (const i of items) {
+    // Geri gelen adet faturalanmaz (değişimde tutulmayan numara / kısmi iade — fatura karar netleşince kesilir)
+    const qty = Number(i.quantity) - Number(i.returned_qty || 0);
+    if (qty <= 0) continue;
     const title = `${i.products?.title ?? i.title ?? "Ürün"}${i.variant_name ? ` — ${i.variant_name}` : ""}`;
     // Pazaryeri satırı sitedeki ürüne hiç bağlanmamışsa (gelirken eşleşmedi) sorun Paraşüt'te değil, satırda
     if (!i.variant_id && !i.product_id) { errs.push(`Satır sitedeki ürüne bağlı değil: ${title} — siparişte o satırın SKU kutusuna sitedeki SKU'yu (ya da barkodu) gir, sonra yeniden dene.`); continue; }
@@ -61,7 +66,7 @@ async function prepare(sb: Sb, o: any) {
     if (!pid) { errs.push(`Paraşüt ürünüyle eşleşmemiş: ${title} (Paraşüt ürün eşleştirme sayfası)`); continue; }
     const v = vat.get(pid);
     if (v == null) { errs.push(`Paraşüt'te KDV oranı yok: ${title} — ürünleri yeniden çek`); continue; }
-    lines.push({ productId: pid, vat: v, qty: Number(i.quantity), gross: r2(Number(i.unit_price) * Number(i.quantity)), title });
+    lines.push({ productId: pid, vat: v, qty, gross: r2(Number(i.unit_price) * qty), title });
   }
 
   // Kupon + kredi (yalnız site) → ürün kalemlerine orantılı; kuruş farkı en büyük kaleme
@@ -87,8 +92,9 @@ async function prepare(sb: Sb, o: any) {
   }
 
   const total = r2(lines.reduce((a, l) => a + l.gross, 0));
-  if (lines.length && Math.abs(total - Number(o.total_amount)) > 0.01)
-    errs.push(`Kalemler (${total} TL) sipariş tutarıyla (${Number(o.total_amount)} TL) tutmuyor.`);
+  const expected = r2(Number(o.total_amount) - Number(o.refunded_amount || 0));
+  if (lines.length && Math.abs(total - expected) > 0.01)
+    errs.push(`Kalemler (${total} TL) sipariş tutarıyla (${expected} TL${Number(o.refunded_amount || 0) > 0 ? ", iade düşülmüş" : ""}) tutmuyor.`);
 
   // Alıcı
   const bill = { ...parse(o.shipping_address), ...parse(o.billing_address) };
@@ -259,6 +265,28 @@ export async function invoiceOrder(sb: Sb, orderId: string, opts: { acceptDiff?:
   return checkInvoice(sb, orderId);
 }
 
+/** YeriHisset siparişinde karar netleşince (müşteri "oldu" / "oldu say" / değişimde tutulmayan geri geldi) faturayı
+ *  kendiliğinden kes. Paraşüt kapalıysa ya da sipariş uygun değilse sessizce geçer; hata siparişe yazılır (parasut_error)
+ *  ve sipariş ekranında "Paraşüt — yeniden dene" görünür. Hata fırlatmaz (çağıran beklemek zorunda değil). */
+export async function autoInvoiceSiteOrder(sb: Sb, orderId: string, why: string): Promise<{ status: string; error?: string }> {
+  try {
+    const { data: o } = await (sb as any).from("orders").select("channel, import_source, status, payment_status, invoice_status, parasut_status, user_id").eq("id", orderId).maybeSingle();
+    if (!o || (o.channel || "site") !== "site" || o.import_source || o.status === "cancelled") return { status: "skipped" };
+    // Regresyon test siparişi (@….test üye): Paraşüt'te GERÇEK fatura kesilmesin
+    if (await isTestOrder(sb, o.user_id)) return { status: "test" };
+    if ((o.invoice_status || "pending") !== "pending" || o.parasut_status === "done" || !["paid", "partial_refund"].includes(o.payment_status)) return { status: "skipped" };
+    const c = await parasutConfig(sb);
+    if (!c.enabled) return { status: "off" };
+    await (sb as any).from("order_events").insert({ order_id: orderId, type: "note", note: `Fatura otomatik kesiliyor (${why})` });
+    const r = await invoiceOrder(sb, orderId);
+    return { status: String(r.status || "") };
+  } catch (e: any) {
+    const msg = String(e?.message || e);
+    try { await save(sb, orderId, { parasut_status: "error", parasut_error: msg.slice(0, 500) }); } catch { /* yut */ }
+    return { status: "error", error: msg };
+  }
+}
+
 /** e-belge işini ve PDF'i takip et (cron + "Şimdi sorgula") */
 export async function checkInvoice(sb: Sb, orderId: string) {
   const o = await loadOrder(sb, orderId);
@@ -298,6 +326,8 @@ export async function checkInvoice(sb: Sb, orderId: string) {
   await save(sb, orderId, { parasut_pdf_path: path, parasut_status: "done", parasut_error: null, parasut_invoiced_at: new Date().toISOString(), invoice_status: "invoiced" });
   // Trendyol / Hepsiburada siparişi: faturayı pazaryerine de yükle (olmazsa hata siparişe yazılır, "Trendyol'a yükle" ile yeniden)
   if (o.channel === "trendyol" || o.channel === "hepsiburada") await pushInvoiceToMarketplace(sb, orderId).catch(() => {});
+  // Site siparişi: PDF müşteriye bizden (bir kez)
+  if ((o.channel || "site") === "site") await sendInvoiceEmail(sb, orderId).catch(() => {});
   return { status: "done", invoiceNo };
 }
 

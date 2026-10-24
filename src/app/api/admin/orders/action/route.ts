@@ -4,6 +4,7 @@ import { getAuthUserFromRequest } from "@/lib/auth-from-request";
 import { iyzicoRefund } from "@/lib/iyzico-refund";
 import { restoreOrderCredit } from "@/lib/store-credit";
 import { kickMarketplaceSync } from "@/lib/marketplace/sync";
+import { autoInvoiceSiteOrder } from "@/lib/parasut-invoice";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -110,7 +111,11 @@ export async function POST(req: NextRequest) {
       const exchangeDone = openCase.kind === "exchange" && ["keep_chosen", "label_sent"].includes(openCase.status);
       if (openCase.kind === "return" || exchangeDone) {
         await sb.from("order_cases").update({ status: exchangeDone ? "resolved" : "received", closed_at: done, updated_at: done }).eq("id", openCase.id);
-        if (exchangeDone) await sb.from("orders").update({ fit_status: "ok" }).eq("id", orderId);
+        if (exchangeDone) {
+          await sb.from("orders").update({ fit_status: "ok" }).eq("id", orderId);
+          // Değişim tamam: tutulan numarayla fatura kendiliğinden (geri gelen adet faturaya girmez)
+          void autoInvoiceSiteOrder(sb, orderId, "değişim tamamlandı");
+        }
       }
     }
     if (body.refund && Number(body.refund.amount) > 0) {
