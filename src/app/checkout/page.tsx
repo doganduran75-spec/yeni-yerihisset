@@ -719,9 +719,10 @@ export default function CheckoutPage() {
             <CheckoutStepper current={step} onGoTeslimat={goToTeslimat} />
           </div>
         </div>
-        <div className="max-w-6xl mx-auto grid lg:grid-cols-12 gap-12">
+        {/* grid-cols-1 = minmax(0,1fr) + min-w-0: tek satırlık (truncate) metin sütunu genişletip telefonda sayfayı yana taşırmasın */}
+        <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12">
           {/* MAIN FLOW */}
-          <div className="lg:col-span-8 space-y-12">
+          <div className="lg:col-span-8 space-y-8 lg:space-y-12 min-w-0">
             
             {step === "teslimat" && (<>
             {/* Üye: e-posta sabit, ad soyad adreste → iletişim bölümü yerine tek satır (adı eksikse bölüm görünür) */}
