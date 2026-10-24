@@ -12,7 +12,7 @@ import { renderEmailTemplate } from "@/lib/notifications";
 
 const HTML = (storeName: string, storeUrl: string, name: string, items: { name: string; price?: number }[]) => {
   const rows = items.slice(0, 6).map((it) =>
-    `<li style="margin:0 0 6px;font-size:14px;color:#334155"><b>${it.name}</b>${it.price ? ` — ₺${Number(it.price).toLocaleString("tr-TR")}` : ""}</li>`
+    `<li style="margin:0 0 6px;font-size:14px;color:#334155"><b>${String(it.name).replace(/&/g, "&amp;").replace(/</g, "&lt;")}</b>${it.price ? ` — ₺${Number(it.price).toLocaleString("tr-TR")}` : ""}</li>`
   ).join("");
   return `<div style="font-family:system-ui,Arial,sans-serif;max-width:560px;margin:0 auto;padding:8px">
     <h1 style="font-size:22px;font-weight:800;color:#3f6212;margin:0 0 12px">Sepetinde seni bekleyen ürünler var 👟</h1>
@@ -97,16 +97,27 @@ async function run(req: NextRequest) {
     const prof = profById[s.user_id];
     if (!prof?.email || recentlyMailed.has(s.user_id) || done.has(s.user_id)) continue;
 
-    const removedNames = new Set(evs.filter((e) => e.event_type === "remove_from_cart").map((e) => e.meta?.name));
+    // Ürün adı: olayda ad yoksa (çoğu sepete ekleme yalnız ürün kimliği taşıyor) ürün kaydından + numara.
+    // Eskiden ad yerine ürün kimliği (uzun kod) yazılıyordu.
+    const pids = [...new Set(added.map((e) => e.meta?.product_id).filter(Boolean))];
+    const { data: prods } = pids.length ? await (supabase as any).from("products").select("id, title").in("id", pids) : { data: [] };
+    const titleOf = new Map(((prods as any[]) || []).map((p) => [p.id, p.title]));
+    const labelOf = (m: any) => {
+      const base = m?.name || titleOf.get(m?.product_id) || "Ürün";
+      return m?.size && !String(base).includes(String(m.size)) ? `${base} · ${m.size}` : base;
+    };
+    const removed = new Set(evs.filter((e) => e.event_type === "remove_from_cart").map((e) => e.meta?.product_id || e.meta?.name));
+    const seen = new Set<string>();
     const items = added
-      .map((e) => ({ name: e.meta?.name || e.meta?.product_id || "Ürün", price: e.meta?.price }))
-      .filter((it) => !removedNames.has(it.name));
+      .filter((e) => !removed.has(e.meta?.product_id || e.meta?.name))
+      .map((e) => ({ name: labelOf(e.meta), price: e.meta?.price }))
+      .filter((it) => it.name !== "Ürün" && !seen.has(it.name) && (seen.add(it.name), true));
     if (!items.length) continue;
 
     const custName = prof.first_name || "Değerli Müşterimiz";
     // Düzenlenebilir şablon (email_templates) varsa onu kullan; yoksa hardcoded.
     const itemsHtml = items.slice(0, 6).map((it: any) =>
-      `<li style="margin:0 0 6px;font-size:14px;color:#334155"><b>${it.name}</b>${it.price ? ` — ₺${Number(it.price).toLocaleString("tr-TR")}` : ""}</li>`
+      `<li style="margin:0 0 6px;font-size:14px;color:#334155"><b>${String(it.name).replace(/&/g, "&amp;").replace(/</g, "&lt;")}</b>${it.price ? ` — ₺${Number(it.price).toLocaleString("tr-TR")}` : ""}</li>`
     ).join("");
     const tpl = await renderEmailTemplate("cart_abandonment", {
       customer_name: custName, items_html: itemsHtml, store_url: storeUrl, store_name: storeName,
