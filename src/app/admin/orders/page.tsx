@@ -1105,8 +1105,10 @@ export default function OrdersPage() {
   const visibleOrders = (() => {
     const needle = trNorm(q.trim()).replace(/^#/, "");
     const list = orders.filter((o) => {
-      // Yarım kalan kart denemeleri (iyzico'da ödenmeden kapandı: iptal + ödeme alınmadı) varsayılan olarak gizli
-      if (!showAbandoned && o.payment_method === "iyzico" && o.status === "cancelled" && o.payment_status === "failed" && !q.trim()) return false;
+      // Yarım kalan kart denemeleri (iyzico'da ödenmeden kapandı: iptal + ödeme alınmadı): varsayılan gizli;
+      // kutu işaretliyse YALNIZ onlar listelenir (aramada her zaman bulunur)
+      const abandoned = o.payment_method === "iyzico" && o.status === "cancelled" && o.payment_status === "failed";
+      if (showAbandoned ? !abandoned : abandoned && !q.trim()) return false;
       if (fPay !== "all" && (o.payment_status || "pending") !== fPay) return false;
       if (fShip !== "all" && (o.shipment_status || "waiting") !== fShip) return false;
       if (fInv !== "all" && (o.invoice_status || "pending") !== fInv) return false;
@@ -1246,7 +1248,7 @@ export default function OrdersPage() {
               </select>
               <label className="inline-flex items-center gap-1.5 text-xs text-muted-foreground px-1" title="Kartla ödeme başlatılıp tamamlanmayan (iptal + ödeme alınmadı) siparişler">
                 <input type="checkbox" checked={showAbandoned} onChange={(e) => { setShowAbandoned(e.target.checked); setListPage(0); }} />
-                Yarım kalan kart denemeleri
+                Yalnız yarım kalan kart denemeleri
               </label>
               <select value={fInv} onChange={(e) => { setFInv(e.target.value); setListPage(0); }} className={selCls}>
                 <option value="all">Fatura: tümü</option>
