@@ -488,6 +488,7 @@ export type Database = {
           affiliate_id: string | null
           brand_ids: string[] | null
           category_ids: string[] | null
+          claim_valid_days: number | null
           amount: number
           auto_assign_on_signup: boolean
           campaign_slug: string | null
@@ -512,6 +513,7 @@ export type Database = {
           affiliate_id?: string | null
           brand_ids?: string[] | null
           category_ids?: string[] | null
+          claim_valid_days?: number | null
           amount?: number
           auto_assign_on_signup?: boolean
           campaign_slug?: string | null
@@ -536,6 +538,7 @@ export type Database = {
           affiliate_id?: string | null
           brand_ids?: string[] | null
           category_ids?: string[] | null
+          claim_valid_days?: number | null
           amount?: number
           auto_assign_on_signup?: boolean
           campaign_slug?: string | null

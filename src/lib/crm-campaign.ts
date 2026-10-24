@@ -91,3 +91,21 @@ ${button(`${site()}/sepet?utm_source=crm&utm_medium=email&utm_campaign=kupon-hat
   }
   return n;
 }
+
+/** "Kuponu hesabına ekle" (misafir): kupon eklendi + şifre belirle / giriş bağlantısı. İşlemsel (kişi istedi) —
+ *  kampanya izni gerekmez. */
+export async function sendClaimEmail(opts: { to: string; coupon: { name: string; type: string; amount: number; min_order_amount?: number | null };
+  expires: string | null; added: boolean; actionUrl: string; mode: "created" | "passwordless" | "member" }) {
+  const { sendSiteMail } = await import("./site-mail");
+  const box = opts.expires ? couponBoxHtml(opts.coupon, opts.expires, "") : `<p style="font-size:18px;font-weight:900;color:#1a2e05;text-align:center;margin:18px 0">${escapeHtml(couponValueText(opts.coupon))}</p>`;
+  const intro = opts.added ? "Kuponun hesabına eklendi 🎁" : "Bu kupon zaten hesabında 🎁";
+  const howTo = opts.mode === "member"
+    ? "Giriş yaptığında sepetinde hazır olacak — kod yazmana gerek yok."
+    : "Kuponu kullanmak için hesabına bir şifre belirlemen yeterli; sonra sepetinde hazır olacak — kod yazmana gerek yok.";
+  const body = `<h1 style="font-size:21px;font-weight:800;color:#111827;margin:0 0 12px">${intro}</h1>
+<p style="font-size:15px;color:#374151;line-height:1.6;margin:0">${howTo}</p>
+${box}
+${button(opts.actionUrl, opts.mode === "member" ? "Giriş yap" : "Şifremi belirle")}
+<p style="font-size:12px;color:#6b7280;line-height:1.6;margin:0">Bu isteği sen yapmadıysan bu e-postayı yok sayabilirsin.</p>`;
+  return sendSiteMail(opts.to, `${couponValueText(opts.coupon)} hesabında`, body);
+}

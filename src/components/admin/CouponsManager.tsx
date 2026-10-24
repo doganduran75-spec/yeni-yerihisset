@@ -35,6 +35,7 @@ type Coupon = {
   is_active: boolean;
   campaign_slug: string | null;
   affiliate_id: string | null; // bu kodu kullanan siparişler bu satış ortağına komisyon üretir
+  claim_valid_days: number | null; // kampanya bağlantısından hesaba eklenince geçerlilik (gün; boş = kuponun bitiş tarihi)
   brand_ids: string[] | null;    // kapsam: boş = bütün markalar
   category_ids: string[] | null; // kapsam: boş = bütün kategoriler
 };
@@ -58,6 +59,7 @@ const EMPTY: Omit<Coupon, "id" | "used_count"> = {
   affiliate_id: null,
   brand_ids: null,
   category_ids: null,
+  claim_valid_days: null,
 };
 
 const TYPE_LABEL: Record<string, string> = {
@@ -201,6 +203,7 @@ export default function CouponsManager() {
         expires_at: editingCoupon.expires_at || null,
         starts_at: editingCoupon.starts_at || new Date().toISOString(),
         affiliate_id: editingCoupon.affiliate_id || null,
+        claim_valid_days: editingCoupon.claim_valid_days ? Number(editingCoupon.claim_valid_days) : null,
         brand_ids: editingCoupon.brand_ids?.length ? editingCoupon.brand_ids : null,
         category_ids: editingCoupon.category_ids?.length ? editingCoupon.category_ids : null,
         updated_at: new Date().toISOString(),
@@ -576,6 +579,12 @@ export default function CouponsManager() {
                 <Input type="date" value={(editingCoupon.expires_at || "").split("T")[0]} onChange={(e) => setEditingCoupon((p) => ({ ...p, expires_at: e.target.value || null }))} />
                 <p className="text-[10px] text-muted-foreground">Boş = süresiz</p>
               </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold">Bağlantıdan hesaba eklenince geçerlilik (gün)</label>
+              <Input type="number" min={1} max={365} value={editingCoupon.claim_valid_days ?? ""} onChange={(e) => setEditingCoupon((p) => ({ ...p, claim_valid_days: e.target.value ? Number(e.target.value) : null }))} placeholder="Boş = son geçerlilik tarihine kadar" />
+              <p className="text-[10px] text-muted-foreground">Kampanya bağlantısı (/kampanya/…) ile “kuponu hesabına ekle” diyen kişide süre eklediği andan başlar.</p>
             </div>
 
             <div className="flex flex-col gap-2.5 pt-1 rounded-xl border border-slate-100 p-3 bg-slate-50/50">

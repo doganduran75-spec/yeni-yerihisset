@@ -36,6 +36,8 @@ export default function SetPasswordPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  // İşaretsiz kampanya izni (kullanıcı kararı 2026-10-24) — kupon izne bağlı değil; işaretlenirse izin verilir
+  const [consent, setConsent] = useState(false);
 
   useEffect(() => {
     let settled = false;
@@ -91,6 +93,14 @@ export default function SetPasswordPage() {
     try {
       const { error } = await supabase.auth.updateUser({ password });
       if (error) throw error;
+      if (consent) {
+        const { data: { session } } = await supabase.auth.getSession();
+        await fetch("/api/marketing-consent", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
+          body: JSON.stringify({ granted: true }),
+        }).catch(() => {});
+      }
       setDone(true);
       setTimeout(() => router.push("/account"), 1500);
     } catch (err: unknown) {
@@ -171,6 +181,11 @@ export default function SetPasswordPage() {
                   />
                 </div>
               </div>
+
+              <label className="flex items-start gap-2.5 text-xs text-slate-600 leading-relaxed cursor-pointer px-1">
+                <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="mt-0.5 h-4 w-4 accent-olive-600 shrink-0" />
+                <span>Kuponlarımın bitmesine yakın hatırlatılsın; kampanya ve yeniliklerden e-postayla haberdar olayım. (İstediğin zaman çıkabilirsin.)</span>
+              </label>
 
               {error && (
                 <div className="bg-red-50 border-l-4 border-red-500 p-4 flex gap-3">

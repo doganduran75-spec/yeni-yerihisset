@@ -1216,6 +1216,28 @@ export default {
         ok(rp.status === 200 && mine?.assigned_count === 1, "Kampanya raporunda görünüyor (tanımlanan 1)", `${why(rp)} → ${JSON.stringify(mine || {}).slice(0, 160)}`);
       });
 
+      await part("Kampanya bağlantısı: kuponu hesabına ekle (üye + misafir, süre eklendiği andan)", async () => {
+        const slug = `rgt-${RUN}-claim`;
+        const cid = insert("coupons", { code: `RGT${RUN.toUpperCase()}CLAIM`, name: "REGRESYON-TEST claim", type: "fixed", amount: 30, min_order_amount: 0,
+          per_user_limit: 1, is_active: true, is_personal: false, auto_assign_on_signup: false, campaign_slug: slug, claim_valid_days: 10 });
+        const claim = (body, token) => api("/api/coupons/campaign-claim", { token, body, headers: { "x-forwarded-for": F.ip } });
+        const m1 = await claim({ slug }, F.member.token);
+        const uc = row(`SELECT expires_at FROM public.user_coupons WHERE user_id = ${lit(F.member.id)} AND coupon_id = ${lit(cid)}`);
+        const left = uc?.expires_at ? (new Date(uc.expires_at).getTime() - Date.now()) / 86400000 : 0;
+        ok(m1.status === 200 && m1.json?.status === "added" && left > 9.9 && left < 10.1, "Üye kuponu tek tıkla hesabına ekliyor (10 gün, eklendiği andan)", `${why(m1)} → ${uc?.expires_at}`);
+        const m2 = await claim({ slug }, F.member.token);
+        ok(m2.status === 200 && m2.json?.status === "already", "İkinci eklemede süre uzamıyor ('zaten hesabında')", why(m2));
+        const email = `rgt-claim-${RUN}@${DOMAIN}`;
+        const bot = await claim({ slug, email });
+        ok(bot.status === 429 && num(`SELECT count(*) FROM public.profiles WHERE email = ${lit(email)}`) === 0, "Formsuz (bot) istekle hesap açılmıyor", why(bot));
+        const g = await claim({ slug, email, _t: 4000 });
+        const gid = one(`SELECT id FROM public.profiles WHERE email = ${lit(email)}`);
+        ok(g.status === 200 && g.json?.status === "email" && !!gid && num(`SELECT count(*) FROM public.user_coupons WHERE user_id = ${lit(gid || "00000000-0000-0000-0000-000000000000")} AND coupon_id = ${lit(cid)}`) === 1,
+          "Misafir e-postasıyla: şifresiz hesap açıldı, kupon eklendi", `${why(g)} → profil ${gid}`);
+        const none = await claim({ slug: `rgt-${RUN}-yok` }, F.member.token);
+        ok(none.status === 404, "Olmayan / bitmiş kampanya reddediliyor", why(none));
+      });
+
       await part("Ödeme alınmadan sevkiyat başlamıyor", async () => {
         const r = await order([MAIN(1)]);
         const id = r.json?.orderId;

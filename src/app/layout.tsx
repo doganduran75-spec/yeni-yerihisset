@@ -7,6 +7,7 @@ import GlobalStructuredData from "@/components/GlobalStructuredData";
 import GoogleAnalytics from "@/components/GoogleAnalytics";
 import MarketingSetup from "@/components/MarketingSetup";
 import MobileTabBar from "@/components/MobileTabBar";
+import CampaignClaimBar from "@/components/CampaignClaim";
 import CookieBanner from "@/components/CookieBanner";
 import FormValidationMessages from "@/components/FormValidationMessages";
 import AffiliateRefCapture from "@/components/AffiliateRefCapture";
@@ -97,6 +98,7 @@ export default function RootLayout({
           <PopupBanner />
           <ScrollToTop />
           <VisitTracker />
+          <CampaignClaimBar />
           <MobileTabBar />
           <CookieBanner />
           <SiteDialogHost />

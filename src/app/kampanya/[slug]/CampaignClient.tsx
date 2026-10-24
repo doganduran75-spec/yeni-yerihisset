@@ -3,8 +3,8 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Ticket, ArrowRight, Sparkles, ShoppingBag, Copy, Check } from "lucide-react";
-import { useState } from "react";
+import { ArrowRight, Sparkles, ShoppingBag } from "lucide-react";
+import { CampaignClaimBox, writeClaim, readClaim } from "@/components/CampaignClaim";
 import { useCartStore } from "@/store/useCartStore";
 import { track, setCampaign } from "@/lib/track";
 
@@ -27,7 +27,6 @@ function discountText(c: Coupon): string {
 export default function CampaignClient({ slug, coupon }: { slug: string; coupon: Coupon | null }) {
   const router = useRouter();
   const { addCouponCode } = useCartStore();
-  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     // Oturuma kampanya kaynağını ata + landing event'i
@@ -35,19 +34,10 @@ export default function CampaignClient({ slug, coupon }: { slug: string; coupon:
     track("campaign_landing", { slug, code: coupon?.code, found: !!coupon });
     // Kodu sepete tanımla (sepette otomatik uygulanır)
     if (coupon?.code) addCouponCode(coupon.code); // sepetteki diğer kuponlar silinmez (birleşir)
+    // Bu oturumda site içinde turuncu "kuponu hesabına ekle" şeridi (src/components/CampaignClaim.tsx)
+    if (coupon && readClaim()?.slug !== slug) writeClaim({ slug, label: discountText(coupon) });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  async function copyCode() {
-    if (!coupon?.code) return;
-    try {
-      await navigator.clipboard.writeText(coupon.code);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      /* yut */
-    }
-  }
 
   return (
     <main className="min-h-[70vh] bg-gradient-to-br from-olive-700 to-olive-900 text-white flex items-center">
@@ -65,16 +55,10 @@ export default function CampaignClient({ slug, coupon }: { slug: string; coupon:
               )}
             </p>
 
-            {/* Kod kartı */}
-            <button
-              onClick={copyCode}
-              className="group mx-auto flex items-center gap-3 bg-white text-olive-900 rounded-2xl px-6 py-4 mb-3 shadow-2xl hover:scale-[1.02] transition-transform"
-            >
-              <Ticket size={22} className="text-olive-600" />
-              <span className="text-2xl font-black tracking-[0.15em] font-mono text-slate-900">{coupon.code}</span>
-              {copied ? <Check size={18} className="text-green-600" /> : <Copy size={18} className="text-slate-400 group-hover:text-olive-600" />}
-            </button>
-            <p className="text-xs text-white/60 mb-8">Kod sepetine tanımlandı — ödemede otomatik uygulanır.</p>
+            {/* Kod yok (kullanıcı kararı): kupon hesaba eklenir, sepette hazır olur */}
+            <div className="mx-auto max-w-md mb-8 rounded-3xl bg-white/10 backdrop-blur p-4 text-left">
+              <CampaignClaimBox slug={slug} label={discountText(coupon)} tone="dark" />
+            </div>
 
             <button
               onClick={() => { track("hero_click", { side: "kampanya", to: "/magaza" }); router.push("/magaza"); }}
