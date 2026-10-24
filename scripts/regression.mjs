@@ -312,7 +312,7 @@ async function main() {
   try {
     const { readdirSync: rd } = await import("node:fs");
     const have = new Set(rd(new URL("../node_modules/iyzipay/lib/resources/", import.meta.url)).filter((f) => f.endsWith(".js")).map((f) => f[0].toLowerCase() + f.slice(1, -3)));
-    const used = ["checkoutForm", "checkoutFormInitialize", "payment", "refund"];
+    const used = ["checkoutForm", "checkoutFormInitialize", "payment", "refund", "refundV2"];
     const miss = used.filter((u) => !have.has(u));
     miss.length ? add("fail", "iyzico servis adı bulunamadı", miss.join(", ")) : add("ok", "iyzico servis adları kütüphaneyle uyumlu");
   } catch (e) { add("warn", "iyzico kütüphanesi kontrol edilemedi", String(e?.message || e)); }
