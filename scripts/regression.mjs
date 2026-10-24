@@ -319,7 +319,7 @@ async function main() {
   // Kart ödemesi dönüşü (3D Secure sonrası): yönlendirme değil, çerçeveden (iframe) çıkıp üst pencereyi götüren sayfa
   {
     const cb = await get("/api/checkout/iyzico/callback", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: "" });
-    cb.status === 200 && /window\.top/.test(cb.text) && /hatali=1/.test(cb.text)
+    cb.status === 200 && /window\.top/.test(cb.text) && /hatali=1&(amp;)?neden=iptal/.test(cb.text)
       ? add("ok", "Kart ödemesi dönüş sayfası çerçeveden çıkıyor (3D Secure sonrası beyaz ekran olmaz)")
       : add("fail", "Kart ödemesi dönüşü", `HTTP ${cb.status} — üst pencereye yönlendiren sayfa bekleniyordu`);
   }

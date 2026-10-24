@@ -1056,6 +1056,26 @@ export default {
           "Yönetici numarayı siliyor; fiyat listelerinden de çıkıyor", `HTTP ${ad.status}`);
       });
 
+      await part("Kart ödemesi dönüşü: sipariş ödeme anahtarıyla bulunur, ret nedeni müşteriye gider", async () => {
+        // Havale siparişi kart denemesi gibi işaretlenir; sahte anahtarla dönüş → iyzico "başarısız" der →
+        // sipariş ANAHTARLA bulunmalı (eskiden boş conversationId ile aranıp bulunamıyordu) ve iptal + not düşmeli
+        const r = await order([MAIN(1)]);
+        const id = r.json?.orderId;
+        if (!id) return add("fail", "Kart dönüşü testi için sipariş oluşturulamadı", why(r));
+        const tok = `RGT-TOKEN-${RUN}`;
+        sql(`UPDATE public.orders SET payment_method = 'iyzico', iyzico_token = ${lit(tok)} WHERE id = ${lit(id)}`);
+        const cb = await fetch(`${t.APP}/api/checkout/iyzico/callback`, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: `token=${encodeURIComponent(tok)}` })
+          .then(async (x) => ({ status: x.status, text: await x.text() })).catch((e) => ({ status: 0, text: String(e) }));
+        const o = ord(id);
+        const note = one(`SELECT note FROM public.order_events WHERE order_id = ${lit(id)} AND note LIKE 'Kart ödemesi başarısız%' LIMIT 1`);
+        if (/neden=teknik/.test(cb.text)) {
+          add("warn", "Kart dönüşü denenemedi", "iyzico'ya ulaşılamadı ya da anahtar yok (teknik) — sipariş eşleşmesi doğrulanmadı");
+        } else {
+          ok(o.status === "cancelled" && !!note, "Kart dönüşünde sipariş ödeme anahtarıyla bulunuyor (başarısız → iptal + gerekçe notu)", `HTTP ${cb.status}, durum ${o.status}, not: ${note || "yok"}`);
+          ok(/neden=(banka|iptal)/.test(cb.text), "Başarısız ödemede müşteriye neden bilgisi gidiyor", cb.text.slice(0, 160));
+        }
+      });
+
       await part("Ödeme alınmadan sevkiyat başlamıyor", async () => {
         const r = await order([MAIN(1)]);
         const id = r.json?.orderId;

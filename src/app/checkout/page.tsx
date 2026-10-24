@@ -578,7 +578,16 @@ export default function CheckoutPage() {
   }, [storeCouponCode]);
 
   // URL'den hata parametresini oku (iyzico başarısız callback)
-  const paymentFailed = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("hatali") === "1";
+  const failQ = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+  const paymentFailed = failQ?.get("hatali") === "1";
+  // Ödeme neden olmadı — müşteriye net mesaj (iyzico dönüşü: neden = banka · teknik · iptal; mesaj = bankanın gerekçesi)
+  const failNeden = failQ?.get("neden") || "";
+  const failMesaj = (failQ?.get("mesaj") || "").slice(0, 140);
+  const failText =
+    failNeden === "banka" ? `Ödeme bankan tarafından onaylanmadı${failMesaj ? `: “${failMesaj}”` : ""}. Kartından para çekilmedi — başka bir kartla tekrar deneyebilir ya da Havale/EFT seçebilirsin.`
+    : failNeden === "teknik" ? "Ödeme sırasında teknik bir sorun oluştu. Kartından tutar çekildiyse merak etme: kontrol edip seninle iletişime geçeceğiz. Tekrar denemeden önce birkaç dakika bekle ya da bize yaz."
+    : failNeden === "iptal" ? "Ödeme tamamlanmadı (işlem yarıda kaldı). Kartından para çekilmedi — tekrar deneyebilir ya da Havale/EFT seçebilirsin."
+    : "Ödeme tamamlanamadı, kartından para çekilmedi. Sepetin duruyor — tekrar deneyebilir ya da Havale/EFT seçebilirsin.";
 
   if (loading) return <div className="min-h-screen flex items-center justify-center animate-pulse text-olive-600 font-bold">Ödeme Sayfası Hazırlanıyor...</div>;
 
@@ -720,7 +729,7 @@ export default function CheckoutPage() {
         {/* Ödeme başarısız → adımların hemen altında, sayfanın içinde (üstte sabit duran uyarı üst menünün altında kalıyordu) */}
         {paymentFailed && (
           <div className="max-w-6xl mx-auto mb-6 bg-red-600 text-white px-5 py-3 rounded-2xl font-bold text-sm flex items-start gap-2 animate-in fade-in">
-            <X size={16} className="shrink-0 mt-0.5" /> Ödeme tamamlanamadı, kartından para çekilmedi. Sepetin duruyor — tekrar deneyebilir ya da Havale/EFT seçebilirsin.
+            <X size={16} className="shrink-0 mt-0.5" /> {failText}
           </div>
         )}
         {/* grid-cols-1 = minmax(0,1fr) + min-w-0: tek satırlık (truncate) metin sütunu genişletip telefonda sayfayı yana taşırmasın */}

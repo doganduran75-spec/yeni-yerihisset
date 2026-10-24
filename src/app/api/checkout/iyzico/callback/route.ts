@@ -10,6 +10,14 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://yerihisset.com";
 // Dönüş: yönlendirme yerine küçük bir sayfa. 3D Secure doğrulaması iyzico formunun içindeki bir çerçevede (iframe)
 // tamamlanırsa 303 yönlendirmesi sonuç sayfasını o çerçevenin İÇİNDE açıyordu (beyaz ekran). Bu sayfa en üst
 // pencereyi hedefe götürür; çerçeve yoksa aynı pencerede açar. Script çalışmazsa meta yenileme + bağlantı yedek.
+// Başarısız dönüş adresi: neden = banka (banka / iyzico reddetti — mesajı gösterilir) · teknik (bizim tarafta sorun;
+// para çekilmiş olabilir) · iptal (müşteri vazgeçti). Ödeme sayfası müşteriye net mesaj gösterir.
+function failUrl(neden: "banka" | "teknik" | "iptal", mesaj?: string | null) {
+  const q = new URLSearchParams({ hatali: "1", neden });
+  if (mesaj) q.set("mesaj", String(mesaj).replace(/\s+/g, " ").slice(0, 140));
+  return `${SITE_URL}/checkout?${q}`;
+}
+
 function go(url: string) {
   const u = JSON.stringify(url).replace(/</g, "\\u003c");
   const esc = url.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
@@ -29,7 +37,7 @@ export async function POST(req: NextRequest) {
     return await handle(req);
   } catch (e: any) {
     console.error("[iyzico/callback] HATA:", e?.stack || e?.message || e);
-    return go(`${SITE_URL}/checkout?hatali=1`);
+    return go(failUrl("teknik"));
   }
 }
 
@@ -52,7 +60,7 @@ async function handle(req: NextRequest) {
   }
 
   if (!token) {
-    return go(`${SITE_URL}/checkout?hatali=1`);
+    return go(failUrl("iptal"));
   }
 
   const supabase = createAdminClient();
@@ -63,7 +71,7 @@ async function handle(req: NextRequest) {
      try {
       if (err) {
         console.error("[iyzico/callback] retrieve error:", err);
-        resolve(go(`${SITE_URL}/checkout?hatali=1`));
+        resolve(go(failUrl("teknik")));
         return;
       }
 
@@ -73,16 +81,18 @@ async function handle(req: NextRequest) {
       const paymentStatus: string = result?.paymentStatus ?? "";
       const paymentId: string = result?.paymentId ?? "";
 
-      // Siparişi conversationId üzerinden bul
-      const { data: order } = await (supabase as any)
-        .from("orders")
-        .select("id, user_id, total_amount, order_number, payment_status, status")
-        .eq("iyzico_conversation_id", conversationId)
-        .single();
+      // Siparişi bul: ödeme anahtarı (token — başlatmada siparişe yazılır) → sepet no (basketId = sipariş id) →
+      // conversationId. (iyzico sonuç sorgusunda conversationId'yi yalnız istekte gönderilirse geri yollar → boş geliyordu)
+      const cols = "id, user_id, total_amount, order_number, payment_status, status";
+      let order: any = (await (supabase as any).from("orders").select(cols).eq("iyzico_token", token).maybeSingle()).data;
+      if (!order && result?.basketId) order = (await (supabase as any).from("orders").select(cols).eq("id", String(result.basketId)).maybeSingle()).data;
+      if (!order && conversationId) order = (await (supabase as any).from("orders").select(cols).eq("iyzico_conversation_id", conversationId).maybeSingle()).data;
 
       if (!order) {
-        console.error("[iyzico/callback] order not found for conversationId:", conversationId);
-        resolve(go(`${SITE_URL}/checkout?hatali=1`));
+        console.error("[iyzico/callback] sipariş bulunamadı:", JSON.stringify({ basketId: result?.basketId, conversationId, paymentStatus }));
+        // Ödeme alınmış ama sipariş eşleşmemişse yöneticinin görmesi şart (Pano › Sistem › Hata alan müşteriler)
+        await (supabase as any).from("client_errors").insert({ kind: "payment_unmatched", message: `iyzico ${paymentStatus || "?"} — sipariş bulunamadı (sepet ${result?.basketId || "?"}, ödeme no ${paymentId || "?"})`.slice(0, 300), path: "/checkout" });
+        resolve(go(failUrl("teknik")));
         return;
       }
 
@@ -213,7 +223,7 @@ async function handle(req: NextRequest) {
       } else {
         // Sipariş zaten ödendi / iptal edildi (tekrar gelen dönüş) → dokunma
         if (order.payment_status !== "pending") {
-          resolve(go(order.payment_status === "paid" ? successUrl : `${SITE_URL}/checkout?hatali=1`));
+          resolve(go(order.payment_status === "paid" ? successUrl : failUrl("iptal")));
           return;
         }
         // Ödeme başarısız / iptal → siparişi iptal et + rezerve stoğu iade et (F9)
@@ -233,11 +243,11 @@ async function handle(req: NextRequest) {
           order_id: order.id, type: "note", note: `Kart ödemesi başarısız: ${reason}`,
         });
 
-        resolve(go(`${SITE_URL}/checkout?hatali=1`));
+        resolve(go(failUrl(result?.errorCode || result?.errorMessage ? "banka" : "iptal", result?.errorMessage)));
       }
      } catch (e: any) {
       console.error("[iyzico/callback] HATA (sonuç işlenirken):", e?.stack || e?.message || e);
-      resolve(go(`${SITE_URL}/checkout?hatali=1`));
+      resolve(go(failUrl("teknik")));
      }
     });
   });
@@ -246,7 +256,7 @@ async function handle(req: NextRequest) {
 // iyzico bazen GET ile de callback gönderebilir
 export async function GET(req: NextRequest) {
   const token = new URL(req.url).searchParams.get("token");
-  if (!token) return go(`${SITE_URL}/checkout?hatali=1`);
+  if (!token) return go(failUrl("iptal"));
 
   const fakeReq = new NextRequest(req.url, {
     method: "POST",
