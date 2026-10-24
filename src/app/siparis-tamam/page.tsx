@@ -99,7 +99,7 @@ function SiparisTamamInner() {
       : { icon: <CreditCard size={14} />, text: "Kredi / banka kartı" };
 
   return (
-    <div className="min-h-screen bg-[#F9FAFB] flex items-center justify-center p-4 py-10">
+    <div className="min-h-screen bg-[#F9FAFB] flex items-start sm:items-center justify-center p-4 pt-4 pb-24 sm:py-10">{/* telefonda üstten başlar (ortalanınca üstte boşluk kalıyordu); alt menü payı */}
       <div className="bg-white rounded-3xl shadow-2xl p-6 sm:p-10 max-w-lg w-full space-y-6">
         {/* ÜST — Siparişini aldık */}
         <div className="text-center space-y-3">
