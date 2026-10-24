@@ -180,16 +180,29 @@ export default {
         ok(r4.status === 400, "Tetikleyici ürün olmadan hediye reddediliyor", `${why(r4)} — bedava ürün açığı`);
       });
 
-      await part("Kargo yöntemi (varsayılan)", async () => {
+      await part("Kargo yöntemi (varsayılan, sıra)", async () => {
         const sm = (body, token = F.admin.token) => api("/api/admin/shipping-methods", { token, body });
         const before = one("SELECT id FROM public.shipping_methods WHERE is_default");
         const m = await sm({ action: "set_default", id: F.shipOff }, F.member.token);
         ok(m.status === 403, "Üye kargo ayarını değiştiremiyor", why(m));
         const off = await sm({ action: "set_default", id: F.shipOff });
         ok(off.status === 400 && one("SELECT id FROM public.shipping_methods WHERE is_default") === before, "Pasif yöntem varsayılan yapılamıyor, varsayılan değişmedi", why(off));
-        const list = await rest("shipping_methods?select=id,is_default&is_active=eq.true&order=is_default.desc,sort_order");
-        ok(Array.isArray(list.json) && list.json[0]?.is_default === true, "Sepet/ödeme listesinde varsayılan en üstte", `HTTP ${list.status} ${list.text.slice(0, 120)}`);
+        const list = await rest("shipping_methods?select=id,is_default&is_active=eq.true&order=sort_order,created_at");
+        ok(Array.isArray(list.json) && list.json.some((x) => x.is_default === true), "Sepet/ödeme listesinde varsayılan yöntem var", `HTTP ${list.status} ${list.text.slice(0, 120)}`);
         ok(Array.isArray(list.json) && !list.json.some((x) => x.id === F.shipOff), "Pasif yöntem müşteriye görünmüyor", "pasif kargo listede");
+        // Sıra (panelde oklarla; sitede bu sırayla): üye değiştiremez; yönetici bir yukarı / geri alır
+        const order = () => sql("SELECT id FROM public.shipping_methods ORDER BY sort_order, created_at").map((r) => r[0]);
+        const o0 = order();
+        const mm = await sm({ action: "move", id: F.shipOff, dir: -1 }, F.member.token);
+        ok(mm.status === 403 && order().join() === o0.join(), "Üye kargo sırasını değiştiremiyor", why(mm));
+        const i0 = o0.indexOf(F.shipOff);
+        if (i0 > 0) {
+          await sm({ action: "move", id: F.shipOff, dir: -1 });
+          const o1 = order();
+          ok(o1.indexOf(F.shipOff) === i0 - 1, "Kargo yöntemi sırada bir yukarı alınabiliyor", `${i0} → ${o1.indexOf(F.shipOff)}`);
+          await sm({ action: "move", id: F.shipOff, dir: 1 });
+          ok(order().join() === o0.join(), "Sıra geri alınabiliyor (aşağı)", "sıra eski hâline dönmedi");
+        }
       });
 
       await part("Kupon kuralları (sepet + sipariş aynı kural)", async () => {

@@ -16,7 +16,7 @@ async function requireAdmin(req: NextRequest) {
 export async function GET(req: NextRequest) {
   const auth = await requireAdmin(req);
   if ("error" in auth) return auth.error;
-  const { data } = await auth.supabase.from("shipping_methods").select("*").order("is_default", { ascending: false }).order("sort_order");
+  const { data } = await auth.supabase.from("shipping_methods").select("*").order("sort_order").order("created_at");
   return NextResponse.json({ ok: true, methods: data || [] });
 }
 
@@ -31,6 +31,18 @@ export async function POST(req: NextRequest) {
     if (cur?.is_default) return NextResponse.json({ error: "Varsayılan yöntem silinemez; önce başka bir yöntemi varsayılan yap" }, { status: 400 });
     const { error } = await supabase.from("shipping_methods").delete().eq("id", body.id);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ ok: true });
+  }
+
+  // Sıra: bir yukarı / aşağı (dir −1 / +1) → hepsi 10, 20, 30 … olarak yeniden numaralanır (sitede bu sırayla)
+  if (body.action === "move" && body.id) {
+    const dir = Number((body as any).dir) < 0 ? -1 : 1;
+    const { data: all } = await (supabase as any).from("shipping_methods").select("id").order("sort_order").order("created_at");
+    const ids = ((all as any[]) || []).map((x) => x.id);
+    const i = ids.indexOf(body.id), j = i + dir;
+    if (i < 0 || j < 0 || j >= ids.length) return NextResponse.json({ ok: true });
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+    for (let k = 0; k < ids.length; k++) await (supabase as any).from("shipping_methods").update({ sort_order: (k + 1) * 10 }).eq("id", ids[k]);
     return NextResponse.json({ ok: true });
   }
 
@@ -55,6 +67,11 @@ export async function POST(req: NextRequest) {
       is_active: m.is_active !== false,
       sort_order: Number(m.sort_order) || 0,
     };
+    // Yeni yöntem listenin sonuna eklenir
+    if (!m.id) {
+      const { data: last } = await (supabase as any).from("shipping_methods").select("sort_order").order("sort_order", { ascending: false }).limit(1).maybeSingle();
+      payload.sort_order = (Number(last?.sort_order) || 0) + 10;
+    }
     if (!payload.name) return NextResponse.json({ error: "İsim zorunlu" }, { status: 400 });
     if (m.id && !payload.is_active) {
       const { data: cur } = await (supabase as any).from("shipping_methods").select("is_default").eq("id", m.id).maybeSingle();

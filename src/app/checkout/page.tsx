@@ -100,7 +100,8 @@ export default function CheckoutPage() {
   // Ödeme yöntemi
   const [paymentMethod, setPaymentMethod] = useState<"credit_card" | "bank_transfer">("credit_card");
   const [bankTransferEnabled, setBankTransferEnabled] = useState(false);
-  const [cardEnabled, setCardEnabled] = useState(false); // Ayarlar › Ödeme Yöntemleri › Kredi / Banka Kartı
+  const [cardEnabled, setCardEnabled] = useState(false); // Ayarlar › Ödeme › Kredi / Banka Kartı
+  const [payOrder, setPayOrder] = useState<string[]>(["credit_card", "bank_transfer"]); // Ayarlar › Ödeme'deki sıra
   const [bankTransferInfo, setBankTransferInfo] = useState("");
   // iyzico form içeriği (ödeme widgetı)
   const [iyzicoFormHtml, setIyzicoFormHtml] = useState<string | null>(null);
@@ -130,7 +131,7 @@ export default function CheckoutPage() {
   // Aktif kargo yöntemlerini yükle (checkout'ta seçilecek)
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.from("shipping_methods").select("*").eq("is_active", true).order("is_default", { ascending: false }).order("sort_order");
+      const { data } = await supabase.from("shipping_methods").select("*").eq("is_active", true).order("sort_order").order("created_at"); // panelde ayarlanan sıra (varsayılan yalnız seçili gelir)
       const list = (data as any[]) || [];
       setShippingMethods(list);
       setShippingLoaded(true);
@@ -179,15 +180,19 @@ export default function CheckoutPage() {
   async function loadPaymentSettings() {
     const { data: paySettings } = await (supabase
       .from("settings")
-      .select("bank_transfer_enabled, bank_transfer_info, card_payment_enabled")
-      .single() as any) as { data: { bank_transfer_enabled?: boolean; bank_transfer_info?: string; card_payment_enabled?: boolean } | null };
+      .select("bank_transfer_enabled, bank_transfer_info, card_payment_enabled, payment_methods_order")
+      .single() as any) as { data: { bank_transfer_enabled?: boolean; bank_transfer_info?: string; card_payment_enabled?: boolean; payment_methods_order?: string[] } | null };
     if (paySettings) {
       setBankTransferEnabled(paySettings.bank_transfer_enabled ?? false);
       setBankTransferInfo(paySettings.bank_transfer_info ?? "");
       // Kart kapalıysa (Ayarlar › Ödeme Yöntemleri) yalnız havale; seçili yöntem de havaleye geçer
       const card = !!paySettings.card_payment_enabled;
       setCardEnabled(card);
-      if (!card && paySettings.bank_transfer_enabled) setPaymentMethod("bank_transfer");
+      // Sıra (Ayarlar › Ödeme): ilk AÇIK yöntem seçili gelir
+      const order = [...(paySettings.payment_methods_order || []), "credit_card", "bank_transfer"].filter((k, i, a) => a.indexOf(k) === i);
+      setPayOrder(order);
+      const first = order.find((k) => (k === "credit_card" ? card : !!paySettings.bank_transfer_enabled));
+      if (first) setPaymentMethod(first as "credit_card" | "bank_transfer");
     }
   }
 
@@ -235,14 +240,18 @@ export default function CheckoutPage() {
     // Ödeme ayarlarını yükle
     const { data: paySettings } = await (supabase
       .from("settings")
-      .select("bank_transfer_enabled, bank_transfer_info, card_payment_enabled")
-      .single() as any) as { data: { bank_transfer_enabled?: boolean; bank_transfer_info?: string; card_payment_enabled?: boolean } | null };
+      .select("bank_transfer_enabled, bank_transfer_info, card_payment_enabled, payment_methods_order")
+      .single() as any) as { data: { bank_transfer_enabled?: boolean; bank_transfer_info?: string; card_payment_enabled?: boolean; payment_methods_order?: string[] } | null };
     if (paySettings) {
       setBankTransferEnabled(paySettings.bank_transfer_enabled ?? false);
       setBankTransferInfo(paySettings.bank_transfer_info ?? "");
       const card = !!paySettings.card_payment_enabled;
       setCardEnabled(card);
-      if (!card && paySettings.bank_transfer_enabled) setPaymentMethod("bank_transfer");
+      // Sıra (Ayarlar › Ödeme): ilk AÇIK yöntem seçili gelir
+      const order = [...(paySettings.payment_methods_order || []), "credit_card", "bank_transfer"].filter((k, i, a) => a.indexOf(k) === i);
+      setPayOrder(order);
+      const first = order.find((k) => (k === "credit_card" ? card : !!paySettings.bank_transfer_enabled));
+      if (first) setPaymentMethod(first as "credit_card" | "bank_transfer");
     }
 
     setLoading(false);
@@ -1071,6 +1080,7 @@ export default function CheckoutPage() {
                   {/* Kredi Kartı — Ayarlar › Ödeme Yöntemleri'nde açıksa */}
                   {cardEnabled && (
                   <div
+                    style={{ order: payOrder.indexOf("credit_card") + 1 }}
                     onClick={() => setPaymentMethod("credit_card")}
                     className={cn(
                       "bento-card flex flex-col items-center justify-center gap-6 py-12 cursor-pointer transition-all duration-300 group relative",
@@ -1100,6 +1110,7 @@ export default function CheckoutPage() {
                   {/* Havale / EFT — sadece admin aktif ettiyse göster */}
                   {bankTransferEnabled && (
                     <div
+                      style={{ order: payOrder.indexOf("bank_transfer") + 1 }}
                       onClick={() => setPaymentMethod("bank_transfer")}
                       className={cn(
                         "bento-card flex flex-col items-center justify-center gap-6 py-12 cursor-pointer transition-all duration-300 group relative",

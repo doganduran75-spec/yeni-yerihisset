@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Truck, Plus, Trash2, Loader2, Save } from "lucide-react";
+import { Truck, Plus, Trash2, Loader2, Save, ChevronUp, ChevronDown } from "lucide-react";
 import { siteAlert, siteConfirm } from "@/components/ui/site-dialog";
 
 const EMPTY = { id: "", name: "", description: "", fee: "", free_over: "", is_active: true, sort_order: 0 };
@@ -56,6 +56,17 @@ export default function ShippingMethodsManager() {
     load();
   }
 
+  // Sıra: sitede (sepet / ödeme) bu sırayla listelenir
+  async function move(id: string, dir: -1 | 1) {
+    setSavingId(id);
+    await fetch("/api/admin/shipping-methods", {
+      method: "POST", headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+      body: JSON.stringify({ action: "move", id, dir }),
+    }).catch(() => null);
+    setSavingId(null);
+    load();
+  }
+
   async function remove(id: string) {
     if (!(await siteConfirm({ title: "Kargo yöntemini sil", message: "Bu kargo yöntemi silinsin mi? Geçmiş siparişlerdeki kargo bilgisi etkilenmez.", confirmText: "Sil", tone: "danger" }))) return;
     const res = await fetch("/api/admin/shipping-methods", {
@@ -71,7 +82,7 @@ export default function ShippingMethodsManager() {
     <Card className="shadow-sm border-muted">
       <CardHeader>
         <CardTitle className="flex items-center gap-2"><Truck size={18} /> Kargo Yöntemleri</CardTitle>
-        <CardDescription>Sepette ve ödemede müşterinin seçeceği kargo yöntemleri. <b>Varsayılan</b> yöntem seçili ve en üstte gelir, diğer aktif yöntemler altında listelenir. “Üstü ücretsiz”: bu tutar ve üstü siparişte kargo ücretsiz (boş = yok).</CardDescription>
+        <CardDescription>Sepette ve ödemede müşterinin seçeceği kargo yöntemleri — sitede <b>buradaki sırayla</b> listelenir (oklarla değiştir). <b>Varsayılan</b> yöntem seçili gelir. “Üstü ücretsiz”: bu tutar ve üstü siparişte kargo ücretsiz (boş = yok).</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         {loading ? (
@@ -79,11 +90,15 @@ export default function ShippingMethodsManager() {
         ) : (
           <>
             {/* Başlık satırı */}
-            <div className="hidden md:grid grid-cols-[1fr_1fr_90px_110px_70px_auto] gap-2 px-1 text-[10px] font-bold uppercase text-muted-foreground">
-              <span>Ad</span><span>Açıklama</span><span>Ücret ₺</span><span>Üstü Ücretsiz</span><span>Aktif</span><span>Varsayılan</span>
+            <div className="hidden md:grid grid-cols-[28px_1fr_1fr_90px_110px_70px_auto] gap-2 px-1 text-[10px] font-bold uppercase text-muted-foreground">
+              <span>Sıra</span><span>Ad</span><span>Açıklama</span><span>Ücret ₺</span><span>Üstü Ücretsiz</span><span>Aktif</span><span>Varsayılan</span>
             </div>
             {rows.map((r, i) => (
-              <div key={r.id} className="grid grid-cols-2 md:grid-cols-[1fr_1fr_90px_110px_70px_auto_auto] gap-2 items-center border rounded-xl p-2">
+              <div key={r.id} className="grid grid-cols-2 md:grid-cols-[28px_1fr_1fr_90px_110px_70px_auto_auto] gap-2 items-center border rounded-xl p-2">
+                <div className="flex md:flex-col items-center gap-0.5 col-span-2 md:col-span-1">
+                  <button type="button" title="Yukarı" disabled={i === 0 || savingId === r.id} onClick={() => move(r.id, -1)} className="p-0.5 rounded text-slate-500 hover:bg-slate-100 disabled:opacity-25"><ChevronUp size={16} /></button>
+                  <button type="button" title="Aşağı" disabled={i === rows.length - 1 || savingId === r.id} onClick={() => move(r.id, 1)} className="p-0.5 rounded text-slate-500 hover:bg-slate-100 disabled:opacity-25"><ChevronDown size={16} /></button>
+                </div>
                 <Input value={r.name} onChange={(e) => setRows((x) => x.map((y, j) => j === i ? { ...y, name: e.target.value } : y))} className="h-9 text-sm" />
                 <Input value={r.description ?? ""} onChange={(e) => setRows((x) => x.map((y, j) => j === i ? { ...y, description: e.target.value } : y))} className="h-9 text-sm" placeholder="opsiyonel" />
                 <Input type="number" step="0.01" value={r.fee} onChange={(e) => setRows((x) => x.map((y, j) => j === i ? { ...y, fee: e.target.value } : y))} className="h-9 text-sm" />
@@ -106,7 +121,8 @@ export default function ShippingMethodsManager() {
             ))}
 
             {/* Yeni ekle */}
-            <div className="grid grid-cols-2 md:grid-cols-[1fr_1fr_90px_110px_70px_auto_auto] gap-2 items-center border-2 border-dashed rounded-xl p-2 bg-slate-50/50">
+            <div className="grid grid-cols-2 md:grid-cols-[28px_1fr_1fr_90px_110px_70px_auto_auto] gap-2 items-center border-2 border-dashed rounded-xl p-2 bg-slate-50/50">
+              <span className="hidden md:block" />
               <Input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} className="h-9 text-sm" placeholder="Aynı Gün Kurye" />
               <Input value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} className="h-9 text-sm" placeholder="Açıklama" />
               <Input type="number" step="0.01" value={draft.fee} onChange={(e) => setDraft({ ...draft, fee: e.target.value })} className="h-9 text-sm" placeholder="0" />

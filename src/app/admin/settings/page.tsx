@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/lib/supabase";
-import { Loader2, Save, Store, Globe, Mail, Server, BarChart3, Eye, EyeOff, ShoppingCart, Copy, Check, Layers, ShieldCheck, Tag, Bookmark, FolderSearch, Tags, Megaphone, Truck, CreditCard, Landmark, MessageSquare, Plug, Cookie, FileText, Home } from "lucide-react";
+import { Loader2, Save, Store, Globe, Mail, Server, BarChart3, Eye, EyeOff, ShoppingCart, Copy, Check, Layers, ShieldCheck, Tag, Bookmark, FolderSearch, Tags, Megaphone, Truck, CreditCard, Landmark, MessageSquare, Plug, Cookie, FileText, Home, ChevronUp, ChevronDown } from "lucide-react";
 import VariantsTab from "@/components/admin/settings/VariantsTab";
 import RolesTab from "@/components/admin/settings/RolesTab";
 import BrandsTab from "@/components/admin/settings/BrandsTab";
@@ -49,6 +49,7 @@ type Settings = {
   // Ödeme
   bank_transfer_enabled: boolean;
   card_payment_enabled?: boolean;
+  payment_methods_order?: string[];
   bank_transfer_info: string;
   // Kargonomi
   kargonomi_api_token: string;
@@ -202,6 +203,22 @@ function SettingsPageInner() {
       </div>
     );
   }
+
+  // Ödeme yöntemi sırası (ödeme sayfası bu sırayla gösterir)
+  const PAY_KEYS = ["credit_card", "bank_transfer"];
+  const payOrder = [...(settings.payment_methods_order || []).filter((k) => PAY_KEYS.includes(k)), ...PAY_KEYS.filter((k) => !(settings.payment_methods_order || []).includes(k))];
+  const movePay = (k: string, dir: -1 | 1) => {
+    const a = [...payOrder]; const i = a.indexOf(k), j = i + dir;
+    if (j < 0 || j >= a.length) return;
+    [a[i], a[j]] = [a[j], a[i]];
+    set({ payment_methods_order: a });
+  };
+  const orderButtons = (k: string) => (
+    <span className="inline-flex flex-col mr-1">
+      <button type="button" title="Yukarı" disabled={payOrder.indexOf(k) === 0} onClick={() => movePay(k, -1)} className="text-slate-500 hover:text-slate-900 disabled:opacity-25 leading-none"><ChevronUp size={14} /></button>
+      <button type="button" title="Aşağı" disabled={payOrder.indexOf(k) === payOrder.length - 1} onClick={() => movePay(k, 1)} className="text-slate-500 hover:text-slate-900 disabled:opacity-25 leading-none"><ChevronDown size={14} /></button>
+    </span>
+  );
 
   const tabs: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
     { id: "general",       label: "Genel Ayarlar",           icon: <Store size={16} /> },
@@ -781,17 +798,18 @@ function SettingsPageInner() {
               Ödeme sayfasında müşterilere sunulacak ödeme seçeneklerini yapılandırın.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-6">
+          <CardContent className="flex flex-col gap-6">
+            <p className="text-xs text-muted-foreground -mb-2">Ödeme sayfasında buradaki sırayla gösterilir (oklarla değiştir); ilk açık yöntem seçili gelir.</p>
 
             {/* Havale / EFT */}
-            <div className="border rounded-xl overflow-hidden">
+            <div className="border rounded-xl overflow-hidden" style={{ order: payOrder.indexOf("bank_transfer") + 1 }}>
               <div className="flex items-center justify-between p-4 bg-slate-50 border-b">
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 bg-white border rounded-lg flex items-center justify-center">
                     <Landmark size={18} className="text-slate-600" />
                   </div>
                   <div>
-                    <p className="text-sm font-semibold">Havale / EFT</p>
+                    <p className="text-sm font-semibold flex items-center gap-1">{orderButtons("bank_transfer")} Havale / EFT</p>
                     <p className="text-xs text-muted-foreground">Banka havalesi ile ödeme</p>
                   </div>
                 </div>
@@ -831,14 +849,14 @@ Açıklama: Sipariş numaranızı açıklamaya yazmayı unutmayın.`}
             </div>
 
             {/* Kredi / Banka Kartı (iyzico) — anahtarlar sunucuda (.env); burada yalnız aç / kapa */}
-            <div className="border rounded-xl overflow-hidden">
+            <div className="border rounded-xl overflow-hidden" style={{ order: payOrder.indexOf("credit_card") + 1 }}>
               <div className="flex items-center justify-between p-4 bg-slate-50">
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 bg-white border rounded-lg flex items-center justify-center">
                     <CreditCard size={18} className="text-slate-600" />
                   </div>
                   <div>
-                    <p className="text-sm font-semibold">Kredi / Banka Kartı</p>
+                    <p className="text-sm font-semibold flex items-center gap-1">{orderButtons("credit_card")} Kredi / Banka Kartı</p>
                     <p className="text-xs text-muted-foreground">
                       iyzico — {iyzico == null ? "…" : !iyzico.configured ? "anahtarlar sunucuda tanımlı değil" : iyzico.sandbox ? "TEST (sandbox) anahtarları" : "CANLI anahtarlar"}
                     </p>

@@ -551,7 +551,7 @@ export default function CartPage() {
   const [shippingMethods, setShippingMethods] = useState<any[]>([]);
   useEffect(() => {
     (async () => {
-      const { data } = await (supabase as any).from("shipping_methods").select("*").eq("is_active", true).order("is_default", { ascending: false }).order("sort_order");
+      const { data } = await (supabase as any).from("shipping_methods").select("*").eq("is_active", true).order("sort_order").order("created_at"); // panelde ayarlanan sıra (varsayılan yalnız seçili gelir)
       setShippingMethods((data as any[]) || []);
     })();
   }, []);

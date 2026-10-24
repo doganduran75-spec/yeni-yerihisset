@@ -173,6 +173,7 @@ async function main() {
     ["20261135 faturayı Trendyol'a yükleme", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'mp_invoice_sent_at')"],
     ["20261136 Hepsiburada paket numarası (fatura bağlantısı)", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'mp_package_number')"],
     ["20261139 yarım kalan sipariş hatırlatması (sabah 10:00)", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'recovery_due_at')"],
+    ["20261140 kargo / ödeme yöntemi sırası", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'settings' AND column_name = 'payment_methods_order')"],
     ["20261138 kart ödemesi aç / kapa", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'settings' AND column_name = 'card_payment_enabled')"],
     ["20261137 Trendyol sipariş saati (GMT+3)", "SELECT NOT EXISTS(SELECT 1 FROM public.orders WHERE channel = 'trendyol' AND import_source IS NULL AND coalesce(external_raw->>'orderDate', '') ~ '^[0-9]{10,13}$' AND abs(extract(epoch FROM created_at - (to_timestamp((external_raw->>'orderDate')::bigint / 1000.0) - interval '3 hours'))) > 60)"],
     ["20261126 ödeme alınmadan sevkiyat başlamaz", "SELECT EXISTS(SELECT 1 FROM pg_trigger WHERE tgname = 'trg_guard_ship_before_payment')"],
@@ -566,8 +567,8 @@ async function main() {
   liveOnly(S.card_payment_enabled === true, "Kart ödemesi kapalı", "Ayarlar › Ödeme › Kredi / Banka Kartı'nı aç");
   // Ödeme sayfası kart seçeneğini tarayıcıdan okur → sütun dışarıya açık olmalı (yalnız bu sütun)
   {
-    const r = await rest("settings?select=card_payment_enabled&limit=1");
-    r.status === 200 ? add("ok", "Kart ödemesi ayarı ödeme sayfasından okunuyor") : add("fail", "Kart ödemesi ayarı okunamıyor", `HTTP ${r.status} — GRANT SELECT (card_payment_enabled) eksik`);
+    const r = await rest("settings?select=card_payment_enabled,payment_methods_order&limit=1");
+    r.status === 200 ? add("ok", "Kart ödemesi ayarı ödeme sayfasından okunuyor") : add("fail", "Kart ödemesi ayarı okunamıyor", `HTTP ${r.status} — GRANT SELECT (card_payment_enabled / payment_methods_order) eksik`);
   }
   liveOnly(!/sandbox/i.test(process.env.IYZICO_BASE_URL || "sandbox"), "iyzico TEST (sandbox) modunda", "IYZICO_BASE_URL=https://api.iyzipay.com + canlı anahtarlar");
   liveOnly(process.env.NEXT_PUBLIC_NOINDEX !== "true", "Arama motoru engeli açık (NEXT_PUBLIC_NOINDEX=true)", "canlıda kaldır, yoksa Google siteyi listelemez");
