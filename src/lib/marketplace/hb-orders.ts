@@ -270,7 +270,10 @@ export async function importHepsiburadaOrders(supabase: AdminClient = createAdmi
         const orderNumber = String(pick(p, "orderNumber", "OrderNumber") ?? "");
         if (!orderNumber) continue;
         const tracking = pick(p, "barcode", "Barcode");
-        const { data: order } = await sb.from("orders").select("id, external_status").eq("channel", "hepsiburada").eq("external_package_id", orderNumber).maybeSingle();
+        const pkgNo = pick(p, "packageNumber", "PackageNumber");
+        const { data: order } = await sb.from("orders").select("id, external_status, mp_package_number").eq("channel", "hepsiburada").eq("external_package_id", orderNumber).maybeSingle();
+        // Paket numarası (fatura bağlantısı pakete gönderilir): kargolanan / teslim edilen listelerinden de al
+        if (order && pkgNo && String(pkgNo) !== order.mp_package_number) await sb.from("orders").update({ mp_package_number: String(pkgNo) }).eq("id", order.id);
         if (!order || order.external_status === mapped.external || order.external_status === "Cancelled") continue;
         await sb.from("orders").update({
           status: mapped.status, shipment_status: mapped.shipment_status, external_status: mapped.external,

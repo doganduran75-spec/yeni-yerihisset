@@ -250,6 +250,7 @@ export default function OrdersPage() {
   const [parasutOn, setParasutOn] = useState(false);
   const [carrierFor, setCarrierFor] = useState<{ o: Order; acceptDiff: boolean } | null>(null);
   const [returnFor, setReturnFor] = useState<Order | null>(null); // "İade gelecek" penceresi
+  const [hbPkg, setHbPkg] = useState<Record<string, string>>({}); // Hepsiburada paket no (elle, fatura yükleme için)
   useEffect(() => {
     parasutApi({ op: "status" }).then((s) => setParasutOn(!!(s.enabled && s.connected))).catch(() => {});
   }, []);
@@ -827,7 +828,7 @@ export default function OrdersPage() {
   async function pushTrendyolInvoice(o: Order) {
     setUpdatingId(o.id);
     try {
-      const r = await parasutApi({ op: "push_marketplace_invoice", order_id: o.id });
+      const r = await parasutApi({ op: "push_marketplace_invoice", order_id: o.id, ...(hbPkg[o.id]?.trim() ? { package_number: hbPkg[o.id].trim() } : {}) });
       const mp = o.channel === "hepsiburada" ? "Hepsiburada" : "Trendyol";
       siteAlert({ message: r.already ? `${mp}'da bu siparişin faturası zaten vardı.` : `Fatura ${mp}'a yüklendi.`, tone: "success" });
     } catch (e: any) {
@@ -1633,6 +1634,15 @@ export default function OrdersPage() {
                           <span className={(o as any).mp_invoice_error ? "text-red-700" : "text-amber-700"}>
                             {(o as any).mp_invoice_error ? `${mp}'a yüklenemedi: ${(o as any).mp_invoice_error}` : `Fatura henüz ${mp}'a yüklenmedi (dakikada bir denenir).`}
                           </span>
+                          {o.channel === "hepsiburada" && !(o as any).mp_package_number && (
+                            <input
+                              placeholder="HB paket no"
+                              title="Hepsiburada satıcı panelinde siparişin paket numarası"
+                              className="h-7 w-32 rounded-md border px-2 text-xs font-mono"
+                              value={hbPkg[o.id] ?? ""}
+                              onChange={(e) => setHbPkg((x) => ({ ...x, [o.id]: e.target.value }))}
+                            />
+                          )}
                           <Button size="sm" variant="outline" className="h-7 text-xs" disabled={updatingId === o.id} onClick={() => pushTrendyolInvoice(o)}>{mp}'a yükle</Button>
                         </div>
                       );

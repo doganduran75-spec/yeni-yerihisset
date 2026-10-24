@@ -51,6 +51,9 @@ export async function POST(req: NextRequest) {
       }
       case "push_marketplace_invoice": {
         if (!uuid(body.order_id)) return NextResponse.json({ error: "order_id" }, { status: 400 });
+        // Hepsiburada paket numarası elle (panelden bakılır): siparişe yazılır, sonra yüklenir
+        const pkg = typeof body.package_number === "string" ? body.package_number.replace(/\D/g, "").slice(0, 30) : "";
+        if (pkg) await (sb as any).from("orders").update({ mp_package_number: pkg, mp_invoice_error: null }).eq("id", body.order_id).eq("channel", "hepsiburada");
         try { return NextResponse.json({ ok: true, ...(await pushInvoiceToMarketplace(sb, body.order_id)) }); }
         catch (e: any) { if (e instanceof MarketplaceInvoiceError) return NextResponse.json({ error: e.message }, { status: e.status }); throw e; }
       }
