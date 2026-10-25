@@ -28,12 +28,12 @@ export function couponValueText(c: { type: string; amount: number }) {
 }
 
 /** E-postadaki kupon kutusu: kod YOK — "sepetinde hazır" */
-export function couponBoxHtml(c: { type: string; amount: number; min_order_amount?: number | null }, expires: Date | string, scope: string) {
+export function couponBoxHtml(c: { type: string; amount: number; min_order_amount?: number | null }, expires: Date | string, scope: string, note = true) {
   return `<div style="margin:22px 0;border:2px dashed #65a30d;border-radius:16px;padding:18px;text-align:center;background:#f7fee7">
   <div style="font-size:12px;font-weight:800;letter-spacing:.12em;color:#4d7c0f">SANA ÖZEL</div>
   <div style="font-size:26px;font-weight:900;color:#1a2e05;margin:6px 0">${escapeHtml(couponValueText(c))}</div>
   <div style="font-size:13px;color:#3f6212;line-height:1.6">${scope ? `${escapeHtml(scope)} · ` : ""}${Number(c.min_order_amount || 0) > 0 ? `${tl(Number(c.min_order_amount))} ve üstü · ` : ""}<b>${day(expires)}</b> tarihine kadar</div>
-  <div style="font-size:12px;color:#4d7c0f;margin-top:8px">Kod yazmana gerek yok — giriş yaptığında sepetinde hazır.</div>
+  ${note ? `<div style="font-size:12px;color:#4d7c0f;margin-top:8px">Kod yazmana gerek yok — giriş yaptığında sepetinde hazır.</div>` : ""}
 </div>`;
 }
 
@@ -125,15 +125,15 @@ export async function queueCouponReminders(sb: Sb): Promise<number> {
 export async function sendClaimEmail(opts: { to: string; coupon: { name: string; type: string; amount: number; min_order_amount?: number | null };
   expires: string | null; added: boolean; actionUrl: string; mode: "created" | "passwordless" | "member" }) {
   const { sendSiteMail } = await import("./site-mail");
-  const box = opts.expires ? couponBoxHtml(opts.coupon, opts.expires, "") : `<p style="font-size:18px;font-weight:900;color:#1a2e05;text-align:center;margin:18px 0">${escapeHtml(couponValueText(opts.coupon))}</p>`;
+  const box = opts.expires ? couponBoxHtml(opts.coupon, opts.expires, "", false) : `<p style="font-size:18px;font-weight:900;color:#1a2e05;text-align:center;margin:18px 0">${escapeHtml(couponValueText(opts.coupon))}</p>`;
   const intro = opts.added ? "Kuponun hesabına eklendi 🎁" : "Bu kupon zaten hesabında 🎁";
   const howTo = opts.mode === "member"
-    ? "Giriş yaptığında sepetinde hazır olacak — kod yazmana gerek yok."
-    : "Kuponu kullanmak için hesabına bir şifre belirlemen yeterli; sonra sepetinde hazır olacak — kod yazmana gerek yok.";
+    ? "Giriş yaptığında sepetinde hazır olacak."
+    : "Kuponu kullanmak için hesabına bir şifre belirlemen yeterli; sonra sepetinde hazır olacak.";
   const body = `<h1 style="font-size:21px;font-weight:800;color:#111827;margin:0 0 12px">${intro}</h1>
 <p style="font-size:15px;color:#374151;line-height:1.6;margin:0">${howTo}</p>
 ${box}
-${button(opts.actionUrl, opts.mode === "member" ? "Giriş yap" : "Şifremi belirle")}
+${button(opts.actionUrl, opts.mode === "member" ? "Giriş yap" : "Şifre belirle")}
 <p style="font-size:12px;color:#6b7280;line-height:1.6;margin:0">Bu isteği sen yapmadıysan bu e-postayı yok sayabilirsin.</p>`;
   return sendSiteMail(opts.to, `${couponValueText(opts.coupon)} hesabında`, body);
 }
