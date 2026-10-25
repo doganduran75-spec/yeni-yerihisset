@@ -65,26 +65,54 @@ export async function scopeText(sb: Sb, brandIds?: string[] | null, categoryIds?
   return names.length ? `yalnız ${names.join(", ")}` : "";
 }
 
-/** Kuyruk cron'u (5 dk): bitmesine 3 gün kalan kişiye özel kuponlar için hatırlatma kuyruğa (bir kez) */
+export type ReminderCoupon = { name: string; type: string; amount: number; min_order_amount?: number | null; expires_at: string; scope?: string };
+
+/** Hatırlatma gövdesi (kullanıcı 2026-10-25): yeni kupon veriyormuş gibi DEĞİL — hangi kupon(lar) ne zaman bitiyor,
+ *  her birinin içeriği (ad, indirim, kapsam, alt limit) + sepete bağlantı. Kişi başına tek e-posta. */
+export function couponReminderHtml(firstName: string | null | undefined, coupons: ReminderCoupon[]) {
+  const name = escapeHtml(String(firstName || "").trim());
+  const many = coupons.length > 1;
+  const rows = coupons.map((c) => {
+    const details = [c.scope, Number(c.min_order_amount || 0) > 0 ? `${tl(Number(c.min_order_amount))} ve üstü sepetlerde` : ""].filter(Boolean).join(" · ");
+    return `<tr><td style="padding:12px 14px;border-bottom:1px solid #e5e7eb">
+  <div style="font-size:15px;font-weight:800;color:#111827">${escapeHtml(c.name || "Kupon")} — ${escapeHtml(couponValueText(c))}</div>
+  ${details ? `<div style="font-size:13px;color:#6b7280;margin-top:2px">${escapeHtml(details)}</div>` : ""}
+  <div style="font-size:13px;color:#b45309;font-weight:700;margin-top:4px">${day(c.expires_at)} tarihinde sona eriyor</div>
+</td></tr>`;
+  }).join("");
+  return `<h1 style="font-size:21px;font-weight:800;color:#111827;margin:0 0 12px">${many ? "Kuponlarının" : "Kuponunun"} süresi doluyor ⏳</h1>
+<p style="font-size:15px;color:#374151;line-height:1.6;margin:0 0 14px">Merhaba${name ? ` ${name}` : ""}, hesabındaki ${many ? "şu kuponların" : "şu kuponun"} süresi birkaç gün içinde bitiyor. Bittikten sonra kullanılamaz.</p>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:12px;border-collapse:separate;overflow:hidden">${rows}</table>
+<p style="font-size:13px;color:#6b7280;line-height:1.6;margin:12px 0 0">Kod yazmana gerek yok — giriş yaptığında sepetindeki “İndirimlerin” bölümünde hazır.</p>
+${button(`${site()}/sepet?utm_source=crm&utm_medium=email&utm_campaign=kupon-hatirlatma`, "Sepetime git")}`;
+}
+
+/** Kuyruk cron'u (5 dk): bitmesine 3 gün kalan kişiye özel kuponlar → kişi başına TEK hatırlatma (kupon başına bir kez) */
 export async function queueCouponReminders(sb: Sb): Promise<number> {
   const s = sb as any;
   const { data: rows, error } = await s.rpc("coupons_to_remind", { p_days: 3 });
   if (error || !rows?.length) return 0;
   const { data: st } = await s.from("settings").select("store_name, smtp_from_name, smtp_from_email, smtp_user").limit(1).maybeSingle();
   const storeName = st?.store_name || "YeriHisset";
+  const byUser = new Map<string, any[]>();
+  for (const r of rows as any[]) byUser.set(r.user_id, [...(byUser.get(r.user_id) || []), r]);
   let n = 0;
-  for (const r of rows as any[]) {
-    // Önce işaretle (aynı anda iki cron çalışırsa çift gitmesin)
-    const { data: mine } = await s.from("user_coupons").update({ reminded_at: new Date().toISOString() }).eq("id", r.uc_id).is("reminded_at", null).select("id");
-    if (!mine?.length) continue;
-    const name = escapeHtml(String(r.first_name || "").trim());
-    const body = `<h1 style="font-size:21px;font-weight:800;color:#111827;margin:0 0 12px">Kuponunun bitmesine 3 gün kaldı ⏳</h1>
-<p style="font-size:15px;color:#374151;line-height:1.6;margin:0">Merhaba${name ? ` ${name}` : ""}, sana özel <b>${escapeHtml(r.coupon_name || "kuponun")}</b> ${day(r.expires_at)} tarihinde sona eriyor. Kullanmak istersen sepetinde seni bekliyor.</p>
-${couponBoxHtml({ type: r.coupon_type, amount: Number(r.amount) }, r.expires_at, "")}
-${button(`${site()}/sepet?utm_source=crm&utm_medium=email&utm_campaign=kupon-hatirlatma`, "Sepetime git")}`;
+  for (const list of byUser.values()) {
+    // Önce işaretle (aynı anda iki cron çalışırsa çift gitmesin); yalnız işaretleyebildiklerimiz listelenir
+    const mine: any[] = [];
+    for (const r of list) {
+      const { data } = await s.from("user_coupons").update({ reminded_at: new Date().toISOString() }).eq("id", r.uc_id).is("reminded_at", null).select("id");
+      if (data?.length) mine.push(r);
+    }
+    if (!mine.length) continue;
+    const coupons: ReminderCoupon[] = [];
+    for (const r of mine) coupons.push({ name: r.coupon_name, type: r.coupon_type, amount: Number(r.amount), min_order_amount: r.min_order_amount,
+      expires_at: r.expires_at, scope: await scopeText(sb, r.brand_ids, r.category_ids) });
+    coupons.sort((x, y) => new Date(x.expires_at).getTime() - new Date(y.expires_at).getTime());
     const { error: qe } = await s.from("email_queue").insert({
-      kind: "campaign", recipient_email: r.email, subject: `${storeName} — kuponunun bitmesine 3 gün kaldı`,
-      html_body: buildEmailDocument(body, storeName), from_name: st?.smtp_from_name || storeName,
+      kind: "campaign", recipient_email: mine[0].email,
+      subject: `${storeName} — ${coupons.length > 1 ? `${coupons.length} kuponunun` : "kuponunun"} süresi doluyor`,
+      html_body: buildEmailDocument(couponReminderHtml(mine[0].first_name, coupons), storeName), from_name: st?.smtp_from_name || storeName,
       from_email: st?.smtp_from_email || st?.smtp_user || null, status: "pending",
     });
     if (!qe) n++;

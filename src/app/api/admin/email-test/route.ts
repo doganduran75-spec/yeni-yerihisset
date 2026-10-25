@@ -108,10 +108,21 @@ export async function POST(req: NextRequest) {
           bodyHtml: "<p>Merhaba {{ad}},</p><p>Seni özledik! Sana özel bir indirim tanımladık.</p>", firstName: me.first_name,
           coupon: sampleCoupon, expires: in7, scope: "", slug: "deneme", storeName }));
       case "coupon_reminder": {
-        const { couponBoxHtml } = await import("@/lib/crm-campaign");
+        // Gerçek görünüm: yöneticinin hesabındaki aktif kişiye özel kuponlar (yoksa örnek iki kupon)
+        const { couponReminderHtml, scopeText: sc } = await import("@/lib/crm-campaign");
         const { buildEmailDocument } = await import("@/lib/notifications");
-        return sendRawSiteMail(to, `${storeName} — kuponunun bitmesine 3 gün kaldı`, buildEmailDocument(
-          `<h1 style="font-size:21px;font-weight:800;color:#111827;margin:0 0 12px">Kuponunun bitmesine 3 gün kaldı ⏳</h1>${couponBoxHtml(sampleCoupon, new Date(Date.now() + 3 * 86400_000), "")}`, storeName));
+        const { data: ucs } = await sb.from("user_coupons").select("expires_at, coupons(name, type, amount, min_order_amount, expires_at, brand_ids, category_ids, is_active)").eq("user_id", user.id).limit(5);
+        const list: any[] = [];
+        for (const u of (ucs as any[]) || []) {
+          const c = u.coupons;
+          if (!c?.is_active) continue;
+          list.push({ name: c.name, type: c.type, amount: Number(c.amount), min_order_amount: c.min_order_amount,
+            expires_at: u.expires_at || c.expires_at || new Date(Date.now() + 3 * 86400_000).toISOString(), scope: await sc(sb, c.brand_ids, c.category_ids) });
+        }
+        if (!list.length) list.push(
+          { name: "Seni özledik %10", type: "percentage", amount: 10, expires_at: new Date(Date.now() + 2 * 86400_000).toISOString() },
+          { name: "Kasım kampanyası", type: "fixed", amount: 150, min_order_amount: 1500, expires_at: new Date(Date.now() + 3 * 86400_000).toISOString(), scope: "yalnız Dodura" });
+        return sendRawSiteMail(to, `${storeName} — ${list.length > 1 ? `${list.length} kuponunun` : "kuponunun"} süresi doluyor`, buildEmailDocument(couponReminderHtml(me.first_name, list), storeName));
       }
       case "claim": return sendClaimEmail({ to, coupon: sampleCoupon, expires: in7.toISOString(), added: true, actionUrl: `${site}/sifre-belirle`, mode: "created" });
       case "lead_magnet": return sendLeadMagnetWelcome({ to, name: me.first_name, couponCode: "KARGOBEDAVA", couponValue: "Ücretsiz kargo", actionUrl: `${site}/sifre-belirle`, mode: "created" });
