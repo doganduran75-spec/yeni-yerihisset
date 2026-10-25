@@ -36,4 +36,10 @@ export function rateLimited(name: string, key: string, max: number, windowMs: nu
   return b.n > max;
 }
 
+/** Sayacı ARTIRMADAN: bu pencerede sınır aşıldı mı (ör. "çok fazla geçersiz deneme" — denemeden önce bak) */
+export function rateExceeded(name: string, key: string, max: number): boolean {
+  const b = stores.get(name)?.get(key);
+  return !!b && b.reset >= Date.now() && b.n >= max;
+}
+
 export const TOO_MANY = { error: "Çok fazla deneme yapıldı. Lütfen biraz sonra tekrar deneyin." };

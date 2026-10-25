@@ -15,6 +15,8 @@ import {
   Users, CheckCircle2, UserPlus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { generateCouponCode, isSystemCouponCode } from "@/lib/coupon-code";
+import { siteAlert, siteConfirm } from "@/components/ui/site-dialog";
 
 type Coupon = {
   id: string;
@@ -184,9 +186,16 @@ export default function CouponsManager() {
     setDialogOpen(true);
   }
 
-  function generateCode() {
-    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-    return Array.from({ length: 8 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+  // Kod sistemden (tahmin edilemez — src/lib/coupon-code.ts); elle yazılmaz
+  const generateCode = generateCouponCode;
+
+  // Basit / elle yazılmış kodu yenile (siparişler ve üyelere tanımlar kupon kimliğine bağlı → etkilenmez)
+  async function renewCode(c: Coupon) {
+    if (!(await siteConfirm({ title: "Kod yenilensin mi?", message: `“${c.code}” tahmin edilebilir. Yeni, rastgele bir kod verilir; geçmiş siparişler, üyelere tanımlı kuponlar ve kampanya bağlantısı etkilenmez.`, confirmText: "Kodu yenile" }))) return;
+    const code = generateCouponCode();
+    const { error } = await (supabase as any).from("coupons").update({ code, updated_at: new Date().toISOString() }).eq("id", c.id);
+    if (error) return siteAlert({ title: "Yenilenemedi", message: error.message, tone: "danger" });
+    setCoupons((prev) => prev.map((x) => (x.id === c.id ? { ...x, code } : x)));
   }
 
   async function handleSave() {
@@ -330,6 +339,11 @@ export default function CouponsManager() {
                       <span className="font-mono font-black text-blue-700 bg-blue-50 px-2 py-0.5 rounded-lg text-sm tracking-widest">
                         {c.code}
                       </span>
+                      {!isSystemCouponCode(c.code) && (
+                        <button type="button" onClick={() => renewCode(c)} title="Bu kod tahmin edilebilir" className="block mt-1 text-[10px] font-bold text-amber-700 underline">
+                          Kodu yenile
+                        </button>
+                      )}
                     </TableCell>
                     <TableCell>
                       <div>
@@ -440,11 +454,11 @@ export default function CouponsManager() {
                 <div className="flex gap-1">
                   <Input
                     value={editingCoupon.code || ""}
-                    onChange={(e) => setEditingCoupon((p) => ({ ...p, code: e.target.value.toUpperCase() }))}
-                    className="font-mono font-bold tracking-widest"
-                    placeholder="INDIRIM10"
+                    readOnly
+                    title="Kod sistemden gelir (tahmin edilemez); müşteri kod yazmaz"
+                    className="font-mono font-bold tracking-widest bg-slate-50"
                   />
-                  <Button type="button" variant="outline" size="sm" onClick={() => setEditingCoupon((p) => ({ ...p, code: generateCode() }))}>
+                  <Button type="button" variant="outline" size="sm" title="Yeni kod" onClick={() => setEditingCoupon((p) => ({ ...p, code: generateCode() }))}>
                     🎲
                   </Button>
                 </div>

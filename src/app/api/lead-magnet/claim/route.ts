@@ -34,11 +34,13 @@ export async function POST(req: NextRequest) {
   const supabase = createAdminClient();
   const storeUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com";
 
-  // Kupon (opsiyonel): koda göre bul
+  // Kupon: amacıyla (coupons.purpose = 'lead_magnet'; kodu yenilense de bozulmaz), yoksa eski usul koda göre
   let coupon: any = null;
-  if (couponCode) {
-    const { data } = await supabase.from("coupons").select("*").eq("code", couponCode).eq("is_active", true).maybeSingle();
-    coupon = data && (data as any).type === "free_shipping" ? data : null;
+  {
+    const { data: byPurpose } = await (supabase as any).from("coupons").select("*").eq("purpose", "lead_magnet").eq("is_active", true).limit(1).maybeSingle();
+    const { data: byCode } = byPurpose ? { data: null } : await supabase.from("coupons").select("*").eq("code", couponCode).eq("is_active", true).maybeSingle();
+    const data: any = byPurpose || byCode;
+    coupon = data && data.type === "free_shipping" ? data : null;
   }
   const couponValue = coupon
     ? (coupon.type === "free_shipping" ? "Ücretsiz kargo"

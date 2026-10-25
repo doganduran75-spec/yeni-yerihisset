@@ -12,6 +12,7 @@ import { randomBytes } from "node:crypto";
 import type { createAdminClient } from "@/lib/supabase-admin";
 import { renderEmailTemplate, escapeHtml } from "@/lib/notifications";
 import { TRIAL_DAYS } from "@/lib/order-next-step";
+import { generateCouponCode } from "@/lib/coupon-code";
 type Sb = ReturnType<typeof createAdminClient>;
 
 export type ReviewQuestion = { key: string; label: string; type: "stars" | "choice"; options?: string[] };
@@ -137,7 +138,7 @@ export async function submitReview(sb: Sb, token: string, body: { overall: numbe
 
 // ── Seni özledik ────────────────────────────────────────────────────────────
 
-const code = () => "GERI" + Array.from(randomBytes(6)).map((b) => "ABCDEFGHJKLMNPRSTUVYZ23456789"[b % 29]).join("");
+const code = generateCouponCode; // tahmin edilemez (src/lib/coupon-code.ts)
 
 export async function processWinback(sb: Sb) {
   const s = sb as any;

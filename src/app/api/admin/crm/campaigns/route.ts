@@ -4,10 +4,10 @@
 //   POST { op: "create", … }          → kişiye özel kupon (süre atandığı andan) + atama + e-posta kuyruğu (yalnız izinli)
 //   POST { op: "report" }             → geçmiş kampanyalar: atanan, gönderilen, kullanan, ciro
 import { NextRequest, NextResponse } from "next/server";
-import { randomBytes } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { getAuthUserFromRequest } from "@/lib/auth-from-request";
 import { campaignEmailHtml, scopeText, type CampaignCoupon } from "@/lib/crm-campaign";
+import { generateCouponCode } from "@/lib/coupon-code";
 
 const uuids = (v: unknown) => (Array.isArray(v) ? v.map(String).filter((s) => /^[0-9a-f-]{36}$/i.test(s)) : []);
 const int = (v: unknown) => (v === null || v === undefined || v === "" ? null : Math.max(0, Math.floor(Number(v))) || null);
@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
     let couponId: string | null = null;
     const expires = cp ? new Date(Date.now() + Number(cp.valid_days) * 86400_000) : null;
     if (cp) {
-      const code = `K${randomBytes(4).toString("hex").toUpperCase()}`;
+      const code = generateCouponCode();
       const { data: c, error } = await sb.from("coupons").insert({
         code, name: String(cp.name || name).slice(0, 80), type: cp.type, amount: cp.type === "free_shipping" ? 0 : Number(cp.amount),
         min_order_amount: Number(cp.min_order_amount || 0), max_discount_amount: cp.max_discount_amount ? Number(cp.max_discount_amount) : null,

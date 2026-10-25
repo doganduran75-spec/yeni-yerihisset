@@ -225,9 +225,6 @@ function AccountPageInner() {
   // Kupon state
   const [userCoupons, setUserCoupons] = useState<any[]>([]);
   const [couponsLoading, setCouponsLoading] = useState(false);
-  const [claimCode, setClaimCode] = useState("");
-  const [claimLoading, setClaimLoading] = useState(false);
-  const [showClaimInput, setShowClaimInput] = useState(false);
 
   // Affiliate state
   const [affiliate, setAffiliate] = useState<any>(null);
@@ -443,27 +440,6 @@ function AccountPageInner() {
     setUserCoupons(((data as any[]) || []).map((x) => (x.coupons && x.expires_at && (!x.coupons.expires_at || new Date(x.expires_at) < new Date(x.coupons.expires_at))
       ? { ...x, coupons: { ...x.coupons, expires_at: x.expires_at } } : x)));
     setCouponsLoading(false);
-  }
-
-  async function handleClaimCoupon(e: React.FormEvent) {
-    e.preventDefault();
-    if (!claimCode.trim()) return;
-    setClaimLoading(true);
-    const authHeaders = await getAuthHeaders();
-    const res = await fetch("/api/coupons/claim", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...authHeaders },
-      body: JSON.stringify({ code: claimCode.trim() }),
-    });
-    const data = await res.json();
-    setClaimLoading(false);
-    if (data.success) {
-      setClaimCode("");
-      setShowClaimInput(false);
-      fetchUserCoupons();
-    } else {
-      siteAlert(data.error || "Kod eklenemedi.");
-    }
   }
 
   async function getAuthHeaders(): Promise<Record<string, string>> {
@@ -772,7 +748,7 @@ function AccountPageInner() {
                     </div>
                     <div className="space-y-1">
                       <h4 className="font-bold text-slate-900">Henüz kuponunuz yok.</h4>
-                      <p className="text-sm text-slate-400">Kampanya kodunuz varsa yukarıdan ekleyebilirsiniz.</p>
+                      <p className="text-sm text-slate-400">Sana özel bir indirim tanımladığımızda burada ve sepetinde görünür.</p>
                     </div>
                   </Card>
                 ) : (

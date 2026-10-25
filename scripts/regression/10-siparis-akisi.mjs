@@ -1201,6 +1201,7 @@ export default {
         const daysLeft = uc?.expires_at ? (new Date(uc.expires_at).getTime() - Date.now()) / 86400000 : 0;
         ok(c.status === 200 && !!uc && daysLeft > 6.9 && daysLeft < 7.1 && uc.campaign_id === c.json?.campaignId, "Kupon kişiye tanımlandı; süre atandığı andan (7 gün)", `${why(c)} → ${JSON.stringify(uc || {})}`);
         const code = one(`SELECT code FROM public.coupons WHERE id = ${lit(c.json?.couponId || "00000000-0000-0000-0000-000000000000")}`);
+        ok(/^YH-[A-Z2-9]{4}-[A-Z2-9]{4}$/.test(code || ""), "Kampanya kupon kodu tahmin edilemez biçimde (YH-XXXX-XXXX)", `kod: ${code}`);
         const items = [{ product_id: F.prod, quantity: 1, price: 1000 }];
         const v = await api("/api/coupons/validate", { token: F.member.token, body: { codes: [code], cartTotal: 1000, items } });
         ok(v.status === 200 && eq(v.json?.discount_amount, 50), "Kampanya kuponu sepette geçerli", why(v));

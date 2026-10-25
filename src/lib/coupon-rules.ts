@@ -12,6 +12,11 @@
 //     hesaplanır (indirim indirimin üstüne binmez); toplam indirim ürün toplamını geçemez.
 //   * Kodlar tek alanda virgülle taşınır ("KOD1,KOD2") — sepet, ödeme ve sipariş uçları aynı alanı kullanır.
 import type { createAdminClient } from "@/lib/supabase-admin";
+import { rateLimited, rateExceeded } from "@/lib/rate-limit";
+
+// Kod tahmini (kaba kuvvet) koruması: bir üye saatte 10'dan fazla OLMAYAN kod denerse kupon doğrulaması durur
+// (sepet, havale siparişi, kart siparişi — hepsi bu kuraldan geçer). Kodlar zaten tahmin edilemez (src/lib/coupon-code.ts).
+const MISS_MAX = 10, MISS_WINDOW = 3600_000;
 type AdminClient = ReturnType<typeof createAdminClient>;
 
 export type CouponLine = { product_id: string; quantity: number; price: number; is_gift?: boolean };
@@ -56,10 +61,14 @@ export async function evaluateCoupon(
 ): Promise<CouponResult> {
   const code = String(opts.code || "").trim().toUpperCase();
   if (!code) return { ok: false, error: "Kupon kodu gerekli", status: 400 };
+  if (rateExceeded("coupon-miss", opts.userId, MISS_MAX)) return { ok: false, error: "Çok fazla geçersiz kupon denemesi — biraz sonra tekrar dene", status: 429 };
 
   const { data: coupon } = await (supabase as any)
     .from("coupons").select("*").eq("code", code).eq("is_active", true).maybeSingle();
-  if (!coupon) return { ok: false, error: "Geçersiz veya pasif kupon kodu", status: 404 };
+  if (!coupon) {
+    rateLimited("coupon-miss", opts.userId, MISS_MAX, MISS_WINDOW);
+    return { ok: false, error: "Geçersiz veya pasif kupon kodu", status: 404 };
+  }
 
   const now = new Date();
   if (coupon.expires_at && new Date(coupon.expires_at) < now) return { ok: false, error: "Bu kupon süresi dolmuş", status: 400 };
