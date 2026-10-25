@@ -1265,6 +1265,8 @@ export async function sendBackInStockNotification(params: {
   name?: string | null;
   productTitle: string;
   productUrl: string;
+  productImage?: string | null;   // ürün fotoğrafı (kullanıcı isteği 2026-10-25)
+  variantLabel?: string | null;   // beklenen numara
 }): Promise<{ status: "sent" | "failed"; error?: string }> {
   const supabase = createAdminClient();
   const { data: settings } = await (supabase as any).from("settings").select("*").limit(1).maybeSingle();
@@ -1274,8 +1276,12 @@ export async function sendBackInStockNotification(params: {
   const bodyHtml = `
     <h1 style="font-size:22px;font-weight:800;color:#111827;margin:0 0 12px">🎉 İyi haber! Ürün tekrar stokta</h1>
     <p style="font-size:15px;color:#374151;line-height:1.6;margin:0 0 8px">
-      ${name}, beklediğin <b>${params.productTitle}</b> yeniden stoklarımızda. Stoklar sınırlı olabilir — kaçırmadan göz at.
+      ${name}, beklediğin <b>${escapeHtml(params.productTitle)}</b>${params.variantLabel ? ` (<b>${escapeHtml(params.variantLabel)}</b> numara)` : ""} yeniden stoklarımızda. Stoklar sınırlı olabilir — kaçırmadan göz at.
     </p>
+    ${params.productImage ? `<div style="text-align:center;margin:20px 0 8px">
+      <a href="${params.productUrl}"><img src="${params.productImage}" alt="${escapeHtml(params.productTitle)}" width="300"
+        style="max-width:300px;width:100%;border-radius:16px;border:1px solid #eef1e6" /></a>
+    </div>` : ""}
     <div style="text-align:center;margin:28px 0">
       <a href="${params.productUrl}" style="display:inline-block;background:#6b7f3a;color:#fff;text-decoration:none;padding:14px 32px;border-radius:14px;font-weight:800;font-size:15px">
         Ürüne Git

@@ -24,7 +24,12 @@ export async function POST(req: NextRequest) {
   const storeUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com";
 
   // Ürün bilgisi (başlık + link)
-  const { data: product } = await (supabase as any).from("products").select("title, slug").eq("id", productId).maybeSingle();
+  const { data: product } = await (supabase as any).from("products").select("title, slug, image_url, images").eq("id", productId).maybeSingle();
+  const productImage: string | null = product?.image_url || product?.images?.[0] || null;
+  const { data: vrow } = variantId
+    ? await (supabase as any).from("product_variants").select("variant_options(value)").eq("id", variantId).maybeSingle()
+    : { data: null };
+  const variantLabel: string | null = vrow?.variant_options?.value ?? null;
   const productTitle = product?.title ?? "Ürün";
   const productUrl = product?.slug ? `${storeUrl}/products/${product.slug}` : storeUrl;
 
@@ -74,7 +79,7 @@ export async function POST(req: NextRequest) {
 
     if (!email) { manual += 1; continue; }
 
-    const res = await sendBackInStockNotification({ to: email, name, productTitle, productUrl });
+    const res = await sendBackInStockNotification({ to: email, name, productTitle, productUrl, productImage, variantLabel });
     if (res.status === "sent") {
       sent += 1;
       notifiedIds.push(r.id);

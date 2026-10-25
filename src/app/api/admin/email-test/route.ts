@@ -130,7 +130,11 @@ export async function POST(req: NextRequest) {
       case "password_recovery": return sendPasswordRecoveryEmail({ to, name: me.first_name, actionUrl: `${site}/sifre-belirle` });
       case "guest_activation": return sendGuestActivationEmail({ email: to, name: me.first_name, orderLabel: orderNo || "YH00000" });
       case "stock_welcome": return sendStockNotifySignupWelcome({ to, name: me.first_name, productTitle: "Deneme ürünü", productUrl: `${site}/magaza`, variantLabel: "42" });
-      case "back_in_stock": return sendBackInStockNotification({ to, name: me.first_name, productTitle: "Deneme ürünü", productUrl: `${site}/magaza` });
+      case "back_in_stock": {
+        const { data: pr } = await sb.from("products").select("title, slug, image_url, images").eq("is_active", true).not("image_url", "is", null).limit(1).maybeSingle();
+        return sendBackInStockNotification({ to, name: me.first_name, productTitle: pr?.title || "Deneme ürünü", productUrl: pr?.slug ? `${site}/products/${pr.slug}` : `${site}/magaza`,
+          productImage: pr?.image_url || pr?.images?.[0] || null, variantLabel: "42" });
+      }
     }
     return { status: "failed", error: "Desteklenmiyor" };
   };
