@@ -764,18 +764,19 @@ export async function sendLeadMagnetWelcome(params: {
   const storeUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com";
   const name = escapeHtml((params.name || "").trim() || "Merhaba");
 
+  // Kod GÖSTERİLMEZ (müşteri kod yazmıyor; kodlar tahmin edilemez ve yenilenebilir) — kupon hesabında hazır
   const couponBlock = params.couponCode
     ? `<div style="margin:24px 0;padding:20px;border:2px dashed #6b7f3a;border-radius:16px;text-align:center;background:#f7f9f0">
-         <p style="margin:0 0 6px;font-size:13px;color:#6b7280;text-transform:uppercase;letter-spacing:1px">Kupon Kodunuz</p>
-         <p style="margin:0;font-size:26px;font-weight:800;letter-spacing:4px;color:#4d5e2a">${params.couponCode}</p>
-         ${params.couponValue ? `<p style="margin:8px 0 0;font-size:14px;color:#6b7f3a;font-weight:700">${params.couponValue}</p>` : ""}
+         <p style="margin:0 0 6px;font-size:13px;color:#6b7280;text-transform:uppercase;letter-spacing:1px">Hesabında hazır</p>
+         <p style="margin:0;font-size:26px;font-weight:800;color:#4d5e2a">${escapeHtml(params.couponValue || "Ücretsiz kargo")}</p>
+         <p style="margin:8px 0 0;font-size:13px;color:#6b7f3a">Giriş yaptığında sepetinde seçili gelir.</p>
        </div>`
     : "";
 
   const cta = params.actionUrl
     ? `<div style="text-align:center;margin:28px 0">
          <a href="${params.actionUrl}" style="display:inline-block;background:#6b7f3a;color:#fff;text-decoration:none;padding:14px 32px;border-radius:14px;font-weight:800;font-size:15px">
-           ${params.mode === "created" ? "Şifremi Belirle ve Giriş Yap" : "Giriş Yap"}
+           ${params.mode === "created" ? "Şifre belirle" : "Giriş yap"}
          </a>
        </div>`
     : "";
