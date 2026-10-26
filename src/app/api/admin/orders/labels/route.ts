@@ -19,8 +19,15 @@ export async function POST(req: NextRequest) {
 
   const body = (await req.json().catch(() => ({}))) as any;
   if (body.getSize) {
-    const { data: st } = await sb.from("settings").select("label_size").limit(1).maybeSingle();
-    return NextResponse.json({ size: st?.label_size || "a5" });
+    const { data: st } = await sb.from("settings").select("label_size, hepsiburada_desi").limit(1).maybeSingle();
+    return NextResponse.json({ size: st?.label_size || "a5", hbDesi: Number(st?.hepsiburada_desi) || 2 });
+  }
+  if (body.hbDesi !== undefined) {
+    const d = Math.round(Number(body.hbDesi));
+    if (!(d >= 1 && d <= 100)) return NextResponse.json({ error: "Desi 1–100 arası olmalı" }, { status: 400 });
+    const { error } = await sb.from("settings").update({ hepsiburada_desi: d }).not("id", "is", null);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ ok: true, hbDesi: d });
   }
   if (body.size !== undefined) {
     if (!SIZES.includes(body.size)) return NextResponse.json({ error: "Geçersiz boyut" }, { status: 400 });

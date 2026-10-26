@@ -16,7 +16,7 @@ export type NextActionKey =
   // "İade gelecek": müşteri iadeyi telefonla bildirdi → yönetici talep açar; kod gerekmiyorsa doğrudan yolda
   | "return_expected" | "return_in_transit"
   // "Paket hazır" akışı (src/app/api/admin/orders/ship-flow)
-  | "packed" | "picked_up" | "mp_picking";
+  | "packed" | "picked_up" | "mp_picking" | "hb_package";
 
 export type NextAction = { key: NextActionKey; label: string; kind: "primary" | "danger" };
 
@@ -41,6 +41,7 @@ export type OrderLike = {
   mp_picking_at?: string | null;           // Trendyol "İşleme al" yapıldı
   mp_picking_error?: string | null;
   cargo_tracking_number?: string | null;
+  mp_package_number?: string | null;       // Hepsiburada paket no (paketlenince)
   order_items?: { quantity: number; returned_qty?: number | null }[] | null;
   created_at?: string | null;
   fit_status?: string | null;      // trial · ok · exchange · return
@@ -112,6 +113,11 @@ function coreNextStep(o: OrderLike): NextStep {
     if (inv === "pending" && !SHIPPED.includes(ship)) {
       if (!o.packed_at) return { stage: "Yeni sipariş", hint: "Etiketi bas, paketi hazırla, “Paket hazır” de — fatura kendiliğinden kesilir ve pazaryerine yüklenir.", actions: [packedAction], needsAction: true };
       return { stage: "Paket hazır — fatura kesilecek", hint: "Fatura kendiliğinden kesilmedi (Paraşüt kapalı ya da hata) — kes ya da kesildiyse işaretle.", actions: invoiceActs, needsAction: true };
+    }
+    // Hepsiburada: paket hazır dendi ama paketlenemedi (paket no yok) → yeniden dene
+    if (o.channel === "hepsiburada" && o.packed_at && !o.mp_package_number && !SHIPPED.includes(ship)) {
+      return { stage: "Hepsiburada'da paketlenmedi", hint: "Paket hazır dendi ama Hepsiburada paketlemesi yapılamadı (notlara bak) — yeniden dene ya da Hepsiburada panelinden paketle.",
+        actions: [{ key: "hb_package", label: "Hepsiburada — paketle", kind: "primary" }, ...(inv === "pending" ? invoiceActs : [])], needsAction: true };
     }
     if (o.channel === "trendyol" && o.packed_at && !o.mp_picking_at && o.mp_picking_error && !SHIPPED.includes(ship)) {
       return { stage: "Trendyol'da “İşleme al” yapılamadı", hint: o.mp_picking_error, actions: [{ key: "mp_picking", label: "Trendyol — işleme al", kind: "primary" }], needsAction: true };

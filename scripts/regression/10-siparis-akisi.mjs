@@ -1182,6 +1182,11 @@ export default {
         ok(p.status === 200 && !!o1.packed_at && o1.shipment_status === "preparing", "Paket hazır: kargo bekliyor, sipariş henüz 'Kargoda' değil (e-posta gitmez)", `${why(p)} → ${o1.shipment_status}, packed_at ${o1.packed_at}`);
         const k = await flow(F.admin.token, { op: "picked_up", ids: [id] });
         ok(k.status === 200 && (k.json?.shipped || []).includes(id) && ord(id).shipment_status === "shipped", "Kurye aldı: sipariş kargoda", `${why(k)} → ${ord(id).shipment_status}`);
+        const hbx = await flow(F.admin.token, { op: "hb_package", orderId: id });
+        ok(hbx.status === 502 && /Hepsiburada/.test(hbx.json?.error || ""), "Hepsiburada paketleme yalnız Hepsiburada siparişinde", why(hbx));
+        const ds = await api("/api/admin/orders/labels", { token: F.admin.token, body: { getSize: true } });
+        const dbad = await api("/api/admin/orders/labels", { token: F.admin.token, body: { hbDesi: 0 } });
+        ok(Number(ds.json?.hbDesi) >= 1 && dbad.status === 400, "Hepsiburada paket desisi ayarı okunuyor, geçersiz değer reddediliyor", `${why(ds)} / ${why(dbad)}`);
         const k2 = await flow(F.admin.token, { op: "picked_up", ids: [id] });
         ok(k2.status === 200 && !(k2.json?.shipped || []).includes(id), "Kurye aldı ikinci kez: tekrar işlenmiyor (e-posta bir kez)", why(k2));
       });

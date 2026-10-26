@@ -141,6 +141,7 @@ type Order = {
   packed_at?: string | null;          // "Paket hazır"
   mp_picking_at?: string | null;      // Trendyol "İşleme al" yapıldı
   mp_picking_error?: string | null;
+  mp_package_number?: string | null;  // Hepsiburada paket no
   mp_warning?: string | null;
   mp_warning_ack?: boolean | null;
   stock_reduced_at?: string | null;
@@ -855,14 +856,16 @@ export default function OrdersPage() {
     try {
       const r = await shipFlowApi({ op: "packed", orderId: o.id });
       const inv = r.invoice as { status?: string; error?: string } | null;
-      if (inv?.status === "error") {
+      const hb = r.hbPackage as { packageNumber?: string | null; tracking?: string | null; error?: string } | null;
+      if (hb?.error) siteAlert({ title: "Hepsiburada paketlenemedi", message: `${hb.error}\n\nSiparişte “Hepsiburada — paketle” ile tekrar dene.`, tone: "danger" });
+      else if (inv?.status === "error") {
         // Tutar farkı / kargo firması gibi onay isteyen durumlar eski fatura akışından devam eder
         if (/Tutarı onayla|Kargo firması belli değil/.test(inv.error || "")) { setUpdatingId(null); return invoiceParasut(o); }
         siteAlert({ title: "Paket hazır — fatura kesilemedi", message: `${inv.error}
 
 Siparişte “Paraşüt — yeniden dene” ile tekrar dene.`, tone: "danger" });
       } else if (site) siteAlert({ message: "Paket hazır — kurye alınca “Kurye aldı” de (müşteriye e-posta o an gider).", tone: "success" });
-      else siteAlert({ message: inv?.status === "done" ? "Paket hazır — fatura kesildi, pazaryerine yükleniyor." : inv?.status === "off" ? "Paket hazır. Paraşüt kapalı: faturayı elle kes." : "Paket hazır — fatura hazırlanıyor; bitince pazaryerine kendiliğinden yüklenir.", tone: "success" });
+      else siteAlert({ message: o.channel === "hepsiburada" && hb && !hb.tracking ? "Paket hazır — Hepsiburada'da paketlendi; fatura kesiliyor, kargo kodu birkaç dakika içinde gelir (sonra etiketi yazdır)." : inv?.status === "done" ? "Paket hazır — fatura kesildi, pazaryerine yükleniyor." : inv?.status === "off" ? "Paket hazır. Paraşüt kapalı: faturayı elle kes." : "Paket hazır — fatura hazırlanıyor; bitince pazaryerine kendiliğinden yüklenir.", tone: "success" });
     } catch (e: any) {
       siteAlert({ title: "Paket hazır denilemedi", message: String(e?.message || e), tone: "danger" });
     } finally {
@@ -918,6 +921,12 @@ Siparişte “Paraşüt — yeniden dene” ile tekrar dene.`, tone: "danger" })
       case "packed": return markPacked(o);
       case "picked_up":
         if (await siteConfirm({ title: "Kurye aldı mı?", message: "Sipariş “Kargoda” olur ve müşteriye takip numaralı kargo e-postası gider.", confirmText: "Kurye aldı" })) await pickedUp([o.id]);
+        return;
+      case "hb_package":
+        setUpdatingId(o.id);
+        try { const r = await shipFlowApi({ op: "hb_package", orderId: o.id }); siteAlert({ message: `Hepsiburada'da paketlendi${r.packageNumber ? ` (paket no ${r.packageNumber})` : ""}.${r.tracking ? "" : " Kargo kodu birkaç dakika içinde gelir."}`, tone: "success" }); }
+        catch (e: any) { siteAlert({ title: "Hepsiburada", message: String(e?.message || e), tone: "danger" }); }
+        finally { setUpdatingId(null); refreshOrder(o.id); }
         return;
       case "mp_picking":
         setUpdatingId(o.id);

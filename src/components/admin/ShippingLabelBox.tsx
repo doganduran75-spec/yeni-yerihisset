@@ -63,7 +63,7 @@ export default function ShippingLabelBox({ order, onChange }: { order: O; onChan
         <b>Kargo etiketi</b>
         {code
           ? <span className="text-xs text-slate-600">{order.cargo_provider || "Kargo"} · <span className="font-mono">{code}</span></span>
-          : <span className="text-xs text-amber-700">Kargo kodu yok — etiket basılamaz{isSite ? " (Kargonomi'den al ya da elle gir)" : " (pazaryerinden kod gelince basılır)"}</span>}
+          : <span className="text-xs text-amber-700">Kargo kodu yok — etiket basılamaz{isSite ? " (Kargonomi'den al ya da elle gir)" : order.channel === "hepsiburada" ? " (Hepsiburada'da kod paketlenince oluşur: “Paket hazır” de, birkaç dakika içinde gelir)" : " (pazaryerinden kod gelince basılır)"}</span>}
         {order.label_printed_at && !outdated && (
           <span className="text-[11px] text-slate-400">· yazdırıldı {new Date(order.label_printed_at).toLocaleString("tr-TR", { dateStyle: "short", timeStyle: "short" })}</span>
         )}

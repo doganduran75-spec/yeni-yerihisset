@@ -21,12 +21,19 @@ async function call(body: object) {
   });
   const d = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
-  return d as { size: string };
+  return d as { size: string; hbDesi?: number };
 }
 
 export default function LabelSizeCard() {
   const [size, setSize] = useState<string | null>(null);
-  useEffect(() => { call({ getSize: true }).then((d) => setSize(d.size)).catch(() => setSize("a5")); }, []);
+  const [desi, setDesi] = useState("");
+  const [desiMsg, setDesiMsg] = useState("");
+  useEffect(() => { call({ getSize: true }).then((d) => { setSize(d.size); setDesi(String(d.hbDesi ?? 2)); }).catch(() => setSize("a5")); }, []);
+  async function saveDesi() {
+    setDesiMsg("");
+    try { const d = await call({ hbDesi: Number(desi) }); setDesi(String(d.hbDesi)); setDesiMsg("Kaydedildi"); }
+    catch (e) { setDesiMsg((e as Error).message); }
+  }
   async function pick(v: string) {
     const old = size;
     setSize(v);
@@ -46,6 +53,14 @@ export default function LabelSizeCard() {
             <b className="block">{o.label}</b><span className="text-[11px] text-muted-foreground">{o.hint}</span>
           </button>
         ))}
+      </div>
+      {/* Hepsiburada paketleme ("Paket hazır" → API ile paketlenir; kargo ücreti desiye göre) */}
+      <div className="flex flex-wrap items-center gap-2 pt-2 border-t">
+        <span className="text-sm font-semibold">Hepsiburada paket desisi</span>
+        <input value={desi} onChange={(e) => setDesi(e.target.value.replace(/\D/g, ""))} inputMode="numeric" className="h-8 w-16 rounded-md border px-2 text-sm" />
+        <button type="button" onClick={saveDesi} className="h-8 rounded-md border px-3 text-xs font-bold hover:bg-slate-50">Kaydet</button>
+        {desiMsg && <span className="text-xs text-muted-foreground">{desiMsg}</span>}
+        <p className="w-full text-[11px] text-muted-foreground">“Paket hazır” dediğinde Hepsiburada siparişi bu desiyle tek koli olarak paketlenir; kargo ücreti buna göre hesaplanır.</p>
       </div>
     </div>
   );

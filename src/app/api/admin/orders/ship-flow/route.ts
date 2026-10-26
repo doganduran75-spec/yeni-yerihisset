@@ -5,12 +5,14 @@
 //                                         Site: yalnız "Kargo bekliyor" — müşteriye e-posta GİTMEZ (gece paketlenebilir).
 //   POST { op: "picked_up", ids }       → kurye aldı (site): Kargoda + kargo e-postası (takip numarasıyla) o an.
 //   POST { op: "mp_picking", orderId }  → Trendyol "İşleme al" yeniden dene.
+//   POST { op: "hb_package", orderId }  → Hepsiburada paketlemeyi yeniden dene.
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { getAuthUserFromRequest } from "@/lib/auth-from-request";
 import { invoiceOrder } from "@/lib/parasut-invoice";
 import { parasutConfig } from "@/lib/parasut";
 import { trendyolPicking } from "@/lib/marketplace-invoice";
+import { hbPackageOrder } from "@/lib/marketplace/hb-package";
 import { sendOrderNotification } from "@/lib/notifications";
 
 const SHIPPED = ["shipped", "delivered", "undelivered", "returned"];
@@ -40,6 +42,12 @@ export async function POST(req: NextRequest) {
       await sb.from("orders").update({ packed_at: now }).eq("id", orderId);
       await note(orderId, site ? "Paket hazır — kurye bekleniyor" : "Paket hazır");
     }
+    // Hepsiburada: önce PAKETLE (paket no + kargo barkodu; fatura bağlantısı paket numarasına yüklenir)
+    let hbPackage: { packageNumber?: string | null; tracking?: string | null; error?: string } | null = null;
+    if (o.channel === "hepsiburada") {
+      try { hbPackage = await hbPackageOrder(sb, orderId); }
+      catch (e: any) { hbPackage = { error: String(e?.message || e) }; await note(orderId, `Hepsiburada paketleme yapılamadı: ${hbPackage.error}`.slice(0, 400)); }
+    }
     // Pazaryeri: fatura hemen (hata siparişe yazılır; sipariş ekranında "yeniden dene")
     let invoice: { status?: string; error?: string } | null = null;
     if (!site && (o.invoice_status || "pending") === "pending" && o.parasut_status !== "done") {
@@ -49,7 +57,7 @@ export async function POST(req: NextRequest) {
         catch (e: any) { invoice = { status: "error", error: String(e?.message || e) }; }
       } else invoice = { status: "off" };
     }
-    return NextResponse.json({ ok: true, packed_at: o.packed_at || now, invoice });
+    return NextResponse.json({ ok: true, packed_at: o.packed_at || now, invoice, hbPackage });
   }
 
   if (body.op === "picked_up") {
@@ -75,6 +83,11 @@ export async function POST(req: NextRequest) {
         .catch((e: any) => console.error("[ship-flow] kargo e-postası", e?.message || e));
     }
     return NextResponse.json({ ok: true, shipped, skipped });
+  }
+
+  if (body.op === "hb_package") {
+    try { return NextResponse.json({ ok: true, ...(await hbPackageOrder(sb, String(body.orderId || ""))) }); }
+    catch (e: any) { return NextResponse.json({ error: String(e?.message || e) }, { status: 502 }); }
   }
 
   if (body.op === "mp_picking") {
