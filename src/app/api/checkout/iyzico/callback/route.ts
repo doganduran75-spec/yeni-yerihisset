@@ -4,6 +4,7 @@ import { kickMarketplaceSync } from "@/lib/marketplace/sync";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { createIyzicoClient } from "@/lib/iyzico";
 import { restoreOrderCredit } from "@/lib/store-credit";
+import { isTestOrder } from "@/lib/notifications";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://yerihisset.com";
 
@@ -213,7 +214,9 @@ async function handle(req: NextRequest) {
         // Neden başarısız oldu → admin sipariş geçmişinde görür (müşteri ekranında genel mesaj)
         const reason = [result?.errorCode, result?.errorMessage].filter(Boolean).join(" — ") || paymentStatus || "bilinmiyor";
         // Pano › Sistem › "Hata alan müşteriler" (kart bilgisi yok, yalnız iyzico'nun gerekçesi)
-        await (supabase as any).from("client_errors").insert({ kind: "payment_failed", message: String(reason).slice(0, 300), path: "/checkout", user_id: order.user_id ?? null, order_id: order.id });
+        // Regresyon test siparişi (@….test üye) panoyu "hata alan müşteri" ile doldurmasın
+        if (!(await isTestOrder(supabase, order.user_id)))
+          await (supabase as any).from("client_errors").insert({ kind: "payment_failed", message: String(reason).slice(0, 300), path: "/checkout", user_id: order.user_id ?? null, order_id: order.id });
         await (supabase as any).from("order_events").insert({
           order_id: order.id, type: "note", note: `Kart ödemesi başarısız: ${reason}`,
         });

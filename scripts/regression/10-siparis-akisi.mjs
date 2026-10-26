@@ -39,6 +39,9 @@ export default {
       const users = `SELECT id FROM auth.users WHERE email ILIKE '%@${DOMAIN}'`;
       const prods = `SELECT id FROM public.products WHERE title LIKE 'REGRESYON-TEST%'`;
       sql(`
+        -- Test siparişlerinin "hata alan müşteri" kayıtları (sipariş silinmeden önce; siparişi silinmiş artık kayıtlar da)
+        DELETE FROM public.client_errors WHERE user_id IN (${users}) OR order_id IN (SELECT id FROM public.orders WHERE user_id IN (${users}))
+          OR (order_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM public.orders o WHERE o.id = client_errors.order_id));
         DELETE FROM public.orders WHERE user_id IN (${users}) OR id IN (SELECT order_id FROM public.order_items WHERE product_id IN (${prods}));
         DELETE FROM public.notification_log WHERE recipient ILIKE '%@${DOMAIN}' OR user_id IN (${users});
         DELETE FROM public.email_queue WHERE recipient_email ILIKE '%@${DOMAIN}';
