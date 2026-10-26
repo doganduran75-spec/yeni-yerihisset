@@ -23,7 +23,16 @@ const round2 = (v: number) => Math.round(v * 100) / 100;
 const pick = (o: any, ...keys: string[]) => { for (const k of keys) if (o && o[k] != null && o[k] !== "") return o[k]; return undefined; };
 const amount = (v: any) => (v && typeof v === "object" ? n(v.amount ?? v.Amount) : n(v));
 const listOf = (j: any): any[] => (Array.isArray(j) ? j : (pick(j, "items", "Items", "data", "Data", "packages", "Packages") ?? []));
-const iso = (v: any) => { const d = v ? new Date(v) : null; return d && !isNaN(d.getTime()) ? d.toISOString() : null; };
+// Hepsiburada tarihleri saat dilimi BELİRTMEDEN Türkiye saatiyle gelir ("2026-10-26T10:15:00"). Saat dilimsiz
+// metin sunucunun saatiyle (CET) okunursa sipariş 1–2 saat ileri görünüyordu (regresyon "gelecek tarihli sipariş")
+// → dilim yoksa Türkiye saati (+03:00, yaz saati uygulaması yok) kabul edilir.
+const iso = (v: any) => {
+  if (!v) return null;
+  const str = typeof v === "string" ? v.trim() : v;
+  const naive = typeof str === "string" && /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(str);
+  const d = new Date(naive ? `${(str as string).replace(" ", "T")}+03:00` : str);
+  return !isNaN(d.getTime()) ? d.toISOString() : null;
+};
 
 function host(c: HepsiburadaConfig, svc: "oms" | "listing") {
   const sit = c.stage ? "-sit" : "";
