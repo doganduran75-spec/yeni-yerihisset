@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { getAuthUserFromRequest } from "@/lib/auth-from-request";
 import { sendSiteMail } from "@/lib/site-mail";
+import { isTestEmail } from "@/lib/mail-guard";
+import { clientIp } from "@/lib/rate-limit";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -41,6 +43,24 @@ export async function POST(req: NextRequest) {
     const user = await getAuthUserFromRequest(req);
     const { error } = await auth.sb.from("server_health_acks").upsert(keys.map((key) => ({ key, acked_by: user?.id ?? null, acked_at: new Date().toISOString() })), { onConflict: "key" });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    // İz: onayı başkası verdiyse de haberin olsun → yöneticiye ikinci e-posta (regresyon test hesabında gönderilmez)
+    const { data: who } = await auth.sb.from("profiles").select("email, first_name, last_name").eq("id", user?.id).maybeSingle();
+    if (!isTestEmail(who?.email)) {
+      const { data: st } = await auth.sb.from("settings").select("*").limit(1).maybeSingle();
+      const to = st?.admin_notify_email || st?.contact_email || st?.smtp_from_email || st?.smtp_user;
+      const tr = (d: Date) => d.toLocaleString("tr-TR", { timeZone: "Europe/Istanbul", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+      const esc = (v: unknown) => String(v ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c] as string));
+      const lines = keys.map((k) => {
+        const m = /^ssh_new_ip:(.+?)(?::(\d+))?$/.exec(k);
+        return `<li><b>${esc(m?.[1])}</b>${m?.[2] ? ` — giriş ${tr(new Date(Number(m[2]) * 1000))}` : ""}</li>`;
+      }).join("");
+      const name = [who?.first_name, who?.last_name].filter(Boolean).join(" ") || "Yönetici";
+      if (to) await sendSiteMail(to, "SSH giriş uyarısı “bendim” diye onaylandı", `
+        <p style="font-size:15px;color:#374151;line-height:1.6">Paneldeki yeni IP'den SSH girişi uyarısı kapatıldı:</p>
+        <ul style="font-size:15px;color:#374151;line-height:1.7">${lines}</ul>
+        <p style="font-size:14px;color:#374151;line-height:1.6">Onaylayan: <b>${esc(name)}</b> (${esc(who?.email)}) · ${tr(new Date())} · panel bağlantısı IP: ${esc(clientIp(req))}</p>
+        <p style="font-size:13px;color:#b45309;line-height:1.6">Bunu sen yapmadıysan: admin panel şifreni ve sunucu şifresini hemen değiştir.</p>`).catch(() => {});
+    }
     return NextResponse.json({ ok: true });
   }
   if (body?.action !== "test_mail") return NextResponse.json({ error: "Geçersiz işlem" }, { status: 400 });
