@@ -1239,6 +1239,18 @@ export default {
         ok(none.status === 404, "Olmayan / bitmiş kampanya reddediliyor", why(none));
       });
 
+      await part("Yeni IP'den SSH girişi uyarısı: 'Evet, bendim' ile kapanır", async () => {
+        const key = `ssh_new_ip:10.254.0.${Math.floor(Math.random() * 250)}:${Math.floor(Date.now() / 1000)}`;
+        const m = await api("/api/admin/system-status", { token: F.member.token, body: { action: "ack", keys: [key] } });
+        ok(m.status === 403, "Üye uyarıyı kapatamıyor", why(m));
+        const bad = await api("/api/admin/system-status", { token: F.admin.token, body: { action: "ack", keys: ["db_disk"] } });
+        ok(bad.status === 400, "Yalnız SSH giriş uyarısı kapatılabiliyor", why(bad));
+        const a = await api("/api/admin/system-status", { token: F.admin.token, body: { action: "ack", keys: [key] } });
+        ok(a.status === 200 && num(`SELECT count(*) FROM public.server_health_acks WHERE key = ${lit(key)} AND acked_by = ${lit(F.admin.id)}`) === 1,
+          "'Evet, bendim' kaydedildi (kim onayladı)", why(a));
+        sql(`DELETE FROM public.server_health_acks WHERE key = ${lit(key)}`);
+      });
+
       await part("E-posta denemesi: yalnız yöneticiye, müşteri kaydına iz bırakmadan", async () => {
         const m = await api("/api/admin/email-test", { token: F.member.token, body: { list: true } });
         ok(m.status === 403, "Üye e-posta denemesi yapamıyor", why(m));

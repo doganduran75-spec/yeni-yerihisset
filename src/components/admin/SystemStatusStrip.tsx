@@ -9,7 +9,7 @@ import { supabase } from "@/lib/supabase";
 // PANONUN ÜST ŞERİDİ — sisteme göz ucuyla bak: her kontrol yeşil / sarı / kırmızı.
 // Sorun varsa şeridin üstünde belirgin uyarı (satışa geçmeden önce görülsün). Ayrıntı: /admin/system
 // Veri: /api/admin/system-status (aynı veriyi Sistem sayfası da kullanır → onData ile paylaşılır).
-export type SystemStatus = { overall: "ok" | "warn" | "fail"; tiles: { key: string; label: string; status: "ok" | "warn" | "fail"; value: string; hint?: string; anchor: string }[]; details: any };
+export type SystemStatus = { overall: "ok" | "warn" | "fail"; tiles: { key: string; label: string; status: "ok" | "warn" | "fail"; value: string; hint?: string; anchor: string; ack?: string[] }[]; details: any };
 
 const ICON = {
   ok: <CheckCircle2 size={18} className="text-green-600 shrink-0" />,
@@ -20,6 +20,20 @@ const ICON = {
 export default function SystemStatusStrip({ onData, linkTo = "/admin/system" }: { onData?: (d: SystemStatus) => void; linkTo?: string }) {
   const [d, setD] = useState<SystemStatus | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [acking, setAcking] = useState<string | null>(null);
+
+  // "Evet, bendim": yeni IP'den SSH girişi uyarısını kapat (sunucu kaydeder; şerit yenilenir)
+  async function ack(tileKey: string, keys: string[]) {
+    setAcking(tileKey);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const h: Record<string, string> = session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
+      const r = await fetch("/api/admin/system-status", { method: "POST", headers: { "Content-Type": "application/json", ...h }, body: JSON.stringify({ action: "ack", keys }) });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `HTTP ${r.status}`);
+      const j = await (await fetch("/api/admin/system-status", { headers: h, cache: "no-store" })).json();
+      setD(j); onData?.(j);
+    } catch (e: any) { setErr(e?.message || "kaydedilemedi"); } finally { setAcking(null); }
+  }
 
   useEffect(() => {
     (async () => {
@@ -46,10 +60,18 @@ export default function SystemStatusStrip({ onData, linkTo = "/admin/system" }: 
             {d.overall === "fail" ? "Sistemde sorun var — önce buna bak" : "Sistemde dikkat edilmesi gereken bir şey var"}
           </p>
           {problems.map((t) => (
-            <Link key={t.key} href={`${linkTo}#${t.anchor}`} className="flex items-start gap-2 text-sm hover:underline">
-              {ICON[t.status]}
-              <span><b>{t.label}:</b> {t.value}{t.hint ? <span className="text-slate-600"> — {t.hint}</span> : null}</span>
-            </Link>
+            <div key={t.key} className="flex flex-wrap items-start gap-2 text-sm">
+              <Link href={`${linkTo}#${t.anchor}`} className="flex items-start gap-2 hover:underline min-w-0 flex-1">
+                {ICON[t.status]}
+                <span><b>{t.label}:</b> {t.value}{t.hint ? <span className="text-slate-600"> — {t.hint}</span> : null}</span>
+              </Link>
+              {t.ack?.length ? (
+                <button type="button" disabled={acking === t.key} onClick={() => ack(t.key, t.ack!)}
+                  className="shrink-0 rounded-lg border border-amber-400 bg-white px-2.5 py-1 text-xs font-bold text-amber-900 hover:bg-amber-100 disabled:opacity-50">
+                  {acking === t.key ? "Kaydediliyor…" : "Evet, bendim"}
+                </button>
+              ) : null}
+            </div>
           ))}
         </div>
       )}

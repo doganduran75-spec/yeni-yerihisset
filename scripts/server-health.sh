@@ -176,13 +176,15 @@ if [ ! -f "$KNOWN" ]; then
   touch "$RECENT"
 fi
 SINCE="-20min"; [ -f "$LAST_RUN_FILE" ] && SINCE="@$(cat "$LAST_RUN_FILE")"
-while read -r IP; do
-  [ -z "$IP" ] && continue
+# Girişin günlükteki saati (unix) + IP — uyarıda tespit anı değil GİRİŞ anı görünsün
+while read -r TS IP; do
+  [ -z "${IP:-}" ] && continue
   if ! grep -qxF "$IP" "$KNOWN"; then
     echo "$IP" >> "$KNOWN"
-    echo "$NOW $IP" >> "$RECENT"
+    echo "${TS:-$NOW} $IP" >> "$RECENT"
   fi
-done < <(SSH_LOG "$SINCE" | grep -oP 'Accepted \S+ for \S+ from \K[0-9a-fA-F.:]+' | sort -u)
+done < <(journalctl -u ssh -u sshd --since "$SINCE" --no-pager -q -o short-unix 2>/dev/null \
+  | grep -E 'Accepted [^ ]+ for [^ ]+ from ' | sed -E 's/^([0-9]+)[^ ]* .*Accepted [^ ]+ for [^ ]+ from ([0-9a-fA-F.:]+).*/\1 \2/' | sort -k2,2 -u)
 echo "$NOW" > "$LAST_RUN_FILE"
 # Son 24 saatteki yeni-IP girişleri kartta görünsün (ve bir kez e-posta gitsin)
 awk -v n="$NOW" '$1 > n-86400' "$RECENT" > "$RECENT.tmp" 2>/dev/null && mv "$RECENT.tmp" "$RECENT"
@@ -190,7 +192,8 @@ NEWIPS=0
 while read -r TS IP; do
   [ -z "${IP:-}" ] && continue
   NEWIPS=$((NEWIPS+1))
-  add "ssh_new_ip:$IP" warn "Yeni IP'den sunucu girişi" "$IP — $(date -d "@$TS" '+%d.%m %H:%M')" "Bu giriş sen değilsen sunucu şifresini hemen değiştir ve bana haber ver." true
+  # Saat Türkiye saatiyle (sunucu CET'te); anahtar IP + giriş anı → panelde "Evet, bendim" ile kapatılır
+  add "ssh_new_ip:$IP:$TS" warn "Yeni IP'den SSH girişi" "$IP — $(TZ=Europe/Istanbul date -d "@$TS" '+%d.%m %H:%M') (TR)" "Bu giriş sen değilsen sunucu şifresini hemen değiştir ve bana haber ver." true
 done < "$RECENT"
 [ "$NEWIPS" -eq 0 ] && add ssh_logins ok "Sunucu girişleri" "bilinmeyen IP'den giriş yok" ""
 

@@ -11,7 +11,7 @@ import { sendSiteMail } from "@/lib/site-mail";
 //   e-posta (mail_health: son gönderimler + 15 dk'da bir SMTP girişi) · yedek (backup_runs) · saldırı (bot_blocks + SSH denemeleri) · yetkisiz giriş (yönetici girişleri,
 //   yeni IP'den sunucu girişi) · hata alan müşteriler (client_errors + gönderilemeyen müşteri e-postaları)
 type Status = "ok" | "warn" | "fail";
-type Tile = { key: string; label: string; status: Status; value: string; hint?: string; anchor: string };
+type Tile = { key: string; label: string; status: Status; value: string; hint?: string; anchor: string; ack?: string[] }; // ack: "Evet, bendim" ile kapatılabilecek uyarı anahtarları
 
 const ago = (iso?: string | null) => {
   if (!iso) return "hiç";
@@ -34,6 +34,15 @@ export async function POST(req: NextRequest) {
   const auth = await requireAdmin(req);
   if ("error" in auth) return auth.error;
   const body = await req.json().catch(() => ({}));
+  // "Evet, bendim": yeni IP'den SSH girişi uyarısını kapat (kim / ne zaman onayladı kaydı kalır)
+  if (body?.action === "ack") {
+    const keys: string[] = (Array.isArray(body.keys) ? body.keys : []).map(String).filter((k: string) => /^ssh_new_ip:[0-9a-fA-F.:]+(:\d+)?$/.test(k)).slice(0, 20);
+    if (!keys.length) return NextResponse.json({ error: "Onaylanacak uyarı yok" }, { status: 400 });
+    const user = await getAuthUserFromRequest(req);
+    const { error } = await auth.sb.from("server_health_acks").upsert(keys.map((key) => ({ key, acked_by: user?.id ?? null, acked_at: new Date().toISOString() })), { onConflict: "key" });
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ ok: true });
+  }
   if (body?.action !== "test_mail") return NextResponse.json({ error: "Geçersiz işlem" }, { status: 400 });
   // select("*"): ayar kolonları kurulumdan kuruluma değişebilir; yoksa sorgu hata verip adres "boş" görünüyordu.
   // Alıcı sırası yönetici bildirimleriyle aynı (sendAdminSystemAlert): bildirim → iletişim → gönderen adresi.
@@ -64,6 +73,8 @@ export async function GET(req: NextRequest) {
     sb.from("notification_log").select("created_at, trigger, recipient, error_message, order_id").eq("status", "failed").gte("created_at", since).order("created_at", { ascending: false }).limit(50),
     sb.from("mail_health").select("*").eq("id", 1).maybeSingle(),
   ]);
+  const { data: ackRows } = await sb.from("server_health_acks").select("key").like("key", "ssh_new_ip:%");
+  const acked = new Set(((ackRows as any[]) || []).map((a) => a.key));
 
   const tiles: Tile[] = [];
   const checks: any[] = (health.data?.checks as any[]) || [];
@@ -143,11 +154,12 @@ export async function GET(req: NextRequest) {
   {
     const L = ((logins.data as any[]) || []);
     const newIp24 = L.filter((l) => l.new_ip && new Date(l.created_at).getTime() > Date.now() - 24 * 3600000);
-    const sshNew = checks.filter((c) => String(c.key).startsWith("ssh_new_ip"));
+    const sshNew = checks.filter((c) => String(c.key).startsWith("ssh_new_ip") && !acked.has(c.key)); // "evet, bendim" denenler gizli
     tiles.push({
       key: "access", label: "Yetkisiz giriş", anchor: "giris",
       status: sshNew.length || newIp24.length ? "warn" : "ok",
-      value: sshNew.length ? `sunucuya yeni IP'den giriş: ${sshNew.map((c) => c.value).join(", ")}`
+      ack: sshNew.length ? sshNew.map((c) => String(c.key)) : undefined,
+      value: sshNew.length ? `SSH ile sunucuya yeni IP'den giriş: ${sshNew.map((c) => c.value).join(", ")}`
         : newIp24.length ? `yönetici paneline yeni IP'den giriş (${newIp24.length})`
         : L[0] ? `son yönetici girişi ${ago(L[0].created_at)}` : "son 7 günde yönetici girişi yok",
       hint: sshNew.length || newIp24.length ? "Bu giriş sen değilsen şifreni hemen değiştir" : undefined,
