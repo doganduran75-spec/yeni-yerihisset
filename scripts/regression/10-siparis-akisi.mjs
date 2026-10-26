@@ -1273,6 +1273,18 @@ export default {
         ok(bad.status === 404, "Olmayan sipariş numarası reddediliyor", why(bad));
       });
 
+      await part("Hepsiburada iadesi elle: ciro düşer, stok isteğe bağlı", async () => {
+        const id = insert("orders", { channel: "hepsiburada", external_order_number: `RGT${RUN}HB`, external_package_id: `RGT${RUN}HB`, user_id: F.member.id,
+          status: "processing", payment_status: "paid", shipment_status: "delivered", invoice_status: "invoiced", total_amount: 250, shipping_address: "{}" });
+        const s0 = stock();
+        const r = await api("/api/admin/orders/marketplace-restock", { token: F.admin.token, body: { orderId: id, restock: false } });
+        const o = ord(id);
+        ok(r.status === 200 && o.payment_status === "refunded" && eq(o.refunded_amount, 250) && o.shipment_status === "returned" && stock() === s0,
+          "İade geldi (stoğa eklemeden): ödeme 'iade edildi', tutar cirodan düştü, stok değişmedi", `${why(r)} → ${o.payment_status}/${o.refunded_amount}/${o.shipment_status}, stok ${s0}→${stock()}`);
+        const m = await api("/api/admin/orders/marketplace-restock", { token: F.member.token, body: { orderId: id } });
+        ok(m.status === 403, "Üye pazaryeri iadesi işaretleyemiyor", why(m));
+      });
+
       await part("Ödeme alınmadan sevkiyat başlamıyor", async () => {
         const r = await order([MAIN(1)]);
         const id = r.json?.orderId;

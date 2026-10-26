@@ -14,11 +14,11 @@ export async function POST(req: NextRequest) {
   const { data: me } = await supabase.from("profiles").select("role").eq("id", user.id).single();
   if ((me as any)?.role !== "admin") return NextResponse.json({ error: "Yetkisiz" }, { status: 403 });
 
-  const { orderId } = (await req.json().catch(() => ({}))) as { orderId?: string };
+  const { orderId, restock } = (await req.json().catch(() => ({}))) as { orderId?: string; restock?: boolean };
   if (!orderId) return NextResponse.json({ error: "orderId gerekli" }, { status: 400 });
   const { data: order } = await (supabase as any).from("orders").select("id, channel").eq("id", orderId).maybeSingle();
   if (!order || order.channel === "site") return NextResponse.json({ error: "Pazaryeri siparişi bulunamadı" }, { status: 404 });
 
-  const restored = await restockReturnedOrder(orderId, supabase);
+  const restored = await restockReturnedOrder(orderId, supabase, restock !== false);
   return NextResponse.json({ ok: true, restored });
 }

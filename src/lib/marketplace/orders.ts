@@ -312,9 +312,10 @@ export async function importMarketplaceOrders(supabase: AdminClient = createAdmi
 }
 
 /** İade gelen (pazaryerinde "Returned") siparişin stoğunu admin onayıyla geri ekle. */
-export async function restockReturnedOrder(orderId: string, supabase: AdminClient = createAdminClient()) {
+export async function restockReturnedOrder(orderId: string, supabase: AdminClient = createAdminClient(), restock = true) {
   const sb = supabase as any;
-  const { data: items } = await sb.from("order_items").select("id").eq("order_id", orderId);
+  // restock=false: ürün stoğa elle eklenmiş ya da satılamaz → stoğa dokunmadan yalnız "iade edildi" (ciro düşer)
+  const { data: items } = restock ? await sb.from("order_items").select("id").eq("order_id", orderId) : { data: [] };
   let restored = 0;
   for (const it of (items as any[]) || []) {
     const { data: r } = await sb.rpc("mp_restore_item_stock", { p_item_id: it.id, p_source: "marketplace_return" });
@@ -329,7 +330,7 @@ export async function restockReturnedOrder(orderId: string, supabase: AdminClien
       shipment_status: "returned", status: "refunded",
       ...marketplacePaymentPatch("refunded", Number(o.total_amount || 0), o.invoice_status),
     }).eq("id", orderId);
-    await sb.from("order_events").insert({ order_id: orderId, type: "return_received", note: `Pazaryeri iadesi depoya geldi; ${restored} adet stoğa eklendi` });
+    await sb.from("order_events").insert({ order_id: orderId, type: "return_received", note: restock ? `Pazaryeri iadesi depoya geldi; ${restored} adet stoğa eklendi` : "Pazaryeri iadesi geldi; stoğa EKLENMEDİ (elle eklenmiş ya da satılamaz)" });
   }
   return restored;
 }

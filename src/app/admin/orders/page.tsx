@@ -954,6 +954,22 @@ Siparişte “Paraşüt — yeniden dene” ile tekrar dene.`, tone: "danger" })
       case "close_case":
         if (await siteConfirm({ title: "Talep kapatılsın mı?", message: "Müşteri vazgeçtiyse kapat; sipariş “müşteri deniyor” durumuna döner.", confirmText: "Kapat", tone: "danger" })) await caseOp(o, { op: "close" });
         return;
+      case "mp_return": {
+        // Hepsiburada / Amazon: iade bilgisi otomatik gelmiyor → elle; stok ayrıca sorulur (elle eklendiyse iki kez artmasın)
+        if (!(await siteConfirm({ title: "İade geldi mi?", message: "Sipariş “İade geldi” ve ödeme “İade edildi” olur (parayı pazaryeri iade eder); satış cirodan düşer.", confirmText: "İade geldi" }))) return;
+        const restock = await siteConfirm({ title: "Ürün stoğa eklensin mi?", message: "Ürün satılabilir durumdaysa ve stoğa henüz elle eklemediysen “Stoğa ekle”. Elle eklediysen ya da ürün satılamazsa “Ekleme”.", confirmText: "Stoğa ekle", cancelText: "Ekleme" });
+        const { data: { session } } = await supabase.auth.getSession();
+        const r = await fetch("/api/admin/orders/marketplace-restock", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
+          body: JSON.stringify({ orderId: o.id, restock }),
+        });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) { siteAlert({ message: d.error || "İşaretlenemedi", tone: "danger" }); return; }
+        siteAlert({ message: restock ? `İade işlendi; ${d.restored ?? 0} adet stoğa eklendi.` : "İade işlendi; stoğa eklenmedi.", tone: "success" });
+        refreshOrder(o.id);
+        return;
+      }
       case "mp_restock": {
         if (!(await siteConfirm({ title: "İade geldi mi?", message: "Ürünler depoya döndüyse ve satılabilir durumdaysa stoğa eklenir; yeni stok tüm pazaryerlerine gönderilir.", confirmText: "Stoğa ekle" }))) return;
         const { data: { session } } = await supabase.auth.getSession();
@@ -2386,17 +2402,9 @@ function MarketplaceOrderPanel({ order, onChange, onRestocked }: {
       {returned ? (
         // Stoğa ekleme "Sıradaki adım" panelinde (tek akış)
         <p className="text-xs text-amber-800">Bu sipariş pazaryerinde <b>iade</b> durumunda — ürün depoya dönünce yukarıdaki “Sıradaki adım”dan stoğa ekle.</p>
-      ) : order.status !== "cancelled" && (
-        // Hepsiburada iade bilgisi otomatik gelmiyor → ürün geri geldiyse elle
-        <button
-          className="text-[11px] text-slate-500 hover:text-slate-800 underline"
-          disabled={busy}
-          onClick={async () => {
-            if (await siteConfirm({ title: "İade geldi mi?", message: "Bu siparişin ürünleri depoya döndüyse ve satılabilir durumdaysa stoğa eklenir; yeni stok tüm pazaryerlerine gönderilir.", confirmText: "Stoğa ekle" })) restock();
-          }}
-        >
-          İade geldi, ürünleri stoğa ekle
-        </button>
+      ) : order.status !== "cancelled" && order.channel !== "trendyol" && (
+        // Hepsiburada / Amazon iade bilgisi otomatik gelmiyor → "Sıradaki adım"daki "İade geldi" (tek akış)
+        <p className="text-[11px] text-slate-500">İade geldiyse yukarıdaki “Sıradaki adım”dan <b>İade geldi</b> de (iade bilgisi bu pazaryerinden otomatik gelmiyor).</p>
       )}
       {msg && <p className="text-xs font-semibold text-slate-700">{msg}</p>}
     </div>

@@ -16,7 +16,7 @@ export type NextActionKey =
   // "İade gelecek": müşteri iadeyi telefonla bildirdi → yönetici talep açar; kod gerekmiyorsa doğrudan yolda
   | "return_expected" | "return_in_transit"
   // "Paket hazır" akışı (src/app/api/admin/orders/ship-flow)
-  | "packed" | "picked_up" | "mp_picking" | "hb_package";
+  | "packed" | "picked_up" | "mp_picking" | "hb_package" | "mp_return";
 
 export type NextAction = { key: NextActionKey; label: string; kind: "primary" | "danger" };
 
@@ -127,7 +127,10 @@ function coreNextStep(o: OrderLike): NextStep {
     if (inv === "pending") {
       return { stage: "Fatura kesilmedi (pazaryeri)", hint: "Kargoya verilmiş; faturası kesilmediyse kes. Eski firma faturaladıysa “Fatura kesildi” işaretle.", actions: invoiceActs, needsAction: daysSince(o.created_at) <= 7 };
     }
-    return { stage: SHIPPED.includes(ship) ? "Kargoda / teslim (pazaryeri)" : "Kargo bekleniyor (pazaryeri)", hint: "Durum pazaryerinden gelir.", actions: [], needsAction: false };
+    // Hepsiburada / Amazon iadesi otomatik gelmiyor → ürün geri gelince elle (ödeme "iade edildi", ciro düşer, stok isteğe bağlı)
+    const manualReturn = SHIPPED.includes(ship) && o.channel !== "trendyol";
+    return { stage: SHIPPED.includes(ship) ? "Kargoda / teslim (pazaryeri)" : "Kargo bekleniyor (pazaryeri)", hint: "Durum pazaryerinden gelir.",
+      actions: manualReturn ? [{ key: "mp_return", label: "İade geldi", kind: "danger" }] : [], needsAction: false };
   }
 
   // ── Site ──
