@@ -99,9 +99,15 @@ async function prepare(sb: Sb, o: any) {
   // Alıcı
   const bill = { ...parse(o.shipping_address), ...parse(o.billing_address) };
   const p = o.profiles || {};
-  const taxNo = String(bill.tax_number || "").replace(/\D/g, "");
+  // Vergi kimliği: VKN (10, şirket) ya da TCKN (11, şahıs şirketi / kimlik numarasını veren kişi). Fatura adresinde yoksa
+  // pazaryerinin gönderdiği TC kimlik (Hepsiburada identity_no); o da yoksa e-Arşiv'de 11111111111.
+  const rawTax = String(bill.tax_number || "").replace(/\D/g, "");
+  const rawId = String(bill.identity_no || "").replace(/\D/g, "");
+  const taxNo = rawTax.length === 10 || rawTax.length === 11 ? rawTax : rawId.length === 11 && rawId !== "11111111111" ? rawId : "";
   const corporate = taxNo.length === 10;
-  const name = String((corporate ? bill.company_name || bill.company : null) || bill.name || o.customer_name || [p.first_name, p.last_name].filter(Boolean).join(" ")).trim();
+  // Şahıs şirketi (TCKN + vergi dairesi / ünvan): fatura ünvanla kesilir; e-fatura mükellefiyse e-fatura gider
+  const business = corporate || (taxNo.length === 11 && !!(bill.is_corporate || bill.company_name || bill.tax_office));
+  const name = String((business ? bill.company_name || bill.company : null) || bill.name || o.customer_name || [p.first_name, p.last_name].filter(Boolean).join(" ")).trim();
   if (!name) errs.push("Alıcı adı yok (fatura adresi).");
   if (!bill.city || !bill.address) errs.push("Fatura adresinde il / açık adres eksik.");
 
@@ -120,7 +126,7 @@ async function prepare(sb: Sb, o: any) {
     else carrier = { name: c.name, vkn: c.vkn };
   }
 
-  return { errs, lines, total, bill, taxNo, corporate, name, email: o.customer_email || p.email || null, phone: bill.phone || o.customer_phone || p.phone || null, ch, carrier, channel };
+  return { errs, lines, total, bill, taxNo, corporate, business, name, email: o.customer_email || p.email || null, phone: bill.phone || o.customer_phone || p.phone || null, ch, carrier, channel };
 }
 
 async function findOrCreateContact(sb: Sb, x: Awaited<ReturnType<typeof prepare>>) {
@@ -234,7 +240,7 @@ export async function invoiceOrder(sb: Sb, orderId: string, opts: { acceptDiff?:
     // 3) e-Fatura (alıcı e-Fatura kullanıcısı) / e-Arşiv
     if (!o.parasut_job_id && !o.parasut_e_doc_id) {
       let inbox: string | null = null;
-      if (x.corporate) {
+      if (x.business) { // şirket (VKN) ya da şahıs şirketi (TCKN) — e-fatura mükellefi mi?
         const j = await parasutCall(sb, "GET", `/e_invoice_inboxes?filter[vkn]=${x.taxNo}`);
         inbox = ((j?.data as any[]) || [])[0]?.attributes?.e_invoice_address ?? null;
       }

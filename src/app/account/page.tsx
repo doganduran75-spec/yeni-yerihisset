@@ -50,6 +50,7 @@ import { siteAlert, siteConfirm } from "@/components/ui/site-dialog";
 import { trAuthError } from "@/lib/auth-errors";
 import VerifyEmailNotice from "@/components/VerifyEmailNotice";
 import MarketingConsentToggle from "@/components/account/MarketingConsentToggle";
+import { isValidTckn, taxIdLabel } from "@/lib/tax-id";
 
 type TabType = "orders" | "addresses" | "profile" | "security" | "affiliate" | "coupons" | "messages";
 // Akordiyon bölüm anahtarları (tek akordiyon; üst menü yok)
@@ -616,6 +617,7 @@ function AccountPageInner() {
       if (!addressForm.tax_office.trim()) { siteAlert("Lütfen vergi dairesini girin."); return; }
       const vkn = addressForm.tax_number.replace(/\D/g, "");
       if (vkn.length !== 10 && vkn.length !== 11) { siteAlert("Vergi numarası 10 (VKN) veya 11 (TCKN) haneli olmalıdır."); return; }
+      if (vkn.length === 11 && !isValidTckn(vkn)) { siteAlert("TC kimlik numarası geçerli görünmüyor — rakamları kontrol eder misin?"); return; }
     }
 
     // Kurumsal değilse şirket/vergi alanlarını boşalt (tutarlılık için)
@@ -1218,13 +1220,13 @@ function AccountPageInner() {
                                 checked={addressForm.is_corporate}
                                 onChange={e => setAddressForm({...addressForm, is_corporate: e.target.checked})}
                               />
-                              <label htmlFor="is_corporate" className="text-sm font-bold text-slate-700 select-none cursor-pointer">Kurumsal Fatura (şirket adına)</label>
+                              <label htmlFor="is_corporate" className="text-sm font-bold text-slate-700 select-none cursor-pointer">Şirket / şahıs şirketi adına fatura</label>
                            </div>
 
                            {addressForm.is_corporate && (
                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2">
                                <div className="space-y-2 md:col-span-2">
-                                 <label className="text-xs font-bold uppercase text-slate-500 px-1">Şirket Ünvanı</label>
+                                 <label className="text-xs font-bold uppercase text-slate-500 px-1">Ünvan (şahıs şirketinde ad soyad / işletme adı)</label>
                                  <Input value={addressForm.company_name} onChange={e => setAddressForm({...addressForm, company_name: e.target.value})} placeholder="Örn: Şirketiniz Tic. Ltd. Şti." className="h-12" />
                                </div>
                                <div className="space-y-2">
@@ -1296,7 +1298,7 @@ function AccountPageInner() {
                              {addr.is_corporate && (
                                <div className="text-xs bg-slate-100 rounded-lg px-3 py-2 mb-2 space-y-0.5">
                                  <p className="font-bold text-slate-800">{addr.company_name}</p>
-                                 <p className="text-slate-500">V.D.: {addr.tax_office} · VKN: <span className="font-mono">{addr.tax_number}</span></p>
+                                 <p className="text-slate-500">V.D.: {addr.tax_office} · {taxIdLabel(addr.tax_number)}: <span className="font-mono">{addr.tax_number}</span></p>
                                </div>
                              )}
                              <p className="flex items-center gap-2 text-slate-400 italic text-xs"><Box size={12} /> {addr.phone}</p>

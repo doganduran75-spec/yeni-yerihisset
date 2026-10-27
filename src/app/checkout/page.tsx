@@ -40,6 +40,7 @@ import CheckoutStepper from "@/components/CheckoutStepper";
 import { track } from "@/lib/track";
 import { getAdContext } from "@/lib/ad-context";
 import { reportClientError } from "@/lib/report-error";
+import { taxIdLabel } from "@/lib/tax-id";
 
 function getCookie(name: string): string | null {
   if (typeof document === "undefined") return null;
@@ -1019,7 +1020,7 @@ export default function CheckoutPage() {
                             </div>
                             <p className="font-black text-slate-900 text-md italic uppercase">{addr.first_name} {addr.last_name}</p>
                             {addr.is_corporate && (
-                              <p className="text-[11px] text-blue-700 font-bold mt-1 line-clamp-1">🏢 {addr.company_name} · VKN {addr.tax_number}</p>
+                              <p className="text-[11px] text-blue-700 font-bold mt-1 line-clamp-1">🏢 {addr.company_name} · {taxIdLabel(addr.tax_number)} {addr.tax_number}</p>
                             )}
                             <p className="text-xs text-slate-500 mt-2 font-medium line-clamp-1">{addr.address_detail}</p>
                             {/* Adresi düzenle → Hesabım > Adreslerim (kaydedince checkout'a döner) */}
@@ -1039,7 +1040,7 @@ export default function CheckoutPage() {
                        >
                          <Plus size={24} />
                          <span className="text-xs font-black uppercase tracking-widest">Yeni fatura adresi ekle</span>
-                         <span className="text-[11px] font-medium text-slate-400">Kurumsal fatura için de buradan</span>
+                         <span className="text-[11px] font-medium text-slate-400">Şirket / şahıs şirketi faturası için de buradan</span>
                        </Link>
                     </div>
                   )}
