@@ -34,7 +34,10 @@ export async function getServerHealth(sb: any): Promise<ServerHealth> {
     if (ageMin > RUN_STALE_MIN) {
       checks.push({ key: "health_run", label: "Sağlık kontrolü", status: "fail", value: `son çalışma ${ago(run.created_at)}`, hint: "Sunucudaki kontrol durmuş: sunucu kapalı olabilir ya da cron çalışmıyor." });
     }
-    for (const c of (run.checks as HealthCheck[]) || []) checks.push(c);
+    // "Evet, bendim" denen yeni-IP SSH girişleri gizli (server_health_acks; panel şeridindeki düğme)
+    const { data: acks } = await sb.from("server_health_acks").select("key").like("key", "ssh_new_ip:%");
+    const acked = new Set(((acks as any[]) || []).map((a) => a.key));
+    for (const c of (run.checks as HealthCheck[]) || []) if (!acked.has(c.key)) checks.push(c);
   }
 
   // 2) Yedek
