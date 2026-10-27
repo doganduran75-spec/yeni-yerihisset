@@ -372,7 +372,7 @@ export default function StockNotificationsPage() {
           </h2>
           <p className="text-muted-foreground">
             Stok gelince haber bekleyen kişiler. Haber verdikçe &quot;Haber Verdim&quot; ile kapatın.
-            <span className="block text-xs mt-0.5">Durum <b>Bekliyor</b> = henüz haber verilmedi · <b>Bildirildi</b> = haber verildi (tamamlandı).</span>
+            <span className="block text-xs mt-0.5">Durum <b>Stok bekleniyor</b> = ürün henüz yok · <b>Stok geldi — haber ver</b> = e-postasız kişiye elden haber ver · <b>Bildirildi</b> = haber verildi (tamamlandı).</span>
           </p>
         </div>
         <div className="flex gap-2">
@@ -548,9 +548,16 @@ export default function StockNotificationsPage() {
                     </TableCell>
                     <TableCell>
                       {n.status === "pending" ? (
-                        <Badge className="bg-amber-100 text-amber-700 border-none hover:bg-amber-100">
-                          Bekliyor
-                        </Badge>
+                        // Bekliyor: stok yok (henüz yapılacak bir şey yok) · Stok geldi: e-postasızsa ELDEN haber ver
+                        (n.stock ?? 0) > 0 ? (
+                          <Badge className="bg-green-100 text-green-800 border-none hover:bg-green-100">
+                            {n.has_email ? "Stok geldi" : "Stok geldi — haber ver"}
+                          </Badge>
+                        ) : (
+                          <Badge className="bg-amber-100 text-amber-700 border-none hover:bg-amber-100">
+                            Stok bekleniyor
+                          </Badge>
+                        )
                       ) : (
                         <Badge className="bg-green-100 text-green-700 border-none hover:bg-green-100">
                           Bildirildi

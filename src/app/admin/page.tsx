@@ -68,11 +68,11 @@ export default function AdminDashboard() {
         .filter((o) => o.step.needsAction);
       setOpenOrders(todo as OpenOrder[]);
 
-      // Manuel stok uyarısı: e-postası olmayan (Instagram/telefon) bekleyen
-      // stok bildirimleri → stok gelince ELDEN bilgilendirilmeli (auto e-posta yok)
+      // Manuel stok uyarısı: e-postası olmayan (Instagram/telefon) bekleyen stok bildirimleri → ELDEN bilgilendirilmeli
+      // (auto e-posta yok). Yalnız istenen numara / ürün STOĞA GİRDİYSE uyarı (stok yokken "haber ver" demesin)
       const { data: snData } = await (supabase as any)
         .from("stock_notifications")
-        .select("id, email, phone, instagram, status, products(title), contacts(full_name, instagram_handle, phone, email)")
+        .select("id, email, phone, instagram, status, variant_id, products(title, stock), product_variants(stock), contacts(full_name, instagram_handle, phone, email)")
         .eq("status", "pending")
         .order("created_at", { ascending: false })
         .limit(40);
@@ -81,7 +81,8 @@ export default function AdminDashboard() {
           const email = n.email || n.contacts?.email;
           const ig = n.instagram || n.contacts?.instagram_handle;
           const ph = n.phone || n.contacts?.phone;
-          return !email && (ig || ph);
+          const inStock = n.variant_id ? Number(n.product_variants?.stock ?? 0) > 0 : Number(n.products?.stock ?? 0) > 0;
+          return !email && (ig || ph) && inStock;
         })
         .map((n) => {
           const ig = n.instagram || n.contacts?.instagram_handle;
