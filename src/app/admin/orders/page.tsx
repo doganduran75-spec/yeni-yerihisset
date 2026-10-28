@@ -320,6 +320,13 @@ export default function OrdersPage() {
   const [fRet, setFRet] = useState(() => searchParams.get("iade") || "all"); // iade/iptal hazır filtreleri (panodan ?iade=return_expected)
   const [showAbandoned, setShowAbandoned] = useState(false); // yarım kalan kart denemelerini göster
   const [fTodo, setFTodo] = useState(() => searchParams.get("todo") === "1"); // "Bekleyen işlerim" (order-next-step); panodan ?todo=1
+  // Panodan gelen hazır filtre (?iade=…, ?todo=1): sayfa açıkken ya da ilk çizimde parametre geç gelirse de uygula
+  useEffect(() => {
+    const iade = searchParams.get("iade");
+    if (iade) { setFRet(iade); setListPage(0); }
+    if (searchParams.get("todo") === "1") setFTodo(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
   const [fMethod, setFMethod] = useState("all");
   const [fChannel, setFChannel] = useState("all"); // sales_channels.code
   const [channels, setChannels] = useState<SalesChannel[]>(CHANNEL_FALLBACK);
