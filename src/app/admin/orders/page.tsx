@@ -317,7 +317,7 @@ export default function OrdersPage() {
   const [fPay, setFPay] = useState("all");
   const [fShip, setFShip] = useState("all");
   const [fInv, setFInv] = useState("all");
-  const [fRet, setFRet] = useState("all"); // iade/iptal hazır filtreleri
+  const [fRet, setFRet] = useState(() => searchParams.get("iade") || "all"); // iade/iptal hazır filtreleri (panodan ?iade=return_expected)
   const [showAbandoned, setShowAbandoned] = useState(false); // yarım kalan kart denemelerini göster
   const [fTodo, setFTodo] = useState(() => searchParams.get("todo") === "1"); // "Bekleyen işlerim" (order-next-step); panodan ?todo=1
   const [fMethod, setFMethod] = useState("all");

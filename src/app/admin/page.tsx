@@ -31,6 +31,7 @@ export default function AdminDashboard() {
   const [msgCount, setMsgCount] = useState(0);         // cevapsız müşteri mesajı (sipariş konuşması)
   const [reviewCount, setReviewCount] = useState(0);   // onay bekleyen yorum
   const [feedbackCount, setFeedbackCount] = useState(0); // bekleyen talep (Talep & Geri Bildirim)
+  const [returnsOpen, setReturnsOpen] = useState(0); // yolda / beklenen iade (açık iade talebi) — takip için, iş değil
   const [searchCount, setSearchCount] = useState(0);   // bakılmamış sonuçsuz arama (30 gün)
   const [stockTasks, setStockTasks] = useState<any[]>([]); // pazaryeri stok görevleri (bekleyen)
   const [loading, setLoading] = useState(true);
@@ -107,11 +108,13 @@ export default function AdminDashboard() {
       setMsgCount([...lastPerOrder.values()].filter((m) => m.sender_role === 'user').length);
 
       // Onay bekleyen yorumlar · bekleyen talepler · bakılmamış sonuçsuz aramalar (yalnız sayı; liste kendi sayfasında)
-      const [rv, fb, nrs] = await Promise.all([
+      const [rv, fb, nrs, rt] = await Promise.all([
         (supabase as any).from("order_reviews").select("id", { count: "exact", head: true }).eq("is_approved", false).is("admin_note", null),
         (supabase as any).from("feedback").select("id", { count: "exact", head: true }).eq("is_handled", false),
         fetchNoResultSearches(30),
+        (supabase as any).from("order_cases").select("id", { count: "exact", head: true }).eq("kind", "return").is("closed_at", null),
       ]);
+      setReturnsOpen(rt.count || 0);
       setReviewCount(rv.count || 0);
       setFeedbackCount(fb.count || 0);
       setSearchCount(nrs.length);
@@ -161,10 +164,12 @@ export default function AdminDashboard() {
               { n: searchCount, label: "Sonuçsuz arama", href: "/admin/feedback#aramalar" },
               { n: stockTasks.length, label: "Pazaryeri stok görevi", href: "/admin/stock-sync" },
               { n: manualAlerts.length, label: "Elle bilgilendirilecek stok talebi", href: "/admin/crm/stock-notifications" },
-            ].map((x) => (
+              // Takip (iş değil): iade kodu gönderildi / müşteri gönderecek — 4 gün gelmezse "Bekleyen sipariş işi"ne de düşer
+              { n: returnsOpen, label: "Yolda olan iade", href: "/admin/orders?iade=return_expected", info: true },
+            ].map((x: { n: number; label: string; href: string; info?: boolean }) => (
               <Link key={x.label} href={x.href} className={`flex items-center justify-between rounded-lg px-2 py-1 hover:bg-slate-50 ${x.n ? "font-semibold text-slate-800" : "text-muted-foreground"}`}>
                 <span>{x.label}</span>
-                <span className={`min-w-[26px] text-center rounded-full px-2 py-0.5 text-xs font-black ${x.n ? "bg-amber-500 text-white" : "bg-slate-100 text-slate-400"}`}>{x.n}</span>
+                <span className={`min-w-[26px] text-center rounded-full px-2 py-0.5 text-xs font-black ${x.n ? (x.info ? "bg-sky-500 text-white" : "bg-amber-500 text-white") : "bg-slate-100 text-slate-400"}`}>{x.n}</span>
               </Link>
             ))}
           </div>
