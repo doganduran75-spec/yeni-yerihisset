@@ -31,7 +31,7 @@ export default function AdminDashboard() {
   const [msgCount, setMsgCount] = useState(0);         // cevapsız müşteri mesajı (sipariş konuşması)
   const [reviewCount, setReviewCount] = useState(0);   // onay bekleyen yorum
   const [feedbackCount, setFeedbackCount] = useState(0); // bekleyen talep (Talep & Geri Bildirim)
-  const [returnsOpen, setReturnsOpen] = useState(0); // yolda / beklenen iade (açık iade talebi) — takip için, iş değil
+  const [returnsOpen, setReturnsOpen] = useState(0); // yoldaki iadeler (kod gönderildi / müşteri gönderiyor) — iş: gelince "İade geldi"
   const [searchCount, setSearchCount] = useState(0);   // bakılmamış sonuçsuz arama (30 gün)
   const [stockTasks, setStockTasks] = useState<any[]>([]); // pazaryeri stok görevleri (bekleyen)
   const [loading, setLoading] = useState(true);
@@ -112,7 +112,7 @@ export default function AdminDashboard() {
         (supabase as any).from("order_reviews").select("id", { count: "exact", head: true }).eq("is_approved", false).is("admin_note", null),
         (supabase as any).from("feedback").select("id", { count: "exact", head: true }).eq("is_handled", false),
         fetchNoResultSearches(30),
-        (supabase as any).from("order_cases").select("id", { count: "exact", head: true }).eq("kind", "return").is("closed_at", null),
+        (supabase as any).from("order_cases").select("id", { count: "exact", head: true }).eq("kind", "return").eq("status", "label_sent").is("closed_at", null),
       ]);
       setReturnsOpen(rt.count || 0);
       setReviewCount(rv.count || 0);
@@ -164,8 +164,8 @@ export default function AdminDashboard() {
               { n: searchCount, label: "Sonuçsuz arama", href: "/admin/feedback#aramalar" },
               { n: stockTasks.length, label: "Pazaryeri stok görevi", href: "/admin/stock-sync" },
               { n: manualAlerts.length, label: "Elle bilgilendirilecek stok talebi", href: "/admin/crm/stock-notifications" },
-              // Takip (iş değil): iade kodu gönderildi / müşteri gönderecek — 4 gün gelmezse "Bekleyen sipariş işi"ne de düşer
-              { n: returnsOpen, label: "Yolda olan iade", href: "/admin/orders?iade=return_expected", info: true },
+              // Yoldaki iadeler (kullanıcı 2026-10-28: iş olarak burada takip; ürün gelince siparişte "İade geldi")
+              { n: returnsOpen, label: "Yolda olan iade", href: "/admin/orders?iade=return_in_transit" },
             ].map((x: { n: number; label: string; href: string; info?: boolean }) => (
               <Link key={x.label} href={x.href} className={`flex items-center justify-between rounded-lg px-2 py-1 hover:bg-slate-50 ${x.n ? "font-semibold text-slate-800" : "text-muted-foreground"}`}>
                 <span>{x.label}</span>

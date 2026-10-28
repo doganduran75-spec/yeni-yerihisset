@@ -51,7 +51,8 @@ export type OrderLike = {
 
 export const TRIAL_DAYS = 14;
 export const UPS_WAIT_DAYS = 5;
-export const RETURN_WAIT_DAYS = 4; // "iade yolda"dan bu kadar gün sonra gelmediyse bekleyen işlere düşer
+export const RETURN_WAIT_DAYS = 4; // "iade yolda"dan bu kadar gün sonra hâlâ gelmediyse sipariş detayında uyarı (kullanıcı 2026-10-28:
+// yoldaki iadeler panodaki "Yolda olan iade" satırında iş olarak takip edilir → "Bekleyen sipariş işi"ne düşmez)
 const daysSince = (iso?: string | null) => (iso ? (Date.now() - new Date(iso).getTime()) / 86400000 : 0);
 
 export type NextStep = {
@@ -189,10 +190,11 @@ function coreNextStep(o: OrderLike): NextStep {
         { key: "return_in_transit", label: "Kod gerekmiyor — iade yolda", kind: "primary" }, close,
       ], needsAction: true };
       const late = daysSince(c.label_sent_at) > RETURN_WAIT_DAYS;
-      return { stage: "İade yolda", hint: upsHint ?? (late ? `${RETURN_WAIT_DAYS} gündür iade gelmedi — müşteriyle görüş.` : "Ürün gelince “İade geldi”."), actions: [
+      // Takip panodaki "Yolda olan iade" satırında (iş olarak) → burada needsAction yok (iki yerde görünmesin)
+      return { stage: "İade yolda", hint: upsHint ?? (late ? `${Math.floor(daysSince(c.label_sent_at))} gündür yolda — gelmediyse müşteriyle görüş.` : "Ürün gelince “İade geldi”."), actions: [
         { key: "return", label: "İade geldi", kind: "danger" },
         { key: "send_label", label: c.return_method === "self" ? "Kargo kodu gönder" : "Kodu değiştir / yeniden gönder", kind: "primary" }, close,
-      ], needsAction: upsLate || late };
+      ], needsAction: false };
     }
     switch (c.status) {
       case "requested": return { stage: "Değişim talebi", hint: "İstenen numarayı gönder.", actions: [{ key: "ship_alt", label: "Alternatifi gönder", kind: "primary" }, close], needsAction: true };

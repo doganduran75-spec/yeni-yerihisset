@@ -941,7 +941,7 @@ Siparişte “Paraşüt — yeniden dene” ile tekrar dene.`, tone: "danger" })
       case "fit_ok": await caseOp(o, { op: "fit_ok" }); return;
       case "return_expected": setReturnFor(o); return;
       case "return_in_transit":
-        if (await siteConfirm({ title: "Kod gerekmiyor mu?", message: "Müşteri ürünü kendisi gönderiyor: sipariş “İade yolda” olur (müşteriye e-posta gitmez). 4 gün içinde gelmezse bekleyen işlere düşer.", confirmText: "İade yolda" })) await caseOp(o, { op: "in_transit" });
+        if (await siteConfirm({ title: "Kod gerekmiyor mu?", message: "Müşteri ürünü kendisi gönderiyor: sipariş “İade yolda” olur (müşteriye e-posta gitmez). Panodaki “Yolda olan iade” satırında görünür.", confirmText: "İade yolda" })) await caseOp(o, { op: "in_transit" });
         return;
       case "case_link": {
         const d = await caseOp(o, { op: "link" }, false);
@@ -1173,6 +1173,7 @@ Siparişte “Paraşüt — yeniden dene” ile tekrar dene.`, tone: "danger" })
         const pay = o.payment_status || "pending";
         const refundedPay = pay === "refunded" || pay === "partial_refund";
         if (fRet === "return_expected" && openCaseOf(o)?.kind !== "return") return false;
+        if (fRet === "return_in_transit" && !(openCaseOf(o)?.kind === "return" && openCaseOf(o)?.status === "label_sent")) return false;
         if (fRet === "exchange_open" && openCaseOf(o)?.kind !== "exchange") return false;
         if (fRet === "returned_unrefunded" && !(o.shipment_status === "returned" && pay === "paid")) return false;
         if (fRet === "refunded_no_return_invoice" && !(refundedPay && (o.invoice_status || "pending") === "invoiced")) return false;
@@ -1318,6 +1319,7 @@ Siparişte “Paraşüt — yeniden dene” ile tekrar dene.`, tone: "danger" })
               <select value={fRet} onChange={(e) => { setFRet(e.target.value); setListPage(0); }} className={selCls}>
                 <option value="all">İade / iptal: tümü</option>
                 <option value="return_expected">İade bekleniyor (talep / yolda)</option>
+                <option value="return_in_transit">Yolda olan iade</option>
                 <option value="exchange_open">Değişimde</option>
                 <option value="returned_unrefunded">İade geldi, ücret iade edilmedi</option>
                 <option value="refunded_no_return_invoice">Ücret iade edildi, iade faturası eksik</option>

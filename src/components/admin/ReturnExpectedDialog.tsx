@@ -2,7 +2,7 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // "İADE GELECEK" (kullanıcı isteği 2026-10-20): müşteri iadeyi telefonla / mesajla bildirdi → yönetici iade talebi
-// açar. Müşteriye e-posta GİTMEZ. "Müşteri kendisi gönderiyor" → doğrudan "iade yolda" (4 gün gelmezse bekleyen işler);
+// açar. Müşteriye e-posta GİTMEZ. "Müşteri kendisi gönderiyor" → doğrudan "iade yolda" (panodaki "Yolda olan iade" satırında takip);
 // "Kargo kodu göndereceğim" → "iade talebi" (sonra İade kodunu gönder). Ürün gelince her zamanki "İade geldi".
 import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
