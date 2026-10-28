@@ -185,6 +185,7 @@ async function main() {
     ["20261149 kupon hatırlatması: kapsam + alt limit (kişi başına tek e-posta)", "SELECT pg_get_function_result('public.coupons_to_remind(int)'::regprocedure) LIKE '%category_ids%'"],
     ["20261150 SSH giriş uyarısı onayı ('Evet, bendim')", "SELECT to_regclass('public.server_health_acks') IS NOT NULL"],
     ["20261151 Hepsiburada paket desisi", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'settings' AND column_name = 'hepsiburada_desi')"],
+    ["20261153 kargoya verilme anı (faturası kesilmemiş takibi)", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'shipped_at') AND EXISTS(SELECT 1 FROM pg_trigger WHERE tgname = 'trg_orders_shipped_at')"],
     ["20261138 kart ödemesi aç / kapa", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'settings' AND column_name = 'card_payment_enabled')"],
     ["20261137 Trendyol sipariş saati (GMT+3)", "SELECT NOT EXISTS(SELECT 1 FROM public.orders WHERE channel = 'trendyol' AND import_source IS NULL AND coalesce(external_raw->>'orderDate', '') ~ '^[0-9]{10,13}$' AND abs(extract(epoch FROM created_at - (to_timestamp((external_raw->>'orderDate')::bigint / 1000.0) - interval '3 hours'))) > 60)"],
     ["20261126 ödeme alınmadan sevkiyat başlamaz", "SELECT EXISTS(SELECT 1 FROM pg_trigger WHERE tgname = 'trg_guard_ship_before_payment')"],

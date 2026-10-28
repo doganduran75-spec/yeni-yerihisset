@@ -10,6 +10,7 @@ import DashboardSummary from "@/components/admin/DashboardSummary";
 import SystemStatusStrip from "@/components/admin/SystemStatusStrip";
 import { fetchNoResultSearches } from "@/components/admin/NoResultSearches";
 import { Loader2, ArrowRight, Clock, PackageOpen } from "lucide-react";
+import { UNINVOICED_SINCE, INVOICE_DAYS } from "@/lib/order-next-step";
 
 type OpenOrder = {
   id: string;
@@ -32,6 +33,7 @@ export default function AdminDashboard() {
   const [reviewCount, setReviewCount] = useState(0);   // onay bekleyen yorum
   const [feedbackCount, setFeedbackCount] = useState(0); // bekleyen talep (Talep & Geri Bildirim)
   const [returnsOpen, setReturnsOpen] = useState(0); // yoldaki iadeler (kod gönderildi / müşteri gönderiyor) — iş: gelince "İade geldi"
+  const [uninvoiced, setUninvoiced] = useState({ n: 0, late: 0 }); // kargolanmış, faturası kesilmemiş (late: 7 günü geçen)
   const [searchCount, setSearchCount] = useState(0);   // bakılmamış sonuçsuz arama (30 gün)
   const [stockTasks, setStockTasks] = useState<any[]>([]); // pazaryeri stok görevleri (bekleyen)
   const [loading, setLoading] = useState(true);
@@ -117,6 +119,13 @@ export default function AdminDashboard() {
       setReturnsOpen(rt.count || 0);
       setReviewCount(rv.count || 0);
       setFeedbackCount(fb.count || 0);
+      // Kargolanmış, faturası kesilmemiş (site + Paraşüt sonrası pazaryeri) · 7 günü geçenler ayrıca
+      const uninvQ = () => (supabase as any).from("orders").select("id", { count: "exact", head: true })
+        .neq("status", "cancelled").in("payment_status", ["paid", "partial_refund"]).in("shipment_status", ["shipped", "delivered"])
+        .or("invoice_status.is.null,invoice_status.eq.pending").is("import_source", null)
+        .or(`channel.is.null,channel.eq.site,created_at.gte.${UNINVOICED_SINCE}`);
+      const [ui, uiLate] = await Promise.all([uninvQ(), uninvQ().lt("shipped_at", new Date(Date.now() - INVOICE_DAYS * 86400000).toISOString())]);
+      setUninvoiced({ n: ui.count || 0, late: uiLate.count || 0 });
       setSearchCount(nrs.length);
     } catch (error) {
       console.error("Dashboard data fetch error:", error);
@@ -166,9 +175,11 @@ export default function AdminDashboard() {
               { n: manualAlerts.length, label: "Elle bilgilendirilecek stok talebi", href: "/admin/crm/stock-notifications" },
               // Yoldaki iadeler (kullanıcı 2026-10-28: iş olarak burada takip; ürün gelince siparişte "İade geldi")
               { n: returnsOpen, label: "Yolda olan iade", href: "/admin/orders?iade=return_in_transit" },
-            ].map((x: { n: number; label: string; href: string; info?: boolean }) => (
+              // Kargolanmış, faturası kesilmemiş — 7 günü geçen varsa kırmızı not (VUK)
+              { n: uninvoiced.n, label: "Faturası kesilmemiş", href: "/admin/orders?iade=uninvoiced_shipped", late: uninvoiced.late },
+            ].map((x: { n: number; label: string; href: string; info?: boolean; late?: number }) => (
               <Link key={x.label} href={x.href} className={`flex items-center justify-between rounded-lg px-2 py-1 hover:bg-slate-50 ${x.n ? "font-semibold text-slate-800" : "text-muted-foreground"}`}>
-                <span>{x.label}</span>
+                <span>{x.label}{x.late ? <span className="ml-1.5 text-[11px] font-bold text-red-600">· {x.late} tanesi {INVOICE_DAYS} günü geçti</span> : null}</span>
                 <span className={`min-w-[26px] text-center rounded-full px-2 py-0.5 text-xs font-black ${x.n ? (x.info ? "bg-sky-500 text-white" : "bg-amber-500 text-white") : "bg-slate-100 text-slate-400"}`}>{x.n}</span>
               </Link>
             ))}

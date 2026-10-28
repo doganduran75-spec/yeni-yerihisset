@@ -42,6 +42,7 @@ export type OrderLike = {
   mp_picking_error?: string | null;
   cargo_tracking_number?: string | null;
   mp_package_number?: string | null;       // Hepsiburada paket no (paketlenince)
+  shipped_at?: string | null;              // kargoya verildiği an (fatura 7 gün takibi)
   order_items?: { quantity: number; returned_qty?: number | null }[] | null;
   created_at?: string | null;
   fit_status?: string | null;      // trial · ok · exchange · return
@@ -51,6 +52,10 @@ export type OrderLike = {
 
 export const TRIAL_DAYS = 14;
 export const UPS_WAIT_DAYS = 5;
+// Kargolanmış ama faturası kesilmemiş (kullanıcı 2026-10-28). Pazaryerinde eski firmanın faturaladığı geçmiş siparişler
+// (Paraşüt'e geçiş 2026-10-21 öncesi) sayılmaz. VUK: teslimden (kargoya verilişten) itibaren 7 gün.
+export const UNINVOICED_SINCE = "2026-10-21";
+export const INVOICE_DAYS = 7;
 export const RETURN_WAIT_DAYS = 4; // "iade yolda"dan bu kadar gün sonra hâlâ gelmediyse sipariş detayında uyarı (kullanıcı 2026-10-28:
 // yoldaki iadeler panodaki "Yolda olan iade" satırında iş olarak takip edilir → "Bekleyen sipariş işi"ne düşmez)
 const daysSince = (iso?: string | null) => (iso ? (Date.now() - new Date(iso).getTime()) / 86400000 : 0);

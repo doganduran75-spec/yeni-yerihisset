@@ -1185,6 +1185,7 @@ export default {
         ok(p.status === 200 && !!o1.packed_at && o1.shipment_status === "preparing", "Paket hazır: kargo bekliyor, sipariş henüz 'Kargoda' değil (e-posta gitmez)", `${why(p)} → ${o1.shipment_status}, packed_at ${o1.packed_at}`);
         const k = await flow(F.admin.token, { op: "picked_up", ids: [id] });
         ok(k.status === 200 && (k.json?.shipped || []).includes(id) && ord(id).shipment_status === "shipped", "Kurye aldı: sipariş kargoda", `${why(k)} → ${ord(id).shipment_status}`);
+        ok(one(`SELECT shipped_at IS NOT NULL FROM public.orders WHERE id = ${lit(id)}`) === "t", "Kargoya verilme anı kaydedildi (fatura 7 gün takibi)", "shipped_at boş");
         const hbx = await flow(F.admin.token, { op: "hb_package", orderId: id });
         ok(hbx.status === 502 && /Hepsiburada/.test(hbx.json?.error || ""), "Hepsiburada paketleme yalnız Hepsiburada siparişinde", why(hbx));
         const ds = await api("/api/admin/orders/labels", { token: F.admin.token, body: { getSize: true } });
