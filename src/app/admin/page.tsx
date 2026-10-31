@@ -122,9 +122,11 @@ export default function AdminDashboard() {
       // Kargolanmış, faturası kesilmemiş (site + Paraşüt sonrası pazaryeri) · 7 günü geçenler ayrıca
       const uninvQ = () => (supabase as any).from("orders").select("id", { count: "exact", head: true })
         .neq("status", "cancelled").in("payment_status", ["paid", "partial_refund"]).in("shipment_status", ["shipped", "delivered"])
-        .eq("invoice_status", "pending").is("import_source", null) // varsayılan 'pending' (null kayıt yok)
-        // Tek "or" (PostgREST aynı istekte iki or= almıyor → sayı hata verip 0 görünüyordu)
-        .or(`channel.eq.site,created_at.gte.${UNINVOICED_SINCE}`);
+        .is("import_source", null)
+        // Fatura durumu boş (null) ya da 'pending' + (site ya da Paraşüt'e geçiş sonrası pazaryeri) — TEK "or" içinde
+        // (liste boş durumu da "Bekleniyor" sayıyor; pano yalnız 'pending' sayınca 0 görünüyordu)
+        .or([`and(invoice_status.is.null,channel.eq.site)`, `and(invoice_status.is.null,created_at.gte.${UNINVOICED_SINCE})`,
+          `and(invoice_status.eq.pending,channel.eq.site)`, `and(invoice_status.eq.pending,created_at.gte.${UNINVOICED_SINCE})`].join(","));
       const [ui, uiLate] = await Promise.all([uninvQ(), uninvQ().lt("shipped_at", new Date(Date.now() - INVOICE_DAYS * 86400000).toISOString())]);
       if (ui.error) console.error("Faturası kesilmemiş sayısı okunamadı:", ui.error.message);
       setUninvoiced({ n: ui.count || 0, late: uiLate.count || 0 });
