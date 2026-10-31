@@ -26,7 +26,7 @@ const norm = (s: unknown) => String(s ?? "").toLocaleLowerCase("tr").replace(/[^
 const parse = (v: any) => { try { return typeof v === "string" ? JSON.parse(v) : v || {}; } catch { return {}; } };
 
 const ORDER_COLS = `id, order_number, external_order_number, channel, status, created_at, payment_method, payment_status, invoice_status,
-  total_amount, shipping_cost, coupon_discount, credit_used, billing_address, shipping_address, customer_name, customer_email, customer_phone,
+  total_amount, shipping_cost, coupon_discount, credit_used, import_source, billing_address, shipping_address, customer_name, customer_email, customer_phone,
   cargo_provider, kargonomi_provider, shipping_method, parasut_invoice_id, parasut_status, parasut_job_id, parasut_e_doc_id, parasut_e_doc_type,
   parasut_paid, parasut_diff_ok, refunded_amount, profiles(email, first_name, last_name, phone),
   order_items(id, quantity, returned_qty, unit_price, product_id, variant_id, variant_name, title, sku, barcode, products(title, parasut_product_id), product_variants(parasut_product_id))`;
@@ -69,8 +69,10 @@ async function prepare(sb: Sb, o: any) {
     lines.push({ productId: pid, vat: v, qty, gross: r2(Number(i.unit_price) * qty), title });
   }
 
-  // Kupon + kredi (yalnız site) → ürün kalemlerine orantılı; kuruş farkı en büyük kaleme
-  const disc = channel === "site" ? r2(Number(o.coupon_discount || 0) + Number(o.credit_used || 0)) : 0;
+  // Kupon + kredi (yalnız site) → ürün kalemlerine orantılı; kuruş farkı en büyük kaleme.
+  // Eski siteden (WooCommerce) aktarılan siparişte satır fiyatı ZATEN kupon düşülmüş gelir → ikinci kez düşülmez
+  // (2026-10-31: "Kalemler 2799.2 TL sipariş tutarıyla 3149.1 TL tutmuyor").
+  const disc = channel === "site" && !o.import_source ? r2(Number(o.coupon_discount || 0) + Number(o.credit_used || 0)) : 0;
   const base = lines.reduce((a, l) => a + l.gross, 0);
   if (disc > 0 && base > 0) {
     let left = disc;

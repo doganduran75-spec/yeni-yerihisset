@@ -1938,7 +1938,10 @@ ${courierQueue.slice(0, 20).map((o) => orderLabel(o)).join(", ")}${courierQueue.
                             <span>Kargo{o.shipping_method ? <span className="text-muted-foreground"> · {o.shipping_method}</span> : null}</span>
                             <span className={ship === 0 ? "text-green-600 font-semibold" : ""}>{ship === 0 ? "Ücretsiz" : fmt(ship)}</span>
                           </div>
-                          {coupon > 0 && <div className="flex justify-between"><span>Kupon indirimi</span><span className="text-red-600">−{fmt(coupon)}</span></div>}
+                          {coupon > 0 && (o.import_source
+                            // Eski siteden aktarılan: satır fiyatları kupon düşülmüş geldi → toplamdan ayrıca düşülmez
+                            ? <div className="flex justify-between text-xs text-muted-foreground"><span>Kupon indirimi (ürün fiyatlarına yansımış)</span><span>{fmt(coupon)}</span></div>
+                            : <div className="flex justify-between"><span>Kupon indirimi</span><span className="text-red-600">−{fmt(coupon)}</span></div>)}
                           {credit > 0 && <div className="flex justify-between"><span>YeriHisset Kredisi</span><span className="text-red-600">−{fmt(credit)}</span></div>}
                           {o.affiliate_profiles?.code && (
                             <div className="flex justify-between text-xs pt-1"><span>Satış ortağı (komisyon)</span><span className="font-mono font-semibold text-olive-700">{o.affiliate_profiles.code}</span></div>
