@@ -1201,7 +1201,8 @@ Siparişte “Paraşüt — yeniden dene” ile tekrar dene.`, tone: "danger" })
       if (fRet !== "all") {
         const pay = o.payment_status || "pending";
         const refundedPay = pay === "refunded" || pay === "partial_refund";
-        if (fRet === "return_expected" && openCaseOf(o)?.kind !== "return") return false;
+        // Trendyol iade talebi de (yolda / depoya ulaştı / onaylandı — src/lib/marketplace/trendyol-claims.ts)
+        if (fRet === "return_expected" && openCaseOf(o)?.kind !== "return" && !["in_transit", "arrived", "accepted"].includes(o.mp_claim_state || "")) return false;
         if (fRet === "return_in_transit" && !(openCaseOf(o)?.kind === "return" && openCaseOf(o)?.status === "label_sent") && o.mp_claim_state !== "in_transit") return false;
         if (fRet === "exchange_open" && openCaseOf(o)?.kind !== "exchange") return false;
         if (fRet === "returned_unrefunded" && !(o.shipment_status === "returned" && pay === "paid")) return false;
@@ -1513,6 +1514,11 @@ ${courierQueue.slice(0, 20).map((o) => orderLabel(o)).join(", ")}${courierQueue.
                             {openCaseOf(order) && (
                               <span className={`text-[10px] font-bold rounded px-1.5 py-0.5 w-fit ${openCaseOf(order).kind === "return" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}>
                                 {openCaseOf(order).kind === "return" ? (openCaseOf(order).status === "requested" ? "İade talebi" : "İade bekleniyor") : "Değişimde"}
+                              </span>
+                            )}
+                            {!openCaseOf(order) && ["in_transit", "arrived", "accepted"].includes(order.mp_claim_state || "") && (
+                              <span className="text-[10px] font-bold rounded px-1.5 py-0.5 w-fit bg-red-50 text-red-700">
+                                {order.mp_claim_state === "in_transit" ? "İade bekleniyor" : "İade geldi — onayla"}
                               </span>
                             )}
                             {(order.kargonomi_tracking_code || order.cargo_tracking_number) && (
