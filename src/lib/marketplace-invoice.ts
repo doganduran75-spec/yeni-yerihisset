@@ -77,14 +77,15 @@ export async function pushInvoiceToMarketplace(sb: Sb, orderId: string): Promise
   return done(`Fatura ${label}'a yüklendi`);
 }
 
-/** Trendyol paketini "İşleme al" (Picking). Paket zaten ilerlemişse (Created değil) dokunmaz, yapıldı sayar. */
+/** Trendyol paketini "İşleme al" (Picking). Paket zaten ilerlemişse (Created / ReadyToShip değil) dokunmaz, yapıldı sayar. */
 export async function trendyolPicking(sb: Sb, orderId: string): Promise<{ ok: boolean; skipped?: boolean }> {
   const s = sb as any;
   const { data: o } = await s.from("orders").select("id, channel, external_package_id, external_status, mp_picking_at").eq("id", orderId).maybeSingle();
   if (!o || o.channel !== "trendyol") throw new MarketplaceInvoiceError(400, "Yalnız Trendyol siparişi.");
   if (o.mp_picking_at) return { ok: true, skipped: true };
   const mark = (fields: Record<string, unknown>) => s.from("orders").update(fields).eq("id", orderId);
-  if (o.external_status && o.external_status !== "Created") {
+  // ReadyToShip: Trendyol panelinde hâlâ "Yeni" (kullanıcı 2026-10-31: işleme alınmamıştı, biz "yapıldı" saymıştık)
+  if (o.external_status && !["Created", "ReadyToShip"].includes(o.external_status)) {
     await mark({ mp_picking_at: new Date().toISOString(), mp_picking_error: null });
     return { ok: true, skipped: true };
   }
