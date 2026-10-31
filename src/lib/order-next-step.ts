@@ -52,8 +52,8 @@ export type OrderLike = {
 
 export const TRIAL_DAYS = 14;
 export const UPS_WAIT_DAYS = 5;
-// Kargolanmış ama faturası kesilmemiş (kullanıcı 2026-10-28). Pazaryerinde eski firmanın faturaladığı geçmiş siparişler
-// (Paraşüt'e geçiş 2026-10-21 öncesi) sayılmaz. VUK: teslimden (kargoya verilişten) itibaren 7 gün.
+// Kargolanmış ama faturası kesilmemiş (kullanıcı 2026-10-28). Paraşüt'e geçiş (2026-10-21) öncesinin pazaryeri ve eski siteden
+// aktarılan siparişleri sayılmaz (eski düzende faturalandı); sonrasında eski siteden aktarılanlar DAHİL. VUK: teslimden (kargoya verilişten) itibaren 7 gün.
 export const UNINVOICED_SINCE = "2026-10-21";
 export const INVOICE_DAYS = 7;
 export const RETURN_WAIT_DAYS = 4; // "iade yolda"dan bu kadar gün sonra hâlâ gelmediyse sipariş detayında uyarı (kullanıcı 2026-10-28:

@@ -88,8 +88,8 @@ async function shipFlowApi(body: Record<string, unknown>) {
 const openCaseOf = (o: any) => ((o?.order_cases as any[]) || []).find((c) => !c.closed_at) ?? null;
 // Kargolanmış, faturası kesilmemiş (panodaki "Faturası kesilmemiş" ile aynı kural)
 const isUninvoicedShipped = (o: any) => o?.status !== "cancelled" && ["paid", "partial_refund"].includes(o?.payment_status)
-  && ["shipped", "delivered"].includes(o?.shipment_status) && (o?.invoice_status || "pending") === "pending" && !o?.import_source
-  && ((o?.channel || "site") === "site" || String(o?.created_at || "") >= UNINVOICED_SINCE);
+  && ["shipped", "delivered"].includes(o?.shipment_status) && (o?.invoice_status || "pending") === "pending"
+  && (((o?.channel || "site") === "site" && !o?.import_source) || String(o?.created_at || "") >= UNINVOICED_SINCE); // eski siteden aktarılan yeni siparişler dahil
 const nx = (o: any) => orderNextStep({ ...o, open_case: openCaseOf(o) });
 
 // Siparişin geldiği reklam/kampanya (orders.attribution.source — src/lib/ad-context.ts)
