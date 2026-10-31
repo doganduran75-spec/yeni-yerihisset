@@ -81,8 +81,7 @@ export function orderNextStep(o: OrderLike): NextStep {
   // (ör. iade geldi → iade faturası kesilecek) → bekleyen işlerde kalır.
   const live = o.shipment_status === "returned" || Number(o.refunded_amount || 0) > 0 || !!o.open_case
     || !!o.order_items?.some((i) => Number(i.returned_qty || 0) > 0);
-  if (o.import_source && !live && (SHIPPED.includes(o.shipment_status || "waiting") || daysSince(o.created_at) > 30)) return { ...r, needsAction: false };
-  // Paraşüt faturası kesiliyor / hata verdi (fatura adımı sırasında)
+  // Paraşüt faturası kesiliyor / hata verdi (fatura adımı sırasında) — eski siteden aktarılan siparişte de görünür
   const ps = o.parasut_status;
   if (ps && ps !== "done" && (o.invoice_status || "pending") === "pending" && r.actions.some((a) => a.key === "invoice")) {
     return ps === "error"
@@ -91,6 +90,7 @@ export function orderNextStep(o: OrderLike): NextStep {
       : { ...r, stage: "Fatura kesiliyor (Paraşüt)", hint: "e-Arşiv / e-Fatura hazırlanıyor; dakikada bir kontrol edilir, bitince “Faturalandı” olur.",
           actions: [{ key: "invoice_parasut", label: "Paraşüt durumu", kind: "primary" }], needsAction: false };
   }
+  if (o.import_source && !live && (SHIPPED.includes(o.shipment_status || "waiting") || daysSince(o.created_at) > 30)) return { ...r, needsAction: false };
   return r;
 }
 

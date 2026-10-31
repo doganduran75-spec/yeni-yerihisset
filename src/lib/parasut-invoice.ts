@@ -320,7 +320,10 @@ export async function checkInvoice(sb: Sb, orderId: string) {
   if (!doc) return { status: o.parasut_status };
   const type = doc.type === "e_invoices" ? "e_invoice" : "e_archive";
   const invoiceNo = doc.attributes?.invoice_number || inv?.data?.attributes?.invoice_no || null;
-  await save(sb, orderId, { parasut_e_doc_id: String(doc.id), parasut_e_doc_type: type, parasut_invoice_no: invoiceNo, parasut_status: "pdf_pending" });
+  // e-belge oluştu (numara geldi) = fatura RESMÎ → sipariş hemen "Faturalandı" (kullanıcı 2026-10-31: numara geldiği hâlde
+  // "Bekleniyor" kalıyordu; PDF gecikirse / inemezse takılıyordu). PDF + pazaryerine yükleme + e-posta arkadan (cron).
+  await save(sb, orderId, { parasut_e_doc_id: String(doc.id), parasut_e_doc_type: type, parasut_invoice_no: invoiceNo, parasut_status: "pdf_pending",
+    ...(o.invoice_status && o.invoice_status !== "pending" ? {} : { invoice_status: "invoiced", parasut_invoiced_at: new Date().toISOString() }) });
 
   // PDF (204 = henüz yok; bağlantı 1 saat geçerli → indirip özel depoya)
   const pdf = await parasutCall(sb, "GET", `/${type === "e_invoice" ? "e_invoices" : "e_archives"}/${doc.id}/pdf`);

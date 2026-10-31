@@ -1518,6 +1518,17 @@ ${courierQueue.slice(0, 20).map((o) => orderLabel(o)).join(", ")}${courierQueue.
                           <div className="flex flex-col gap-1">
                             <StatusMenu label={invoiceLabels[iStatus] ?? iStatus} color={invoiceColors[iStatus] ?? invoiceColors.pending}
                               options={INVOICE_OPTIONS} current={iStatus} onSelect={(v) => selectInvoice(order, v)} />
+                            {/* Paraşüt aşaması: kesiliyor / PDF bekleniyor / hata (hangi siparişte işlem başladı görünsün) */}
+                            {(() => {
+                              const ps = (order as any).parasut_status as string | null;
+                              if (!ps || ps === "done") return null;
+                              const m: Record<string, [string, string]> = {
+                                created: ["Faturalanıyor", "bg-sky-50 text-sky-700"], job_pending: ["Faturalanıyor", "bg-sky-50 text-sky-700"],
+                                pdf_pending: ["PDF bekleniyor", "bg-slate-50 text-slate-500"], error: ["Paraşüt hatası", "bg-red-50 text-red-700"],
+                              };
+                              const [t, c] = m[ps] || [ps, "bg-slate-50 text-slate-500"];
+                              return <span title={(order as any).parasut_error || ""} className={`text-[10px] font-bold rounded px-1.5 py-0.5 w-fit ${c}`}>{t}</span>;
+                            })()}
                             {isUninvoicedShipped(order) && order.shipped_at && (() => {
                               const d = Math.floor((Date.now() - new Date(order.shipped_at).getTime()) / 86400000);
                               return <span className={`text-[10px] font-bold rounded px-1.5 py-0.5 w-fit ${d >= INVOICE_DAYS ? "bg-red-50 text-red-700" : "bg-slate-50 text-slate-500"}`}>kargodan {d} gün</span>;
