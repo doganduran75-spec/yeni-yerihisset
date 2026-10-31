@@ -10,7 +10,8 @@ import { getAuthUserFromRequest } from "@/lib/auth-from-request";
 // Adet = bu siparişlerdeki satılan ürün adedi (ücretsiz hediye hariç).
 // Dönemler Türkiye saatine göre (UTC+3, yaz saati yok).
 
-type Bucket = { revenue: number; orders: number; units: number; byChannel: Record<string, number> };
+// İade olan satış (kullanıcı 2026-10-31): ciro dışında kalan iade tutarı (refunded_amount), kanal kırılımıyla.
+type Bucket = { revenue: number; orders: number; units: number; byChannel: Record<string, number>; returns: number; returnsByChannel: Record<string, number> };
 
 function trNow() {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Istanbul", year: "numeric", month: "2-digit" })
@@ -57,11 +58,12 @@ export async function GET(req: NextRequest) {
     .order("created_at", { ascending: true })
     .range(from, to));
 
-  const empty = (): Bucket => ({ revenue: 0, orders: 0, units: 0, byChannel: {} });
+  const empty = (): Bucket => ({ revenue: 0, orders: 0, units: 0, byChannel: {}, returns: 0, returnsByChannel: {} });
   const sales = { year: empty(), month: empty(), lastMonth: empty() };
   for (const o of orders) {
     const t = new Date(o.created_at);
-    const revenue = Math.max(0, Number(o.total_amount || 0) - Number(o.refunded_amount || 0));
+    const refunded = Math.min(Number(o.refunded_amount || 0), Number(o.total_amount || 0));
+    const revenue = Math.max(0, Number(o.total_amount || 0) - refunded);
     const units = ((o.order_items as any[]) || [])
       .filter((i) => Number(i.unit_price) > 0)
       .reduce((a, i) => a + Number(i.quantity || 0), 0);
@@ -69,6 +71,7 @@ export async function GET(req: NextRequest) {
     const add = (b: Bucket) => {
       b.revenue += revenue; b.orders += 1; b.units += units;
       b.byChannel[ch] = (b.byChannel[ch] ?? 0) + revenue; // ciro kanal kırılımı (site / trendyol / hepsiburada)
+      if (refunded > 0) { b.returns += refunded; b.returnsByChannel[ch] = (b.returnsByChannel[ch] ?? 0) + refunded; }
     };
     if (t >= yearStart) add(sales.year);
     if (t >= monthStart) add(sales.month);
@@ -77,6 +80,8 @@ export async function GET(req: NextRequest) {
   for (const b of Object.values(sales)) {
     b.revenue = Math.round(b.revenue * 100) / 100;
     for (const k of Object.keys(b.byChannel)) b.byChannel[k] = Math.round(b.byChannel[k] * 100) / 100;
+    b.returns = Math.round(b.returns * 100) / 100;
+    for (const k of Object.keys(b.returnsByChannel)) b.returnsByChannel[k] = Math.round(b.returnsByChannel[k] * 100) / 100;
   }
 
   // ── Kişiler (hesabını kapatanlar hariç) ──

@@ -60,9 +60,19 @@ export default function DashboardSummary({ children }: { children?: ReactNode })
         label: `↳ ${chList.find((c) => c.code === k)?.label ?? k}`, fmt: (b: any) => tl(b.byChannel?.[k] ?? 0), sub: true,
       }))
     : [];
+  // İade olan satış (ciroya dahil değil) + iadesi olan kanallar
+  const retChannels = [...new Set(cols.flatMap((c) => Object.keys(d.sales[c.key]?.returnsByChannel ?? {})))];
+  const retOrdered = [...chList.map((c) => c.code).filter((k) => retChannels.includes(k)), ...retChannels.filter((k) => !chList.some((c) => c.code === k))];
+  const returnRows = cols.some((c) => Number(d.sales[c.key]?.returns || 0) > 0)
+    ? [
+        { label: "İade olan satış", fmt: (b: any) => tl(b.returns ?? 0) },
+        ...retOrdered.map((k) => ({ label: `↳ ${chList.find((c) => c.code === k)?.label ?? k}`, fmt: (b: any) => tl(b.returnsByChannel?.[k] ?? 0), sub: true })),
+      ]
+    : [];
   const rows: { label: string; fmt: (b: any) => string; strong?: boolean; sub?: boolean }[] = [
     { label: "Toplam ciro", fmt: (b: any) => tl(b.revenue), strong: true },
     ...channelRows,
+    ...returnRows,
     { label: "Sipariş", fmt: (b: any) => num(b.orders) },
     { label: "Satılan adet", fmt: (b: any) => num(b.units) },
   ];
@@ -98,7 +108,7 @@ export default function DashboardSummary({ children }: { children?: ReactNode })
             </tbody>
           </table>
           <p className="text-[10px] text-slate-400 mt-1">
-            Ödemesi alınmış, iptal edilmemiş siparişler · ciro kargo dahil, iadeler düşülmüş · adet ücretsiz hediyeler hariç
+            Ödemesi alınmış, iptal edilmemiş siparişler · ciro kargo dahil, iadeler düşülmüş (iade olan satış ayrıca gösterilir) · adet ücretsiz hediyeler hariç
           </p>
         </CardContent>
       </Card>

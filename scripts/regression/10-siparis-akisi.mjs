@@ -1227,6 +1227,9 @@ export default {
           "İade talebi 'işlendi' oldu (sıradaki adım: iade faturası / bekleyen iş kalmaz)", `durum ${o.mp_claim_state}`);
         const c2 = await flow(F.admin.token, { op: "mp_claim", orderId: id, restock: false });
         ok(c2.status === 400 && Number(ord(id).refunded_amount) === Number(o.refunded_amount), "Aynı iade ikinci kez işlenmiyor (ciro iki kez düşmez)", why(c2));
+        const ds = await api("/api/admin/dashboard-summary", { method: "GET", token: F.admin.token });
+        ok(ds.status === 200 && Number(ds.json?.sales?.month?.returnsByChannel?.trendyol || 0) >= unit && Number(ds.json?.sales?.month?.returns || 0) >= unit,
+          "Satış özeti: 'İade olan satış' Trendyol iadesini kanal kırılımıyla gösteriyor", `${why(ds)} → ${JSON.stringify(ds.json?.sales?.month?.returnsByChannel || {})}`);
       });
 
       await part("CRM kampanyası: kitle, kişiye özel süreli kupon, hatırlatma listesi, rapor", async () => {
