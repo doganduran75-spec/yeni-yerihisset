@@ -1193,6 +1193,15 @@ export default {
         ok(Number(ds.json?.hbDesi) >= 1 && dbad.status === 400, "Hepsiburada paket desisi ayarı okunuyor, geçersiz değer reddediliyor", `${why(ds)} / ${why(dbad)}`);
         const k2 = await flow(F.admin.token, { op: "picked_up", ids: [id] });
         ok(k2.status === 200 && !(k2.json?.shipped || []).includes(id), "Kurye aldı ikinci kez: tekrar işlenmiyor (e-posta bir kez)", why(k2));
+        // Eski siteden aktarılan sipariş (attipas kanalı) de paketlenip kuryeye verilebiliyor; paketlemede fatura denenmiyor
+        const r2 = await order([MAIN(1)]);
+        const im = r2.json?.orderId;
+        if (!im) return add("fail", "Aktarılmış sipariş testi için sipariş oluşturulamadı", why(r2));
+        sql(`UPDATE public.orders SET import_source = 'woocommerce', channel = 'attipas', payment_status = 'paid', status = 'processing', shipment_status = 'preparing' WHERE id = ${lit(im)}`);
+        const ip = await flow(F.admin.token, { op: "packed", orderId: im });
+        ok(ip.status === 200 && !!ord(im).packed_at && !ip.json?.invoice, "Aktarılmış sipariş 'Paket hazır' olabiliyor (fatura otomatik denenmiyor)", why(ip));
+        const ik = await flow(F.admin.token, { op: "picked_up", ids: [im] });
+        ok(ik.status === 200 && (ik.json?.shipped || []).includes(im) && ord(im).shipment_status === "shipped", "Aktarılmış sipariş: kurye aldı → kargoda", why(ik));
       });
 
       await part("CRM kampanyası: kitle, kişiye özel süreli kupon, hatırlatma listesi, rapor", async () => {

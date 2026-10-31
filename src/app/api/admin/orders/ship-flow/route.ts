@@ -33,9 +33,11 @@ export async function POST(req: NextRequest) {
       .select("id, channel, import_source, status, payment_status, shipment_status, invoice_status, parasut_status, packed_at")
       .eq("id", orderId).maybeSingle();
     if (!o) return NextResponse.json({ error: "Sipariş bulunamadı" }, { status: 404 });
-    if (o.import_source || o.status === "cancelled" || SHIPPED.includes(o.shipment_status || ""))
-      return NextResponse.json({ error: "Bu sipariş için paket hazırlanamaz (iptal, aktarılmış ya da zaten kargolanmış)" }, { status: 400 });
-    const site = (o.channel || "site") === "site";
+    if (o.status === "cancelled" || SHIPPED.includes(o.shipment_status || ""))
+      return NextResponse.json({ error: "Bu sipariş için paket hazırlanamaz (iptal ya da zaten kargolanmış)" }, { status: 400 });
+    // Eski siteden aktarılan (yerihisset / attipas) sipariş de site akışıyla hazırlanır (kullanıcı 2026-10-31: panel
+    // "Paket hazır" gösteriyor ama reddediliyordu) — pazaryeri gibi paketlemede otomatik fatura yok.
+    const site = (o.channel || "site") === "site" || !!o.import_source;
     if (site && !["paid", "partial_refund"].includes(o.payment_status || ""))
       return NextResponse.json({ error: "Ödemesi alınmamış sipariş hazırlanamaz — önce “Ödeme alındı”." }, { status: 400 });
     if (!o.packed_at) {
@@ -69,7 +71,7 @@ export async function POST(req: NextRequest) {
     const shipped: string[] = [];
     const skipped: { id: string; reason: string }[] = [];
     for (const o of (rows as any[]) || []) {
-      if ((o.channel || "site") !== "site" || o.import_source) { skipped.push({ id: o.id, reason: "pazaryeri / aktarılmış" }); continue; }
+      if ((o.channel || "site") !== "site" && !o.import_source) { skipped.push({ id: o.id, reason: "pazaryeri" }); continue; }
       if (!o.packed_at || o.status === "cancelled" || SHIPPED.includes(o.shipment_status || "")) { skipped.push({ id: o.id, reason: "paket hazır değil ya da zaten kargoda" }); continue; }
       // Koşullu güncelleme: aynı anda iki tıklamada e-posta bir kez
       const { data: done, error } = await sb.from("orders").update({ shipment_status: "shipped" })
