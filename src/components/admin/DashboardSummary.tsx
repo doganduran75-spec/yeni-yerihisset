@@ -120,12 +120,8 @@ export default function DashboardSummary({ children }: { children?: ReactNode })
               </tr>
             </thead>
             <tbody>
-              <tr className="border-b">
-                <td className="py-1 pr-2 font-black text-slate-900">Tüm üyeler</td>
-                <td className="py-1 px-2 text-right font-black text-slate-900">{num(d.members.total)}</td>
-                <td className="py-1 pl-2 text-right font-bold text-teal-700">+{num(d.members.new30)}</td>
-              </tr>
-              {d.roles.map((r: any) => (
+              {/* Her kişi tek grupta (Yönetici › Affiliate › Müdavim › Müşteri › Üye › Kişi); fonksiyon yoksa eski rol sayımı */}
+              {(d.tiers || d.roles).map((r: any) => (
                 <tr key={r.slug} className="border-b last:border-0">
                   <td className="py-1 pr-2 font-bold text-slate-600">{r.name}</td>
                   <td className="py-1 px-2 text-right font-bold text-slate-800">{num(r.total)}</td>
@@ -134,6 +130,7 @@ export default function DashboardSummary({ children }: { children?: ReactNode })
               ))}
             </tbody>
           </table>
+          {d.tiers && <p className="text-[10px] text-slate-400 mt-1">Her kişi tek grupta: en üstteki geçerli olan · Kişi = üye olmamış (stok bildirimi / kampanya), şifre belirleyip doğrulayınca Üye</p>}
         </CardContent>
       </Card>
 

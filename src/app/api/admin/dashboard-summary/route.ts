@@ -117,5 +117,12 @@ export async function GET(req: NextRequest) {
     sales,
     members,
     roles: roleRows,
+    // Her kişi YALNIZ BİR grupta: Yönetici › Affiliate › Müdavim › Müşteri › Üye › Kişi (people_tiers, 2026-10-31)
+    tiers: await (async () => {
+      const { data, error } = await (supabase as any).rpc("people_tiers");
+      if (error) return null; // migration uygulanmadıysa eski görünüm
+      const NAME: Record<string, string> = { yonetici: "Yönetici", affiliate: "Affiliate", mudavim: "Müdavim", musteri: "Müşteri", uye: "Üye", kisi: "Kişi" };
+      return ((data as any[]) || []).map((t) => ({ slug: t.tier, name: NAME[t.tier] || t.tier, total: Number(t.total) || 0, new30: Number(t.new30) || 0 }));
+    })(),
   });
 }
