@@ -77,7 +77,7 @@ export default {
       cleanup(); // önceki çalıştırmadan kalan (yarıda kesildiyse)
       F.cat = insert("categories", { name: "REGRESYON-TEST", slug: "regresyon-test" });
       F.prod = insert("products", { title: "REGRESYON-TEST Ayakkabı", slug: `regresyon-test-urun-${RUN}`, price: 1000, stock: 0, is_active: false, category_id: F.cat });
-      F.var = insert("product_variants", { product_id: F.prod, price: 1000, stock: 30, is_active: true });
+      F.var = insert("product_variants", { product_id: F.prod, price: 1000, stock: 60, is_active: true }); // yeni senaryolar stok tüketir (99 = stoktan fazla testi)
       F.var2 = insert("product_variants", { product_id: F.prod, price: 1000, stock: 5, is_active: true }); // değişim alternatifi
       F.gift = insert("products", { title: "REGRESYON-TEST Hediye", slug: `regresyon-test-hediye-${RUN}`, price: 200, stock: 5, is_active: false });
       insert("free_gift_rules", { name: "REGRESYON-TEST hediye", trigger_category_id: F.cat, gift_product_id: F.gift, is_active: true });
