@@ -6,6 +6,7 @@
 //   POST { op: "picked_up", ids }       → kurye aldı (site): Kargoda + kargo e-postası (takip numarasıyla) o an.
 //   POST { op: "mp_picking", orderId }  → Trendyol "İşleme al" yeniden dene.
 //   POST { op: "hb_package", orderId }  → Hepsiburada paketlemeyi yeniden dene.
+//   POST { op: "mp_claim", orderId, restock } → Trendyol iadesini onayla + işle (src/lib/marketplace/trendyol-claims.ts).
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { getAuthUserFromRequest } from "@/lib/auth-from-request";
@@ -13,6 +14,7 @@ import { invoiceOrder } from "@/lib/parasut-invoice";
 import { parasutConfig } from "@/lib/parasut";
 import { trendyolPicking } from "@/lib/marketplace-invoice";
 import { hbPackageOrder } from "@/lib/marketplace/hb-package";
+import { receiveTrendyolClaim } from "@/lib/marketplace/trendyol-claims";
 import { sendOrderNotification } from "@/lib/notifications";
 
 const SHIPPED = ["shipped", "delivered", "undelivered", "returned"];
@@ -90,6 +92,12 @@ export async function POST(req: NextRequest) {
   if (body.op === "hb_package") {
     try { return NextResponse.json({ ok: true, ...(await hbPackageOrder(sb, String(body.orderId || ""))) }); }
     catch (e: any) { return NextResponse.json({ error: String(e?.message || e) }, { status: 502 }); }
+  }
+
+  // Trendyol iadesi: depoya ulaşanı Trendyol'da onayla + iade gelen satır (stok isteğe bağlı) + kısmi ciro düşümü
+  if (body.op === "mp_claim") {
+    try { return NextResponse.json({ ok: true, ...(await receiveTrendyolClaim(sb, String(body.orderId || ""), body.restock !== false, user.id)) }); }
+    catch (e: any) { return NextResponse.json({ error: String(e?.message || e) }, { status: 400 }); }
   }
 
   if (body.op === "mp_picking") {

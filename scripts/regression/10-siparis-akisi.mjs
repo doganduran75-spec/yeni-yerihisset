@@ -1204,6 +1204,31 @@ export default {
         ok(ik.status === 200 && (ik.json?.shipped || []).includes(im) && ord(im).shipment_status === "shipped", "Aktarılmış sipariş: kurye aldı → kargoda", why(ik));
       });
 
+      await part("Trendyol iadesi (kısmi): onaylanmış talep sitede işlenir — iade gelen adet + cirodan düşüm", async () => {
+        const r = await order([MAIN(2)]);
+        const id = r.json?.orderId;
+        if (!id) return add("fail", "Trendyol iade testi için sipariş oluşturulamadı", why(r));
+        const flow = (token, body) => api("/api/admin/orders/ship-flow", { token, body });
+        // Trendyol'da onaylanmış (Accepted) talep → Trendyol'a istek gitmez; 2 adetten 1'i iade
+        sql(`UPDATE public.orders SET channel = 'trendyol', payment_status = 'paid', status = 'delivered', shipment_status = 'delivered', mp_claim_state = 'accepted' WHERE id = ${lit(id)}`);
+        const it = one(`SELECT id FROM public.order_items WHERE order_id = ${lit(id)} LIMIT 1`);
+        sql(`INSERT INTO public.mp_claim_items (id, claim_id, order_id, order_item_id, status, reason) VALUES (${lit("REGRESYON-" + RUN)}, 'REGRESYON', ${lit(id)}, ${lit(it)}, 'Accepted', 'Bedeni küçük geldi')`);
+        const before = ord(id);
+        const m = await flow(F.member.token, { op: "mp_claim", orderId: id, restock: false });
+        ok(m.status === 403, "Üye Trendyol iadesini işleyemiyor", why(m));
+        const c = await flow(F.admin.token, { op: "mp_claim", orderId: id, restock: false });
+        const o = ord(id);
+        const ri = row(`SELECT quantity, returned_qty FROM public.order_items WHERE id = ${lit(it)}`);
+        const unit = Number(one(`SELECT unit_price FROM public.order_items WHERE id = ${lit(it)}`));
+        ok(c.status === 200 && ri?.returned_qty === 1 && ri?.quantity === 2, "Kısmi iade: 2 adetten yalnız 1'i iade geldi sayıldı", `${why(c)} → ${JSON.stringify(ri)}`);
+        ok(Math.abs(Number(o.refunded_amount || 0) - Number(before.refunded_amount || 0) - unit) < 0.01 && o.payment_status === "partial_refund",
+          "Kısmi iade: yalnız iade gelen ürünün tutarı cirodan düştü (ödeme 'kısmi iade')", `iade ${o.refunded_amount}, birim ${unit}, ödeme ${o.payment_status}`);
+        ok(o.mp_claim_state === "done" && one(`SELECT received_at IS NOT NULL FROM public.mp_claim_items WHERE id = ${lit("REGRESYON-" + RUN)}`) === "t",
+          "İade talebi 'işlendi' oldu (sıradaki adım: iade faturası / bekleyen iş kalmaz)", `durum ${o.mp_claim_state}`);
+        const c2 = await flow(F.admin.token, { op: "mp_claim", orderId: id, restock: false });
+        ok(c2.status === 400 && Number(ord(id).refunded_amount) === Number(o.refunded_amount), "Aynı iade ikinci kez işlenmiyor (ciro iki kez düşmez)", why(c2));
+      });
+
       await part("CRM kampanyası: kitle, kişiye özel süreli kupon, hatırlatma listesi, rapor", async () => {
         const crm = (token, body) => api("/api/admin/crm/campaigns", { token, body });
         const m = await crm(F.member.token, { op: "audience", filters: {} });

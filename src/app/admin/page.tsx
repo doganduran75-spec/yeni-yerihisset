@@ -62,7 +62,7 @@ export default function AdminDashboard() {
       // (kargoda / teslim / faturalı) ve eski aktarılmış siparişler burada görünmez.
       const { data: openData } = await (supabase as any)
         .from('orders')
-        .select('id, order_number, external_order_number, total_amount, refunded_amount, status, payment_status, shipment_status, invoice_status, created_at, channel, import_source, customer_name, kargonomi_tracking_code, kargonomi_shipment_id, kargonomi_confirmed_at, kargonomi_provider, kargonomi_error, parasut_status, parasut_error, mp_restocked_at, fit_status, delivered_at, profiles (first_name, last_name), order_cases (kind, status, return_method, label_sent_at, closed_at)')
+        .select('id, order_number, external_order_number, total_amount, refunded_amount, status, payment_status, shipment_status, invoice_status, created_at, channel, import_source, customer_name, kargonomi_tracking_code, kargonomi_shipment_id, kargonomi_confirmed_at, kargonomi_provider, kargonomi_error, parasut_status, parasut_error, mp_restocked_at, mp_claim_state, mp_claim_note, fit_status, delivered_at, profiles (first_name, last_name), order_cases (kind, status, return_method, label_sent_at, closed_at)')
         .eq('is_closed', false)
         .order('created_at', { ascending: false })
         .limit(1000);
@@ -116,7 +116,9 @@ export default function AdminDashboard() {
         fetchNoResultSearches(30),
         (supabase as any).from("order_cases").select("id", { count: "exact", head: true }).eq("kind", "return").eq("status", "label_sent").is("closed_at", null),
       ]);
-      setReturnsOpen(rt.count || 0);
+      // + Trendyol'da iade talebi açılmış, ürün yolda (src/lib/marketplace/trendyol-claims.ts)
+      const { count: tyRet } = await (supabase as any).from("orders").select("id", { count: "exact", head: true }).eq("mp_claim_state", "in_transit");
+      setReturnsOpen((rt.count || 0) + (tyRet || 0));
       setReviewCount(rv.count || 0);
       setFeedbackCount(fb.count || 0);
       // Kargolanmış, faturası kesilmemiş (site + Paraşüt sonrası pazaryeri) · 7 günü geçenler ayrıca

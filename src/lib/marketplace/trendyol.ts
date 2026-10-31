@@ -116,6 +116,18 @@ export async function updatePackageStatus(c: TrendyolConfig, packageId: string, 
   await call(c, "PUT", `/integration/order/sellers/${encodeURIComponent(c.sellerId)}/shipment-packages/${encodeURIComponent(packageId)}`, { lines, params, status });
 }
 
+/** İade talepleri (Claims): tarih aralığı talebin lastModifiedDate'ine uygulanır (ms, GMT).
+ *  Belge: https://developers.trendyol.com/v2.0/docs/getting-returned-orders-getclaims */
+export async function getClaims(c: TrendyolConfig, params: Record<string, string>): Promise<any> {
+  return call(c, "GET", `/integration/order/sellers/${encodeURIComponent(c.sellerId)}/claims?${new URLSearchParams(params).toString()}`);
+}
+
+/** İadeyi onayla — yalnız "WaitingInAction" (ürün depoya ulaştı) durumundaki kalemler. Kimlikler talep kalemi (claimItems[].id). */
+export async function approveClaimItems(c: TrendyolConfig, claimId: string, claimItemIds: string[]): Promise<void> {
+  await call(c, "PUT", `/integration/order/sellers/${encodeURIComponent(c.sellerId)}/claims/${encodeURIComponent(claimId)}/items/approve`,
+    { claimLineItemIdList: claimItemIds, params: {} });
+}
+
 /** Bağlantı testi: ürün listesinin ilk sayfası. Trendyol'daki toplam ürün sayısını döner. */
 export async function testConnection(c: TrendyolConfig): Promise<{ totalProducts: number | null; services: { name: string; ok: boolean; detail: string }[] }> {
   // Product v2 (eski /products ucu 2026-10'da kapatılıyor — "brownout 426")

@@ -145,6 +145,8 @@ type Order = {
   packed_at?: string | null;          // "Paket hazır"
   mp_picking_at?: string | null;      // Trendyol "İşleme al" yapıldı
   mp_picking_error?: string | null;
+  mp_claim_state?: string | null;     // Trendyol iade talebi (src/lib/marketplace/trendyol-claims.ts)
+  mp_claim_note?: string | null;
   mp_package_number?: string | null;  // Hepsiburada paket no
   shipped_at?: string | null;         // kargoya verildiği an
   mp_warning?: string | null;
@@ -982,6 +984,19 @@ Siparişte “Paraşüt — yeniden dene” ile tekrar dene.`, tone: "danger" })
         refreshOrder(o.id);
         return;
       }
+      case "mp_claim": {
+        // Trendyol iadesi: depoya ulaşanı onayla (Trendyol'a gider) + iade gelen satır + kısmi ciro düşümü
+        const st = o.mp_claim_state;
+        if (!(await siteConfirm({ title: st === "arrived" ? "İade onaylansın mı?" : "İade işlensin mi?", message: `${o.mp_claim_note ? `${o.mp_claim_note}. ` : ""}${st === "arrived" ? "Trendyol'a onay gider (parayı müşteriye Trendyol iade eder); " : ""}iade gelen ürün cirodan düşer.`, confirmText: st === "arrived" ? "Onayla" : "İşle" }))) return;
+        const restock = await siteConfirm({ title: "Ürün stoğa eklensin mi?", message: "Ürün satılabilir durumdaysa ve stoğa henüz elle eklemediysen “Stoğa ekle”. Elle eklediysen ya da ürün satılamazsa “Ekleme”.", confirmText: "Stoğa ekle", cancelText: "Ekleme" });
+        setUpdatingId(o.id);
+        try {
+          const r = await shipFlowApi({ op: "mp_claim", orderId: o.id, restock });
+          siteAlert({ message: `İade işlendi${r.approved ? " ve Trendyol'da onaylandı" : ""}: ${r.items} ürün${r.amount ? `, ${Number(r.amount).toLocaleString("tr-TR")} TL cirodan düştü` : ""}${restock ? `, ${r.restocked} adet stoğa eklendi` : ", stoğa eklenmedi"}.`, tone: "success" });
+        } catch (e: any) { siteAlert({ title: "Trendyol iadesi", message: String(e?.message || e), tone: "danger" }); }
+        finally { setUpdatingId(null); refreshOrder(o.id); }
+        return;
+      }
       case "mp_restock": {
         if (!(await siteConfirm({ title: "İade geldi mi?", message: "Ürünler depoya döndüyse ve satılabilir durumdaysa stoğa eklenir; yeni stok tüm pazaryerlerine gönderilir.", confirmText: "Stoğa ekle" }))) return;
         const { data: { session } } = await supabase.auth.getSession();
@@ -1187,7 +1202,7 @@ Siparişte “Paraşüt — yeniden dene” ile tekrar dene.`, tone: "danger" })
         const pay = o.payment_status || "pending";
         const refundedPay = pay === "refunded" || pay === "partial_refund";
         if (fRet === "return_expected" && openCaseOf(o)?.kind !== "return") return false;
-        if (fRet === "return_in_transit" && !(openCaseOf(o)?.kind === "return" && openCaseOf(o)?.status === "label_sent")) return false;
+        if (fRet === "return_in_transit" && !(openCaseOf(o)?.kind === "return" && openCaseOf(o)?.status === "label_sent") && o.mp_claim_state !== "in_transit") return false;
         if (fRet === "exchange_open" && openCaseOf(o)?.kind !== "exchange") return false;
         if (fRet === "returned_unrefunded" && !(o.shipment_status === "returned" && pay === "paid")) return false;
         if (fRet === "refunded_no_return_invoice" && !(refundedPay && (o.invoice_status || "pending") === "invoiced")) return false;

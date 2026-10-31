@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { processMarketplaceStock } from "@/lib/marketplace/sync";
 import { importMarketplaceOrders } from "@/lib/marketplace/orders";
+import { syncTrendyolClaims } from "@/lib/marketplace/trendyol-claims";
 import { processMarketplacePrices } from "@/lib/marketplace/price-sync";
 import { syncMarketplaceListings } from "@/lib/marketplace/listings";
 import { evaluateHealthAlerts } from "@/lib/server-health-alerts";
@@ -29,6 +30,9 @@ async function run(req: NextRequest) {
   for (const o of orders) {
     if (o.errors.length) console.error(`[cron/marketplace-orders:${o.channel}]`, o.errors.join(" | "));
   }
+  // 1a) Trendyol iade talepleri (kısmi iade sipariş servisinde görünmüyor) → siparişte "İade yolda / depoya ulaştı"
+  const claims = await syncTrendyolClaims(supabase).catch((e: any) => ({ fetched: 0, orders: 0, errors: [e?.message || String(e)] }));
+  if (claims.errors.length) console.error("[cron/trendyol-claims]", claims.errors.join(" | "));
   // 1b) İlan eşitleme (saatte bir): stok/fiyat yalnız o kanalda ilanı olan ürüne gider
   try {
     const ls = await syncMarketplaceListings(supabase);
@@ -77,7 +81,7 @@ async function run(req: NextRequest) {
   if (new Date().getMinutes() % 15 === 7) {
     await evaluateHealthAlerts(supabase).catch((e: any) => console.error("[cron/health-alerts]", e?.message || e));
   }
-  return NextResponse.json({ ok: true, orders, reports, prices, kargo, fatura, google });
+  return NextResponse.json({ ok: true, orders, claims, reports, prices, kargo, fatura, google });
 }
 
 export const GET = run;

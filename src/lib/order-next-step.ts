@@ -16,7 +16,9 @@ export type NextActionKey =
   // "İade gelecek": müşteri iadeyi telefonla bildirdi → yönetici talep açar; kod gerekmiyorsa doğrudan yolda
   | "return_expected" | "return_in_transit"
   // "Paket hazır" akışı (src/app/api/admin/orders/ship-flow)
-  | "packed" | "picked_up" | "mp_picking" | "hb_package" | "mp_return";
+  | "packed" | "picked_up" | "mp_picking" | "hb_package" | "mp_return"
+  // Trendyol iade talebi: onayla + işle (src/lib/marketplace/trendyol-claims.ts)
+  | "mp_claim";
 
 export type NextAction = { key: NextActionKey; label: string; kind: "primary" | "danger" };
 
@@ -42,6 +44,8 @@ export type OrderLike = {
   mp_picking_error?: string | null;
   cargo_tracking_number?: string | null;
   mp_package_number?: string | null;       // Hepsiburada paket no (paketlenince)
+  mp_claim_state?: string | null;          // Trendyol iade talebi: in_transit / arrived / accepted / disputed / done
+  mp_claim_note?: string | null;           // "1 × ürün (beden) — sebep"
   shipped_at?: string | null;              // kargoya verildiği an (fatura 7 gün takibi)
   order_items?: { quantity: number; returned_qty?: number | null }[] | null;
   created_at?: string | null;
@@ -111,6 +115,23 @@ function coreNextStep(o: OrderLike): NextStep {
   // ── Pazaryeri: durumları pazaryeri yönetir ──
   if (isMarketplaceOrder(o)) {
     if (o.status === "cancelled") return { stage: "İptal edildi (pazaryeri)", actions: [], needsAction: false };
+    // Trendyol iade talebi (kısmi iade dahil; kullanıcı kararı 2026-10-31: iade siteden onaylanır)
+    const cs = o.mp_claim_state;
+    const cn = o.mp_claim_note ? `${o.mp_claim_note}. ` : "";
+    if (cs === "arrived") {
+      return { stage: "İade depoya ulaştı (Trendyol)", hint: `${cn}Ürünü kontrol et: sağlamsa onayla — Trendyol'a onay gider, iade gelen ürün cirodan düşer. Sorunluysa Trendyol panelinden reddet (48 saat içinde işlem yapılmazsa Trendyol kendiliğinden onaylar).`,
+        actions: [{ key: "mp_claim", label: "İadeyi onayla", kind: "danger" }], needsAction: true };
+    }
+    if (cs === "accepted") {
+      return { stage: "İade onaylandı (Trendyol)", hint: `${cn}Trendyol'da onaylanmış — sitede işle (stok + ciro).`,
+        actions: [{ key: "mp_claim", label: "İade geldi — işle", kind: "danger" }], needsAction: true };
+    }
+    if (cs === "in_transit") return { stage: "İade yolda (Trendyol)", hint: `${cn}Ürün depoya ulaşınca “İadeyi onayla” çıkar.`, actions: [], needsAction: false };
+    if (cs === "disputed") return { stage: "İade itirazda (Trendyol)", hint: `${cn}Trendyol inceliyor.`, actions: [], needsAction: false };
+    if (cs === "done" && inv === "invoiced") {
+      return { stage: "İade faturası kesilecek", hint: `${cn}İade işlendi; Paraşüt'te iade faturasını kes, sonra işaretle.`,
+        actions: [{ key: "return_invoice", label: "İade faturası kesildi", kind: "primary" }], needsAction: true };
+    }
     if (o.status === "refunded" || ship === "returned") {
       return o.mp_restocked_at
         ? { stage: "İade geldi, stoğa eklendi", actions: [], needsAction: false }
