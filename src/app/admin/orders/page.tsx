@@ -1943,6 +1943,17 @@ ${courierQueue.slice(0, 20).map((o) => orderLabel(o)).join(", ")}${courierQueue.
                                     {item.variant_name}
                                   </span>
                                 )}
+                                {(() => {
+                                  // İade gelen satır (kullanıcı 2026-10-31): kısmi "1/2 iade edildi"; tam iade edilen pazaryeri siparişinde tüm satırlar
+                                  const ret = Number(item.returned_qty || 0) || (selectedOrder.shipment_status === "returned" ? item.quantity : 0);
+                                  if (!ret) return null;
+                                  return (
+                                    <span className="text-[10px] font-bold rounded px-1.5 py-0.5 w-fit bg-red-50 text-red-700">
+                                      {ret >= item.quantity ? "İade edildi" : `${ret}/${item.quantity} iade edildi`}
+                                      {Number(item.restocked_qty || 0) > 0 ? " · stoğa eklendi" : ""}
+                                    </span>
+                                  );
+                                })()}
                               </div>
                             </TableCell>
                             <TableCell className="text-xs text-center py-2">{item.quantity}</TableCell>
