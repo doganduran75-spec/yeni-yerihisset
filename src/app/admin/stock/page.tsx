@@ -28,6 +28,8 @@ type StockRow = {
   search: string;
   waiting: number; // bu ürün/varyant için stok bekleyen (pending) kişi sayısı
   notified: number; // stoğa girince haber verilmiş kişi sayısı (talep geçmişi — üretim kararı için)
+  modelId: string | null; // kategorinin alt kırılımı (Bot › 01) — aynı modelin renklerini gruplar
+  modelLabel: string;     // "Bot · 01" ("" yoksa)
 };
 
 // Türkçe-duyarsız normalize (arama için): küçült + Türkçe karakterleri sadeleştir
@@ -53,6 +55,9 @@ export default function StockPage() {
   const [prodSaved, setProdSaved] = useState<string | null>(null);
   // Stok gelince: bu ürünü bekleyenler uyarısı
   const [restockAlert, setRestockAlert] = useState<{ product: string; total: number; sent: number; manual: number; failed: number; error?: string } | null>(null);
+  // Model süzgeci ("" = tümü) — seçilince numara bazında renklerin toplamı gösterilir
+  const [models, setModels] = useState<{ id: string; label: string }[]>([]);
+  const [modelFilter, setModelFilter] = useState("");
 
   useEffect(() => { load(); }, []);
 
@@ -61,7 +66,7 @@ export default function StockPage() {
     const { data } = await (supabase as any)
       .from("products")
       .select(`
-        id, title, short_description, stock, in_production, has_variants, image_url, taban_option_id, saya_option_id,
+        id, title, short_description, stock, in_production, has_variants, image_url, taban_option_id, saya_option_id, model_id,
         product_variants ( id, sku, barcode, stock, in_production, variant_options ( value, variant_groups ( name ) ) )
       `)
       .order("title");
@@ -96,8 +101,19 @@ export default function StockPage() {
       (opts as any[] || []).forEach((o) => optMap.set(o.id, o.value ?? ""));
     }
 
+    // Modeller (Bot · 01) — yalnız panel
+    const { data: mdls } = await (supabase as any).from("product_models").select("id, code, name, categories(name)");
+    const modelMap = new Map<string, string>();
+    for (const m of (mdls as any[]) || []) {
+      modelMap.set(m.id, [m.categories?.name, m.code].filter(Boolean).join(" · ") + (m.name ? ` (${m.name})` : ""));
+    }
+    const usedModels = [...new Set(prods.map((p) => p.model_id).filter((id) => id && modelMap.has(id)))] as string[];
+    setModels(usedModels.map((id) => ({ id, label: modelMap.get(id)! })).sort((a, b) => a.label.localeCompare(b.label, "tr")));
+
     const out: StockRow[] = [];
     for (const p of prods) {
+      const modelId: string | null = p.model_id && modelMap.has(p.model_id) ? p.model_id : null;
+      const modelLabel = modelId ? modelMap.get(modelId)! : "";
       const taban = p.taban_option_id ? (optMap.get(p.taban_option_id) ?? "") : "";
       const saya = p.saya_option_id ? (optMap.get(p.saya_option_id) ?? "") : "";
       const desc = p.short_description ?? "";
@@ -122,9 +138,10 @@ export default function StockPage() {
             stock: Number(v.stock ?? 0),
             inProduction: Number(v.in_production ?? 0),
             image: p.image_url,
-            search: norm([p.title, desc, groupName, value, v.sku, v.barcode, taban, saya].filter(Boolean).join(" ")),
+            search: norm([p.title, desc, groupName, value, v.sku, v.barcode, taban, saya, modelLabel].filter(Boolean).join(" ")),
             waiting: waitOf(p.id, v.id),
             notified: notifiedOf(p.id, v.id),
+            modelId, modelLabel,
           });
         }
       } else {
@@ -143,9 +160,10 @@ export default function StockPage() {
           stock: Number(p.stock ?? 0),
           inProduction: Number(p.in_production ?? 0),
           image: p.image_url,
-          search: norm([p.title, desc, taban, saya].filter(Boolean).join(" ")),
+          search: norm([p.title, desc, taban, saya, modelLabel].filter(Boolean).join(" ")),
           waiting: waitOf(p.id, null),
           notified: notifiedOf(p.id, null),
+          modelId, modelLabel,
         });
       }
     }
@@ -156,9 +174,25 @@ export default function StockPage() {
   // Çok-kelimeli AND arama: her kelime satır metninde geçmeli
   const filtered = useMemo(() => {
     const tokens = norm(query).split(/\s+/).filter(Boolean);
-    if (tokens.length === 0) return rows;
-    return rows.filter((r) => tokens.every((t) => r.search.includes(t)));
-  }, [rows, query]);
+    const base = modelFilter ? rows.filter((r) => r.modelId === modelFilter) : rows;
+    if (tokens.length === 0) return base;
+    return base.filter((r) => tokens.every((t) => r.search.includes(t)));
+  }, [rows, query, modelFilter]);
+
+  // Seçili modelin numara bazında toplamı (tüm renkler birlikte) — üretim kararı için
+  const modelSummary = useMemo(() => {
+    if (!modelFilter) return null;
+    const mr = rows.filter((r) => r.modelId === modelFilter);
+    const colors = new Set(mr.map((r) => r.productId)).size;
+    const by = new Map<string, { size: string; stock: number; inProduction: number; waiting: number; notified: number }>();
+    for (const r of mr) {
+      const k = r.sizeValue || "—";
+      const b = by.get(k) ?? { size: k, stock: 0, inProduction: 0, waiting: 0, notified: 0 };
+      b.stock += r.stock; b.inProduction += r.inProduction; b.waiting += r.waiting; b.notified += r.notified;
+      by.set(k, b);
+    }
+    return { colors, sizes: sortByVariantValue([...by.values()], (b) => b.size) };
+  }, [rows, modelFilter]);
 
   function isDirty(r: StockRow): boolean {
     const e = edited[r.key];
@@ -244,9 +278,10 @@ export default function StockPage() {
   // Excel'e aktar — tüm satırlar + tüm kolonlar (.xls; Excel HTML tablosu olarak açar)
   function exportExcel() {
     const esc = (s: any) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    const headers = ["Ürün", "Numara", "Stok Kodu", "Barkod", "Taban", "Saya", "Bekleyen", "Bilgi verildi", "Stok", "Üretimde"];
+    const headers = ["Ürün", "Model", "Numara", "Stok Kodu", "Barkod", "Taban", "Saya", "Bekleyen", "Bilgi verildi", "Stok", "Üretimde"];
     const body = rows.map((r) => `<tr>
       <td>${esc(r.title)}</td>
+      <td>${esc(r.modelLabel)}</td>
       <td>${esc(r.sizeValue)}</td>
       <td>${esc(r.sku)}</td>
       <td>${esc(r.barcode)}</td>
@@ -330,20 +365,65 @@ export default function StockPage() {
         </div>
       )}
 
-      {/* Arama */}
-      <div className="relative">
-        <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-        <Input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder='Ara: "bot siyah", "bot 38", "sandalet 40"...'
-          className="h-12 pl-12 rounded-xl text-base"
-        />
+      {/* Arama + model süzgeci */}
+      <div className="flex flex-col sm:flex-row gap-2">
+        <div className="relative flex-1">
+          <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder='Ara: "bot siyah", "bot 38", "sandalet 40"...'
+            className="h-12 pl-12 rounded-xl text-base"
+          />
+        </div>
+        {models.length > 0 && (
+          <select
+            value={modelFilter}
+            onChange={(e) => setModelFilter(e.target.value)}
+            className="h-12 rounded-xl border border-input bg-white px-3 text-sm sm:w-64"
+            title="Aynı modelin renklerini birlikte göster (Ayarlar › Varyasyonlar › Modeller)"
+          >
+            <option value="">Tüm modeller</option>
+            {models.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+          </select>
+        )}
       </div>
       <p className="text-xs text-muted-foreground -mt-3">
         {loading ? "Yükleniyor..." : `${filtered.length} / ${rows.length} kalem`}
-        {query && " (aramaya göre)"}
+        {(query || modelFilter) && " (süzgece göre)"}
       </p>
+
+      {/* Model seçiliyken: numara bazında tüm renklerin toplamı */}
+      {modelSummary && modelSummary.sizes.length > 0 && (
+        <div className="rounded-2xl border border-blue-100 bg-blue-50/40 p-3">
+          <p className="text-xs font-bold text-blue-900 mb-2">
+            {models.find((m) => m.id === modelFilter)?.label} — {modelSummary.colors} renk, numara bazında toplam
+          </p>
+          <div className="overflow-x-auto">
+            <table className="text-xs">
+              <thead>
+                <tr className="text-left text-[10px] font-black uppercase tracking-wide text-slate-500">
+                  <th className="pr-4 py-1">Numara</th>
+                  {modelSummary.sizes.map((b) => <th key={b.size} className="px-2 py-1 text-center">{b.size}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {([["Stok", "stock"], ["Üretimde", "inProduction"], ["Bekleyen", "waiting"], ["Bilgi verildi", "notified"]] as const).map(([label, k]) => (
+                  <tr key={k} className="border-t border-blue-100">
+                    <td className="pr-4 py-1 font-semibold text-slate-600 whitespace-nowrap">{label}</td>
+                    {modelSummary.sizes.map((b) => (
+                      <td key={b.size} className={cn("px-2 py-1 text-center font-bold",
+                        b[k] === 0 ? "text-slate-300" : k === "stock" ? "text-slate-800" : k === "inProduction" ? "text-blue-700" : k === "waiting" ? "text-amber-700" : "text-slate-600")}>
+                        {b[k]}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Liste — başlıklı tablo (yatay kaydırmalı) */}
       {loading ? (
@@ -389,7 +469,10 @@ export default function StockPage() {
                             <Package size={16} className="text-slate-300" />
                           )}
                         </div>
-                        <span className="font-semibold text-slate-900 line-clamp-2">{r.title}</span>
+                        <div className="min-w-0">
+                          <span className="font-semibold text-slate-900 line-clamp-2">{r.title}</span>
+                          {r.modelLabel && <span className="block text-[10px] text-blue-700/80">Model {r.modelLabel}</span>}
+                        </div>
                       </div>
                     </td>
                     {/* SKU */}

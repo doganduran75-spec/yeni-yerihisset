@@ -1044,6 +1044,40 @@ export default {
         }
       });
 
+      await part("Model (kategorinin alt kırılımı): yalnız panel, kategori değişince boşalır", async () => {
+        const mu = await rest("product_models", { token: F.member.token, method: "POST", body: { category_id: F.cat, code: "99" } });
+        ok(mu.status >= 400 && one(`SELECT count(*) FROM public.product_models WHERE category_id = ${lit(F.cat)}`) === "0", "Üye model ekleyemiyor", `HTTP ${mu.status}`);
+        const ad = await rest("product_models", { token: F.admin.token, method: "POST", body: { category_id: F.cat, code: "01", name: "REGRESYON-TEST" }, headers: { Prefer: "return=representation" } });
+        const mid = ad.json?.[0]?.id;
+        ok(ad.status < 300 && !!mid, "Yönetici kategoriye model ekleyebiliyor (01)", `HTTP ${ad.status} ${ad.text.slice(0, 120)}`);
+        if (!mid) return;
+        try {
+          const dup = await rest("product_models", { token: F.admin.token, method: "POST", body: { category_id: F.cat, code: " 01 " } });
+          ok(dup.status >= 400, "Aynı kategoride aynı model kodu ikinci kez eklenemiyor", `HTTP ${dup.status}`);
+          const an = await rest(`product_models?id=eq.${mid}&select=id`);
+          const mr = await rest(`product_models?id=eq.${mid}&select=id`, { token: F.member.token });
+          ok(!(an.json || []).length && !(mr.json || []).length, "Modeller müşteriye görünmüyor (girişsiz / üye okuyamıyor)", `anon ${an.status} ${(an.json || []).length} · üye ${mr.status} ${(mr.json || []).length}`);
+          // Geri alınan işlem: ürüne model → kategori değişince model boşalır; başka kategorinin modeli bağlanamaz; model silinince ürün modelsiz
+          const r = sql(`BEGIN;
+            UPDATE public.products SET model_id = ${lit(mid)} WHERE id = ${lit(F.prod)};
+            SELECT coalesce(model_id::text, '-') FROM public.products WHERE id = ${lit(F.prod)};
+            UPDATE public.products SET category_id = NULL WHERE id = ${lit(F.prod)};
+            SELECT coalesce(model_id::text, '-') FROM public.products WHERE id = ${lit(F.prod)};
+            UPDATE public.products SET model_id = ${lit(mid)} WHERE id = ${lit(F.prod)};
+            SELECT coalesce(model_id::text, '-') FROM public.products WHERE id = ${lit(F.prod)};
+            UPDATE public.products SET category_id = ${lit(F.cat)}, model_id = ${lit(mid)} WHERE id = ${lit(F.prod)};
+            DELETE FROM public.product_models WHERE id = ${lit(mid)};
+            SELECT coalesce(model_id::text, '-') FROM public.products WHERE id = ${lit(F.prod)};
+            ROLLBACK;`).flat().map(String).filter((x) => x === mid || x === "-");
+          ok(r[0] === mid, "Ürüne kendi kategorisinin modeli bağlanıyor", r.join(" / "));
+          ok(r[1] === "-", "Ürünün kategorisi değişince model kendiliğinden boşalıyor", r.join(" / "));
+          ok(r[2] === "-", "Başka kategorinin modeli ürüne bağlanamıyor", r.join(" / "));
+          ok(r[3] === "-", "Model silinince ürün modelsiz kalıyor (ürün silinmiyor)", r.join(" / "));
+        } finally {
+          sql(`UPDATE public.products SET model_id = NULL WHERE id = ${lit(F.prod)}; DELETE FROM public.product_models WHERE category_id = ${lit(F.cat)};`);
+        }
+      });
+
       await part("Aynı barkod / SKU iki kez kaydedilemez (harf / boşluk farkı dahil)", async () => {
         // Geri alınan işlem içinde: hiçbir şey kalıcı olmaz, pazaryeri kuyruğuna da bir şey kalmaz
         const r = sql(`BEGIN;

@@ -26,6 +26,7 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
 
   const [categories, setCategories] = useState<any[]>([]);
   const [brands, setBrands] = useState<any[]>([]);
+  const [models, setModels] = useState<any[]>([]); // kategorinin alt kırılımı (yalnız panel)
   const [variantGroups, setVariantGroups] = useState<any[]>([]);
 
   const [formData, setFormData] = useState({
@@ -33,6 +34,7 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
     price: "",
     stock: "",
     category_id: "",
+    model_id: "",
     brand_id: "",
     short_description: "",
     description: "",
@@ -59,6 +61,7 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
         price: initialData.price?.toString() || "",
         stock: initialData.stock?.toString() || "",
         category_id: initialData.category_id || "",
+        model_id: initialData.model_id || "",
         brand_id: initialData.brand_id || "",
         short_description: initialData.short_description || "",
         tags: initialData.tags || [],
@@ -110,14 +113,16 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
   }
 
   async function fetchMetadata() {
-    const [cats, brnds, vgrps] = await Promise.all([
+    const [cats, brnds, vgrps, mdls] = await Promise.all([
       supabase.from("categories").select("id, name"),
       supabase.from("brands").select("id, name"),
       supabase.from("variant_groups").select("id, name, variant_options(id, value)"),
+      (supabase as any).from("product_models").select("id, category_id, code, name").order("code"),
     ]);
     setCategories(cats.data || []);
     setBrands(brnds.data || []);
     setVariantGroups(vgrps.data || []);
+    setModels(mdls.data || []);
   }
 
   const turkishToSlug = (text: string) => {
@@ -262,6 +267,7 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
         price: parseFloat(formData.price) || 0,
         stock: 0, // kopyada stok yok — stok gerçek mal sayısı; kopyalanırsa sayılmamış ürün satılır
         category_id: formData.category_id || null,
+        model_id: formData.model_id || null,
         brand_id: formData.brand_id || null,
         short_description: formData.short_description,
         description: formData.description,
@@ -353,6 +359,7 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
         title: formData.title,
         slug: slug,
         category_id: formData.category_id || null,
+        model_id: formData.model_id || null,
         brand_id: formData.brand_id || null,
         short_description: formData.short_description,
         description: formData.description,
@@ -821,12 +828,29 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
                 <select
                   className="flex h-11 w-full rounded-xl border border-input bg-slate-50/50 px-3 py-2 text-sm"
                   value={formData.category_id}
-                  onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, category_id: e.target.value, model_id: "" })}
                 >
                   <option value="">Kategori Seçin</option>
                   {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </div>
+              {/* Model: kategorinin alt kırılımı — aynı modelin renklerini gruplar (yalnız panel; müşteriye gösterilmez) */}
+              {formData.category_id && models.some((m) => m.category_id === formData.category_id) && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Model</label>
+                  <select
+                    className="flex h-11 w-full rounded-xl border border-input bg-slate-50/50 px-3 py-2 text-sm"
+                    value={formData.model_id}
+                    onChange={(e) => setFormData({ ...formData, model_id: e.target.value })}
+                  >
+                    <option value="">Model yok</option>
+                    {models.filter((m) => m.category_id === formData.category_id).map((m) => (
+                      <option key={m.id} value={m.id}>{m.code}{m.name ? ` · ${m.name}` : ""}</option>
+                    ))}
+                  </select>
+                  <p className="text-[11px] text-slate-400">Yalnız panelde gruplama için (Stok Yönetimi). Modeller: Ayarlar › Varyasyonlar.</p>
+                </div>
+              )}
               <div className="space-y-2">
                 <label className="text-sm font-medium">Marka</label>
                 <select

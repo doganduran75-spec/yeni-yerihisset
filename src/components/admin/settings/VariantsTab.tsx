@@ -15,6 +15,7 @@ import { supabase } from "@/lib/supabase";
 import { siteAlert, siteConfirm } from "@/components/ui/site-dialog";
 import { Plus, Edit, Trash2, Loader2, Layers, ArrowRightLeft } from "lucide-react";
 import { sortByVariantValue } from "@/lib/variant-sort";
+import ProductModelsCard from "./ProductModelsCard";
 
 type VariantGroup = {
   id: string;
@@ -279,6 +280,8 @@ export default function VariantsTab() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ProductModelsCard />
     </div>
   );
 }

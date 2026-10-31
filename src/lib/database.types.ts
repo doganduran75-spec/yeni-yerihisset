@@ -1703,6 +1703,40 @@ export type Database = {
           },
         ]
       }
+      product_models: {
+        Row: {
+          category_id: string
+          code: string
+          created_at: string
+          id: string
+          name: string | null
+          updated_at: string
+        }
+        Insert: {
+          category_id: string
+          code: string
+          created_at?: string
+          id?: string
+          name?: string | null
+          updated_at?: string
+        }
+        Update: {
+          category_id?: string
+          code?: string
+          created_at?: string
+          id?: string
+          name?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_models_category_id_fkey"
+            columns: ["category_id"]
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       products: {
         Row: {
           brand_id: string | null
@@ -1716,6 +1750,7 @@ export type Database = {
           in_production: number
           is_active: boolean
           model_code: string | null
+          model_id: string | null
           price: number
           saya_option_id: string | null
           short_description: string | null
@@ -1738,6 +1773,7 @@ export type Database = {
           in_production?: number
           is_active?: boolean
           model_code?: string | null
+          model_id?: string | null
           price?: number
           saya_option_id?: string | null
           short_description?: string | null
@@ -1760,6 +1796,7 @@ export type Database = {
           in_production?: number
           is_active?: boolean
           model_code?: string | null
+          model_id?: string | null
           price?: number
           saya_option_id?: string | null
           short_description?: string | null
