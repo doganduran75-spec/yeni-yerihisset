@@ -73,8 +73,7 @@ export default function DashboardSummary({ children }: { children?: ReactNode })
     { label: "Toplam ciro", fmt: (b: any) => tl(b.revenue), strong: true },
     ...channelRows,
     ...returnRows,
-    { label: "Sipariş", fmt: (b: any) => num(b.orders) },
-    { label: "Satılan adet", fmt: (b: any) => num(b.units) },
+    // "Sipariş" / "Satılan adet" satırları kaldırıldı (kullanıcı 2026-10-31) — veri API'de duruyor, gerekirse geri eklenir
   ];
 
   return (
@@ -108,7 +107,7 @@ export default function DashboardSummary({ children }: { children?: ReactNode })
             </tbody>
           </table>
           <p className="text-[10px] text-slate-400 mt-1">
-            Ödemesi alınmış, iptal edilmemiş siparişler · ciro kargo dahil, iadeler düşülmüş (iade olan satış ayrıca gösterilir) · adet ücretsiz hediyeler hariç
+            Ödemesi alınmış, iptal edilmemiş siparişler · ciro kargo dahil, iadeler düşülmüş (iade olan satış ayrıca gösterilir)
           </p>
         </CardContent>
       </Card>
