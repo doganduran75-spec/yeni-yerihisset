@@ -54,7 +54,11 @@ export default function DashboardSummary({ children }: { children?: ReactNode })
   const chList: { code: string; label: string }[] = d.channels?.length ? d.channels : [
     { code: "site", label: "YeriHisset" }, { code: "trendyol", label: "Trendyol" }, { code: "hepsiburada", label: "Hepsiburada" },
   ];
-  const ordered = [...chList.map((c) => c.code).filter((k) => channels.includes(k)), ...channels.filter((k) => !chList.some((c) => c.code === k))];
+  // Sıra (kullanıcı 2026-11-01): YeriHisset → Trendyol → Hepsiburada → diğerleri (Attipas…) sales_channels sırasıyla
+  const FIRST = ["site", "trendyol", "hepsiburada"];
+  const chOrder = [...FIRST, ...chList.map((c) => c.code).filter((k) => !FIRST.includes(k))];
+  const sortCh = (ks: string[]) => [...chOrder.filter((k) => ks.includes(k)), ...ks.filter((k) => !chOrder.includes(k))];
+  const ordered = sortCh(channels);
   const channelRows = channels.length > 1 || (channels.length === 1 && channels[0] !== "site")
     ? ordered.map((k) => ({
         label: `↳ ${chList.find((c) => c.code === k)?.label ?? k}`, fmt: (b: any) => tl(b.byChannel?.[k] ?? 0), sub: true,
@@ -62,7 +66,7 @@ export default function DashboardSummary({ children }: { children?: ReactNode })
     : [];
   // İade olan satış (ciroya dahil değil) + iadesi olan kanallar
   const retChannels = [...new Set(cols.flatMap((c) => Object.keys(d.sales[c.key]?.returnsByChannel ?? {})))];
-  const retOrdered = [...chList.map((c) => c.code).filter((k) => retChannels.includes(k)), ...retChannels.filter((k) => !chList.some((c) => c.code === k))];
+  const retOrdered = sortCh(retChannels);
   const returnRows = cols.some((c) => Number(d.sales[c.key]?.returns || 0) > 0)
     ? [
         { label: "İade olan satış", fmt: (b: any) => tl(b.returns ?? 0) },
