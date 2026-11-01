@@ -29,7 +29,11 @@ export async function GET(req: NextRequest) {
     configured: !!(process.env.IYZICO_API_KEY && process.env.IYZICO_SECRET_KEY),
     sandbox: !/^https:\/\/api\.iyzipay\.com/.test(process.env.IYZICO_BASE_URL ?? "https://sandbox-api.iyzipay.com"),
   };
-  return NextResponse.json({ ok: true, settings: data?.[0] ?? null, iyzico });
+  // Telegram ayarları burada dönmez: token tarayıcıya hiç gitmez, ayarlar sayfasının genel "Kaydet"i de
+  // Telegram kartının değiştirdiğini eski değerle ezmesin (yönetimi /api/admin/telegram)
+  const row = data?.[0] ? { ...data[0] } : null;
+  if (row) for (const k of Object.keys(row)) if (k.startsWith("telegram_")) delete row[k];
+  return NextResponse.json({ ok: true, settings: row, iyzico });
 }
 
 // Kaydet: güncellenecek satırı SUNUCU bulur (istemciden gelen id'ye güvenilmez).

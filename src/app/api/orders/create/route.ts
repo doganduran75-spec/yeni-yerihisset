@@ -328,6 +328,8 @@ export async function POST(req: NextRequest) {
     .catch((e) => console.error("[admin-order-mail] exception", e?.message || e));
   // Satışla stoğu 0'a düşen ürün(ler) için admin'e "satış noktalarında kapat" uyarısı
   alertOutOfStockForOrder(order.id).catch((e) => console.error("[out-of-stock-alert]", e?.message || e));
+  // Telegram "yeni sipariş" (kuyruğu tetikleyici doldurdu; cron'u beklemeden gönder — src/lib/telegram.ts)
+  import("@/lib/telegram").then(({ kickTelegram }) => kickTelegram()).catch(() => {});
 
   return NextResponse.json({
     orderId: order.id,

@@ -12,6 +12,7 @@ import { pollParasut } from "@/lib/parasut-invoice";
 import { pollMarketplaceInvoices } from "@/lib/marketplace-invoice";
 import { processGmcQueue } from "@/lib/gmc-sync";
 import { processReviewRequests, processWinback } from "@/lib/review-winback";
+import { processTelegramOutbox } from "@/lib/telegram";
 
 // Pazaryeri SİPARİŞLERİ (önce: yeni siparişleri al, iptallerde stoğu geri ekle) +
 // stok kuyruğu (Trendyol + Hepsiburada) — YEDEK tetik: anlık tetik
@@ -62,6 +63,9 @@ async function run(req: NextRequest) {
   // 6) Google Merchant API: değişen ürünler (besleme günlük tam eşitlemeyi sürdürür)
   const google = await processGmcQueue(supabase).catch((e: any) => ({ products: 0, sent: 0, deleted: 0, failed: 0, skipped: "", errors: [e?.message || String(e)] }));
   if (google.errors.length) console.error("[cron/gmc]", google.errors.slice(0, 5).join(" | "));
+  // 6b) Telegram bildirimleri (yeni sipariş: mesaj + entegrasyonlar bitince güncelleme; src/lib/telegram.ts)
+  const telegram = await processTelegramOutbox(supabase).catch((e: any) => ({ sent: 0, updated: 0, skipped: 0, errors: [e?.message || String(e)] }));
+  if (telegram.errors.length) console.error("[cron/telegram]", telegram.errors.slice(0, 3).join(" | "));
   // 7) Saatte bir: yorum isteme + "seni özledik" (src/lib/review-winback.ts; ayarlar Ayarlar › E-posta Şablonları)
   if (new Date().getMinutes() === 23) {
     await processReviewRequests(supabase).catch((e: any) => console.error("[cron/review-request]", e?.message || e));
@@ -81,7 +85,7 @@ async function run(req: NextRequest) {
   if (new Date().getMinutes() % 15 === 7) {
     await evaluateHealthAlerts(supabase).catch((e: any) => console.error("[cron/health-alerts]", e?.message || e));
   }
-  return NextResponse.json({ ok: true, orders, claims, reports, prices, kargo, fatura, google });
+  return NextResponse.json({ ok: true, orders, claims, reports, prices, kargo, fatura, google, telegram });
 }
 
 export const GET = run;

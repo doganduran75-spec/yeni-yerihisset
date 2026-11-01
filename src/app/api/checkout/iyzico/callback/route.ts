@@ -172,6 +172,8 @@ async function handle(req: NextRequest) {
           import("@/lib/notifications").then(({ alertOutOfStockForOrder }) =>
             alertOutOfStockForOrder(order.id)
           ),
+          // Telegram "yeni sipariş" (ödeme gelince kuyruğa girdi; src/lib/telegram.ts)
+          import("@/lib/telegram").then(({ kickTelegram }) => kickTelegram()),
           // Kupon kullanımını say (order_coupons; birden çok kupon — src/lib/coupon-rules.ts)
           import("@/lib/coupon-rules").then(({ countOrderCoupons }) => countOrderCoupons(supabase, order.id, order.user_id)),
         ]).catch(() => {});

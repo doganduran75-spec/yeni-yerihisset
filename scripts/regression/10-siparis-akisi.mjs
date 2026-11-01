@@ -1044,6 +1044,42 @@ export default {
         }
       });
 
+      await part("Telegram: yeni sipariş kuyruğu, yetki, gizli token, test siparişi gönderilmez", async () => {
+        const anon = await api("/api/admin/telegram", { body: { op: "status" } });
+        const mem = await api("/api/admin/telegram", { token: F.member.token, body: { op: "status" } });
+        ok(anon.status === 401 && mem.status === 403, "Girişsiz / üye Telegram ayarına erişemiyor", `girişsiz ${anon.status} · üye ${mem.status}`);
+        const ad = await api("/api/admin/telegram", { token: F.admin.token, body: { op: "status" } });
+        ok(ad.status === 200 && !/"(token|telegram_bot_token)"\s*:/.test(ad.text), "Yönetici durumu görüyor, bot token yanıtta yok", why(ad));
+        const sAnon = await rest("settings?select=telegram_bot_token&limit=1");
+        const sMem = await rest("settings?select=telegram_bot_token&limit=1", { token: F.member.token });
+        ok(sAnon.status >= 400 && sMem.status >= 400, "Bot token dışarıdan / üyeden okunamıyor", `girişsiz ${sAnon.status} · üye ${sMem.status}`);
+        const qMem = await rest("telegram_outbox?select=id&limit=1", { token: F.member.token });
+        ok(qMem.status >= 400 || !(qMem.json || []).length, "Gönderim kuyruğu üyeye kapalı", `HTTP ${qMem.status}`);
+        const tr = await order([MAIN(1)]); // bu bölümün kendi havale siparişi (önceki senaryolar ilk siparişi iptal / iade ediyor)
+        const tid = tr.json?.orderId;
+        if (!tid) return add("fail", "Telegram için havale siparişi açılamadı", why(tr));
+        ok(one(`SELECT count(*) FROM public.telegram_outbox WHERE topic = 'new_order' AND ref_id = ${lit(tid)}`) === "1", "Havale siparişi verilince Telegram kuyruğuna giriyor");
+        // Geri alınan işlem: kart siparişi ödeme gelince girer; eski siteden aktarılan sipariş girmez
+        const r = sql(`BEGIN;
+          DELETE FROM public.telegram_outbox WHERE ref_id = ${lit(tid)};
+          UPDATE public.orders SET payment_method = 'iyzico', payment_status = 'pending', import_source = NULL WHERE id = ${lit(tid)};
+          SELECT 'kart-bekliyor:' || count(*) FROM public.telegram_outbox WHERE ref_id = ${lit(tid)};
+          UPDATE public.orders SET payment_status = 'paid' WHERE id = ${lit(tid)};
+          SELECT 'kart-odendi:' || count(*) FROM public.telegram_outbox WHERE ref_id = ${lit(tid)};
+          DELETE FROM public.telegram_outbox WHERE ref_id = ${lit(tid)};
+          UPDATE public.orders SET payment_status = 'pending', import_source = 'regresyon' WHERE id = ${lit(tid)};
+          UPDATE public.orders SET payment_status = 'paid' WHERE id = ${lit(tid)};
+          SELECT 'aktarilan:' || count(*) FROM public.telegram_outbox WHERE ref_id = ${lit(tid)};
+          ROLLBACK;`).flat().map(String).filter((x) => /^(kart|aktarilan)/.test(x));
+        ok(r.includes("kart-bekliyor:0") && r.includes("kart-odendi:1"), "Kart siparişi ödeme gelmeden bildirilmiyor, ödeme gelince kuyruğa giriyor", r.join(" / "));
+        ok(r.includes("aktarilan:0"), "Eski siteden aktarılan sipariş bildirilmiyor", r.join(" / "));
+        const pv = await api("/api/admin/telegram", { token: F.admin.token, body: { op: "preview", orderId: tid } });
+        const no = one(`SELECT order_number FROM public.orders WHERE id = ${lit(tid)}`);
+        ok(pv.status === 200 && pv.json?.text?.includes(`YH${no}`) && pv.json.text.includes("REGRESYON-TEST Ayakkabı") && pv.json.text.includes("→"),
+          "Mesaj: sipariş no, ürün, stok kaçtan kaça", why(pv) + ` ${String(pv.json?.text || "").slice(0, 160)}`);
+        ok(pv.json?.test === true, "Test siparişi Telegram'a gönderilmiyor (test olarak tanınıyor)", `test=${pv.json?.test}`);
+      });
+
       await part("Model (kategorinin alt kırılımı): yalnız panel, kategori değişince boşalır", async () => {
         const mu = await rest("product_models", { token: F.member.token, method: "POST", body: { category_id: F.cat, code: "99" } });
         ok(mu.status >= 400 && one(`SELECT count(*) FROM public.product_models WHERE category_id = ${lit(F.cat)}`) === "0", "Üye model ekleyemiyor", `HTTP ${mu.status}`);

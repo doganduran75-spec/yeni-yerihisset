@@ -15,6 +15,7 @@ import HepsiburadaTestCenter from "@/components/admin/settings/HepsiburadaTestCe
 import ParasutCard from "@/components/admin/settings/ParasutCard";
 import IntegrationSection from "@/components/admin/settings/IntegrationSection";
 import GmcApiCard from "@/components/admin/settings/GmcApiCard";
+import TelegramCard from "@/components/admin/settings/TelegramCard";
 import {
   Loader2, Save, Eye, EyeOff, Truck, Store, RefreshCw, Send, PlugZap, AlertTriangle, CheckCircle2, Info, RotateCcw, History, ShoppingBag,
 } from "lucide-react";
@@ -697,6 +698,7 @@ export default function IntegrationsTab() {
 
       {/* ─── Google Merchant API (anlık ürün gönderimi) ─── */}
       <GmcApiCard />
+      <TelegramCard />
     </div>
   );
 }
