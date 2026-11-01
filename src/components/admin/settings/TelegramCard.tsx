@@ -24,6 +24,10 @@ async function api(body: Record<string, unknown>) {
   return j;
 }
 
+const TOPIC_LABEL: Record<string, string> = {
+  new_order: "Yeni sipariş", stock_request: "Stok talebi", after_sale_request: "İade / değişim talebi", customer_message: "Müşteri mesajı",
+  integration_error: "Entegrasyon hatası", server_alert: "Sunucu uyarısı", daily_summary: "Günlük özet",
+};
 const STATUS: Record<string, string> = { pending: "sırada", sending: "gönderiliyor", sent: "gönderildi (güncellenecek)", done: "gönderildi", skipped: "atlandı", failed: "gönderilemedi" };
 
 export default function TelegramCard() {
@@ -53,7 +57,7 @@ export default function TelegramCard() {
 
   return (
     <IntegrationSection id="telegram" icon={<Send size={20} className="text-sky-500" />} title="Telegram bildirimleri"
-      summary="Yeni sipariş (stok, entegrasyonlar) · ileride talepler, sunucu uyarıları, günlük özet"
+      summary="Yeni sipariş, talepler, müşteri mesajı, entegrasyon hatası, sunucu uyarısı, günlük özet"
       status={enabled ? "Açık" : st?.tokenSet ? "Kapalı" : "Kurulmadı"} tone={enabled ? "ok" : st?.tokenError ? "warn" : "off"}
       right={<label className="flex items-center gap-2 text-sm font-semibold">
         <input type="checkbox" checked={enabled} disabled={!!busy || !st?.tokenSet || !st?.chatId}
@@ -118,6 +122,19 @@ export default function TelegramCard() {
             <span className="flex-1">
               <b>{t.label}</b>{!t.ready && <span className="ml-2 text-[10px] font-bold uppercase text-slate-400">yakında</span>}
               <span className="block text-xs text-muted-foreground">{t.desc}</span>
+              {t.key === "daily_summary" && (
+                <span className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+                  Saat:
+                  <select className="h-7 rounded border px-1 bg-white" disabled={!!busy} value={st?.dailyHour ?? 9}
+                    onChange={(e) => run("hour", async () => { await api({ op: "save", dailyHour: Number(e.target.value) }); })}>
+                    {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}
+                  </select>
+                  <button type="button" className="underline text-sky-700 disabled:opacity-50" disabled={!!busy || !st?.tokenSet || !st?.chatId}
+                    onClick={() => run("daily", async () => { await api({ op: "send_daily" }); siteAlert({ message: "Günlük özet gönderildi — Telegram’a bak.", tone: "success" }); })}>
+                    Şimdi gönder (deneme)
+                  </button>
+                </span>
+              )}
             </span>
           </label>
         ))}
@@ -130,7 +147,7 @@ export default function TelegramCard() {
             {st.recent.map((r: any) => (
               <li key={r.id} className="flex flex-wrap gap-2">
                 <span className="text-slate-400">{new Date(r.created_at).toLocaleString("tr-TR", { dateStyle: "short", timeStyle: "short" })}</span>
-                <span>{r.topic === "new_order" ? "Yeni sipariş" : r.topic} {r.order && <b>{r.order}</b>}</span>
+                <span>{TOPIC_LABEL[r.topic] || r.topic} {r.order && <b>{r.order}</b>}</span>
                 <span className={r.status === "failed" ? "text-red-600 font-semibold" : r.status === "done" || r.status === "sent" ? "text-green-700" : "text-slate-500"}>{STATUS[r.status] || r.status}</span>
                 {r.error && <span className="text-slate-400">— {r.error}</span>}
               </li>

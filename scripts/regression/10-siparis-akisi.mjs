@@ -1078,6 +1078,23 @@ export default {
         ok(pv.status === 200 && pv.json?.text?.includes(`YH${no}`) && pv.json.text.includes("REGRESYON-TEST Ayakkabı") && pv.json.text.includes("→"),
           "Mesaj: sipariş no, ürün, stok kaçtan kaça", why(pv) + ` ${String(pv.json?.text || "").slice(0, 160)}`);
         ok(pv.json?.test === true, "Test siparişi Telegram'a gönderilmiyor (test olarak tanınıyor)", `test=${pv.json?.test}`);
+        // Diğer konular (geri alınan işlem): müşteri mesajı / iade talebi / stok talebi kuyruğa girer, yönetici mesajı girmez
+        const k = sql(`BEGIN;
+          INSERT INTO public.messages (order_id, user_id, sender_role, content) VALUES (${lit(tid)}, ${lit(F.member.id)}, 'user', 'REGRESYON-TEST mesaj');
+          INSERT INTO public.messages (order_id, user_id, sender_role, content) VALUES (${lit(tid)}, ${lit(F.member.id)}, 'admin', 'REGRESYON-TEST yanıt');
+          SELECT 'mesaj:' || count(*) FROM public.telegram_outbox o JOIN public.messages m ON m.id = o.ref_id WHERE o.topic = 'customer_message' AND m.order_id = ${lit(tid)};
+          INSERT INTO public.order_cases (order_id, kind, status, reason) VALUES (${lit(tid)}, 'return', 'requested', 'Numara küçük');
+          SELECT 'talep:' || count(*) FROM public.telegram_outbox o JOIN public.order_cases c ON c.id = o.ref_id WHERE o.topic = 'after_sale_request' AND c.order_id = ${lit(tid)};
+          INSERT INTO public.stock_notifications (product_id, variant_id, email, status) VALUES (${lit(F.prod)}, ${lit(F.var)}, 'rgt-tg@${DOMAIN}', 'pending');
+          SELECT 'stok:' || count(*) FROM public.telegram_outbox o JOIN public.stock_notifications n ON n.id = o.ref_id WHERE o.topic = 'stock_request' AND n.product_id = ${lit(F.prod)};
+          ROLLBACK;`).flat().map(String).filter((x) => /^(mesaj|talep|stok):/.test(x));
+        ok(k.includes("mesaj:1"), "Müşteri mesajı kuyruğa giriyor, yönetici yanıtı girmiyor", k.join(" / "));
+        ok(k.includes("talep:1"), "İade / değişim talebi kuyruğa giriyor", k.join(" / "));
+        ok(k.includes("stok:1"), "Yeni stok talebi kuyruğa giriyor", k.join(" / "));
+        const dl = await api("/api/admin/telegram", { token: F.admin.token, body: { op: "preview_daily" } });
+        ok(dl.status === 200 && /Günlük özet/.test(dl.json?.text || "") && /Dünkü satış/.test(dl.json?.text || ""), "Günlük özet hazırlanıyor (dünkü satış + bekleyen işler)", why(dl));
+        const dm = await api("/api/admin/telegram", { token: F.member.token, body: { op: "send_daily" } });
+        ok(dm.status === 403, "Üye günlük özet gönderemiyor", `HTTP ${dm.status}`);
       });
 
       await part("Model (kategorinin alt kırılımı): yalnız panel, kategori değişince boşalır", async () => {

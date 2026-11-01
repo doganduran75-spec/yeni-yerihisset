@@ -5,11 +5,13 @@
 //   POST { op: "find_chat" }                       → bota en son yazan sohbeti bul (önce Telegram'da bota /start yaz)
 //   POST { op: "test" }                            → deneme mesajı
 //   POST { op: "preview", orderId }                → sipariş mesajının metni (gönderilmez)
+//   POST { op: "send_daily" }                      → günlük özeti şimdi gönder (deneme)
+//   POST { op: "preview_daily" }                   → günlük özetin metni (gönderilmez)
 //   POST { op: "remove_token" }                    → token'ı sil + kapat
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { getAuthUserFromRequest } from "@/lib/auth-from-request";
-import { TELEGRAM_TOPICS, TOKEN_RE, getTelegramConfig, tgCall, tgSend, composeOrderMessage } from "@/lib/telegram";
+import { TELEGRAM_TOPICS, TOKEN_RE, getTelegramConfig, tgCall, tgSend, composeOrderMessage, composeDailySummary } from "@/lib/telegram";
 
 export async function POST(req: NextRequest) {
   const user = await getAuthUserFromRequest(req);
@@ -32,14 +34,15 @@ export async function POST(req: NextRequest) {
       if (cfg.token) {
         try { bot = (await tgCall(cfg.token, "getMe"))?.username ?? null; } catch (e: any) { tokenError = e?.message || "Token doğrulanamadı"; }
       }
+      // Hata bildirimlerinin "bildirildi" işaret satırları (ie:…) listede görünmez
       const { data: recent } = await sb.from("telegram_outbox").select("id, topic, ref_id, status, error, created_at, sent_at")
-        .order("created_at", { ascending: false }).limit(10);
+        .or("dedupe_key.is.null,dedupe_key.like.daily:*").order("created_at", { ascending: false }).limit(10);
       const ids = ((recent as any[]) || []).map((r) => r.ref_id).filter(Boolean);
       const nums = new Map<string, string>();
       if (ids.length) ((await sb.from("orders").select("id, order_number, external_order_number").in("id", ids)).data || [])
         .forEach((o: any) => nums.set(o.id, o.order_number ? `YH${o.order_number}` : o.external_order_number || ""));
       return NextResponse.json({
-        ok: true, enabled: cfg.enabled, tokenSet: !!cfg.token, bot, tokenError, chatId: cfg.chatId, topics: cfg.topics,
+        ok: true, enabled: cfg.enabled, tokenSet: !!cfg.token, bot, tokenError, chatId: cfg.chatId, topics: cfg.topics, dailyHour: cfg.dailyHour,
         topicList: TELEGRAM_TOPICS,
         recent: ((recent as any[]) || []).map((r) => ({ ...r, order: nums.get(r.ref_id) || null })),
       });
@@ -61,6 +64,11 @@ export async function POST(req: NextRequest) {
       if (body.topics && typeof body.topics === "object") {
         const keys = new Set<string>(TELEGRAM_TOPICS.map((t) => t.key));
         patch.telegram_topics = Object.fromEntries(Object.entries(body.topics).filter(([k]) => keys.has(k)).map(([k, v]) => [k, !!v]));
+      }
+      if (body.dailyHour !== undefined) {
+        const h = Number(body.dailyHour);
+        if (!Number.isInteger(h) || h < 0 || h > 23) return NextResponse.json({ error: "Saat 0–23 olmalı" }, { status: 400 });
+        patch.telegram_daily_hour = h;
       }
       if (typeof body.enabled === "boolean") {
         if (body.enabled && !((patch.telegram_bot_token as string) || cfg.token)) return NextResponse.json({ error: "Önce bot token'ı kaydet" }, { status: 400 });
@@ -94,6 +102,14 @@ export async function POST(req: NextRequest) {
       const msg = await composeOrderMessage(sb, id, { final: true });
       if (!msg) return NextResponse.json({ error: "Sipariş bulunamadı" }, { status: 404 });
       return NextResponse.json({ ok: true, text: msg.text, test: msg.test });
+    }
+
+    if (body.op === "preview_daily") return NextResponse.json({ ok: true, text: await composeDailySummary(sb) });
+
+    if (body.op === "send_daily") {
+      if (!cfg.token || !cfg.chatId) return NextResponse.json({ error: "Önce token'ı kaydet ve sohbeti bul" }, { status: 400 });
+      await tgSend(cfg, await composeDailySummary(sb));
+      return NextResponse.json({ ok: true });
     }
 
     if (body.op === "remove_token") {

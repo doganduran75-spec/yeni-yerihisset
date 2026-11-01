@@ -5,6 +5,7 @@
 // /api/cron/marketplace-sync (15 dk'da bir) → sağlık betiği durursa da uyarı gider.
 import { getServerHealth, alertKeys } from "@/lib/server-health";
 import { sendAdminSystemAlert } from "@/lib/notifications";
+import { notifyServerAlert } from "@/lib/telegram";
 
 const REMIND_H = 24;
 
@@ -28,8 +29,11 @@ export async function evaluateHealthAlerts(sb: any): Promise<{ status: string; a
       resolved ? [] : problems,
       fresh,
     );
-    sent = r.status;
-    if (r.status === "sent") {
+    // Telegram (konu açıksa) — e-postayla aynı an, aynı içerik
+    const subject = resolved ? "Sunucu sorunları giderildi" : `Sunucu uyarısı: ${problems.map((p) => p.label).slice(0, 3).join(", ")}${problems.length > 3 ? "…" : ""}`;
+    const tg = await notifyServerAlert(sb, subject, resolved ? [] : problems, fresh).catch(() => false);
+    sent = r.status === "sent" ? r.status : tg ? "telegram" : r.status;
+    if (r.status === "sent" || tg) {
       await sb.from("server_health_alerts").upsert({ id: 1, last_keys: keys, last_sent_at: new Date().toISOString() });
     }
   } else if (keys.join() !== prev.join()) {
