@@ -839,6 +839,15 @@ export default function OrdersPage() {
     setTimelineTick((t) => t + 1);
   }
 
+  // Detay kapanınca o siparişi sessizce yeniden oku (talepler dahil) → süzgeçteki liste güncel kalır
+  // (ör. "Yolda olan iade"de iadesi işlenen sipariş listeden düşer; kullanıcı 2026-11-01)
+  async function syncOrder(id: string) {
+    const { data } = await (supabase as any).from("orders")
+      .select(`*, profiles(first_name, last_name, email, phone, email_verified), affiliate_profiles(code), order_cases(*)`)
+      .eq("id", id).maybeSingle();
+    if (data) setOrders((prev) => prev.map((x) => (x.id === id ? { ...x, ...data } : x)));
+  }
+
   // Sıradaki adım panelindeki düğmeler → mevcut işlemler (kurallar src/lib/order-next-step.ts)
   // Paraşüt faturası: kes / kaldığı yerden devam / durum (src/lib/parasut-invoice.ts)
   async function invoiceParasut(o: Order, acceptDiff = false, carrier?: string) {
@@ -1599,7 +1608,7 @@ ${courierQueue.slice(0, 20).map((o) => orderLabel(o)).join(", ")}${courierQueue.
         onPick={(name) => { const c = carrierFor; setCarrierFor(null); if (c) invoiceParasut(c.o, c.acceptDiff, name); }} />
 
       {/* ─── Detay Dialog ─────────────────────────────────────────────────── */}
-      <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
+      <Dialog open={isDetailsOpen} onOpenChange={(o) => { setIsDetailsOpen(o); if (!o && selectedOrder) syncOrder(selectedOrder.id); }}>
         <DialogContent className="w-[95vw] sm:max-w-[860px] max-h-[90vh] overflow-y-auto top-[5vh] translate-y-0">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -2609,9 +2618,10 @@ function OrderActionDialog({ mode, order, onClose, onDone }: {
   const title = mode === "cancel" ? "Siparişi iptal et" : mode === "return" ? "İade al (ürün geri geldi)" : "Ücret iadesi yap";
 
   return (
-    <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-3 border-b">
+    // İç içe pencere (body'ye açılır): sipariş detayının kaydırılan içeriğine yapışmaz, ekranın ortasında tam görünür
+    <Dialog open onOpenChange={(o) => { if (!o && !busy) onClose(); }}>
+      <DialogContent showCloseButton={false} className="w-[95vw] sm:max-w-xl max-h-[92vh] overflow-y-auto p-0 gap-0 bg-white rounded-2xl shadow-xl">
+        <div className="sticky top-0 z-10 bg-white flex items-center justify-between px-5 py-3 border-b rounded-t-2xl">
           <h3 className="font-bold">{title}</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-700 text-xl leading-none">×</button>
         </div>
@@ -2710,14 +2720,14 @@ function OrderActionDialog({ mode, order, onClose, onDone }: {
           </label>
           {err && <p className="text-xs font-semibold text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{err}</p>}
         </div>
-        <div className="flex justify-end gap-2 px-5 py-3 border-t bg-slate-50 rounded-b-2xl">
+        <div className="sticky bottom-0 flex justify-end gap-2 px-5 py-3 border-t bg-slate-50 rounded-b-2xl">
           <Button variant="outline" size="sm" onClick={onClose} disabled={busy}>Vazgeç</Button>
           <Button size="sm" onClick={submit} disabled={busy || (needsConfirm && !confirmed)} className={mode === "cancel" ? "bg-red-600 hover:bg-red-700" : ""}>
             {busy ? <Loader2 size={14} className="animate-spin" /> : title}
           </Button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
