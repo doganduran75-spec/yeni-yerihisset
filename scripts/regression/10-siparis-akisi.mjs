@@ -1086,7 +1086,7 @@ export default {
           INSERT INTO public.order_cases (order_id, kind, status, reason) VALUES (${lit(tid)}, 'return', 'requested', 'Numara küçük');
           SELECT 'talep:' || count(*) FROM public.telegram_outbox o JOIN public.order_cases c ON c.id = o.ref_id WHERE o.topic = 'after_sale_request' AND c.order_id = ${lit(tid)};
           INSERT INTO public.stock_notifications (product_id, variant_id, email, status) VALUES (${lit(F.prod)}, ${lit(F.var)}, 'rgt-tg@${DOMAIN}', 'pending');
-          SELECT 'stok:' || count(*) FROM public.telegram_outbox o JOIN public.stock_notifications n ON n.id = o.ref_id WHERE o.topic = 'stock_request' AND n.product_id = ${lit(F.prod)};
+          SELECT 'stok:' || count(*) FROM public.telegram_outbox o JOIN public.stock_notifications n ON n.id = o.ref_id WHERE o.topic = 'stock_request' AND n.email = 'rgt-tg@${DOMAIN}';
           ROLLBACK;`).flat().map(String).filter((x) => /^(mesaj|talep|stok):/.test(x));
         ok(k.includes("mesaj:1"), "Müşteri mesajı kuyruğa giriyor, yönetici yanıtı girmiyor", k.join(" / "));
         ok(k.includes("talep:1"), "İade / değişim talebi kuyruğa giriyor", k.join(" / "));

@@ -86,14 +86,14 @@ async function hbGetDated(c: HepsiburadaConfig, svc: "oms" | "listing", path: st
 
 // Satıcı stok kodu (veya HBSKU → listing'den satıcı kodu) → sitedeki varyant
 function makeMatcher(sb: any, c: HepsiburadaConfig) {
-  const cache = new Map<string, { variant_id: string; product_id: string } | null>();
+  const cache = new Map<string, { variant_id: string; product_id: string; sku: string | null } | null>();
   const hbToMerchant = new Map<string, string | null>();
   const byField = async (field: "sku" | "barcode", val: string) => {
     // büyük / küçük harf ve baş / son boşluk farkı yok sayılır (pazaryeri kodları ile site kodları farklı yazılabiliyor)
     const v = val.trim().replace(/[%_]/g, "");
     if (!v) return null;
-    const { data } = await sb.from("product_variants").select("id, product_id").ilike(field, v).limit(1).maybeSingle();
-    return data ? { variant_id: data.id, product_id: data.product_id } : null;
+    const { data } = await sb.from("product_variants").select("id, product_id, sku").ilike(field, v).limit(1).maybeSingle();
+    return data ? { variant_id: data.id, product_id: data.product_id, sku: (data.sku as string | null) ?? null } : null;
   };
   return async (merchantSku: string | null, hbSku: string | null) => {
     let ms = merchantSku;
@@ -353,7 +353,9 @@ async function upsertHbOrder(sb: any, orderNumber: string, lines: Line[], since:
     if (!mt) out.warnings.push(`Eşleşmeyen ürün: ${l.name ?? ""} (satıcı kodu ${l.merchantSku ?? "—"}, HBSKU ${l.hbSku ?? "—"})`);
     const { data: item, error } = await sb.from("order_items").insert({
       order_id: order.id, product_id: mt?.product_id ?? null, variant_id: mt?.variant_id ?? null,
-      quantity: l.qty, unit_price: round2(l.unit), sku: l.merchantSku, variant_name: l.variant,
+      // Siparişte satıcı kodu gelmeyebiliyor (yalnız HBSKU) → eşleşen numaranın stok kodu yazılır (kullanıcı 2026-11-01:
+      // "Ürün Kodu" boş görünüyordu; eşleme HBSKU → ilan → satıcı kodu ile yapılmıştı)
+      quantity: l.qty, unit_price: round2(l.unit), sku: l.merchantSku || mt?.sku || null, variant_name: l.variant,
       title: l.name, barcode: null, external_line_id: l.lineId, external_status: "Open",
     }).select("id").single();
     if (error) { if (String(error.code) === "23505") continue; throw new Error(error.message); }
