@@ -27,6 +27,7 @@ Sayfalar hâlâ **taslak** (üstte uyarı + arama motoruna kapalı). Onaydan son
 3. **VERBİS:** Yıllık çalışan < 50 ve mali bilanço < 100 milyon TL ise kayıt yükümlülüğü yok — durumumuz?
 4. **İYS:** Kampanya e-postası göndermeden önce İleti Yönetim Sistemi kaydı (marka + izinlerin İYS'ye yüklenmesi).
 5. Metinlerin genel kontrolü (özellikle mesafeli satış).
+6. **Telegram bildirimleri (2026-11-01):** Yönetici Telegram'ına yeni siparişte müşteri adı + ürünler, müşteri mesajında mesaj metni, iade/değişim talebinde sebep ve not gidiyor (adres / telefon / e-posta gitmiyor). Telegram yurt dışı (BAE/İngiltere) bir hizmet → aydınlatma metnine "işletme içi bildirim" amacıyla aktarım olarak eklenmeli mi, yurt dışı aktarım şartı (md. 9) nasıl karşılanır?
 
 ## C) Benim yapacağım kod işleri (metinlerin doğru olması için — canlı öncesi)
 
