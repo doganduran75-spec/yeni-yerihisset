@@ -15,9 +15,12 @@ export async function sendInvoiceEmail(sb: Sb, orderId: string): Promise<{ statu
   const { data: o } = await s.from("orders")
     .select("id, order_number, channel, import_source, user_id, customer_email, customer_name, parasut_pdf_path, parasut_invoice_no, invoice_emailed_at")
     .eq("id", orderId).maybeSingle();
-  if (!o || (o.channel || "site") !== "site" || o.import_source) return { status: "skipped" };
+  if (!o) return { status: "skipped", error: "Sipariş bulunamadı" };
+  // Pazaryerinde fatura pazaryerine yüklenir; eski siteden aktarılana e-posta gitmez
+  if ((o.channel || "site") !== "site") return { status: "skipped", error: "Yalnız site siparişinde gider (bu sipariş pazaryerinden) — faturası kesilmiş bir site siparişi seç" };
+  if (o.import_source) return { status: "skipped", error: "Eski siteden aktarılan siparişe gitmez — faturası kesilmiş bir site siparişi seç" };
   const trial = mailRedirectActive(); // e-posta denemesi: işaret / not yazılmaz, daha önce gönderilmiş olsa da gider
-  if (o.invoice_emailed_at && !trial) return { status: "skipped" };
+  if (o.invoice_emailed_at && !trial) return { status: "skipped", error: "Fatura e-postası bu siparişe zaten gönderildi" };
   if (!o.parasut_pdf_path) return { status: "failed", error: "Faturanın PDF'i yok" };
   const { data: p } = o.user_id ? await s.from("profiles").select("email, first_name").eq("id", o.user_id).maybeSingle() : { data: null };
   const email = p?.email || o.customer_email;
