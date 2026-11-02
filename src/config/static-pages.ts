@@ -3,7 +3,7 @@
 // bu metni geri yükler. Metinlerde yer tutucular kullanılır → künye bir yerden değişince her sayfada güncellenir
 // (src/lib/static-pages.ts › fillPlaceholders).
 
-export type StaticPageSlug = "kvkk" | "gizlilik" | "cerez-politikasi" | "mesafeli-satis" | "iade-degisim" | "hakkimizda" | "barefoot-nedir";
+export type StaticPageSlug = "kvkk" | "gizlilik" | "cerez-politikasi" | "mesafeli-satis" | "iade-degisim" | "hakkimizda" | "hakkimizda-bilgi" | "barefoot-nedir";
 
 export const PLACEHOLDERS: { key: string; label: string }[] = [
   { key: "marka", label: "Marka adı (YeriHisset)" },
@@ -22,7 +22,8 @@ export const PLACEHOLDERS: { key: string; label: string }[] = [
   { key: "cerez_tercihleri", label: "\"Çerez tercihlerini değiştir\" bağlantısı" },
 ];
 
-export const STATIC_PAGES: Record<StaticPageSlug, { title: string; intro: string; body: string; draftDefault: boolean }> = {
+// href: ayrı sayfası olmayan bölüm (ör. Hakkımızda'daki sekmeler) — panelde "Görüntüle" bağlantısı; hint: panelde açıklama
+export const STATIC_PAGES: Record<StaticPageSlug, { title: string; intro: string; body: string; draftDefault: boolean; href?: string; hint?: string }> = {
   kvkk: {
     title: "KVKK Aydınlatma Metni",
     intro: "Kişisel verilerinizi hangi amaçla işlediğimizi, kimlerle paylaştığımızı ve haklarınızı 6698 sayılı Kişisel Verilerin Korunması Kanunu (KVKK) uyarınca aşağıda açıklıyoruz.",
@@ -196,6 +197,28 @@ export const STATIC_PAGES: Record<StaticPageSlug, { title: string; intro: string
 </ul>
 <h2>Şirket bilgileri</h2>
 {{satici_bilgileri}}`,
+  },
+
+  // Hakkımızda › sekmeli "pratik bilgiler" (Origo sürdürülebilirlik sayfası gibi; kullanıcı 2026-10-18).
+  // Her <h2> başlığı bir sekme olur. Taslakken sitede HİÇ görünmez → köşeli parantezli notlar müşteriye çıkmaz.
+  // Bilgi uydurulmaz: köşeli parantezleri kullanıcı kendi bilgisiyle doldurur.
+  "hakkimizda-bilgi": {
+    title: "Ayakkabılarımız hakkında",
+    intro: "Malzemeden bakıma, merak edilenler.",
+    draftDefault: true,
+    href: "/hakkimizda",
+    hint: "Hakkımızda sayfasında sekmeli bölüm — her H2 başlığı bir sekme. Taslakken sitede görünmez.",
+    body: `<h2>Malzeme</h2>
+<p>[Saya: deri türü, nereden geldiği, tabaklama şekli]</p>
+<p>[Astar ve iç taban: malzeme, çıkarılabilir mi]</p>
+<p>[Dış taban: malzeme, kalınlık (mm), kaymazlık]</p>
+<h2>Üretim</h2>
+<p>[Nerede, kimler tarafından üretiliyor; el işçiliği; üretim adedi / sipariş üzerine üretim]</p>
+<h2>Dayanıklılık ve bakım</h2>
+<p>[Deri bakımı: temizleme, boya / krem, ıslanınca kurutma]</p>
+<p>[Taban ömrü, tamir / pençe imkânı]</p>
+<h2>Numara seçimi</h2>
+<p>[Ayak ölçme yöntemi, kalıp geniş mi dar mı, iki numara arasında kalınca öneri] — değişimde iki numara birden gönderiyoruz: <a href="/iade-degisim">iade ve değişim</a>.</p>`,
   },
 
   "barefoot-nedir": {

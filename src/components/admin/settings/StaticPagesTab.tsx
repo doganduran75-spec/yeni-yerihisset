@@ -191,11 +191,11 @@ export default function StaticPagesTab() {
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-slate-800">{r?.title || STATIC_PAGES[slug].title}</p>
                       <p className="text-[11px] text-muted-foreground">
-                        /{slug} · {r ? `son düzenleme ${new Date(r.updated_at).toLocaleString("tr-TR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}` : "varsayılan metin"}
+                        {STATIC_PAGES[slug].hint ? `${STATIC_PAGES[slug].hint} · ` : `/${slug} · `}{r ? `son düzenleme ${new Date(r.updated_at).toLocaleString("tr-TR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}` : "varsayılan metin"}
                       </p>
                     </div>
                     <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${draft ? "bg-amber-100 text-amber-800" : "bg-green-100 text-green-700"}`}>{draft ? "Taslak" : "Yayında"}</span>
-                    <Link href={`/${slug}`} target="_blank" className="p-2 text-slate-400 hover:text-slate-700" title="Görüntüle"><ExternalLink size={15} /></Link>
+                    <Link href={STATIC_PAGES[slug].href ?? `/${slug}`} target="_blank" className="p-2 text-slate-400 hover:text-slate-700" title="Görüntüle"><ExternalLink size={15} /></Link>
                     <Button size="sm" variant="outline" className="gap-1" onClick={() => setEditing(slug)}><Pencil size={13} /> Düzenle</Button>
                   </div>
                 );

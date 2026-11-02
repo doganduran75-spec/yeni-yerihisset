@@ -6,6 +6,7 @@ import { staticPageMetadata } from "@/components/StaticPageView";
 import { getStaticPage } from "@/lib/static-pages";
 import { getHomeContent } from "@/lib/home-content";
 import { TRIAL_DAYS } from "@/lib/order-next-step";
+import AboutTabs from "@/components/AboutTabs";
 
 // "BİZ" SAYFASI (kullanıcı isteği: Origo'nun sürdürülebilirlik sayfası gibi görsel, bölümlü).
 // Başlık, giriş ve hikâye metni: Ayarlar › Sayfalar › Hakkımızda (static_pages) — burada uydurma bilgi YOK.
@@ -28,8 +29,17 @@ const PROMISES = [
   { title: "İade kargosu bizden", text: "İade ya da değişimde geri gönderim kodunu biz veriyoruz; kargo ücreti sana yansımaz." },
 ];
 
+// Pratik bilgiler (Ayarlar › Sayfalar › "Ayakkabılarımız hakkında"): her <h2> bir sekme; taslakken gösterilmez
+function splitTabs(html: string): { title: string; html: string }[] {
+  return html.split(/<h2[^>]*>/i).slice(1).map((part) => {
+    const [t, ...rest] = part.split(/<\/h2>/i);
+    return { title: t.replace(/<[^>]+>/g, "").trim(), html: rest.join("").trim() };
+  }).filter((x) => x.title);
+}
+
 export default async function HakkimizdaPage() {
-  const [p, home, brands] = await Promise.all([getStaticPage("hakkimizda"), getHomeContent(), brandList()]);
+  const [p, home, brands, info] = await Promise.all([getStaticPage("hakkimizda"), getHomeContent(), brandList(), getStaticPage("hakkimizda-bilgi")]);
+  const tabs = info.draft ? [] : splitTabs(info.body);
   const principles = (home.principles?.items || []).filter((x) => x.show !== false);
   return (
     <>
@@ -74,6 +84,16 @@ export default async function HakkimizdaPage() {
                 ))}
               </div>
             </div>
+          </section>
+        )}
+
+        {/* Pratik bilgiler — sekmeli */}
+        {tabs.length > 0 && (
+          <section className="container mx-auto px-4 py-14 md:py-20 max-w-4xl">
+            <p className="text-xs font-black uppercase tracking-[0.25em] text-olive-600 mb-3">Pratik bilgiler</p>
+            <h2 className="text-3xl md:text-4xl font-black tracking-tight italic text-slate-900">{info.title}</h2>
+            {info.intro && <p className="mt-3 text-slate-600">{info.intro}</p>}
+            <AboutTabs tabs={tabs} />
           </section>
         )}
 

@@ -271,6 +271,13 @@ async function main() {
     liveOnly(!r.text.includes("Taslak:") && !r.text.includes("noindex"), `Hukuki metin yayında: ${path}`, "taslak / arama motoruna kapalı — onaydan sonra draft kaldırılmalı");
     liveOnly(!r.text.includes("(eklenecek)"), `Künye eksiksiz: ${path}`, "telefon / MERSİS / KEP eksik (src/config/company.ts)");
   }
+  // Hakkımızda › "Ayakkabılarımız hakkında" sekmeleri: taslakken görünmez; yayına alınınca köşeli parantezli not kalmasın
+  {
+    const r = await get("/hakkimizda");
+    const note = (r.text.match(/\[(Saya|Astar|Dış taban|Nerede|Deri bakımı|Taban ömrü|Ayak ölçme)[^\]]*\]/) || [])[0];
+    r.status === 200 && note ? add("fail", "Hakkımızda sekmelerinde doldurulmamış not", `${note.slice(0, 60)} — Ayarlar › Sayfalar › Ayakkabılarımız hakkında`)
+      : add("ok", "Hakkımızda sekmelerinde doldurulmamış not yok");
+  }
   const nf = await get("/bu-sayfa-kesinlikle-yok-123");
   nf.status === 404 ? add("ok", "Olmayan sayfa → 404") : add("warn", "Olmayan sayfa", `HTTP ${nf.status} (404 beklenirdi)`);
   // KVKK C2: Google Analytics betiği izin verilmeden sayfaya doğrudan eklenmez (yalnız izinle __yhGA yükler)

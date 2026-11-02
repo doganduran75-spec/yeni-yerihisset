@@ -75,7 +75,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.5,
     },
     // Hukuki sayfalar + Hakkımızda: Ayarlar › Sayfalar'da "Taslak" işareti kalkınca haritaya girer
-    ...((pages ?? []) as any[]).filter((p) => p.slug !== "barefoot-nedir").map((p) => ({ url: `${SITE_URL}/${p.slug}`, lastModified: new Date(p.updated_at), changeFrequency: "yearly" as const, priority: 0.3 })),
+    // hakkimizda-bilgi ayrı sayfa değil (Hakkımızda'daki sekmeler)
+    ...((pages ?? []) as any[]).filter((p) => p.slug !== "barefoot-nedir" && p.slug !== "hakkimizda-bilgi").map((p) => ({ url: `${SITE_URL}/${p.slug}`, lastModified: new Date(p.updated_at), changeFrequency: "yearly" as const, priority: 0.3 })),
   ];
 
   return [...staticPages, ...listUrls, ...productUrls, ...kbUrls];
