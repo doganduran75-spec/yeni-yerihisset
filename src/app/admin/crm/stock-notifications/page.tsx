@@ -56,6 +56,7 @@ type Notification = {
   sku?: string | null;
   barcode?: string | null;
   stock?: number;
+  ready?: boolean;       // stok geldi (istenen numara ya da "her renk"te modelin başka rengi) — stock_notify_ready()
   has_email?: boolean;
   contact_name?: string | null;
   contact_instagram?: string | null;
@@ -86,7 +87,9 @@ export default function StockNotificationsPage() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<"pending" | "manual" | "notified" | "all">("pending");
+  // Akış: Bekleyenler (stok bekleniyor) → stok gelince e-postalıya otomatik e-posta → Bildirildi;
+  // otomatik gidemeyen (e-postasız / gönderilemedi) → Manuel bildirim → "Haber Verdim" → Bildirildi.
+  const [filter, setFilter] = useState<"pending" | "manual" | "notified">("pending");
   const [marking, setMarking] = useState<string | null>(null);
 
   // Manuel ekleme
@@ -122,6 +125,9 @@ export default function StockNotificationsPage() {
 
   useEffect(() => {
     fetchNotifications(); // tümünü çek; filtre istemci tarafında
+    // Panodan "?tab=manual" ile gelinir
+    const t = new URLSearchParams(window.location.search).get("tab");
+    if (t === "manual" || t === "notified") setFilter(t); // eslint-disable-line react-hooks/set-state-in-effect
   }, []);
 
   useEffect(() => { fetchProducts(); }, []);
@@ -174,6 +180,10 @@ export default function StockNotificationsPage() {
         .order("created_at", { ascending: false });
       if (error) throw error;
       const rows = (data as any[]) || [];
+      // Stok gelmiş bekleyenler (tek kural: veritabanında)
+      const { data: readyData, error: rErr } = await (supabase as any).rpc("stock_notify_ready");
+      if (rErr) throw rErr;
+      const readyIds = new Set<string>(((readyData as any[]) || []).map((x) => (typeof x === "string" ? x : x?.stock_notify_ready)));
 
       // Ürün başlık + stok
       const pids = [...new Set(rows.map((r) => r.product_id).filter(Boolean))] as string[];
@@ -219,6 +229,7 @@ export default function StockNotificationsPage() {
           sku: v?.sku ?? null,
           barcode: v?.barcode ?? null,
           stock: n.variant_id ? (v?.stock ?? 0) : (p?.stock ?? 0),
+          ready: readyIds.has(n.id),
           has_email: hasEmail,
           contact_name: c?.full_name ?? null,
           contact_instagram: c?.instagram_handle ?? null,
@@ -242,6 +253,28 @@ export default function StockNotificationsPage() {
     }
   }
 
+  // Stok başka yoldan girdiyse (ürün formu, iade vb.) otomatik e-posta tetiklenmemiş olabilir → elle gönder.
+  // Yalnız istenen ürün/numara stoktayken (başka renk eşleşmesinde e-posta o rengin ürününden gider: Stok Yönetimi)
+  async function resendEmail(n: Notification) {
+    setMarking(n.id);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const r = await fetch("/api/stock-notify/dispatch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
+        body: JSON.stringify({ productId: n.product_id, variantId: n.variant_id || null }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || "Gönderilemedi");
+      alert(d.sent ? `${d.sent} kişiye e-posta gitti.` : `E-posta gitmedi${d.error ? ": " + d.error : ""} — elden haber ver.`);
+      await fetchNotifications();
+    } catch (e: any) {
+      alert("Gönderilemedi: " + (e?.message ?? "hata"));
+    } finally {
+      setMarking(null);
+    }
+  }
+
   async function markAsNotified(id: string) {
     setMarking(id);
     try {
@@ -260,8 +293,8 @@ export default function StockNotificationsPage() {
   }
 
   async function markAllAsNotified() {
-    if (!confirm("Bekleyen tüm bildirimler 'Bildirildi' olarak işaretlensin mi?")) return;
-    const pendingIds = notifications.filter((n) => n.status === "pending").map((n) => n.id);
+    if (!confirm("Manuel bildirimdeki herkese haber verildi olarak işaretlensin mi?")) return;
+    const pendingIds = notifications.filter((n) => n.status === "pending" && n.ready).map((n) => n.id);
     if (!pendingIds.length) return;
 
     const { error } = await supabase
@@ -273,18 +306,16 @@ export default function StockNotificationsPage() {
   }
 
   // Dashboard sayaçları — HER ZAMAN tüm veriden (filtreden bağımsız, sabit)
-  const pendingCount  = notifications.filter((n) => n.status === "pending").length;
-  const manualCount   = notifications.filter((n) => n.status === "pending" && !n.has_email).length;
+  const pendingCount  = notifications.filter((n) => n.status === "pending" && !n.ready).length;
+  const manualCount   = notifications.filter((n) => n.status === "pending" && n.ready).length;
   const notifiedCount = notifications.filter((n) => n.status === "notified").length;
 
   // Görünen liste — sekmeye göre istemci tarafı filtre.
-  // Bekleyenler = stok bekleyen HERKES (e-postalı + e-postasız).
-  // Manuel bildirim = onun e-postasız alt kümesi (elden haber verilecekler).
+  // Bekleyenler = stok henüz gelmedi. Manuel bildirim = stok geldi ama otomatik e-posta gitmedi (elden haber ver).
   const shown = notifications.filter((n) => {
-    if (filter === "pending")  return n.status === "pending";
-    if (filter === "manual")   return n.status === "pending" && !n.has_email;
-    if (filter === "notified") return n.status === "notified";
-    return true; // Hepsi
+    if (filter === "pending")  return n.status === "pending" && !n.ready;
+    if (filter === "manual")   return n.status === "pending" && n.ready;
+    return n.status === "notified";
   });
 
   function contactDisplay(n: Notification) {
@@ -306,7 +337,6 @@ export default function StockNotificationsPage() {
     const inStock = units.filter((u) => u.modelId === mid && u.productId !== n.product_id && u.stock > 0 && normTr(u.sizeValue).trim() === size);
     return { label: modelLabels[mid] || "Model", inStock, stock: inStock.reduce((s, u) => s + u.stock, 0) };
   }
-  const stockOf = (n: Notification) => (n.stock ?? 0) + (modelInfo(n)?.stock ?? 0);
 
   const filteredUnits = (() => {
     const tokens = normTr(pSearch).split(/\s+/).filter(Boolean);
@@ -394,8 +424,8 @@ export default function StockNotificationsPage() {
             Stok Bildirimleri
           </h2>
           <p className="text-muted-foreground">
-            Stok gelince haber bekleyen kişiler. Haber verdikçe &quot;Haber Verdim&quot; ile kapatın.
-            <span className="block text-xs mt-0.5">Durum <b>Stok bekleniyor</b> = ürün henüz yok · <b>Stok geldi — haber ver</b> = e-postasız kişiye elden haber ver · <b>Bildirildi</b> = haber verildi (tamamlandı).</span>
+            Stok gelince haber bekleyen kişiler.
+            <span className="block text-xs mt-0.5"><b>Bekleyenler</b> = stok henüz gelmedi · stok gelince e-postası olana otomatik e-posta gider ve <b>Bildirildi</b>&apos;ye geçer · otomatik gidemeyen <b>Manuel bildirim</b>&apos;e düşer → elden haber verip &quot;Haber Verdim&quot;.</span>
           </p>
         </div>
         <div className="flex gap-2">
@@ -410,13 +440,13 @@ export default function StockNotificationsPage() {
           >
             <RefreshCw size={14} /> Yenile
           </Button>
-          {pendingCount > 0 && (
+          {filter === "manual" && manualCount > 0 && (
             <Button
               size="sm"
               className="gap-2 bg-green-600 hover:bg-green-700"
               onClick={markAllAsNotified}
             >
-              <Check size={14} /> Tümünü Bildirildi İşaretle ({pendingCount})
+              <Check size={14} /> Hepsine Haber Verdim ({manualCount})
             </Button>
           )}
         </div>
@@ -431,7 +461,7 @@ export default function StockNotificationsPage() {
             </div>
             <div>
               <p className="text-2xl font-black text-slate-900">{pendingCount}</p>
-              <p className="text-xs text-slate-500 font-medium">Bekleyen</p>
+              <p className="text-xs text-slate-500 font-medium">Stok bekleniyor</p>
             </div>
           </CardContent>
         </Card>
@@ -442,7 +472,7 @@ export default function StockNotificationsPage() {
             </div>
             <div>
               <p className="text-2xl font-black text-slate-900">{manualCount}</p>
-              <p className="text-xs text-slate-500 font-medium">Manuel (e-postasız)</p>
+              <p className="text-xs text-slate-500 font-medium">Stok geldi — elden haber ver</p>
             </div>
           </CardContent>
         </Card>
@@ -465,7 +495,6 @@ export default function StockNotificationsPage() {
           { key: "pending"  as const, label: "Bekleyenler", count: pendingCount },
           { key: "manual"   as const, label: "Manuel bildirim", count: manualCount },
           { key: "notified" as const, label: "Bildirildi", count: notifiedCount },
-          { key: "all"      as const, label: "Hepsi", count: notifications.length },
         ]).map((f) => (
           <button
             key={f.key}
@@ -483,10 +512,9 @@ export default function StockNotificationsPage() {
         <CardHeader>
           <CardTitle>Bildirim Talepleri</CardTitle>
           <CardDescription>
-            {filter === "pending" ? "Stok bekleyen herkes (e-postalılar otomatik bilgilendirilir; e-postasızlar Manuel bildirim'de)"
-              : filter === "manual" ? "E-postasız — stok gelince ELDEN haber verilecekler (WhatsApp/Instagram)"
-              : filter === "notified" ? "Haber verilmiş (tamamlanmış) talepler"
-              : "Tüm bildirim talepleri"}
+            {filter === "pending" ? "Stok henüz gelmedi — gelince e-postası olana otomatik haber gider"
+              : filter === "manual" ? "Stok geldi ama otomatik e-posta gitmedi — ELDEN haber ver (WhatsApp / Instagram / telefon), sonra \"Haber Verdim\""
+              : "Haber verilmiş (tamamlanmış) talepler"}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -582,9 +610,9 @@ export default function StockNotificationsPage() {
                     <TableCell>
                       {n.status === "pending" ? (
                         // Bekliyor: stok yok (henüz yapılacak bir şey yok) · Stok geldi: e-postasızsa ELDEN haber ver
-                        stockOf(n) > 0 ? (
-                          <Badge className="bg-green-100 text-green-800 border-none hover:bg-green-100">
-                            {n.has_email ? "Stok geldi" : "Stok geldi — haber ver"}
+                        n.ready ? (
+                          <Badge className="bg-green-100 text-green-800 border-none hover:bg-green-100" title={n.has_email ? "E-postası var ama otomatik e-posta gitmedi (stok başka yoldan girmiş ya da gönderilemedi)" : undefined}>
+                            {n.has_email ? "Stok geldi — e-posta gitmedi" : "Stok geldi — haber ver"}
                           </Badge>
                         ) : (
                           <Badge className="bg-amber-100 text-amber-700 border-none hover:bg-amber-100">
@@ -597,7 +625,13 @@ export default function StockNotificationsPage() {
                         </Badge>
                       )}
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right whitespace-nowrap">
+                      {n.status === "pending" && n.ready && n.has_email && (n.stock ?? 0) > 0 && (
+                        <Button size="sm" variant="ghost" className="h-8 px-2 mr-1 text-blue-600" disabled={marking === n.id}
+                          onClick={() => resendEmail(n)} title="Stok geldi e-postasını şimdi gönder">
+                          E-posta gönder
+                        </Button>
+                      )}
                       {n.status === "pending" && (
                         <Button
                           size="sm"

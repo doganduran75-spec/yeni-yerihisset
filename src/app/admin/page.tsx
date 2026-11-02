@@ -28,7 +28,7 @@ type OpenOrder = {
 
 export default function AdminDashboard() {
   const [openOrders, setOpenOrders] = useState<OpenOrder[]>([]);
-  const [manualAlerts, setManualAlerts] = useState<{ id: string; product: string; who: string; channel: string }[]>([]);
+  const [manualStockCount, setManualStockCount] = useState(0);
   const [msgCount, setMsgCount] = useState(0);         // cevapsız müşteri mesajı (sipariş konuşması)
   const [reviewCount, setReviewCount] = useState(0);   // onay bekleyen yorum
   const [feedbackCount, setFeedbackCount] = useState(0); // bekleyen talep (Talep & Geri Bildirim)
@@ -71,33 +71,10 @@ export default function AdminDashboard() {
         .filter((o) => o.step.needsAction);
       setOpenOrders(todo as OpenOrder[]);
 
-      // Manuel stok uyarısı: e-postası olmayan (Instagram/telefon) bekleyen stok bildirimleri → ELDEN bilgilendirilmeli
-      // (auto e-posta yok). Yalnız istenen numara / ürün STOĞA GİRDİYSE uyarı (stok yokken "haber ver" demesin)
-      const { data: snData } = await (supabase as any)
-        .from("stock_notifications")
-        .select("id, email, phone, instagram, status, variant_id, products(title, stock), product_variants(stock), contacts(full_name, instagram_handle, phone, email)")
-        .eq("status", "pending")
-        .order("created_at", { ascending: false })
-        .limit(40);
-      const alerts = ((snData as any[]) || [])
-        .filter((n) => {
-          const email = n.email || n.contacts?.email;
-          const ig = n.instagram || n.contacts?.instagram_handle;
-          const ph = n.phone || n.contacts?.phone;
-          const inStock = n.variant_id ? Number(n.product_variants?.stock ?? 0) > 0 : Number(n.products?.stock ?? 0) > 0;
-          return !email && (ig || ph) && inStock;
-        })
-        .map((n) => {
-          const ig = n.instagram || n.contacts?.instagram_handle;
-          const ph = n.phone || n.contacts?.phone;
-          return {
-            id: n.id,
-            product: n.products?.title || "—",
-            who: n.contacts?.full_name || "",
-            channel: ig ? `@${ig}` : (ph || ""),
-          };
-        });
-      setManualAlerts(alerts);
+      // Stok geldi ama otomatik e-posta gitmedi (e-postasız / gönderilemedi) → elden haber verilecek.
+      // Kural Stok Bildirimleri › Manuel bildirim ile aynı: stock_notify_ready() ("her renk" talebinde modelin başka rengi dahil)
+      const { data: readyIds } = await (supabase as any).rpc("stock_notify_ready");
+      setManualStockCount(((readyIds as any[]) || []).length);
 
       // Cevaplanmayan mesajlar: SİPARİŞ bazlı — son mesajı 'user' olan konuşmalar
       const { data: allMessages } = await (supabase as any)
@@ -177,7 +154,7 @@ export default function AdminDashboard() {
               { n: feedbackCount, label: "Talep", href: "/admin/feedback" },
               { n: searchCount, label: "Sonuçsuz arama", href: "/admin/feedback#aramalar" },
               { n: stockTasks.length, label: "Pazaryeri stok görevi", href: "/admin/stock-sync" },
-              { n: manualAlerts.length, label: "Elle bilgilendirilecek stok talebi", href: "/admin/crm/stock-notifications" },
+              { n: manualStockCount, label: "Stok geldi — elden haber verilecek", href: "/admin/crm/stock-notifications?tab=manual" },
               // Yoldaki iadeler (kullanıcı 2026-10-28: iş olarak burada takip; ürün gelince siparişte "İade geldi")
               { n: returnsOpen, label: "Yolda olan iade", href: "/admin/orders?iade=return_in_transit" },
               // Kargolanmış, faturası kesilmemiş — 7 günü geçen varsa kırmızı not (VUK)

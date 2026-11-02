@@ -2632,6 +2632,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      stock_notify_ready: {
+        Args: Record<PropertyKey, never>
+        Returns: string[]
+      }
       stock_notify_targets: {
         Args: { p_product_id: string; p_variant_id: string | null }
         Returns: string[]

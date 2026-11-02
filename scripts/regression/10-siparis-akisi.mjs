@@ -733,7 +733,7 @@ export default {
         ok(Array.isArray(own.json) && own.json.length >= 1, "Üye kendi stok bildirimini görüyor", `HTTP ${own.status}`);
       });
 
-      await part("Stok talebi 'Model · Numara' (modelin her rengi)", async () => {
+      await part("Stok talebi 'Model · Numara' (modelin her rengi) + stok geldi → Manuel bildirim", async () => {
         // Geri alınan işlem: iki renkli model; "her renk" talebi diğer rengin aynı numarasında haber alır, farklı numarada almaz
         const r = sql(`BEGIN;
           CREATE TEMP TABLE _mc (k text, v boolean);
@@ -752,6 +752,14 @@ export default {
             INSERT INTO _mc VALUES ('tek_ayni', n2 IN (SELECT public.stock_notify_targets(p2, v2)));
             INSERT INTO _mc VALUES ('her_farkli', n1 IN (SELECT public.stock_notify_targets(p2, v3)));
             INSERT INTO _mc VALUES ('kendi', (SELECT count(*) FROM public.stock_notify_targets(${lit(F.prod)}, v1) x WHERE x IN (n1, n2)) = 2);
+            -- Stok geldi kuralı (Manuel bildirim sekmesi + pano): stok yokken ikisi de beklemede
+            INSERT INTO _mc VALUES ('hazir_yok', n1 IN (SELECT public.stock_notify_ready()) OR n2 IN (SELECT public.stock_notify_ready()));
+            UPDATE public.product_variants SET stock = 1 WHERE id = v2;
+            INSERT INTO _mc VALUES ('hazir_her', n1 IN (SELECT public.stock_notify_ready()));
+            INSERT INTO _mc VALUES ('hazir_tek', n2 IN (SELECT public.stock_notify_ready()));
+            UPDATE public.product_variants SET stock = 1 WHERE id = v1;
+            INSERT INTO _mc VALUES ('hazir_kendi', n2 IN (SELECT public.stock_notify_ready()));
+            UPDATE public.product_variants SET stock = 0 WHERE id = v1;
             UPDATE public.products SET model_id = NULL WHERE id = p2;
             INSERT INTO _mc VALUES ('modelsiz', n1 IN (SELECT public.stock_notify_targets(p2, v2)));
           END $mc$;
@@ -763,6 +771,16 @@ export default {
         ok(got.her_farkli === false, "'Her renk' talebi farklı numarada haber almıyor", JSON.stringify(got));
         ok(got.kendi === true, "Kendi ürünü gelince iki talep de haber listesinde", JSON.stringify(got));
         ok(got.modelsiz === false, "Model kaldırılınca başka renk eşleşmiyor", JSON.stringify(got));
+        ok(got.hazir_yok === false, "Stok yokken talep 'Stok bekleniyor'da (Manuel bildirime düşmüyor)", JSON.stringify(got));
+        ok(got.hazir_her === true && got.hazir_tek === false, "Başka renkte stok gelince yalnız 'her renk' talebi Manuel bildirime düşüyor", JSON.stringify(got));
+        ok(got.hazir_kendi === true, "Kendi numarası stoğa girince talep Manuel bildirime düşüyor", JSON.stringify(got));
+        const an = await rest("rpc/stock_notify_ready", { method: "POST", body: {} });
+        const ar = await rest("rpc/stock_notify_ready", { token: F.admin.token, method: "POST", body: {} });
+        const mr = await rest("rpc/stock_notify_ready", { token: F.member.token, method: "POST", body: {} });
+        const mIds = Array.isArray(mr.json) ? mr.json : [];
+        const foreign = mIds.length ? one(`SELECT count(*) FROM public.stock_notifications WHERE id IN (${mIds.map(lit).join(",")}) AND user_id IS DISTINCT FROM ${lit(F.member.id)}`) : "0";
+        ok(an.status >= 400 && ar.status === 200 && Array.isArray(ar.json) && mr.status === 200 && foreign === "0",
+          "'Stok geldi' listesi: girişsize kapalı, yönetici görür, üye yalnız kendi kaydını", `girişsiz ${an.status} · yönetici ${ar.status} · üye ${mr.status} (başkasının ${foreign})`);
         const body = { p_product_id: F.prod, p_variant_id: F.var };
         const mb = await rest("rpc/stock_notify_targets", { token: F.member.token, method: "POST", body });
         const ad = await rest("rpc/stock_notify_targets", { token: F.admin.token, method: "POST", body });
