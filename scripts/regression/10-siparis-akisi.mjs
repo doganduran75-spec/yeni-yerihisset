@@ -733,6 +733,42 @@ export default {
         ok(Array.isArray(own.json) && own.json.length >= 1, "Üye kendi stok bildirimini görüyor", `HTTP ${own.status}`);
       });
 
+      await part("Stok talebi 'Model · Numara' (modelin her rengi)", async () => {
+        // Geri alınan işlem: iki renkli model; "her renk" talebi diğer rengin aynı numarasında haber alır, farklı numarada almaz
+        const r = sql(`BEGIN;
+          CREATE TEMP TABLE _mc (k text, v boolean);
+          DO $mc$ DECLARE m uuid; o uuid; o2 uuid; p2 uuid; v1 uuid; v2 uuid; v3 uuid; n1 uuid; n2 uuid; BEGIN
+            SELECT id INTO o FROM public.variant_options WHERE coalesce(btrim(value), '') <> '' ORDER BY id LIMIT 1;
+            SELECT id INTO o2 FROM public.variant_options WHERE coalesce(btrim(value), '') <> '' AND lower(btrim(value)) <> (SELECT lower(btrim(value)) FROM public.variant_options WHERE id = o) LIMIT 1;
+            INSERT INTO public.product_models (category_id, code, name) VALUES (${lit(F.cat)}, '98', 'REGRESYON-TEST') RETURNING id INTO m;
+            UPDATE public.products SET model_id = m WHERE id = ${lit(F.prod)};
+            INSERT INTO public.product_variants (product_id, price, stock, is_active, variant_option_id) VALUES (${lit(F.prod)}, 1, 0, false, o) RETURNING id INTO v1;
+            INSERT INTO public.products (title, slug, price, stock, is_active, category_id, model_id) VALUES ('REGRESYON-TEST Renk 2', ${lit(`regresyon-test-renk2-${RUN}`)}, 1, 0, false, ${lit(F.cat)}, m) RETURNING id INTO p2;
+            INSERT INTO public.product_variants (product_id, price, stock, is_active, variant_option_id) VALUES (p2, 1, 0, false, o) RETURNING id INTO v2;
+            INSERT INTO public.product_variants (product_id, price, stock, is_active, variant_option_id) VALUES (p2, 1, 0, false, o2) RETURNING id INTO v3;
+            INSERT INTO public.stock_notifications (product_id, variant_id, email, status, any_color) VALUES (${lit(F.prod)}, v1, ${lit(`rgt-mc1@${DOMAIN}`)}, 'pending', true) RETURNING id INTO n1;
+            INSERT INTO public.stock_notifications (product_id, variant_id, email, status) VALUES (${lit(F.prod)}, v1, ${lit(`rgt-mc2@${DOMAIN}`)}, 'pending') RETURNING id INTO n2;
+            INSERT INTO _mc VALUES ('her_ayni', n1 IN (SELECT public.stock_notify_targets(p2, v2)));
+            INSERT INTO _mc VALUES ('tek_ayni', n2 IN (SELECT public.stock_notify_targets(p2, v2)));
+            INSERT INTO _mc VALUES ('her_farkli', n1 IN (SELECT public.stock_notify_targets(p2, v3)));
+            INSERT INTO _mc VALUES ('kendi', (SELECT count(*) FROM public.stock_notify_targets(${lit(F.prod)}, v1) x WHERE x IN (n1, n2)) = 2);
+            UPDATE public.products SET model_id = NULL WHERE id = p2;
+            INSERT INTO _mc VALUES ('modelsiz', n1 IN (SELECT public.stock_notify_targets(p2, v2)));
+          END $mc$;
+          SELECT k, v FROM _mc;
+          ROLLBACK;`);
+        const got = Object.fromEntries(r.map((x) => [x[0], x[1] === "t"]));
+        ok(got.her_ayni === true, "'Her renk' talebi modelin başka renginde aynı numara gelince haber listesinde", JSON.stringify(got));
+        ok(got.tek_ayni === false, "Normal talep başka renkte haber almıyor", JSON.stringify(got));
+        ok(got.her_farkli === false, "'Her renk' talebi farklı numarada haber almıyor", JSON.stringify(got));
+        ok(got.kendi === true, "Kendi ürünü gelince iki talep de haber listesinde", JSON.stringify(got));
+        ok(got.modelsiz === false, "Model kaldırılınca başka renk eşleşmiyor", JSON.stringify(got));
+        const body = { p_product_id: F.prod, p_variant_id: F.var };
+        const mb = await rest("rpc/stock_notify_targets", { token: F.member.token, method: "POST", body });
+        const ad = await rest("rpc/stock_notify_targets", { token: F.admin.token, method: "POST", body });
+        ok(mb.status >= 400 && ad.status >= 400, "Eşleştirme fonksiyonu dışarıdan çağrılamıyor (yalnız sunucu)", `üye ${mb.status} · yönetici ${ad.status}`);
+      });
+
       await part("Pano: sistem durumu ve müşteri hata kaydı", async () => {
         const st = await api("/api/admin/system-status", { method: "GET", token: F.admin.token });
         const keys = (st.json?.tiles ?? []).map((x) => x.key).join(",");

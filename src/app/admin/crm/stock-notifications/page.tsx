@@ -48,6 +48,7 @@ type Notification = {
   contact_id: string | null;
   instagram: string | null;
   status: "pending" | "notified";
+  any_color?: boolean;   // "Model · Numara": modelin başka renginde bu numara gelince de haber
   created_at: string;
   notified_at: string | null;
   product_title?: string;
@@ -69,7 +70,9 @@ type Unit = {
   variantLabel: string;  // "" ya da "Beden: 42"
   sku: string;
   stock: number;
-  search: string;        // başlık + varyant + sku (çok-kelimeli)
+  modelId: string | null; // Bot · 01 (yalnız panel)
+  sizeValue: string;      // numara değeri ("41")
+  search: string;        // başlık + varyant + sku + model (çok-kelimeli)
 };
 
 // Türkçe-duyarsız normalize
@@ -90,7 +93,8 @@ export default function StockNotificationsPage() {
   const [units, setUnits] = useState<Unit[]>([]);
   const [addOpen, setAddOpen] = useState(false);
   const [pSearch, setPSearch] = useState("");
-  const [form, setForm] = useState({ productId: "", variantId: "", name: "", email: "", instagram: "", phone: "" });
+  const [form, setForm] = useState({ productId: "", variantId: "", name: "", email: "", instagram: "", phone: "", anyColor: false });
+  const [modelLabels, setModelLabels] = useState<Record<string, string>>({});
   // Üye seçimi: başka kanaldan (Instagram / WhatsApp) yazışılan kişi zaten üyeyse onu çağır → bildirim üyeye bağlanır
   const [member, setMember] = useState<{ id: string; name: string; email: string | null; phone: string | null } | null>(null);
   const [mSearch, setMSearch] = useState("");
@@ -125,11 +129,17 @@ export default function StockNotificationsPage() {
   async function fetchProducts() {
     const { data } = await (supabase as any)
       .from("products")
-      .select("id, title, stock, product_variants(id, sku, stock, variant_options(value, variant_groups(name)))")
+      .select("id, title, stock, model_id, product_variants(id, sku, stock, variant_options(value, variant_groups(name)))")
       .eq("is_active", true)
       .order("title");
+    const { data: mdls } = await (supabase as any).from("product_models").select("id, code, name, categories(name)");
+    const ml: Record<string, string> = {};
+    for (const m of (mdls as any[]) || []) ml[m.id] = [m.categories?.name, m.code].filter(Boolean).join(" · ") + (m.name ? ` (${m.name})` : "");
+    setModelLabels(ml);
     const us: Unit[] = [];
     for (const p of (data as any[]) || []) {
+      const modelId: string | null = p.model_id && ml[p.model_id] ? p.model_id : null;
+      const mLabel = modelId ? ml[modelId] : "";
       const vs = p.product_variants || [];
       if (vs.length > 0) {
         for (const v of vs) {
@@ -138,14 +148,14 @@ export default function StockNotificationsPage() {
           const label = val ? (gn ? `${gn}: ${val}` : val) : "Varyant";
           us.push({
             productId: p.id, variantId: v.id, title: p.title, variantLabel: label,
-            sku: v.sku ?? "", stock: Number(v.stock ?? 0),
-            search: normTr([p.title, gn, val, v.sku].filter(Boolean).join(" ")),
+            sku: v.sku ?? "", stock: Number(v.stock ?? 0), modelId, sizeValue: val,
+            search: normTr([p.title, gn, val, v.sku, mLabel].filter(Boolean).join(" ")),
           });
         }
       } else {
         us.push({
           productId: p.id, variantId: "", title: p.title, variantLabel: "",
-          sku: "", stock: Number(p.stock ?? 0), search: normTr(p.title),
+          sku: "", stock: Number(p.stock ?? 0), modelId, sizeValue: "", search: normTr([p.title, mLabel].filter(Boolean).join(" ")),
         });
       }
     }
@@ -160,7 +170,7 @@ export default function StockNotificationsPage() {
       // TÜMÜNÜ çek — filtre istemci tarafında (dashboard rakamları sabit kalsın)
       const { data, error } = await (supabase as any)
         .from("stock_notifications")
-        .select("id, product_id, variant_id, user_id, email, phone, contact_id, instagram, status, created_at, notified_at")
+        .select("id, product_id, variant_id, user_id, email, phone, contact_id, instagram, status, any_color, created_at, notified_at")
         .order("created_at", { ascending: false });
       if (error) throw error;
       const rows = (data as any[]) || [];
@@ -286,6 +296,18 @@ export default function StockNotificationsPage() {
     return "—";
   }
 
+  // "Model · Numara" talebi: modelin diğer renklerinde aynı numaranın stoğu (stok gelince dispatch bunlara da haber verir)
+  const unitModel = new Map(units.map((u) => [u.productId, u.modelId]));
+  function modelInfo(n: Notification) {
+    if (!n.any_color || !n.variant_value) return null;
+    const mid = unitModel.get(n.product_id);
+    if (!mid) return null;
+    const size = normTr(n.variant_value).trim();
+    const inStock = units.filter((u) => u.modelId === mid && u.productId !== n.product_id && u.stock > 0 && normTr(u.sizeValue).trim() === size);
+    return { label: modelLabels[mid] || "Model", inStock, stock: inStock.reduce((s, u) => s + u.stock, 0) };
+  }
+  const stockOf = (n: Notification) => (n.stock ?? 0) + (modelInfo(n)?.stock ?? 0);
+
   const filteredUnits = (() => {
     const tokens = normTr(pSearch).split(/\s+/).filter(Boolean);
     if (tokens.length === 0) return units.slice(0, 30);
@@ -347,12 +369,13 @@ export default function StockNotificationsPage() {
         contact_id: contactId,
         ...(member ? { user_id: member.id } : {}),
         email, phone, instagram,
+        any_color: !!(form.anyColor && selectedUnit?.modelId && form.variantId),
         status: "pending",
       });
       if (nErr) throw nErr;
 
       setAddOpen(false);
-      setForm({ productId: "", variantId: "", name: "", email: "", instagram: "", phone: "" });
+      setForm({ productId: "", variantId: "", name: "", email: "", instagram: "", phone: "", anyColor: false });
       setPSearch(""); setMember(null);
       fetchNotifications();
     } catch (e: any) {
@@ -506,7 +529,17 @@ export default function StockNotificationsPage() {
                         <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${(n.stock ?? 0) > 0 ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-500"}`}>
                           {(n.stock ?? 0) > 0 ? `Stok ${n.stock}` : "Stok 0"}
                         </span>
+                        {n.any_color && (
+                          <span className="text-[10px] font-bold text-violet-700 bg-violet-50 border border-violet-100 rounded px-1.5 py-0.5" title="Modelin başka renginde bu numara gelince de haber verilir">
+                            {modelInfo(n)?.label ?? "Model"} · her renk
+                          </span>
+                        )}
                       </div>
+                      {(modelInfo(n)?.inStock.length ?? 0) > 0 && (
+                        <div className="text-[11px] text-green-700 mt-0.5">
+                          Başka renkte stokta: {modelInfo(n)!.inStock.map((u) => `${u.title} (${u.stock})`).join(", ")}
+                        </div>
+                      )}
                       {(n.sku || n.barcode) && (
                         <div className="flex items-center gap-2 mt-1 text-[10px] font-mono text-slate-400">
                           {n.sku && <span title="Stok kodu (SKU)">SKU: {n.sku}</span>}
@@ -549,7 +582,7 @@ export default function StockNotificationsPage() {
                     <TableCell>
                       {n.status === "pending" ? (
                         // Bekliyor: stok yok (henüz yapılacak bir şey yok) · Stok geldi: e-postasızsa ELDEN haber ver
-                        (n.stock ?? 0) > 0 ? (
+                        stockOf(n) > 0 ? (
                           <Badge className="bg-green-100 text-green-800 border-none hover:bg-green-100">
                             {n.has_email ? "Stok geldi" : "Stok geldi — haber ver"}
                           </Badge>
@@ -613,7 +646,7 @@ export default function StockNotificationsPage() {
                       {selectedUnit.stock > 0 ? `Stok ${selectedUnit.stock} — zaten var, bildirim gereksiz olabilir` : "Tükendi"}
                     </span>
                   </span>
-                  <button className="text-xs text-blue-600 font-bold shrink-0" onClick={() => setForm(f => ({ ...f, productId: "", variantId: "" }))}>Değiştir</button>
+                  <button className="text-xs text-blue-600 font-bold shrink-0" onClick={() => setForm(f => ({ ...f, productId: "", variantId: "", anyColor: false }))}>Değiştir</button>
                 </div>
               ) : (
                 <>
@@ -640,6 +673,15 @@ export default function StockNotificationsPage() {
                     {filteredUnits.length === 0 && <div className="px-3 py-2 text-xs text-muted-foreground">Sonuç yok.</div>}
                   </div>
                 </>
+              )}
+              {selectedUnit?.modelId && selectedUnit.variantId && (
+                <label className="flex items-start gap-2 rounded-lg border border-violet-100 bg-violet-50/60 px-3 py-2 text-xs">
+                  <input type="checkbox" className="mt-0.5" checked={form.anyColor} onChange={(e) => setForm(f => ({ ...f, anyColor: e.target.checked }))} />
+                  <span>
+                    <b>Modelin her renginde ({modelLabels[selectedUnit.modelId]} · {selectedUnit.sizeValue})</b>
+                    <span className="block text-muted-foreground">Bu modelin başka bir renginde {selectedUnit.sizeValue} numara stoğa girince de haber ver.</span>
+                  </span>
+                </label>
               )}
             </div>
 

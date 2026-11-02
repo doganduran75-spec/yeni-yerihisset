@@ -2171,6 +2171,7 @@ export type Database = {
       }
       stock_notifications: {
         Row: {
+          any_color: boolean
           contact_id: string | null
           created_at: string | null
           email: string | null
@@ -2184,6 +2185,7 @@ export type Database = {
           variant_id: string | null
         }
         Insert: {
+          any_color?: boolean
           contact_id?: string | null
           created_at?: string | null
           email?: string | null
@@ -2197,6 +2199,7 @@ export type Database = {
           variant_id?: string | null
         }
         Update: {
+          any_color?: boolean
           contact_id?: string | null
           created_at?: string | null
           email?: string | null
@@ -2629,6 +2632,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      stock_notify_targets: {
+        Args: { p_product_id: string; p_variant_id: string | null }
+        Returns: string[]
+      }
       admin_link_contact_to_member: {
         Args: { p_contact: string; p_user: string }
         Returns: undefined

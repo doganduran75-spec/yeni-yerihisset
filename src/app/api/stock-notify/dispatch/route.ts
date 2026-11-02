@@ -33,13 +33,13 @@ export async function POST(req: NextRequest) {
   const productTitle = product?.title ?? "Ürün";
   const productUrl = product?.slug ? `${storeUrl}/products/${product.slug}` : storeUrl;
 
-  // Bekleyen kayıtlar
-  let q = (supabase as any).from("stock_notifications")
-    .select("id, email, contact_id, user_id")
-    .eq("status", "pending")
-    .eq("product_id", productId);
-  q = variantId ? q.eq("variant_id", variantId) : q.is("variant_id", null);
-  const { data: rows } = await q;
+  // Bekleyen kayıtlar: bu ürün + numara ve "modelin her rengi" talepleri (aynı model, aynı numara) — stock_notify_targets
+  const { data: ids, error: tErr } = await (supabase as any).rpc("stock_notify_targets", { p_product_id: productId, p_variant_id: variantId || null });
+  if (tErr) return NextResponse.json({ error: tErr.message }, { status: 500 });
+  const idList = ((ids as any[]) || []).map((x) => (typeof x === "string" ? x : x?.stock_notify_targets)).filter(Boolean);
+  const { data: rows } = idList.length
+    ? await (supabase as any).from("stock_notifications").select("id, email, contact_id, user_id").in("id", idList)
+    : { data: [] };
   const list = (rows as any[]) || [];
 
   if (list.length === 0) return NextResponse.json({ ok: true, sent: 0, manual: 0 });
