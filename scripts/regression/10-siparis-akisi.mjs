@@ -1097,6 +1097,18 @@ export default {
         ok(dm.status === 403, "Üye günlük özet gönderemiyor", `HTTP ${dm.status}`);
       });
 
+      await part("Talep & Geri Bildirim: not silme yalnız yönetici", async () => {
+        const fid = one(`INSERT INTO public.feedback (message, source) VALUES ('REGRESYON-TEST talep', 'admin') RETURNING id`);
+        try {
+          await rest(`feedback?id=eq.${fid}`, { token: F.member.token, method: "DELETE" });
+          ok(one(`SELECT count(*) FROM public.feedback WHERE id = ${lit(fid)}`) === "1", "Üye talep notunu silemiyor");
+          const d = await rest(`feedback?id=eq.${fid}`, { token: F.admin.token, method: "DELETE" });
+          ok(d.status < 300 && one(`SELECT count(*) FROM public.feedback WHERE id = ${lit(fid)}`) === "0", "Yönetici talep notunu silebiliyor", `HTTP ${d.status}`);
+        } finally {
+          sql(`DELETE FROM public.feedback WHERE id = ${lit(fid)}`);
+        }
+      });
+
       await part("Model (kategorinin alt kırılımı): yalnız panel, kategori değişince boşalır", async () => {
         const mu = await rest("product_models", { token: F.member.token, method: "POST", body: { category_id: F.cat, code: "99" } });
         ok(mu.status >= 400 && one(`SELECT count(*) FROM public.product_models WHERE category_id = ${lit(F.cat)}`) === "0", "Üye model ekleyemiyor", `HTTP ${mu.status}`);

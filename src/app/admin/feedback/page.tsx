@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import NoResultSearches from "@/components/admin/NoResultSearches";
-import { Loader2, Check, Mail, MessageSquare, Inbox, Plus, Search } from "lucide-react";
+import { siteAlert, siteConfirm } from "@/components/ui/site-dialog";
+import { Loader2, Check, Mail, MessageSquare, Inbox, Plus, Search, Trash2 } from "lucide-react";
 
 const SOURCE: Record<string, string> = { search: "sonuçsuz aramadan", admin: "elle eklendi" };
 
@@ -60,6 +61,18 @@ export default function FeedbackPage() {
     try {
       await (supabase as any).from("feedback").update({ is_handled: !f.is_handled }).eq("id", f.id);
       setRows((prev) => prev.map((x) => x.id === f.id ? { ...x, is_handled: !x.is_handled } : x));
+    } finally { setBusy(null); }
+  }
+
+  // Sil (kullanıcı 2026-11-02): onay sorulur; silinen geri gelmez
+  async function remove(f: Feedback) {
+    const preview = f.message.length > 80 ? `${f.message.slice(0, 80)}…` : f.message;
+    if (!(await siteConfirm({ title: "Not silinsin mi?", message: `“${preview}” kalıcı olarak silinir.`, confirmText: "Sil", tone: "danger" }))) return;
+    setBusy(f.id);
+    try {
+      const { data, error } = await (supabase as any).from("feedback").delete().eq("id", f.id).select("id");
+      if (error || !data?.length) { siteAlert({ title: "Silinemedi", message: error?.message || "Yetki yok ya da kayıt bulunamadı.", tone: "danger" }); return; }
+      setRows((prev) => prev.filter((x) => x.id !== f.id));
     } finally { setBusy(null); }
   }
 
@@ -148,6 +161,16 @@ export default function FeedbackPage() {
                   >
                     {busy === f.id ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
                     {f.is_handled ? "Geri Al" : "İşlendi"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={busy === f.id}
+                    onClick={() => remove(f)}
+                    title="Sil"
+                    className="h-8 w-8 p-0 shrink-0 text-slate-400 hover:text-red-600 hover:bg-red-50"
+                  >
+                    <Trash2 size={14} />
                   </Button>
                 </div>
               ))}
