@@ -794,6 +794,11 @@ export default {
         const tm = await api("/api/admin/system-status", { token: F.member.token, body: { action: "test_mail" } });
         ok(tm.status === 401 || tm.status === 403, "Üye deneme e-postası gönderemiyor", `HTTP ${tm.status}`);
         // Göndermeden alıcıyı çöz (dryRun): "Yönetici e-posta adresi ayarlı değil" hatası yakalansın
+        // mail-tester adresi kabul, başka adres reddedilir (panel e-posta aracı olmasın)
+        const mtOk = await api("/api/admin/system-status", { token: F.admin.token, body: { action: "test_mail", dryRun: true, to: "test-rgt123@srv1.mail-tester.com" } });
+        const mtBad = await api("/api/admin/system-status", { token: F.admin.token, body: { action: "test_mail", dryRun: true, to: `rgt-baska@${DOMAIN}` } });
+        ok(mtOk.status === 200 && mtOk.json?.to === "test-rgt123@srv1.mail-tester.com" && mtBad.status === 400,
+          "Deneme e-postası mail-tester adresine gönderilebilir, başka adrese gönderilemez", `mail-tester ${mtOk.status} · başka ${mtBad.status}`);
         const dr = await api("/api/admin/system-status", { token: F.admin.token, body: { action: "test_mail", dryRun: true } });
         ok(dr.status === 200 && /@/.test(dr.json?.to || ""), "Deneme e-postasının alıcısı bulunuyor (yönetici adresi)", why(dr));
         const bad = await api("/api/admin/system-status", { token: F.admin.token, body: { action: "yok" } });

@@ -32,6 +32,7 @@ async function requireAdmin(req: NextRequest) {
 
 // POST {action:"test_mail"} → yönetici bildirim adresine deneme e-postası (gerçekten gidiyor mu?)
 // dryRun: true → göndermeden yalnız alıcıyı döndürür (regresyon testi; her deploy'da e-posta atılmasın)
+// to: yalnız mail-tester.com adresi (gönderilebilirlik puanı, canlı öncesi) — panel başka adrese e-posta aracı olmasın
 export async function POST(req: NextRequest) {
   const auth = await requireAdmin(req);
   if ("error" in auth) return auth.error;
@@ -67,7 +68,9 @@ export async function POST(req: NextRequest) {
   // select("*"): ayar kolonları kurulumdan kuruluma değişebilir; yoksa sorgu hata verip adres "boş" görünüyordu.
   // Alıcı sırası yönetici bildirimleriyle aynı (sendAdminSystemAlert): bildirim → iletişim → gönderen adresi.
   const { data: st } = await auth.sb.from("settings").select("*").limit(1).maybeSingle();
-  const to = st?.admin_notify_email || st?.contact_email || st?.smtp_from_email || st?.smtp_user;
+  const custom = typeof body?.to === "string" ? body.to.trim().toLowerCase() : "";
+  if (custom && !/^[a-z0-9._-]+@(srv\d+\.)?mail-tester\.com$/.test(custom)) return NextResponse.json({ error: "Yalnız mail-tester.com adresi yazılabilir" }, { status: 400 });
+  const to = custom || st?.admin_notify_email || st?.contact_email || st?.smtp_from_email || st?.smtp_user;
   if (!to) return NextResponse.json({ error: "Yönetici e-posta adresi ayarlı değil (Ayarlar › Genel › İletişim Bilgileri › E-posta Adresi)" }, { status: 400 });
   if (body?.dryRun) return NextResponse.json({ ok: true, to, dryRun: true });
   const r = await sendSiteMail(to, "Deneme e-postası", `<p style="font-size:15px">Bu bir deneme e-postasıdır. Geldiyse sitenin e-posta gönderimi çalışıyor.</p><p style="font-size:13px;color:#6b7280">Gönderim: ${new Date().toLocaleString("tr-TR", { timeZone: "Europe/Istanbul" })}</p>`);
