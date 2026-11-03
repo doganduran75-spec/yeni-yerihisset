@@ -133,7 +133,7 @@ export default function KargonomiDialog({ order, onClose, onChanged }: {
                     )}
                   </div>
                 )}
-                {basit && o.kargonomi_status && <p className="text-[11px] text-muted-foreground">Basit Kargo durumu: {o.kargonomi_status}{o.kargonomi_error ? ` — ${o.kargonomi_error}` : ""}</p>}
+                {o.kargonomi_status && <p className="text-[11px] text-muted-foreground">{basit ? "Basit Kargo" : "Kargonomi"} durumu: {o.kargonomi_status}{o.kargonomi_error ? ` — ${o.kargonomi_error}` : ""}{o.kargonomi_checked_at ? ` · son sorgu ${new Date(o.kargonomi_checked_at).toLocaleString("tr-TR")}` : ""}</p>}
               </div>
             ) : o.kargonomi_confirmed_at ? (
               <div className="space-y-3">

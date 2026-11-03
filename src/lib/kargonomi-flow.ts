@@ -6,6 +6,9 @@
 //   4) Kod gelince: kod + firma kaydedilir (Kargoda YAPILMAZ — etiket → "Paket hazır" → kurye alınca "Kurye aldı")
 //   Basit Kargo ayrıca durum bildirir (webhook + saatlik sorgu): kargoda → "Kurye aldı" ile aynı (Kargoda + e-posta),
 //   teslim → Teslim edildi + e-posta, sorunlu durum (iade yolunda, kayıp, destek) → siparişe hata (bekleyen işler / Telegram).
+//   Kargonomi (saatlik sorgu, kullanıcı 2026-11-03): teslim edildi → Teslim edildi + e-posta; teslim edilemedi / geri geliyor /
+//   kayıp → siparişe hata. "Teslim sürecinde" yalnız durum olarak yazılır — Kurye aldı elle (kuryeden önce mi geliyor, ilk
+//   gönderide bakılacak).
 // Sağlayıcı: ayarlarda Basit Kargo açık + token varsa yeni gönderiler Basit Kargo'dan (kullanıcı 2026-11-03); siparişteki
 // gönderinin sağlayıcısı orders.kargo_api (NULL = kargonomi). Siparişin kargonomi_* alanları iki sağlayıcıda ortak.
 // Kod gelmeden sipariş kargolanmış sayılmaz (stok / iptal kuralları değişmez).
@@ -13,7 +16,7 @@
 import { createAdminClient } from "@/lib/supabase-admin";
 import {
   KargonomiError, createShipment, getOffers, confirmProvider, getShipment, cancelShipment,
-  findStateId, findCityId, stateCount, trackingOf, phone10, FAILED_STATUSES, type KargonomiOffer,
+  findStateId, findCityId, stateCount, trackingOf, phone10, FAILED_STATUSES, DELIVERED_STATUS, PROBLEM_STATUSES, type KargonomiOffer,
 } from "@/lib/kargonomi";
 import * as bk from "@/lib/basitkargo";
 import { markPickedUp, markDelivered } from "@/lib/order-ship-events";
@@ -22,7 +25,7 @@ type Sb = ReturnType<typeof createAdminClient>;
 type Provider = "kargonomi" | "basitkargo";
 const SHIPPED = ["shipped", "delivered", "undelivered", "returned"];
 const WAIT_DAYS = 3; // bu süreden sonra otomatik kod sorgusu durur (siparişte "Şimdi sorgula" çalışır)
-const TRACK_DAYS = 30; // Basit Kargo: kargodaki gönderinin durumu bu süre boyunca saatte bir sorgulanır (webhook yedeği)
+const TRACK_DAYS = 30; // kodu gelmiş gönderinin durumu bu süre boyunca saatte bir sorgulanır (teslim / sorun; Basit Kargo'da webhook yedeği)
 export const PROVIDER_NAME: Record<Provider, string> = { kargonomi: "Kargonomi", basitkargo: "Basit Kargo" };
 
 export async function cargoConfig(sb: Sb) {
@@ -245,18 +248,24 @@ export async function checkOrder(sb: Sb, orderId: string) {
     const cur = await bk.getOrder(c.basit.token, o.kargonomi_shipment_id);
     return applyBasitState(sb, o, cur);
   }
-  if (o.kargonomi_tracking_code) return { tracking: o.kargonomi_tracking_code, status: o.kargonomi_status };
   if (!c.kargonomi.token) throw new KargonomiError(400, "Kargonomi API token girilmemiş.");
   const sh = await getShipment(c.kargonomi.token, o.kargonomi_shipment_id);
-  const tracking = trackingOf(sh);
-  const failed = FAILED_STATUSES.includes(String(sh.status || ""));
+  const status = String(sh.status || "");
+  const label = String(sh.status_label || status);
+  const tracking = trackingOf(sh) ?? o.kargonomi_tracking_code ?? null;
+  const failed = FAILED_STATUSES.includes(status);
+  const problem = !!o.kargonomi_tracking_code && PROBLEM_STATUSES.includes(status);
   await update(sb, orderId, {
-    kargonomi_status: sh.status ?? o.kargonomi_status, kargonomi_checked_at: new Date().toISOString(),
+    kargonomi_status: status || o.kargonomi_status, kargonomi_checked_at: new Date().toISOString(),
     ...(sh.shipping_provider_name ? { kargonomi_provider: sh.shipping_provider_name } : {}),
-    kargonomi_error: failed ? `${sh.status_label || sh.status} — iptal edip yeniden teklif al` : null,
+    kargonomi_error: failed
+      ? (o.kargonomi_tracking_code ? `Kargonomi: ${label} — Kargonomi panelinden kontrol et` : `${label} — iptal edip yeniden teklif al`)
+      : problem ? `Kargonomi: ${label} — kargo firmasıyla kontrol et` : null,
   });
-  if (tracking && !failed) await markTracking(sb, o, tracking, String(sh.shipping_provider_name || ""));
-  return { tracking, status: sh.status ?? null, provider: sh.shipping_provider_name ?? null, failed };
+  if ((problem || failed) && o.kargonomi_tracking_code && o.kargonomi_status !== status) await note(sb, orderId, `Kargonomi: ${label}`);
+  if (tracking && !failed && !o.kargonomi_tracking_code) await markTracking(sb, o, tracking, String(sh.shipping_provider_name || ""));
+  if (status === DELIVERED_STATUS) await markDelivered(sb, orderId, "Kargonomi: teslim edildi");
+  return { tracking, status: status || null, provider: sh.shipping_provider_name ?? null, failed: failed || problem };
 }
 
 /** Basit Kargo durumu → sipariş (sorgu ve webhook ortak). Yük değil API'den okunan gönderi işlenir. */
@@ -301,7 +310,7 @@ export async function basitReturnCode(sb: Sb, orderId: string) {
   return { code: r.code };
 }
 
-/** Cron (dakikada bir): firma seçilmiş, kodu gelmemiş siparişler + (Basit Kargo) kargodaki gönderilerin saatlik durumu */
+/** Cron (dakikada bir): firma seçilmiş, kodu gelmemiş siparişler + kodu gelmiş, teslim edilmemiş gönderilerin saatlik durumu */
 export async function pollKargonomi(sb: Sb = createAdminClient()) {
   const since = new Date(Date.now() - WAIT_DAYS * 86400_000).toISOString();
   const { data } = await (sb as any).from("orders").select("id, kargonomi_status")
@@ -310,7 +319,7 @@ export async function pollKargonomi(sb: Sb = createAdminClient()) {
   const waiting = ((data as any[]) || []).filter((r) => !FAILED_STATUSES.includes(r.kargonomi_status || ""));
   const hourAgo = new Date(Date.now() - 3600_000).toISOString();
   const { data: moving } = await (sb as any).from("orders").select("id")
-    .eq("kargo_api", "basitkargo").not("kargonomi_tracking_code", "is", null)
+    .not("kargonomi_shipment_id", "is", null).not("kargonomi_tracking_code", "is", null)
     .not("shipment_status", "in", "(delivered,undelivered,returned,cancelled)").neq("status", "cancelled")
     .gte("kargonomi_confirmed_at", new Date(Date.now() - TRACK_DAYS * 86400_000).toISOString())
     .or(`kargonomi_checked_at.is.null,kargonomi_checked_at.lt.${hourAgo}`).limit(20);

@@ -1191,6 +1191,8 @@ export default {
         const ktM = await api("/api/kargonomi/ship", { token: F.member.token, body: { op: "test" } });
         const ktok = one(`SELECT coalesce(kargonomi_api_token, '') FROM public.settings ORDER BY id LIMIT 1`);
         ok(kt.status !== 500 && kt.status !== 404 && ktM.status === 403 && !(ktok && kt.text.includes(ktok)), "Kargonomi bağlantı denemesi: yönetici çalıştırır (token yanıtta yok), üye çağıramaz", `yönetici ${kt.status} · üye ${ktM.status}`);
+        const ck0 = await api("/api/kargonomi/ship", { token: F.admin.token, body: { op: "check", order_id: "00000000-0000-0000-0000-000000000000" } });
+        ok(ck0.status === 404, "Kargo durum sorgusu: olmayan siparişte 404 (çökmez)", why(ck0));
         const lb = await api("/api/admin/basitkargo", { token: F.admin.token, body: { op: "label", orderId: "00000000-0000-0000-0000-000000000000" } });
         ok(lb.status === 409 || lb.status === 400, "Basit Kargo gönderisi olmayan siparişte resmî etiket istenmiyor", why(lb));
         const ck = sql(`BEGIN;

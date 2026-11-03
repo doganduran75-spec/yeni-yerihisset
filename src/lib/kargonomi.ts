@@ -142,6 +142,9 @@ export const trackingOf = (s: KargonomiShipment) =>
   String(s.shipping_webservice_tracking_code || s.shipping_webservice_barcode || "").trim() || null;
 
 export const FAILED_STATUSES = ["webservice_order_failed", "cancelled", "request_for_cancellation"];
+/** Kod geldikten sonraki durumlar (belge): teslim sürecinde → teslim edildi; sorunlu: teslim edilemedi / geri geliyor / kayıp */
+export const DELIVERED_STATUS = "webservice_shipment_delivered";
+export const PROBLEM_STATUSES = ["webservice_shipment_not_delivered", "webservice_shipment_returning", "webservice_shipment_missing"];
 
 /** Türkiye cep / sabit: 10 hane (başında 0 / 90 olmadan) */
 export function phone10(p: unknown): string {
