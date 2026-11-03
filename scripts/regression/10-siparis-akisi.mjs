@@ -1368,6 +1368,19 @@ export default {
         ok(["a5", "100x150"].includes(s0.json?.size) && bad.status === 400, "Etiket boyutu ayarı okunuyor, geçersiz boyut reddediliyor", `${why(s0)} / ${why(bad)}`);
       });
 
+      await part("Entegrasyon etiketi basılınca 'Kargo hazırlandı' (Paket hazır kendiliğinden)", async () => {
+        const r1 = await order([MAIN(1)]);
+        const r2 = await order([MAIN(1)]);
+        const a = r1.json?.orderId, b = r2.json?.orderId;
+        if (!a || !b) return add("fail", "Etiket → kargo hazırlandı testi için sipariş oluşturulamadı", why(r1));
+        sql(`UPDATE public.orders SET payment_status = 'paid', status = 'processing', shipment_status = 'preparing', kargonomi_tracking_code = 'RGKH' || substr(id::text, 1, 6) WHERE id = ${lit(a)};
+             UPDATE public.orders SET kargonomi_tracking_code = 'RGKH' || substr(id::text, 1, 6) WHERE id = ${lit(b)};
+             UPDATE public.orders SET label_printed_code = kargonomi_tracking_code, label_printed_at = now() WHERE id IN (${lit(a)}, ${lit(b)});`);
+        ok(one(`SELECT packed_at IS NOT NULL FROM public.orders WHERE id = ${lit(a)}`) === "t" && ord(a).shipment_status === "preparing",
+          "Ödenmiş siparişte entegrasyon etiketi basılınca 'Kargo hazırlandı' (henüz Kargoda değil, e-posta yok)", `packed_at ${ord(a).packed_at} · ${ord(a).shipment_status}`);
+        ok(one(`SELECT packed_at IS NULL FROM public.orders WHERE id = ${lit(b)}`) === "t", "Ödemesi alınmamış siparişte etiket 'Kargo hazırlandı' yapmıyor", "packed_at doldu");
+      });
+
       await part("Paket hazır → kurye aldı (gece paketlenir, e-posta kurye alınca)", async () => {
         const r = await order([MAIN(1)]);
         const id = r.json?.orderId;

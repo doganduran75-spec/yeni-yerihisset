@@ -185,19 +185,23 @@ function coreNextStep(o: OrderLike): NextStep {
           ], needsAction: true }
         : { stage: `Kargo kodu bekleniyor${firm}`, hint: late
             ? "1 saattir kod gelmedi — kargo panelinden kontrol et."
-            : "Kod gelince siparişe yazılır (dakikada bir sorgulanır); sonra etiketi bas, “Paket hazır” de.",
+            : "Kod gelince siparişe yazılır (dakikada bir sorgulanır); sonra etiketi bas — sipariş kendiliğinden “Kargo hazırlandı” olur.",
           actions: [{ key: "ship_kargonomi", label: "Kargo durumu", kind: "primary" }], needsAction: late };
     }
     // Paket hazır → kurye bekleniyor (müşteriye e-posta "Kurye aldı"da gider; listede toplu düğme)
     if (o.packed_at) {
-      return { stage: "Kargo bekliyor — paket hazır", hint: "Kurye alınca “Kurye aldı” — müşteriye kargo e-postası o an gider.", actions: [
+      // Entegrasyonla gelen kod: kurye alınca kargo firmasının durumu siparişi kendiliğinden Kargoda yapar (saatlik sorgu)
+      const auto = !!o.kargonomi_tracking_code;
+      return { stage: "Kargo hazırlandı — kurye bekleniyor", hint: auto
+          ? "Kurye alınca sipariş kendiliğinden “Kargoda” olur, müşteriye e-posta gider (saatte bir sorgulanır). “Kurye aldı” yalnız gecikirse."
+          : "Kurye alınca “Kurye aldı” — müşteriye kargo e-postası o an gider.", actions: [
         { key: "picked_up", label: "Kurye aldı", kind: "primary" },
         { key: "cancel", label: "Siparişi iptal et + para iadesi", kind: "danger" },
-      ], needsAction: daysSince(o.packed_at) > 1 };
+      ], needsAction: daysSince(o.packed_at) > (auto ? 2 : 1) };
     }
     const hasCode = !!(o.kargonomi_tracking_code || o.cargo_tracking_number);
     return { stage: o.kargonomi_shipment_id && !hasCode ? "Hazırlanıyor — kargo firması seçilmedi" : "Hazırlanıyor",
-      hint: hasCode ? "Etiketi bas, paketi hazırla, “Paket hazır” de." : "Kargo kodunu al (Kargoya ver ya da etiket kutusundan elle), etiketi bas, “Paket hazır” de.", actions: [
+      hint: o.kargonomi_tracking_code ? "Etiketi bas — sipariş kendiliğinden “Kargo hazırlandı” olur." : hasCode ? "Etiketi bas, paketi hazırla, “Paket hazır” de." : "Kargo kodunu al (Kargoya ver ya da etiket kutusundan elle), etiketi bas, “Paket hazır” de.", actions: [
       ...(hasCode ? [] : [{ key: "ship_kargonomi", label: o.kargonomi_shipment_id ? "Kargo firmasını seç" : "Kargoya ver", kind: "primary" } as NextAction]),
       packedAction,
       { key: "cancel", label: "Siparişi iptal et + para iadesi", kind: "danger" },

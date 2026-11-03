@@ -3,12 +3,13 @@
 //   1) "Kargoya ver" → desi → taslak gönderi + firma teklifleri (quoteOrder)
 //   2) Yönetici firmayı seçer → onay (confirmOrder) → kargo kodu (Basit Kargo hemen; Kargonomi'de birkaç sn – 10+ dk)
 //   3) Kod beklenirken dakikada bir sorgu (pollKargonomi; cron) + siparişte "Şimdi sorgula"
-//   4) Kod gelince: kod + firma kaydedilir (Kargoda YAPILMAZ — etiket → "Paket hazır" → kurye alınca "Kurye aldı")
+//   4) Kod gelince: kod + firma kaydedilir (Kargoda YAPILMAZ). Etiket basılınca sipariş kendiliğinden "Kargo hazırlandı"
+//      (packed_at; veritabanı tetikleyicisi 20261165) → kurye alınca kargo firmasının durumu siparişi Kargoda yapar.
 //   Basit Kargo ayrıca durum bildirir (webhook + saatlik sorgu): kargoda → "Kurye aldı" ile aynı (Kargoda + e-posta),
 //   teslim → Teslim edildi + e-posta, sorunlu durum (iade yolunda, kayıp, destek) → siparişe hata (bekleyen işler / Telegram).
-//   Kargonomi (saatlik sorgu, kullanıcı 2026-11-03): teslim edildi → Teslim edildi + e-posta; teslim edilemedi / geri geliyor /
-//   kayıp → siparişe hata. "Teslim sürecinde" yalnız durum olarak yazılır — Kurye aldı elle (kuryeden önce mi geliyor, ilk
-//   gönderide bakılacak).
+//   Kargonomi (saatlik sorgu, kullanıcı 2026-11-03): teslim sürecinde → "Kurye aldı" ile aynı (Kargoda + e-posta);
+//   teslim edildi → Teslim edildi + e-posta; teslim edilemedi / geri geliyor / kayıp → siparişe hata.
+//   Teslim edilmiş / iade / iptal sipariş sorgulanmaz.
 // Sağlayıcı: ayarlarda Basit Kargo açık + token varsa yeni gönderiler Basit Kargo'dan (kullanıcı 2026-11-03); siparişteki
 // gönderinin sağlayıcısı orders.kargo_api (NULL = kargonomi). Siparişin kargonomi_* alanları iki sağlayıcıda ortak.
 // Kod gelmeden sipariş kargolanmış sayılmaz (stok / iptal kuralları değişmez).
@@ -16,7 +17,7 @@
 import { createAdminClient } from "@/lib/supabase-admin";
 import {
   KargonomiError, createShipment, getOffers, confirmProvider, getShipment, cancelShipment,
-  findStateId, findCityId, stateCount, trackingOf, phone10, FAILED_STATUSES, DELIVERED_STATUS, PROBLEM_STATUSES, type KargonomiOffer,
+  findStateId, findCityId, stateCount, trackingOf, phone10, FAILED_STATUSES, MOVING_STATUS, DELIVERED_STATUS, PROBLEM_STATUSES, type KargonomiOffer,
 } from "@/lib/kargonomi";
 import * as bk from "@/lib/basitkargo";
 import { markPickedUp, markDelivered } from "@/lib/order-ship-events";
@@ -264,6 +265,7 @@ export async function checkOrder(sb: Sb, orderId: string) {
   });
   if ((problem || failed) && o.kargonomi_tracking_code && o.kargonomi_status !== status) await note(sb, orderId, `Kargonomi: ${label}`);
   if (tracking && !failed && !o.kargonomi_tracking_code) await markTracking(sb, o, tracking, String(sh.shipping_provider_name || ""));
+  if (status === MOVING_STATUS && o.kargonomi_tracking_code) await markPickedUp(sb, orderId, "Kargonomi: teslim sürecinde — sipariş kargoda");
   if (status === DELIVERED_STATUS) await markDelivered(sb, orderId, "Kargonomi: teslim edildi");
   return { tracking, status: status || null, provider: sh.shipping_provider_name ?? null, failed: failed || problem };
 }
