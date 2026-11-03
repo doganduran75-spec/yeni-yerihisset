@@ -3,7 +3,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // Ayarlar › Entegrasyonlar › Basit Kargo (src/lib/basitkargo.ts, /api/admin/basitkargo).
 // Kurulum: Basit Kargo paneli › Ayarlar'dan API token → yapıştır → gönderici adresini seç → Aç.
-// Açıkken siparişteki "Kargoya ver" Basit Kargo'dan çalışır (Kargonomi yerine). Token kaydedildikten sonra gösterilmez.
+// Açıkken siparişteki "Kargoya ver" Basit Kargo'dan çalışır (Kargonomi de açıksa siparişte hangisi seçilir). Token kaydedildikten sonra gösterilmez.
 // Webhook (isteğe bağlı): adres üret → Basit Kargo paneli › Ayarlar › Webhook'a yapıştır (durum değişikliği).
 import { useCallback, useEffect, useState } from "react";
 import IntegrationSection from "@/components/admin/settings/IntegrationSection";
@@ -52,7 +52,7 @@ export default function BasitKargoCard() {
           onChange={(e) => run("en", async () => { await api({ op: "save", enabled: e.target.checked }); })} /> Açık
       </label>}>
       <p className="text-sm text-muted-foreground">
-        Açıkken siparişteki <b>Kargoya ver</b> Basit Kargo&apos;dan çalışır (Kargonomi yerine): desi gir → firmaların fiyatları gelir → firmayı seç →
+        Açıkken siparişteki <b>Kargoya ver</b> Basit Kargo&apos;dan çalışır (Kargonomi de açıksa pencerede ikisinden birini seçersin): desi gir → firmaların fiyatları gelir → firmayı seç →
         kargo kodu hemen gelir → <b>Basit Kargo etiketi</b>ni bas → “Paket hazır”. Kurye alınca ve teslim edilince sipariş kendiliğinden güncellenir
         (webhook ya da saatte bir sorgu). Teslim edilmiş gönderide iade kodu talepten alınır.
       </p>

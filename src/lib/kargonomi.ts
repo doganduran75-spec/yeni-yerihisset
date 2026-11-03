@@ -64,6 +64,12 @@ export async function findStateId(token: string, cityName: string): Promise<numb
   return m.id;
 }
 
+/** Bağlantı denemesi: il listesini okur (gönderi açmaz, ücret yok) → il sayısı */
+export async function stateCount(token: string): Promise<number> {
+  statesCache = listOf(await call(token, "GET", "/states"), "states");
+  return statesCache.length;
+}
+
 export async function findCityId(token: string, stateId: number, districtName: string): Promise<number> {
   citiesCache[stateId] ??= listOf(await call(token, "GET", `/cities/${stateId}`), "cities");
   const m = citiesCache[stateId].find((c) => normalizetr(c.name) === normalizetr(districtName));

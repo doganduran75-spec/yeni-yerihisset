@@ -13,7 +13,7 @@
 import { createAdminClient } from "@/lib/supabase-admin";
 import {
   KargonomiError, createShipment, getOffers, confirmProvider, getShipment, cancelShipment,
-  findStateId, findCityId, trackingOf, phone10, FAILED_STATUSES, type KargonomiOffer,
+  findStateId, findCityId, stateCount, trackingOf, phone10, FAILED_STATUSES, type KargonomiOffer,
 } from "@/lib/kargonomi";
 import * as bk from "@/lib/basitkargo";
 import { markPickedUp, markDelivered } from "@/lib/order-ship-events";
@@ -68,10 +68,24 @@ const providerOfOrder = (o: any): Provider => (o.kargo_api === "basitkargo" ? "b
 const update = (sb: Sb, id: string, fields: Record<string, unknown>) => (sb as any).from("orders").update(fields).eq("id", id);
 const note = (sb: Sb, id: string, t: string) => (sb as any).from("order_events").insert({ order_id: id, type: "note", note: t.slice(0, 400), created_by: null });
 
-/** Pencere başlığı için: yeni gönderi hangi sağlayıcıdan gider */
+/** Kullanıma hazır sağlayıcılar (açık + token; Kargonomi'de depo da) */
+function availableOf(c: Cfg): Provider[] {
+  return (["basitkargo", "kargonomi"] as Provider[]).filter((p) => { try { ready(c, p); return true; } catch { return false; } });
+}
+
+/** Pencere için: varsayılan sağlayıcı + hazır olanlar (ikisi de hazırsa siparişte seçilir) */
 export async function activeProvider(sb: Sb) {
   const c = await cargoConfig(sb);
-  return { provider: c.active, name: PROVIDER_NAME[c.active] };
+  return { provider: c.active, name: PROVIDER_NAME[c.active], available: availableOf(c).map((p) => ({ provider: p, name: PROVIDER_NAME[p] })) };
+}
+
+/** Ayarlar › Kargonomi "Bağlantıyı test et": kayıtlı token ile il listesi okunur (gönderi açılmaz) */
+export async function testKargonomi(sb: Sb) {
+  const c = await cargoConfig(sb);
+  if (!c.kargonomi.token) throw new KargonomiError(400, "Kargonomi API token kaydedilmemiş — önce token'ı girip Kaydet'e bas.");
+  const states = await stateCount(c.kargonomi.token);
+  if (!states) throw new KargonomiError(502, "Kargonomi bağlandı ama il listesi boş döndü.");
+  return { states, enabled: c.kargonomi.enabled, warehouse: c.kargonomi.warehouseId || null };
 }
 
 /** Alıcı bilgileri (iki sağlayıcıda aynı kontroller) */
@@ -96,7 +110,7 @@ async function dropDraft(c: Cfg, p: Provider, shipmentId: string) {
 }
 
 /** 1) Taslak gönderi + teklifler. Aynı sağlayıcı + desiyle açık taslak varsa yeniden kullanılır. */
-export async function quoteOrder(sb: Sb, orderId: string, desi: number): Promise<{ offers: KargonomiOffer[]; shipmentId: string; provider: Provider }> {
+export async function quoteOrder(sb: Sb, orderId: string, desi: number, want?: string): Promise<{ offers: KargonomiOffer[]; shipmentId: string; provider: Provider }> {
   if (!(desi > 0 && desi <= 1000)) throw new KargonomiError(400, "Geçerli bir desi gir.");
   const c = await cargoConfig(sb);
   const o = await loadOrder(sb, orderId);
@@ -104,7 +118,8 @@ export async function quoteOrder(sb: Sb, orderId: string, desi: number): Promise
   if (o.kargonomi_confirmed_at) throw new KargonomiError(409, "Kargo firması seçildi — önce iptal et.");
   if (o.status === "cancelled" || SHIPPED.includes(o.shipment_status || "")) throw new KargonomiError(409, "Bu sipariş kargoya verilemez (iptal ya da zaten kargolanmış).");
   if (o.payment_status !== "paid") throw new KargonomiError(409, "Ödemesi alınmamış sipariş kargoya verilemez.");
-  const p = c.active;
+  // İkisi de hazırsa pencerede seçilen sağlayıcı; seçilmediyse varsayılan (Basit Kargo açıksa o)
+  const p: Provider = want === "basitkargo" || want === "kargonomi" ? want : c.active;
   ready(c, p);
 
   let shipmentId = o.kargonomi_shipment_id as string | null;

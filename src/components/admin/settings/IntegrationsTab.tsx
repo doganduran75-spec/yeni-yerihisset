@@ -694,7 +694,7 @@ export default function IntegrationsTab() {
             </div>
           ) : null}
 
-          <div className="flex justify-end">{saveBtn("kargonomi", "Kargonomi")}</div>
+          <div className="flex flex-wrap justify-end gap-2"><KargonomiTest />{saveBtn("kargonomi", "Kargonomi")}</div>
       </IntegrationSection>
 
       {/* ─── Paraşüt (fatura) ─── */}
@@ -703,6 +703,34 @@ export default function IntegrationsTab() {
       {/* ─── Google Merchant API (anlık ürün gönderimi) ─── */}
       <GmcApiCard />
       <TelegramCard />
+    </div>
+  );
+}
+
+/** Kargonomi kayıtlı token'la bağlantı denemesi (il listesi okunur, gönderi açılmaz) */
+function KargonomiTest() {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  async function test() {
+    setBusy(true); setMsg(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const r = await fetch("/api/kargonomi/ship", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
+        body: JSON.stringify({ op: "test" }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) setMsg({ ok: false, text: j.error || `HTTP ${r.status}` });
+      else setMsg({ ok: true, text: `Bağlantı tamam — ${j.states} il okundu.${j.warehouse ? ` Depo ID ${j.warehouse} (ilk teklifte doğrulanır).` : " Depo ID girilmemiş."}${j.enabled ? "" : " Kargonomi kapalı."}` });
+    } catch (e: any) { setMsg({ ok: false, text: e?.message || "Bağlantı hatası" }); } finally { setBusy(false); }
+  }
+  return (
+    <div className="flex items-center gap-2">
+      {msg && <span className={`text-xs ${msg.ok ? "text-green-700" : "text-red-600"}`}>{msg.text}</span>}
+      <Button variant="outline" className="gap-1.5" disabled={busy} onClick={test}>
+        {busy ? <Loader2 size={14} className="animate-spin" /> : <PlugZap size={14} />} Bağlantıyı test et
+      </Button>
     </div>
   );
 }

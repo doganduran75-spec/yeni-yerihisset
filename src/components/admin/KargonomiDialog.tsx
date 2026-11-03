@@ -38,8 +38,9 @@ export default function KargonomiDialog({ order, onClose, onChanged }: {
   const [pick, setPick] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [active, setActive] = useState<{ provider: string; name: string } | null>(null);
-  useEffect(() => { if (order && !active) call({ op: "info" }).then((j) => setActive({ provider: j.provider, name: j.name })).catch(() => {}); }, [order, active]);
+  const [active, setActive] = useState<{ provider: string; name: string; available: { provider: string; name: string }[] } | null>(null);
+  const [want, setWant] = useState<string | null>(null); // ikisi de hazırsa seçilen sağlayıcı
+  useEffect(() => { if (order && !active) call({ op: "info" }).then((j) => setActive({ provider: j.provider, name: j.name, available: j.available || [] })).catch(() => {}); }, [order, active]);
 
   // Pencere açılınca siparişin güncel Kargonomi alanlarını oku
   const reload = useCallback(async (id: string) => {
@@ -79,8 +80,11 @@ export default function KargonomiDialog({ order, onClose, onChanged }: {
     finally { await reload(o.id); setBusy(null); }
   }
 
-  // Gönderi açıldıysa onun sağlayıcısı, açılmadıysa ayarlardaki etkin sağlayıcı
-  const basit = o?.kargonomi_shipment_id ? o?.kargo_api === "basitkargo" : active?.provider === "basitkargo";
+  // Firma seçildiyse gönderinin sağlayıcısı; teklif aşamasında pencerede seçilen (yoksa taslağınki, yoksa varsayılan)
+  const draftProv = o?.kargonomi_shipment_id ? (o?.kargo_api === "basitkargo" ? "basitkargo" : "kargonomi") : null;
+  const chosen = o?.kargonomi_confirmed_at ? draftProv : want ?? draftProv ?? active?.provider ?? null;
+  const basit = chosen === "basitkargo";
+  const canChoose = !o?.kargonomi_confirmed_at && (active?.available.length ?? 0) > 1;
   const pname = basit ? "Basit Kargo" : o?.kargonomi_shipment_id || active ? "Kargonomi" : "";
   const offers: Offer[] = (o?.kargonomi_offers as Offer[]) || [];
   const sorted = [...offers].sort((a, b) => (a.id === "-1" ? -1 : b.id === "-1" ? 1 : (a.amount ?? 1e9) - (b.amount ?? 1e9)));
@@ -158,17 +162,29 @@ export default function KargonomiDialog({ order, onClose, onChanged }: {
               </div>
             ) : (
               <div className="space-y-3">
+                {canChoose && (
+                  <div className="space-y-1">
+                    <span className="text-xs font-medium">Kargo entegrasyonu</span>
+                    <div className="flex gap-1 rounded-lg border p-1">
+                      {active!.available.map((a) => (
+                        <button key={a.provider} type="button" disabled={!!busy} onClick={() => { setWant(a.provider); setPick(""); }}
+                          className={`flex-1 rounded-md px-2 py-1.5 text-xs font-semibold ${chosen === a.provider ? "bg-purple-600 text-white" : "text-slate-600 hover:bg-slate-100"}`}>{a.name}</button>
+                      ))}
+                    </div>
+                    {draftProv && chosen !== draftProv && <p className="text-[11px] text-muted-foreground">Teklifleri getirince {draftProv === "basitkargo" ? "Basit Kargo" : "Kargonomi"} taslağı silinir.</p>}
+                  </div>
+                )}
                 <div className="flex items-end gap-2">
                   <label className="flex-1 space-y-1">
                     <span className="text-xs font-medium">Desi</span>
                     <Input type="number" min="0.5" max="300" step="0.5" value={desi} onChange={(e) => setDesi(e.target.value)} />
                   </label>
-                  <Button className="gap-1.5" disabled={!!busy || !(Number(desi) > 0)} onClick={() => run("quote", { op: "quote", desi: Number(desi) })}>
+                  <Button className="gap-1.5" disabled={!!busy || !(Number(desi) > 0)} onClick={() => run("quote", { op: "quote", desi: Number(desi), ...(chosen ? { provider: chosen } : {}) })}>
                     {busy === "quote" ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} {offers.length ? "Teklifleri yenile" : "Teklifleri getir"}
                   </Button>
                 </div>
 
-                {sorted.length > 0 && (
+                {sorted.length > 0 && (!draftProv || draftProv === chosen) && (
                   <div className="rounded-lg border divide-y">
                     {sorted.map((f) => {
                       const off = f.id !== "-1" && f.amount == null;
@@ -187,7 +203,7 @@ export default function KargonomiDialog({ order, onClose, onChanged }: {
                   {o.kargonomi_shipment_id && (
                     <Button variant="outline" disabled={!!busy} onClick={() => run("cancel", { op: "cancel" })}>Vazgeç</Button>
                   )}
-                  <Button className="flex-1 gap-1.5 bg-purple-600 hover:bg-purple-700" disabled={!!busy || !pick}
+                  <Button className="flex-1 gap-1.5 bg-purple-600 hover:bg-purple-700" disabled={!!busy || !pick || (!!draftProv && draftProv !== chosen)}
                     onClick={() => run("confirm", { op: "confirm", provider_id: pick })}>
                     {busy === "confirm" ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} Bu firmayla gönder
                   </Button>

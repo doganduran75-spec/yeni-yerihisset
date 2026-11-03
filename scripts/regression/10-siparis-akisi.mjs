@@ -1186,6 +1186,11 @@ export default {
         const inf = await api("/api/kargonomi/ship", { token: F.admin.token, body: { op: "info" } });
         const infM = await api("/api/kargonomi/ship", { token: F.member.token, body: { op: "info" } });
         ok(inf.status === 200 && ["kargonomi", "basitkargo"].includes(inf.json?.provider) && infM.status === 403, "Kargoya ver: etkin sağlayıcı yöneticiye görünüyor, üye çağıramıyor", `yönetici ${inf.status} ${inf.json?.provider} · üye ${infM.status}`);
+        ok(Array.isArray(inf.json?.available) && inf.json.available.every((x) => ["kargonomi", "basitkargo"].includes(x.provider)), "Kargoya ver: hazır sağlayıcı listesi geliyor (ikisi de hazırsa pencerede seçilir)", JSON.stringify(inf.json?.available));
+        const kt = await api("/api/kargonomi/ship", { token: F.admin.token, body: { op: "test" } });
+        const ktM = await api("/api/kargonomi/ship", { token: F.member.token, body: { op: "test" } });
+        const ktok = one(`SELECT coalesce(kargonomi_api_token, '') FROM public.settings ORDER BY id LIMIT 1`);
+        ok(kt.status !== 500 && kt.status !== 404 && ktM.status === 403 && !(ktok && kt.text.includes(ktok)), "Kargonomi bağlantı denemesi: yönetici çalıştırır (token yanıtta yok), üye çağıramaz", `yönetici ${kt.status} · üye ${ktM.status}`);
         const lb = await api("/api/admin/basitkargo", { token: F.admin.token, body: { op: "label", orderId: "00000000-0000-0000-0000-000000000000" } });
         ok(lb.status === 409 || lb.status === 400, "Basit Kargo gönderisi olmayan siparişte resmî etiket istenmiyor", why(lb));
         const ck = sql(`BEGIN;
