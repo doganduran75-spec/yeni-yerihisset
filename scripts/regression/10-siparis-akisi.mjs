@@ -1156,6 +1156,19 @@ export default {
         ok(dm.status === 403, "Üye günlük özet gönderemiyor", `HTTP ${dm.status}`);
       });
 
+      await part("Pano: 'İade faturası kesilecek' ayrı satır, 'Bekleyen sipariş işi'nde sayılmaz", async () => {
+        let m;
+        try { m = await import(new URL("../../src/lib/order-next-step.ts", import.meta.url)); }
+        catch (e) { return add("warn", "İade faturası kuralı denenemedi", `order-next-step.ts yüklenemedi (Node TS desteği?): ${String(e?.message || e).slice(0, 120)}`); }
+        const due = (o) => m.isReturnInvoiceDue(m.orderNextStep(o));
+        const ty = { channel: "trendyol", status: "delivered", payment_status: "paid", shipment_status: "delivered", mp_claim_state: "done", total_amount: 849 };
+        ok(due({ ...ty, invoice_status: "invoiced" }), "Trendyol iadesi işlenmiş, faturalı sipariş → 'İade faturası kesilecek'te sayılır");
+        ok(!due({ ...ty, invoice_status: "return_invoiced" }), "'İade faturası kesildi' denince satırdan düşer");
+        const site = { channel: "site", payment_status: "refunded", shipment_status: "returned", total_amount: 1000, refunded_amount: 1000 };
+        ok(due({ ...site, invoice_status: "invoiced" }), "Site: iade geldi + ücret iade edildi + faturalı → sayılır");
+        ok(!due({ ...site, payment_status: "paid", refunded_amount: 0, invoice_status: "invoiced" }), "Site: ücret iadesi henüz yapılmamışsa 'Bekleyen sipariş işi'nde kalır");
+      });
+
       await part("Talep & Geri Bildirim: Planla (panodan düşer) + not silme yalnız yönetici", async () => {
         const fid = one(`INSERT INTO public.feedback (message, source) VALUES ('REGRESYON-TEST talep', 'admin') RETURNING id`);
         try {

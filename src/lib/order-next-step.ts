@@ -73,6 +73,12 @@ export type NextStep = {
 
 const SHIPPED = ["shipped", "delivered", "undelivered", "returned"];
 
+// Sırada yalnız iade faturası kesmek var (Trendyol iadesi işlendi / iade geldi + ücret iade edildi / faturalı iptal).
+// Panoda ayrı "İade faturası kesilecek" satırında sayılır, "Bekleyen sipariş işi"nde sayılmaz (kullanıcı 2026-11-03).
+export function isReturnInvoiceDue(s: NextStep) {
+  return s.needsAction && s.actions.length > 0 && s.actions.every((a) => a.key === "return_invoice");
+}
+
 export function isMarketplaceOrder(o: OrderLike) {
   return (o.channel || "site") !== "site" && !o.import_source;
 }

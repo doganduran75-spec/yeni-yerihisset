@@ -2,7 +2,7 @@
 
 import { orderLabel } from "@/lib/order-label";
 import { useEffect, useState, useCallback } from "react";
-import { orderNextStep, type NextActionKey, UNINVOICED_SINCE, INVOICE_DAYS } from "@/lib/order-next-step";
+import { orderNextStep, isReturnInvoiceDue, type NextActionKey, UNINVOICED_SINCE, INVOICE_DAYS } from "@/lib/order-next-step";
 import { useSearchParams, useRouter } from "next/navigation";
 import AdminOpsTabs from "@/components/admin/AdminOpsTabs";
 import OrderTimeline from "@/components/admin/OrderTimeline";
@@ -1219,6 +1219,7 @@ Siparişte “Paraşüt — yeniden dene” ile tekrar dene.`, tone: "danger" })
         if (fRet === "cancelled_unrefunded" && !(o.status === "cancelled" && (pay === "paid" || pay === "partial_refund"))) return false;
         if (fRet === "any_refund" && !refundedPay) return false;
         if (fRet === "uninvoiced_shipped" && !isUninvoicedShipped(o)) return false;
+        if (fRet === "return_invoice_due" && !isReturnInvoiceDue(nx(o))) return false;
       }
       if (fMethod !== "all" && (o.payment_method || "credit_card") !== fMethod) return false;
       if (fTodo && !nx(o).needsAction) return false;
@@ -1365,6 +1366,7 @@ Siparişte “Paraşüt — yeniden dene” ile tekrar dene.`, tone: "danger" })
                 <option value="refunded_no_return_invoice">Ücret iade edildi, iade faturası eksik</option>
                 <option value="cancelled_unrefunded">İptal, ücret iade edilmedi</option>
                 <option value="any_refund">Ücret iadesi olanlar</option>
+                <option value="return_invoice_due">İade faturası kesilecek</option>
                 <option value="uninvoiced_shipped">Kargolanmış, faturası kesilmemiş</option>
               </select>
               <label className="inline-flex items-center gap-1.5 text-xs text-muted-foreground px-1" title="Kartla ödeme başlatılıp tamamlanmayan (iptal + ödeme alınmadı) siparişler">

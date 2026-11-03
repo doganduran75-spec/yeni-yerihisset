@@ -3,7 +3,7 @@
 import { orderLabel } from "@/lib/order-label";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { orderNextStep, type NextStep } from "@/lib/order-next-step";
+import { orderNextStep, isReturnInvoiceDue, type NextStep } from "@/lib/order-next-step";
 import { Card } from "@/components/ui/card";
 import { supabase } from "@/lib/supabase";
 import DashboardSummary from "@/components/admin/DashboardSummary";
@@ -126,6 +126,7 @@ export default function AdminDashboard() {
 
   // TEK EKRAN PANO (≈1600×830): üstte sistem şeridi, ortada satış + kişiler + bugünün işleri,
   // altta bekleyen işlerim (mesaj / yorum / talep / sonuçsuz arama sayıları "Bugünün işleri"nde). Liste uzunlukları ekrana sığacak kadar; "Tümü" ile devamı.
+  const returnInvoiceDue = openOrders.filter((o) => o.step && isReturnInvoiceDue(o.step)).length;
   const CH: Record<string, string> = { trendyol: "TY", hepsiburada: "HB", amazon: "AZ", attipas: "AT" };
   const head = (icon: React.ReactNode, title: string, n: number, href: string, tone: string) => (
     <div className="flex items-center justify-between px-4 pt-3 pb-1">
@@ -148,7 +149,8 @@ export default function AdminDashboard() {
           <div className="px-4 pb-1 font-semibold text-sm flex items-center gap-2"><Clock size={16} className="text-amber-500" /> Bugünün işleri</div>
           <div className="px-2 text-sm">
             {[
-              { n: openOrders.length, label: "Bekleyen sipariş işi", href: "/admin/orders?todo=1" },
+              // İade faturası bekleyenler ayrı satırda (aşağıda), burada sayılmaz (kullanıcı 2026-11-03)
+              { n: openOrders.length - returnInvoiceDue, label: "Bekleyen sipariş işi", href: "/admin/orders?todo=1" },
               { n: msgCount, label: "Cevapsız müşteri mesajı", href: "/admin/messages" },
               { n: reviewCount, label: "Onay bekleyen yorum", href: "/admin/reviews" },
               { n: feedbackCount, label: "Talep", href: "/admin/feedback" },
@@ -157,6 +159,7 @@ export default function AdminDashboard() {
               { n: manualStockCount, label: "Stok geldi — elden haber verilecek", href: "/admin/crm/stock-notifications?tab=manual" },
               // Yoldaki iadeler (kullanıcı 2026-10-28: iş olarak burada takip; ürün gelince siparişte "İade geldi")
               { n: returnsOpen, label: "Yolda olan iade", href: "/admin/orders?iade=return_in_transit" },
+              { n: returnInvoiceDue, label: "İade faturası kesilecek", href: "/admin/orders?iade=return_invoice_due" },
               // Kargolanmış, faturası kesilmemiş — 7 günü geçen varsa kırmızı not (VUK)
               { n: uninvoiced.n, label: "Faturası kesilmemiş", href: "/admin/orders?iade=uninvoiced_shipped", late: uninvoiced.late },
             ].map((x: { n: number; label: string; href: string; info?: boolean; late?: number }) => (
