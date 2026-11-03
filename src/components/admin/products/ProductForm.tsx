@@ -375,7 +375,11 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
       let createdInactive = false;
 
       if (productId) {
-        const { error } = await supabase.from("products").update(payload as any).eq("id", productId);
+        // Yayına alma EN SONDA (numaralar kaydedildikten sonra): fiyat kuralı (require_price_to_activate) aktif numaraya
+        // bakar — numaralar o an veritabanında kapalıysa formda açılmış olsalar da "fiyat yok" diye reddediliyordu (2026-11-03)
+        const rest = { ...payload };
+        delete rest.is_active;
+        const { error } = await supabase.from("products").update(rest as any).eq("id", productId);
         if (error) throw error;
       } else {
         // Yeni ürün PASİF oluşturulur: fiyatı girilmeden yayına alınamaz (Fiyatlar sayfası)
@@ -437,6 +441,11 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
         }
       }
 
+      if (productId) {
+        const { error } = await supabase.from("products").update({ is_active: formData.is_active } as any).eq("id", productId);
+        if (error) throw error;
+      }
+
       // Stok değiştiyse pazaryerlerine (Trendyol) hemen gönderilsin — kuyruğu
       // veritabanı tetikleyicisi doldurdu; burada yalnız işleyiciyi dürtüyoruz.
       try {
@@ -458,9 +467,10 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
       router.refresh();
     } catch (error: any) {
       const msg = String(error?.message || "");
-      alert(msg.includes("PRICE_REQUIRED_TO_ACTIVATE")
-        ? "Bu ürünün satış fiyatı yok — fiyatsız ürün yayına alınamaz. Önce Admin › Fiyatlar sayfasından fiyat gir."
-        : "Hata: " + msg);
+      const noOpenSize = formData.has_variants && !formData.variants.some((v) => v.is_active);
+      alert(!msg.includes("PRICE_REQUIRED_TO_ACTIVATE") ? "Hata: " + msg
+        : noOpenSize ? "Hiçbir numara açık değil — ürün yayına alınamaz. Varyantlar bölümünde en az bir numaranın Aktif kutusunu işaretle."
+        : "Açık numaraların satış fiyatı yok — fiyatsız ürün yayına alınamaz. Önce Admin › Fiyatlar sayfasından fiyat gir.");
     } finally {
       setLoading(false);
     }

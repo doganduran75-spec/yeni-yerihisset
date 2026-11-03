@@ -1156,6 +1156,21 @@ export default {
         ok(dm.status === 403, "Üye günlük özet gönderemiyor", `HTTP ${dm.status}`);
       });
 
+      await part("Ürünü yayına alma: fiyat kuralı açık numaraya bakar (önce numaralar, sonra ürün)", async () => {
+        const r = one(`BEGIN;
+          UPDATE public.products SET is_active = false, price = 0 WHERE id = ${lit(F.prod)};
+          UPDATE public.product_variants SET is_active = false, price = greatest(coalesce(price, 0), 1) WHERE product_id = ${lit(F.prod)};
+          CREATE TEMP TABLE _rg_act (k text) ON COMMIT DROP;
+          DO $$ BEGIN UPDATE public.products SET is_active = true WHERE id = ${lit(F.prod)}; INSERT INTO _rg_act VALUES ('a_closed_ok');
+            EXCEPTION WHEN others THEN INSERT INTO _rg_act VALUES ('a_closed_blocked'); END $$;
+          UPDATE public.product_variants SET is_active = true WHERE product_id = ${lit(F.prod)};
+          DO $$ BEGIN UPDATE public.products SET is_active = true WHERE id = ${lit(F.prod)}; INSERT INTO _rg_act VALUES ('b_open_ok');
+            EXCEPTION WHEN others THEN INSERT INTO _rg_act VALUES ('b_open_blocked'); END $$;
+          SELECT string_agg(k, ',' ORDER BY k) FROM _rg_act;
+          ROLLBACK;`);
+        ok(r === "a_closed_blocked,b_open_ok", "Numaralar kapalıyken ürün yayına alınamıyor; fiyatlı numara açılınca alınabiliyor (ürün formu numaraları önce kaydeder)", r);
+      });
+
       await part("Pano: 'İade faturası kesilecek' ayrı satır, 'Bekleyen sipariş işi'nde sayılmaz", async () => {
         let m;
         try { m = await import(new URL("../../src/lib/order-next-step.ts", import.meta.url)); }
