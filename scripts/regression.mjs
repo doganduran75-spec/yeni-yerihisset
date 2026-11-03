@@ -627,8 +627,13 @@ async function main() {
   backupH < 26 ? add("ok", "Gece yedeği", `${backupH.toFixed(1)} saat önce`) : add("fail", "Gece yedeği", backupH >= 999 ? "hiç başarılı yedek yok" : `${backupH.toFixed(0)} saat önce`);
   const healthM = Number(one("SELECT extract(epoch FROM now()-max(created_at))/60 FROM public.server_health_runs") || 9999);
   healthM < 40 ? add("ok", "Sunucu sağlık kontrolü", `${healthM.toFixed(0)} dk önce`) : add("warn", "Sunucu sağlık kontrolü", healthM >= 9999 ? "hiç çalışmadı" : `${healthM.toFixed(0)} dk önce`);
-  const hstat = one("SELECT status FROM public.server_health_runs ORDER BY created_at DESC LIMIT 1");
-  hstat === "fail" ? add("fail", "Sunucu sağlığı", "kırmızı — dashboard kartına bak") : hstat === "warn" ? add("warn", "Sunucu sağlığı", "sarı — dashboard kartına bak") : add("ok", "Sunucu sağlığı", hstat || "—");
+  // Panodaki kartla aynı hesap (src/lib/server-health.ts): "Evet, bendim" denen yeni-IP SSH girişleri sayılmaz
+  const hrows = sql(`SELECT c->>'status', c->>'label', c->>'value' FROM (SELECT checks FROM public.server_health_runs ORDER BY created_at DESC LIMIT 1) r,
+    jsonb_array_elements(r.checks) c
+    WHERE c->>'status' IN ('warn', 'fail') AND NOT EXISTS (SELECT 1 FROM public.server_health_acks a WHERE a.key = c->>'key' AND a.key LIKE 'ssh_new_ip:%')`);
+  const hfail = hrows.filter((x) => x[0] === "fail"), hwarn = hrows.filter((x) => x[0] === "warn");
+  const hlist = (xs) => xs.map((x) => `${x[1]}: ${x[2]}`).join(" · ");
+  hfail.length ? add("fail", "Sunucu sağlığı", `kırmızı — ${hlist(hfail)}`) : hwarn.length ? add("warn", "Sunucu sağlığı", `sarı — ${hlist(hwarn)}`) : add("ok", "Sunucu sağlığı", "yeşil");
   const S = SETTINGS();
   const mktOn = !!(S.trendyol_enabled || S.hepsiburada_enabled || S.amazon_enabled);
   const beat = () => Number(one("SELECT extract(epoch FROM now()-last_run_at)/60 FROM public.cron_heartbeats WHERE name='marketplace-sync'") || 9999);
