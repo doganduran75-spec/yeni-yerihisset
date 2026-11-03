@@ -801,7 +801,7 @@ export default function OrdersPage() {
   ] : [
     { value: "waiting", label: "Bekleniyor" },
     { value: "preparing", label: "Hazırlanıyor" },
-    ...(o.kargonomi_tracking_code ? [] : [{ value: "ship_kargonomi", label: "Kargoya Ver (Kargonomi)" }]),
+    ...(o.kargonomi_tracking_code ? [] : [{ value: "ship_kargonomi", label: "Kargoya Ver (entegrasyon)" }]),
     { value: "shipped", label: o.kargonomi_tracking_code ? "Kargoya Verildi" : "Kargoya Verildi (elle)" },
     { value: "delivered", label: "Teslim Edildi" },
     { value: "returned", label: "İade geldi…" },
@@ -2799,7 +2799,18 @@ function CaseBox({ order, kase, canSendLabel, canShipAlt, onDone }: {
           <select value={method} onChange={(e) => setMethod(e.target.value)} className="h-8 rounded-md border px-2 bg-white">
             {Object.entries(RETURN_METHODS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
           </select>
-          <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="Kargonomi kargo kodu" className="h-8 flex-1 min-w-[140px] rounded-md border px-2 font-mono" />
+          <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="İade kargo kodu" className="h-8 flex-1 min-w-[140px] rounded-md border px-2 font-mono" />
+          {(order as any).kargo_api === "basitkargo" && (order as any).kargonomi_shipment_id && (
+            <Button size="sm" variant="outline" disabled={busy} title="Teslim edilmiş gönderi için Basit Kargo'dan iade kodu" onClick={async () => {
+              setBusy(true);
+              try {
+                const { data: { session } } = await supabase.auth.getSession();
+                const r = await fetch("/api/kargonomi/ship", { method: "POST", headers: { "Content-Type": "application/json", ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) }, body: JSON.stringify({ op: "return_code", order_id: order.id }) });
+                const d = await r.json().catch(() => ({}));
+                if (!r.ok) siteAlert({ message: d.error || "İade kodu alınamadı", tone: "danger" }); else setCode(d.code);
+              } finally { setBusy(false); }
+            }}>Basit Kargo&apos;dan al</Button>
+          )}
           <Button size="sm" disabled={busy || !code.trim()} onClick={() => call({ op: "send_label", method, code })}>Kodu müşteriye gönder</Button>
         </div>
       )}

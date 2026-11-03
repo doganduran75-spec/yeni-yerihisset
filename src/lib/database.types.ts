@@ -1296,6 +1296,7 @@ export type Database = {
           iyzico_conversation_id: string | null
           iyzico_payment_id: string | null
           iyzico_token: string | null
+          kargo_api: string | null
           kargonomi_shipment_id: string | null
           kargonomi_tracking_code: string | null
           order_number: string | null
@@ -1334,6 +1335,7 @@ export type Database = {
           iyzico_conversation_id?: string | null
           iyzico_payment_id?: string | null
           iyzico_token?: string | null
+          kargo_api?: string | null
           kargonomi_shipment_id?: string | null
           kargonomi_tracking_code?: string | null
           order_number?: string | null
@@ -1372,6 +1374,7 @@ export type Database = {
           iyzico_conversation_id?: string | null
           iyzico_payment_id?: string | null
           iyzico_token?: string | null
+          kargo_api?: string | null
           kargonomi_shipment_id?: string | null
           kargonomi_tracking_code?: string | null
           order_number?: string | null
@@ -1970,6 +1973,10 @@ export type Database = {
           gmc_product_condition: string | null
           gmc_target_country: string | null
           id: string
+          basitkargo_address_id: string | null
+          basitkargo_api_token: string | null
+          basitkargo_enabled: boolean
+          basitkargo_webhook_key: string | null
           kargonomi_api_token: string | null
           kargonomi_warehouse_id: string | null
           product_reviews_show_all: boolean
@@ -2001,6 +2008,10 @@ export type Database = {
           gmc_product_condition?: string | null
           gmc_target_country?: string | null
           id?: string
+          basitkargo_address_id?: string | null
+          basitkargo_api_token?: string | null
+          basitkargo_enabled?: boolean
+          basitkargo_webhook_key?: string | null
           kargonomi_api_token?: string | null
           kargonomi_warehouse_id?: string | null
           product_reviews_show_all?: boolean
@@ -2032,6 +2043,10 @@ export type Database = {
           gmc_product_condition?: string | null
           gmc_target_country?: string | null
           id?: string
+          basitkargo_address_id?: string | null
+          basitkargo_api_token?: string | null
+          basitkargo_enabled?: boolean
+          basitkargo_webhook_key?: string | null
           kargonomi_api_token?: string | null
           kargonomi_warehouse_id?: string | null
           product_reviews_show_all?: boolean

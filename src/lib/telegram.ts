@@ -19,7 +19,7 @@ export const TELEGRAM_TOPICS = [
   { key: "stock_request", label: "Yeni stok talebi", desc: "Müşteri “stoğa gelince haber ver” dedi: ürün, numara, o numarayı bekleyen kişi sayısı (elle eklediğin hariç)", ready: true },
   { key: "after_sale_request", label: "İade / değişim talebi", desc: "Müşteri siparişinde iade ya da değişim istedi: sebep, istenen numara, not", ready: true },
   { key: "customer_message", label: "Müşteri mesajı", desc: "Müşteri sipariş ekranından mesaj yazdı", ready: true },
-  { key: "integration_error", label: "Entegrasyon hatası", desc: "Paraşüt faturası, pazaryeri fatura yükleme, Trendyol işleme al, Kargonomi, pazaryeri stok, Google gönderimi hata verdi", ready: true },
+  { key: "integration_error", label: "Entegrasyon hatası", desc: "Paraşüt faturası, pazaryeri fatura yükleme, Trendyol işleme al, kargo (Basit Kargo / Kargonomi), pazaryeri stok, Google gönderimi hata verdi", ready: true },
   { key: "server_alert", label: "Sunucu / sistem uyarısı", desc: "Sunucu sağlığı uyarısı (disk, yedek, yeni IP’den SSH girişi, zamanlanmış görev durdu…) ve “giderildi”", ready: true },
   { key: "daily_summary", label: "Günlük özet (periyodik)", desc: "Her sabah seçtiğin saatte: dünkü satış (kanal kırılımı), bekleyen işler, stok talepleri, sunucu durumu", ready: true },
 ] as const;
@@ -210,7 +210,7 @@ export async function notifyServerAlert(sb: SB, subject: string, problems: { key
 // ─── Entegrasyon hataları (dakikalık tarama) ────────────────────────────────
 const ORDER_ERRORS: [string, string][] = [
   ["parasut_error", "Paraşüt faturası"], ["mp_invoice_error", "Pazaryerine fatura yükleme"],
-  ["mp_picking_error", "Trendyol “İşleme al”"], ["kargonomi_error", "Kargonomi"],
+  ["mp_picking_error", "Trendyol “İşleme al”"], ["kargonomi_error", "Kargo entegrasyonu"],
 ];
 async function scanIntegrationErrors(sb: SB, cfg: TelegramConfig): Promise<number> {
   const nowIso = new Date().toISOString();

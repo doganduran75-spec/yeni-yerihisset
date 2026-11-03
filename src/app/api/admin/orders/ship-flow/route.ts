@@ -15,7 +15,7 @@ import { parasutConfig } from "@/lib/parasut";
 import { trendyolPicking } from "@/lib/marketplace-invoice";
 import { hbPackageOrder } from "@/lib/marketplace/hb-package";
 import { receiveTrendyolClaim } from "@/lib/marketplace/trendyol-claims";
-import { sendOrderNotification } from "@/lib/notifications";
+import { markPickedUp } from "@/lib/order-ship-events";
 
 const SHIPPED = ["shipped", "delivered", "undelivered", "returned"];
 
@@ -67,24 +67,16 @@ export async function POST(req: NextRequest) {
   if (body.op === "picked_up") {
     const ids: string[] = (Array.isArray(body.ids) ? body.ids : []).map(String).filter((s: string) => /^[0-9a-f-]{36}$/i.test(s)).slice(0, 200);
     if (!ids.length) return NextResponse.json({ error: "Sipariş seçilmedi" }, { status: 400 });
-    const { data: rows } = await sb.from("orders")
-      .select("id, user_id, channel, import_source, status, payment_status, shipment_status, packed_at, cargo_tracking_number, kargonomi_tracking_code, cargo_provider")
-      .in("id", ids);
+    const { data: rows } = await sb.from("orders").select("id, channel, import_source, status, shipment_status, packed_at").in("id", ids);
     const shipped: string[] = [];
     const skipped: { id: string; reason: string }[] = [];
     for (const o of (rows as any[]) || []) {
       if ((o.channel || "site") !== "site" && !o.import_source) { skipped.push({ id: o.id, reason: "pazaryeri" }); continue; }
       if (!o.packed_at || o.status === "cancelled" || SHIPPED.includes(o.shipment_status || "")) { skipped.push({ id: o.id, reason: "paket hazır değil ya da zaten kargoda" }); continue; }
-      // Koşullu güncelleme: aynı anda iki tıklamada e-posta bir kez
-      const { data: done, error } = await sb.from("orders").update({ shipment_status: "shipped" })
-        .eq("id", o.id).not("shipment_status", "in", `(${SHIPPED.join(",")})`).select("id");
-      if (error) { skipped.push({ id: o.id, reason: /PAYMENT_REQUIRED/.test(error.message) ? "ödeme alınmamış" : error.message }); continue; }
-      if (!done?.length) continue;
-      shipped.push(o.id);
-      await note(o.id, "Kurye aldı — sipariş kargoda");
-      const code = o.cargo_tracking_number || o.kargonomi_tracking_code;
-      await sendOrderNotification("order_shipped", { orderId: o.id, userId: o.user_id, ...(code ? { trackingNumber: o.cargo_provider ? `${code} (${o.cargo_provider})` : code } : {}) })
-        .catch((e: any) => console.error("[ship-flow] kargo e-postası", e?.message || e));
+      // Ortak kural (kargo entegrasyonunun "kargoda" bildirimiyle aynı): src/lib/order-ship-events.ts
+      const r = await markPickedUp(sb, o.id, "Kurye aldı — sipariş kargoda", user.id);
+      if (r.ok) shipped.push(o.id);
+      else if (r.reason !== "zaten kargoda") skipped.push({ id: o.id, reason: r.reason || "hata" });
     }
     return NextResponse.json({ ok: true, shipped, skipped });
   }

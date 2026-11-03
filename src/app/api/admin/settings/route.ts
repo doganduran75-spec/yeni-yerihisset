@@ -32,7 +32,8 @@ export async function GET(req: NextRequest) {
   // Telegram ayarları burada dönmez: token tarayıcıya hiç gitmez, ayarlar sayfasının genel "Kaydet"i de
   // Telegram kartının değiştirdiğini eski değerle ezmesin (yönetimi /api/admin/telegram)
   const row = data?.[0] ? { ...data[0] } : null;
-  if (row) for (const k of Object.keys(row)) if (k.startsWith("telegram_")) delete row[k];
+  // Basit Kargo da aynı: token / webhook anahtarı yalnız /api/admin/basitkargo üzerinden
+  if (row) for (const k of Object.keys(row)) if (k.startsWith("telegram_") || k.startsWith("basitkargo_")) delete row[k];
   return NextResponse.json({ ok: true, settings: row, iyzico });
 }
 

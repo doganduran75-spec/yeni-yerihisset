@@ -179,14 +179,14 @@ function coreNextStep(o: OrderLike): NextStep {
       const late = daysSince(o.kargonomi_confirmed_at) > 1 / 24;
       const firm = o.kargonomi_provider ? ` (${o.kargonomi_provider})` : "";
       return o.kargonomi_error
-        ? { stage: "Kargonomi: gönderi oluşturulamadı", hint: o.kargonomi_error, actions: [
-            { key: "ship_kargonomi", label: "Kargonomi — iptal et / yeniden teklif", kind: "primary" },
+        ? { stage: "Kargo entegrasyonu: gönderi oluşturulamadı", hint: o.kargonomi_error, actions: [
+            { key: "ship_kargonomi", label: "Kargo — iptal et / yeniden teklif", kind: "primary" },
             { key: "ship_manual", label: "Kargoya verildi (elle)", kind: "primary" },
           ], needsAction: true }
         : { stage: `Kargo kodu bekleniyor${firm}`, hint: late
-            ? "1 saattir kod gelmedi — Kargonomi panelinden kontrol et."
+            ? "1 saattir kod gelmedi — kargo panelinden kontrol et."
             : "Kod gelince siparişe yazılır (dakikada bir sorgulanır); sonra etiketi bas, “Paket hazır” de.",
-          actions: [{ key: "ship_kargonomi", label: "Kargonomi durumu", kind: "primary" }], needsAction: late };
+          actions: [{ key: "ship_kargonomi", label: "Kargo durumu", kind: "primary" }], needsAction: late };
     }
     // Paket hazır → kurye bekleniyor (müşteriye e-posta "Kurye aldı"da gider; listede toplu düğme)
     if (o.packed_at) {
@@ -197,8 +197,8 @@ function coreNextStep(o: OrderLike): NextStep {
     }
     const hasCode = !!(o.kargonomi_tracking_code || o.cargo_tracking_number);
     return { stage: o.kargonomi_shipment_id && !hasCode ? "Hazırlanıyor — kargo firması seçilmedi" : "Hazırlanıyor",
-      hint: hasCode ? "Etiketi bas, paketi hazırla, “Paket hazır” de." : "Kargo kodunu al (Kargonomi ya da etiket kutusundan elle), etiketi bas, “Paket hazır” de.", actions: [
-      ...(hasCode ? [] : [{ key: "ship_kargonomi", label: o.kargonomi_shipment_id ? "Kargo firmasını seç (Kargonomi)" : "Kargoya ver (Kargonomi)", kind: "primary" } as NextAction]),
+      hint: hasCode ? "Etiketi bas, paketi hazırla, “Paket hazır” de." : "Kargo kodunu al (Kargoya ver ya da etiket kutusundan elle), etiketi bas, “Paket hazır” de.", actions: [
+      ...(hasCode ? [] : [{ key: "ship_kargonomi", label: o.kargonomi_shipment_id ? "Kargo firmasını seç" : "Kargoya ver", kind: "primary" } as NextAction]),
       packedAction,
       { key: "cancel", label: "Siparişi iptal et + para iadesi", kind: "danger" },
     ], needsAction: true };
@@ -211,7 +211,7 @@ function coreNextStep(o: OrderLike): NextStep {
     const upsHint = upsLate ? `UPS ${UPS_WAIT_DAYS} gündür almadı — Sürat ya da Aras için yeni kod gönder.` : undefined;
     const close: NextAction = { key: "close_case", label: "Talebi kapat", kind: "danger" };
     if (c.kind === "return") {
-      if (c.status === "requested") return { stage: "İade talebi", hint: "Kargonomi'den etiket oluştur, kodu gir — müşteriye e-postayla gider. Müşteri kendisi gönderiyorsa “Kod gerekmiyor”.", actions: [
+      if (c.status === "requested") return { stage: "İade talebi", hint: "İade kodunu al (Basit Kargo ile gönderildiyse talepte “Basit Kargo'dan al”), kodu gir — müşteriye e-postayla gider. Müşteri kendisi gönderiyorsa “Kod gerekmiyor”.", actions: [
         { key: "send_label", label: "İade kodunu gönder", kind: "primary" },
         { key: "return_in_transit", label: "Kod gerekmiyor — iade yolda", kind: "primary" }, close,
       ], needsAction: true };

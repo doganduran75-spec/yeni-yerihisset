@@ -1,7 +1,7 @@
 "use client";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// Siparişte "Kargoya ver (Kargonomi)" penceresi — akış src/lib/kargonomi-flow.ts:
+// Siparişte "Kargoya ver" penceresi (Kargonomi / Basit Kargo — ayarlardan) — akış src/lib/kargonomi-flow.ts:
 //   desi → "Teklifleri getir" → firma seç → "Bu firmayla gönder" → kod bekleniyor (pencere açıkken 30 sn'de bir,
 //   kapalıyken sunucu dakikada bir sorgular) → kod gelince siparişe yazılır (etiket → "Paket hazır" → kurye alınca "Kurye aldı" → Kargoda + e-posta).
 import { useEffect, useState, useCallback } from "react";
@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { siteConfirm } from "@/components/ui/site-dialog";
 import { supabase } from "@/lib/supabase";
 import { orderLabel } from "@/lib/order-label";
+import { printBasitLabel } from "@/lib/basit-label-print";
 import { Truck, Loader2, AlertCircle, CheckCircle, Copy, RefreshCw, Send } from "lucide-react";
 
 type Offer = { id: string; name: string; price: string | null; amount: number | null };
@@ -23,7 +24,7 @@ async function call(body: Record<string, unknown>) {
     body: JSON.stringify(body),
   });
   const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(j.error || "Kargonomi hatası");
+  if (!r.ok) throw new Error(j.error || "Kargo hatası");
   return j;
 }
 
@@ -37,6 +38,8 @@ export default function KargonomiDialog({ order, onClose, onChanged }: {
   const [pick, setPick] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [active, setActive] = useState<{ provider: string; name: string } | null>(null);
+  useEffect(() => { if (order && !active) call({ op: "info" }).then((j) => setActive({ provider: j.provider, name: j.name })).catch(() => {}); }, [order, active]);
 
   // Pencere açılınca siparişin güncel Kargonomi alanlarını oku
   const reload = useCallback(async (id: string) => {
@@ -76,6 +79,9 @@ export default function KargonomiDialog({ order, onClose, onChanged }: {
     finally { await reload(o.id); setBusy(null); }
   }
 
+  // Gönderi açıldıysa onun sağlayıcısı, açılmadıysa ayarlardaki etkin sağlayıcı
+  const basit = o?.kargonomi_shipment_id ? o?.kargo_api === "basitkargo" : active?.provider === "basitkargo";
+  const pname = basit ? "Basit Kargo" : o?.kargonomi_shipment_id || active ? "Kargonomi" : "";
   const offers: Offer[] = (o?.kargonomi_offers as Offer[]) || [];
   const sorted = [...offers].sort((a, b) => (a.id === "-1" ? -1 : b.id === "-1" ? 1 : (a.amount ?? 1e9) - (b.amount ?? 1e9)));
   let addr: Record<string, string> = {};
@@ -85,7 +91,7 @@ export default function KargonomiDialog({ order, onClose, onChanged }: {
     <Dialog open={!!order} onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent className="sm:max-w-[460px]">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2"><Truck size={18} className="text-purple-600" /> Kargoya ver (Kargonomi)</DialogTitle>
+          <DialogTitle className="flex items-center gap-2"><Truck size={18} className="text-purple-600" /> Kargoya ver{pname ? ` (${pname})` : ""}</DialogTitle>
           <DialogDescription>Sipariş {o ? orderLabel(o) : ""}</DialogDescription>
         </DialogHeader>
 
@@ -108,6 +114,22 @@ export default function KargonomiDialog({ order, onClose, onChanged }: {
                     <code className="block font-mono font-bold">{o.kargonomi_tracking_code}</code></span>
                   <button onClick={() => navigator.clipboard.writeText(o.kargonomi_tracking_code)} className="text-blue-500 text-xs flex items-center gap-1"><Copy size={12} /> Kopyala</button>
                 </div>
+                {basit && (
+                  <div className="flex gap-2">
+                    <Button className="flex-1 gap-1.5" disabled={!!busy} onClick={async () => {
+                      setBusy("label"); setErr(null);
+                      const r = await printBasitLabel(o.id, o.kargonomi_tracking_code);
+                      if (!r.ok) setErr(r.error || "Etiket alınamadı"); else await reload(o.id);
+                      setBusy(null);
+                    }}>{busy === "label" ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} Basit Kargo etiketini yazdır</Button>
+                    {!["shipped", "delivered", "undelivered", "returned"].includes(o.shipment_status) && (
+                      <Button variant="outline" className="text-red-600" disabled={!!busy} onClick={async () => {
+                        if (await siteConfirm({ title: "Gönderi iptal edilsin mi?", message: "Basit Kargo barkodu iptal edilir (ücret iade), kod siparişten silinir. Kurye aldıysa iptal Basit Kargo panelinden.", confirmText: "İptal et", tone: "danger" })) run("cancel", { op: "cancel" });
+                      }}>{busy === "cancel" ? <Loader2 size={14} className="animate-spin" /> : null} İptal et</Button>
+                    )}
+                  </div>
+                )}
+                {basit && o.kargonomi_status && <p className="text-[11px] text-muted-foreground">Basit Kargo durumu: {o.kargonomi_status}{o.kargonomi_error ? ` — ${o.kargonomi_error}` : ""}</p>}
               </div>
             ) : o.kargonomi_confirmed_at ? (
               <div className="space-y-3">
@@ -130,7 +152,7 @@ export default function KargonomiDialog({ order, onClose, onChanged }: {
                     {busy === "check" ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} Şimdi sorgula
                   </Button>
                   <Button variant="outline" className="flex-1 text-red-600" disabled={!!busy} onClick={async () => {
-                    if (await siteConfirm({ title: "Gönderi iptal edilsin mi?", message: "Kargonomi'ye iptal talebi gider (kargoya verilmemişse). Sonra yeniden teklif alabilirsin.", confirmText: "İptal et", tone: "danger" })) run("cancel", { op: "cancel" });
+                    if (await siteConfirm({ title: "Gönderi iptal edilsin mi?", message: `${pname || "Kargo"} gönderisi iptal edilir (kargoya verilmemişse). Sonra yeniden teklif alabilirsin.`, confirmText: "İptal et", tone: "danger" })) run("cancel", { op: "cancel" });
                   }}>{busy === "cancel" ? <Loader2 size={14} className="animate-spin" /> : null} İptal et</Button>
                 </div>
               </div>

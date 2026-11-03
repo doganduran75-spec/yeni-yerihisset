@@ -42,7 +42,7 @@ export const STATIC_PAGES: Record<StaticPageSlug, { title: string; intro: string
 <p>Kart bilgileriniz sitemize kaydedilmez; ödeme sırasında doğrudan lisanslı ödeme kuruluşu iyzico'ya iletilir. Verileriniz site formları, e-posta ve çerezler aracılığıyla elektronik ortamda toplanır.</p>
 <h2>3. Verileriniz kimlere aktarılır?</h2>
 <ul>
-<li><b>Kargo firmaları</b> (UPS, Sürat Kargo, Aras Kargo; Kargonomi aracılığıyla) — teslimat ve iade gönderisi için.</li>
+<li><b>Kargo firmaları</b> (UPS, Sürat Kargo, Aras Kargo ve diğerleri; Basit Kargo / Kargonomi aracılığıyla) — teslimat ve iade gönderisi için.</li>
 <li><b>iyzico</b> — kartlı ödemenin alınması ve iadesi için.</li>
 <li><b>Muhasebe ve e-fatura hizmeti aldığımız kişi/kuruluşlar</b> — yasal kayıt ve fatura için.</li>
 <li><b>Barındırma hizmeti:</b> sitemiz ve veritabanımız {{barindirma}} sunucularında tutulur. Bu aktarım KVKK md. 9 kapsamında, Kurul'un ilan ettiği standart sözleşme ile yapılır.</li>

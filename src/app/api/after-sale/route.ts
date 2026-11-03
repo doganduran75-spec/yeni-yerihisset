@@ -120,7 +120,7 @@ export async function POST(req: NextRequest) {
     }
     sendAdminCaseEmail(orderId, "İade talebi", [
       ...ids.map((id) => escapeLine(label(id))),
-      `Kargo: <b>${RETURN_METHOD_LABEL[body.method]}</b> → Kargonomi'den etiket oluştur, kodu siparişe gir`,
+      `Kargo: <b>${RETURN_METHOD_LABEL[body.method]}</b> → iade kodunu al (Basit Kargo ile gönderildiyse siparişte “Basit Kargo'dan al”), kodu siparişe gir`,
       ...(note ? [`Not: ${escapeLine(note)}`] : []),
     ]).catch(() => {});
     return NextResponse.json({ ok: true, fitStatus: "return" });
@@ -135,7 +135,7 @@ export async function POST(req: NextRequest) {
     await sb.from("order_cases").update({ status: "keep_chosen", keep_item_id: body.keep_item_id, return_method: body.method, customer_note: note ?? c.customer_note, updated_at: now }).eq("id", c.id);
     sendAdminCaseEmail(orderId, "Değişim — müşteri seçti", [
       `Tuttuğu: <b>${escapeLine(label(body.keep_item_id))}</b>`,
-      `Geri gönderecek: ${RETURN_METHOD_LABEL[body.method]} → Kargonomi'den etiket oluştur, kodu siparişe gir`,
+      `Geri gönderecek: ${RETURN_METHOD_LABEL[body.method]} → iade kodunu al (Basit Kargo ile gönderildiyse siparişte “Basit Kargo'dan al”), kodu siparişe gir`,
     ]).catch(() => {});
     return NextResponse.json({ ok: true });
   }

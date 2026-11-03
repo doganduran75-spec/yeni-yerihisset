@@ -2,8 +2,9 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // Sipariş detayında kargo etiketi: "Etiket yazdır" (her seferinde güncel kargo kodundan), kod değiştiyse uyarı.
-// Kargo kodu yoksa etiket basılmaz. Site siparişi kargo entegrasyonu dışında gönderiliyorsa (Kargonomi yok / başka
+// Kargo kodu yoksa etiket basılmaz. Site siparişi kargo entegrasyonu dışında gönderiliyorsa (entegrasyon yok / başka
 // firma) firma + takip kodu burada elle girilir — etiket ve müşteri kargo bilgisi bu koddan çalışır.
+// Basit Kargo ile gönderilende ayrıca "Basit Kargo etiketi" (resmî etiket, firmanın barkoduyla) — şubede okutulacak olan o.
 import { useEffect, useState } from "react";
 import { Printer, AlertTriangle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -11,10 +12,11 @@ import { Input } from "@/components/ui/input";
 import { supabase } from "@/lib/supabase";
 import { siteAlert } from "@/components/ui/site-dialog";
 import { printShippingLabels, labelOutdated } from "@/lib/shipping-label";
+import { printBasitLabel } from "@/lib/basit-label-print";
 
 type O = {
   id: string; channel?: string | null; status?: string | null;
-  cargo_provider?: string | null; cargo_tracking_number?: string | null; kargonomi_tracking_code?: string | null;
+  cargo_provider?: string | null; cargo_tracking_number?: string | null; kargonomi_tracking_code?: string | null; kargo_api?: string | null;
   label_printed_code?: string | null; label_printed_at?: string | null;
 };
 
@@ -43,6 +45,15 @@ export default function ShippingLabelBox({ order, onChange }: { order: O; onChan
     else if (r.skipped.length) siteAlert({ message: `Etiket basılmadı: ${r.skipped[0].reason}.`, tone: "danger" });
   }
 
+  async function printOfficial() {
+    setBusy(true);
+    const r = await printBasitLabel(order.id, order.kargonomi_tracking_code || null);
+    setBusy(false);
+    if (!r.ok) return siteAlert({ title: "Basit Kargo etiketi alınamadı", message: r.error || "Hata", tone: "danger" });
+    if (order.kargonomi_tracking_code) onChange({ label_printed_code: order.kargonomi_tracking_code, label_printed_at: r.printedAt });
+  }
+  const official = order.kargo_api === "basitkargo" && !!order.kargonomi_tracking_code;
+
   async function saveManual() {
     const t = track.trim().replace(/\s+/g, "");
     if (!carrier.trim() || !t) return siteAlert({ message: "Kargo firması ve takip kodu gerekli.", tone: "danger" });
@@ -63,7 +74,7 @@ export default function ShippingLabelBox({ order, onChange }: { order: O; onChan
         <b>Kargo etiketi</b>
         {code
           ? <span className="text-xs text-slate-600">{order.cargo_provider || "Kargo"} · <span className="font-mono">{code}</span></span>
-          : <span className="text-xs text-amber-700">Kargo kodu yok — etiket basılamaz{isSite ? " (Kargonomi'den al ya da elle gir)" : order.channel === "hepsiburada" ? " (Hepsiburada'da kod paketlenince oluşur: “Paket hazır” de, birkaç dakika içinde gelir)" : " (pazaryerinden kod gelince basılır)"}</span>}
+          : <span className="text-xs text-amber-700">Kargo kodu yok — etiket basılamaz{isSite ? " (Kargoya ver ile al ya da elle gir)" : order.channel === "hepsiburada" ? " (Hepsiburada'da kod paketlenince oluşur: “Paket hazır” de, birkaç dakika içinde gelir)" : " (pazaryerinden kod gelince basılır)"}</span>}
         {order.label_printed_at && !outdated && (
           <span className="text-[11px] text-slate-400">· yazdırıldı {new Date(order.label_printed_at).toLocaleString("tr-TR", { dateStyle: "short", timeStyle: "short" })}</span>
         )}
@@ -73,7 +84,13 @@ export default function ShippingLabelBox({ order, onChange }: { order: O; onChan
               {order.cargo_tracking_number ? "Kodu değiştir" : "Kodu elle gir"}
             </Button>
           )}
-          <Button type="button" size="sm" variant={outdated ? "default" : "outline"} className="h-8 gap-1.5 text-xs" disabled={!code || busy} onClick={print}>
+          {official && (
+            <Button type="button" size="sm" variant={outdated ? "default" : "outline"} className="h-8 gap-1.5 text-xs" disabled={busy} onClick={printOfficial}
+              title="Kargo firmasının barkodlu resmî etiketi (Basit Kargo)">
+              {busy ? <Loader2 size={13} className="animate-spin" /> : <Printer size={13} />} Basit Kargo etiketi
+            </Button>
+          )}
+          <Button type="button" size="sm" variant={outdated && !official ? "default" : "outline"} className="h-8 gap-1.5 text-xs" disabled={!code || busy} onClick={print}>
             {busy ? <Loader2 size={13} className="animate-spin" /> : <Printer size={13} />} {order.label_printed_at ? "Yeniden yazdır" : "Etiket yazdır"}
           </Button>
         </span>

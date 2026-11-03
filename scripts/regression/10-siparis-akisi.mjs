@@ -1168,6 +1168,39 @@ export default {
         }
       });
 
+      await part("Basit Kargo: yetki, gizli token, webhook anahtarı, sağlayıcı alanı", async () => {
+        const anon = await api("/api/admin/basitkargo", { body: { op: "status" } });
+        const mem = await api("/api/admin/basitkargo", { token: F.member.token, body: { op: "status" } });
+        ok(anon.status === 401 && mem.status === 403, "Girişsiz / üye Basit Kargo ayarına erişemiyor", `girişsiz ${anon.status} · üye ${mem.status}`);
+        const ad = await api("/api/admin/basitkargo", { token: F.admin.token, body: { op: "status" } });
+        const tok = one(`SELECT coalesce(basitkargo_api_token, '') FROM public.settings ORDER BY id LIMIT 1`);
+        ok(ad.status === 200 && !/"(token|basitkargo_api_token)"\s*:/.test(ad.text) && !(tok && ad.text.includes(tok)), "Yönetici durumu görüyor, API token yanıtta yok", why(ad));
+        const gs = await api("/api/admin/settings", { method: "GET", token: F.admin.token });
+        ok(gs.status === 200 && !/basitkargo_/.test(gs.text), "Genel ayar yanıtında Basit Kargo alanları yok (token tarayıcıya gitmez)", `HTTP ${gs.status}`);
+        const sAnon = await rest("settings?select=basitkargo_api_token&limit=1");
+        const sMem = await rest("settings?select=basitkargo_webhook_key&limit=1", { token: F.member.token });
+        ok(sAnon.status >= 400 && sMem.status >= 400, "Token / webhook anahtarı dışarıdan / üyeden okunamıyor", `girişsiz ${sAnon.status} · üye ${sMem.status}`);
+        const w0 = await api("/api/basitkargo/webhook", { body: { id: "1", status: "DELIVERED" } });
+        const w1 = await api("/api/basitkargo/webhook?key=yanlis-anahtar", { body: { id: "1", status: "DELIVERED" } });
+        ok(w0.status === 401 && w1.status === 401, "Webhook anahtarsız / yanlış anahtarla reddediliyor", `anahtarsız ${w0.status} · yanlış ${w1.status}`);
+        const inf = await api("/api/kargonomi/ship", { token: F.admin.token, body: { op: "info" } });
+        const infM = await api("/api/kargonomi/ship", { token: F.member.token, body: { op: "info" } });
+        ok(inf.status === 200 && ["kargonomi", "basitkargo"].includes(inf.json?.provider) && infM.status === 403, "Kargoya ver: etkin sağlayıcı yöneticiye görünüyor, üye çağıramıyor", `yönetici ${inf.status} ${inf.json?.provider} · üye ${infM.status}`);
+        const lb = await api("/api/admin/basitkargo", { token: F.admin.token, body: { op: "label", orderId: "00000000-0000-0000-0000-000000000000" } });
+        ok(lb.status === 409 || lb.status === 400, "Basit Kargo gönderisi olmayan siparişte resmî etiket istenmiyor", why(lb));
+        const ck = sql(`BEGIN;
+          CREATE TEMP TABLE _bk (k text, v boolean);
+          DO $bk$ BEGIN
+            BEGIN
+              UPDATE public.orders SET kargo_api = 'baska' WHERE id = (SELECT id FROM public.orders LIMIT 1);
+              INSERT INTO _bk VALUES ('yanlis', false);
+            EXCEPTION WHEN check_violation THEN INSERT INTO _bk VALUES ('yanlis', true); END;
+          END $bk$;
+          SELECT k, v FROM _bk;
+          ROLLBACK;`);
+        ok(ck.some((x) => x[0] === "yanlis" && x[1] === "t"), "Siparişin kargo sağlayıcısı yalnız kargonomi / basitkargo olabilir", JSON.stringify(ck));
+      });
+
       await part("Model (kategorinin alt kırılımı): yalnız panel, kategori değişince boşalır", async () => {
         const mu = await rest("product_models", { token: F.member.token, method: "POST", body: { category_id: F.cat, code: "99" } });
         ok(mu.status >= 400 && one(`SELECT count(*) FROM public.product_models WHERE category_id = ${lit(F.cat)}`) === "0", "Üye model ekleyemiyor", `HTTP ${mu.status}`);

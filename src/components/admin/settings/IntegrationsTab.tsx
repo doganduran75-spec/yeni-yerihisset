@@ -1,7 +1,7 @@
 "use client";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// Ayarlar › Entegrasyonlar: Trendyol + Hepsiburada + Amazon (stok senkronu + sipariş) + Kargonomi (kargo) + Paraşüt (fatura).
+// Ayarlar › Entegrasyonlar: Trendyol + Hepsiburada + Amazon (stok senkronu + sipariş) + Basit Kargo / Kargonomi (kargo) + Paraşüt (fatura).
 // Ayarlar /api/admin/settings ile okunur/yazılır (gizli kolonlar yalnız sunucuda).
 // Her kart YALNIZ kendi alanlarını kaydeder (başka kartın/sekmenin ayarını ezmez).
 // Kanal durumu/işlemleri: /api/admin/integrations/<kanal>.
@@ -16,6 +16,7 @@ import ParasutCard from "@/components/admin/settings/ParasutCard";
 import IntegrationSection from "@/components/admin/settings/IntegrationSection";
 import GmcApiCard from "@/components/admin/settings/GmcApiCard";
 import TelegramCard from "@/components/admin/settings/TelegramCard";
+import BasitKargoCard from "@/components/admin/settings/BasitKargoCard";
 import {
   Loader2, Save, Eye, EyeOff, Truck, Store, RefreshCw, Send, PlugZap, AlertTriangle, CheckCircle2, Info, RotateCcw, History, ShoppingBag,
 } from "lucide-react";
@@ -655,6 +656,9 @@ export default function IntegrationsTab() {
             <SyncPanel channel="amazon" enabled={s.amazon_enabled} />
           </div>
       </IntegrationSection>
+
+      {/* ─── Basit Kargo (açıksa "Kargoya ver" bundan; kullanıcı 2026-11-03) ─── */}
+      <BasitKargoCard />
 
       {/* ─── Kargonomi ─── */}
       <IntegrationSection id="kargonomi" icon={<Truck size={20} className="text-blue-600" />} title="Kargonomi"
