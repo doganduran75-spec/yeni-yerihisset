@@ -192,7 +192,8 @@ export default function KargonomiDialog({ order, onClose, onChanged }: {
                         <label key={f.id} className={`flex items-center gap-2 px-3 py-2 ${off ? "opacity-50" : "cursor-pointer hover:bg-slate-50"}`}>
                           <input type="radio" name="kargo" disabled={off} checked={pick === f.id} onChange={() => setPick(f.id)} />
                           <span className="flex-1 font-medium">{f.id === "-1" ? "Otomatik (en ucuz firma)" : f.name}</span>
-                          <span className="text-xs text-slate-600">{f.id === "-1" ? "" : f.price ?? "—"}</span>
+                          {f.id !== "-1" && f.price?.includes(" · ") && <span className="text-[11px] text-muted-foreground">{f.price.split(" · ")[1]}</span>}
+                          <span className="w-24 text-right text-xs text-slate-600 tabular-nums">{f.id === "-1" ? "" : f.amount != null ? `${f.amount.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₺` : f.price ?? "—"}</span>
                         </label>
                       );
                     })}
