@@ -1156,9 +1156,15 @@ export default {
         ok(dm.status === 403, "Üye günlük özet gönderemiyor", `HTTP ${dm.status}`);
       });
 
-      await part("Talep & Geri Bildirim: not silme yalnız yönetici", async () => {
+      await part("Talep & Geri Bildirim: Planla (panodan düşer) + not silme yalnız yönetici", async () => {
         const fid = one(`INSERT INTO public.feedback (message, source) VALUES ('REGRESYON-TEST talep', 'admin') RETURNING id`);
         try {
+          const cnt = async () => Number((await rest("feedback?select=id&is_handled=eq.false&id=eq." + fid, { token: F.admin.token })).json?.length ?? -1);
+          const before = await cnt();
+          await rest(`feedback?id=eq.${fid}`, { token: F.member.token, method: "PATCH", body: { is_handled: true } });
+          ok(one(`SELECT is_handled FROM public.feedback WHERE id = ${lit(fid)}`) === "f", "Üye talebi planlayamıyor");
+          const pl = await rest(`feedback?id=eq.${fid}`, { token: F.admin.token, method: "PATCH", body: { is_handled: true } });
+          ok(pl.status < 300 && before === 1 && (await cnt()) === 0, "Yönetici 'Planla' deyince talep Planlandı'ya geçer, panonun bekleyen sayısından düşer", `HTTP ${pl.status} · önce ${before}`);
           await rest(`feedback?id=eq.${fid}`, { token: F.member.token, method: "DELETE" });
           ok(one(`SELECT count(*) FROM public.feedback WHERE id = ${lit(fid)}`) === "1", "Üye talep notunu silemiyor");
           const d = await rest(`feedback?id=eq.${fid}`, { token: F.admin.token, method: "DELETE" });

@@ -5,11 +5,10 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import NoResultSearches from "@/components/admin/NoResultSearches";
 import { siteAlert, siteConfirm } from "@/components/ui/site-dialog";
-import { Loader2, Check, Mail, MessageSquare, Inbox, Plus, Search, Trash2 } from "lucide-react";
+import { Loader2, Check, CalendarClock, Undo2, Mail, MessageSquare, Inbox, Plus, Search, Trash2 } from "lucide-react";
 
 const SOURCE: Record<string, string> = { search: "sonuçsuz aramadan", admin: "elle eklendi" };
 
@@ -25,7 +24,9 @@ type Feedback = {
 export default function FeedbackPage() {
   const [rows, setRows] = useState<Feedback[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<"open" | "all">("open");
+  // Bekleyen → "Planla" → Planlandı (kullanıcı 2026-11-03: talebi bilmek istiyor ama belki 1 yıl sonra yapılır;
+  // pano yalnız bekleyenleri sayar, okuyup planlayınca uyarı kalkar)
+  const [filter, setFilter] = useState<"open" | "planned">("open");
   const [busy, setBusy] = useState<string | null>(null);
   // Yönetici "Yeni ekle": telefonda / Instagram'da / sonuçsuz aramada gördüğü talebi not eder
   const [adding, setAdding] = useState(false);
@@ -76,7 +77,7 @@ export default function FeedbackPage() {
     } finally { setBusy(null); }
   }
 
-  const shown = rows.filter((r) => (filter === "open" ? !r.is_handled : true));
+  const shown = rows.filter((r) => (filter === "open" ? !r.is_handled : r.is_handled));
   const openCount = rows.filter((r) => !r.is_handled).length;
 
   return (
@@ -87,7 +88,7 @@ export default function FeedbackPage() {
       </div>
 
       <div className="flex gap-2 flex-wrap items-center">
-        {([["open", `Bekleyen (${openCount})`], ["all", `Hepsi (${rows.length})`]] as const).map(([k, label]) => (
+        {([["open", `Bekleyen (${openCount})`], ["planned", `Planlandı (${rows.length - openCount})`]] as const).map(([k, label]) => (
           <button
             key={k}
             onClick={() => setFilter(k)}
@@ -149,18 +150,18 @@ export default function FeedbackPage() {
                         {new Date(f.created_at).toLocaleString("tr-TR", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
                       </span>
                       {f.source && SOURCE[f.source] && <span className="text-[11px] text-slate-400">· {SOURCE[f.source]}</span>}
-                      {f.is_handled && <Badge className="text-[10px] bg-green-100 text-green-700 border-none hover:bg-green-100">İşlendi</Badge>}
                     </div>
                   </div>
                   <Button
                     size="sm"
                     variant={f.is_handled ? "outline" : "default"}
+                    title={f.is_handled ? "Bekleyenlere geri al" : "Okudum — Planlandı'ya taşı"}
                     disabled={busy === f.id}
                     onClick={() => toggleHandled(f)}
                     className="h-8 shrink-0 gap-1.5"
                   >
-                    {busy === f.id ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
-                    {f.is_handled ? "Geri Al" : "İşlendi"}
+                    {busy === f.id ? <Loader2 size={12} className="animate-spin" /> : f.is_handled ? <Undo2 size={12} /> : <CalendarClock size={12} />}
+                    {f.is_handled ? "Geri Al" : "Planla"}
                   </Button>
                   <Button
                     size="sm"
