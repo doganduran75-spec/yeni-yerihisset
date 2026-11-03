@@ -280,6 +280,12 @@ async function main() {
     r.status === 200 && note ? add("fail", "Hakkımızda sekmelerinde doldurulmamış not", `${note.slice(0, 60)} — Ayarlar › Sayfalar › Ayakkabılarımız hakkında`)
       : add("ok", "Hakkımızda sekmelerinde doldurulmamış not yok");
   }
+  // Ürün metinleri (docs/RENK-PARAGRAFLARI.md taslakları): aktif üründe "[DOLDUR: …]" notu kalmasın
+  {
+    const left = sql(`SELECT title FROM public.products WHERE is_active AND (coalesce(short_description, '') LIKE '%[DOLDUR%' OR coalesce(description, '') LIKE '%[DOLDUR%') ORDER BY title LIMIT 5`).map((x) => x[0]);
+    left.length ? add("warn", "Ürün metninde doldurulmamış not", `${left.join(" · ")} — Panel › Ürünler › Kısa / Detaylı Açıklama`)
+      : add("ok", "Ürün metinlerinde doldurulmamış not yok");
+  }
   const nf = await get("/bu-sayfa-kesinlikle-yok-123");
   nf.status === 404 ? add("ok", "Olmayan sayfa → 404") : add("warn", "Olmayan sayfa", `HTTP ${nf.status} (404 beklenirdi)`);
   // KVKK C2: Google Analytics betiği izin verilmeden sayfaya doğrudan eklenmez (yalnız izinle __yhGA yükler)
