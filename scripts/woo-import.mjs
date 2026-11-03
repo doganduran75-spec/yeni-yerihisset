@@ -15,7 +15,7 @@
 //   * Başarısız / taslak siparişler alınmaz (müşterisi alınır). 2021 öncesi ₺0 = test, alınmaz.
 //   * "Beklemede/ödeme bekleniyor" 30 günden eskiyse İptal (ödenmemiş) olarak gelir.
 //   * Ürün eşleştirme: elle eşleme → SKU → barkod (rematch_order_items). Eşleşmeyenler
-//     /admin/products/unmatched ekranında.
+//     sipariş satırında "Eski ürün — sitede yok" olarak kalır (eşleştirme ekranı kullanıcı kararıyla kaldırıldı, 2026-11-03).
 //
 // Kullanım (sunucuda, /opt/yerihisset-app içinde; anahtarlar .env.woo'da):
 //   node scripts/woo-import.mjs                    # DENEME (rapor)
@@ -391,7 +391,7 @@ async function main() {
   if (APPLY) {
     const { data: rm, error } = await sb.rpc("rematch_order_items");
     log("");
-    log(error ? `! Eşleştirme hatası: ${error.message}` : `EŞLEŞTİRME: ${rm.matched} satır ürüne bağlandı · ${rm.unmatched} satır eşleşmedi → /admin/products/unmatched`);
+    log(error ? `! Eşleştirme hatası: ${error.message}` : `EŞLEŞTİRME: ${rm.matched} satır ürüne bağlandı · ${rm.unmatched} satır eşleşmedi (sitede olmayan eski ürünler)`);
   }
 
   const text = report.join("\n");

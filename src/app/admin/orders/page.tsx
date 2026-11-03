@@ -1940,9 +1940,7 @@ ${courierQueue.slice(0, 20).map((o) => orderLabel(o)).join(", ")}${courierQueue.
                                   <span className="text-[10px] text-red-600 font-semibold">Sitede eşleşmedi — stok düşülmedi (barkod {item.barcode || "—"})</span>
                                 )}
                                 {isImported(selectedOrder) && !item.product_id && (
-                                  <a href="/admin/products/unmatched" className="text-[10px] text-amber-700 font-semibold hover:underline">
-                                    Eski ürün — sitede eşleşmedi (SKU {item.sku || "—"}) · eşleştir →
-                                  </a>
+                                  <span className="text-[10px] text-amber-700 font-semibold">Eski ürün — sitede yok (SKU {item.sku || "—"})</span>
                                 )}
                                 {isMarketplace(selectedOrder) && item.stock_restored_at && (
                                   <span className="text-[10px] text-amber-700">Stok geri eklendi</span>

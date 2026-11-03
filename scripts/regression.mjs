@@ -286,6 +286,11 @@ async function main() {
     left.length ? add("warn", "Ürün metninde doldurulmamış not", `${left.join(" · ")} — Panel › Ürünler › Kısa / Detaylı Açıklama`)
       : add("ok", "Ürün metinlerinde doldurulmamış not yok");
   }
+  // Eşleşmeyen eski ürünler ekranı kaldırıldı (kullanıcı 2026-11-03) — geri gelmesin
+  {
+    const lm = await get("/api/admin/legacy-match");
+    lm.status === 404 || lm.status === 405 ? add("ok", "Eşleşmeyen eski ürünler ekranı kaldırılmış") : add("warn", "Eşleşmeyen eski ürünler ekranı hâlâ var", `HTTP ${lm.status}`);
+  }
   const nf = await get("/bu-sayfa-kesinlikle-yok-123");
   nf.status === 404 ? add("ok", "Olmayan sayfa → 404") : add("warn", "Olmayan sayfa", `HTTP ${nf.status} (404 beklenirdi)`);
   // KVKK C2: Google Analytics betiği izin verilmeden sayfaya doğrudan eklenmez (yalnız izinle __yhGA yükler)
