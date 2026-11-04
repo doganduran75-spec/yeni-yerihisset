@@ -17,7 +17,7 @@
 import { createAdminClient } from "@/lib/supabase-admin";
 import {
   KargonomiError, createShipment, getOffers, confirmProvider, getShipment, cancelShipment,
-  findStateId, findCityId, stateCount, trackingOf, phone10, FAILED_STATUSES, MOVING_STATUS, DELIVERED_STATUS, PROBLEM_STATUSES, type KargonomiOffer,
+  findStateId, findCityId, stateCount, trackingOf, carrierTrackingOf, phone10, FAILED_STATUSES, MOVING_STATUS, DELIVERED_STATUS, PROBLEM_STATUSES, type KargonomiOffer,
 } from "@/lib/kargonomi";
 import * as bk from "@/lib/basitkargo";
 import { markPickedUp, markDelivered } from "@/lib/order-ship-events";
@@ -291,7 +291,21 @@ export async function checkOrder(sb: Sb, orderId: string) {
       : problem ? `Kargonomi: ${label} — kargo firmasıyla kontrol et` : null,
   });
   if ((problem || failed) && o.kargonomi_tracking_code && o.kargonomi_status !== status) await note(sb, orderId, `Kargonomi: ${label}`);
-  if (tracking && !failed && !o.kargonomi_tracking_code) await markTracking(sb, o, tracking, String(sh.shipping_provider_name || ""));
+  if (tracking && !failed && !o.kargonomi_tracking_code) {
+    await markTracking(sb, o, tracking, String(sh.shipping_provider_name || ""));
+    // Hangi alanın geldiğini görmek için (ilk gerçek gönderiler): Kargonomi'nin kod alanları siparişe not
+    await note(sb, orderId, `Kargonomi kodları — ref: ${sh.shipping_webservice_order_id ?? "—"} · barkod: ${sh.shipping_webservice_barcode ?? "—"} · sipariş barkodu: ${sh.barcode_of_order_id ?? "—"} · takip: ${sh.shipping_webservice_tracking_code ?? "—"}`);
+  }
+  // Firma siparişi oluşturdu ama bildiğimiz alanlarda kod yok → hangi alanda olduğunu görmek için bir kez not (düz alanlar)
+  if (!tracking && !failed && status === "webservice_order_created" && o.kargonomi_status !== status) {
+    const flat = Object.entries(sh).filter(([, v]) => v != null && v !== "" && typeof v !== "object").map(([k, v]) => `${k}=${String(v).slice(0, 40)}`).join(" · ");
+    await note(sb, orderId, `Kargonomi: firma siparişi oluşturdu, kod alanı tanınmadı — ${flat}`.slice(0, 900));
+  }
+  // Firmanın kendi takip kodu gelince müşteriye giden takip numarası o olur (etiketteki entegrasyon kodu değişmez)
+  const carrier = carrierTrackingOf(sh);
+  if (carrier && carrier !== tracking && carrier !== o.cargo_tracking_number) {
+    await (sb as any).from("orders").update({ cargo_tracking_number: carrier }).eq("id", orderId);
+  }
   if (status === MOVING_STATUS && o.kargonomi_tracking_code) await markPickedUp(sb, orderId, "Kargonomi: teslim sürecinde — sipariş kargoda");
   if (status === DELIVERED_STATUS) await markDelivered(sb, orderId, "Kargonomi: teslim edildi");
   return { tracking, status: status || null, provider: sh.shipping_provider_name ?? null, failed: failed || problem };

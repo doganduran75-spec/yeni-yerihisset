@@ -3,7 +3,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // Siparişte "Kargoya ver" penceresi (Kargonomi / Basit Kargo — ayarlardan) — akış src/lib/kargonomi-flow.ts:
 //   desi → "Teklifleri getir" → firma seç → "Bu firmayla gönder" → kod bekleniyor (pencere açıkken 30 sn'de bir,
-//   kapalıyken sunucu dakikada bir sorgular) → kod gelince siparişe yazılır (etiket → "Paket hazır" → kurye alınca "Kurye aldı" → Kargoda + e-posta).
+//   kapalıyken sunucu dakikada bir sorgular) → kod gelince siparişe yazılır (etiket → kendiliğinden "Kargo hazırlandı" → firma paketi okutunca Kargoda + e-posta).
 import { useEffect, useState, useCallback } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -146,7 +146,7 @@ export default function KargonomiDialog({ order, onClose, onChanged }: {
                     <Loader2 size={18} className="animate-spin shrink-0 mt-0.5" />
                     <div>
                       <p className="font-semibold">Kargo kodu bekleniyor{o.kargonomi_provider ? ` — ${o.kargonomi_provider}` : ""}</p>
-                      <p className="text-xs mt-0.5">Firmaya göre birkaç saniye – 10+ dakika sürer. Pencereyi kapatabilirsin: kod gelince siparişe yazılır; sonra etiketi basıp “Paket hazır” dersin.</p>
+                      <p className="text-xs mt-0.5">Firmaya göre birkaç saniye – 10+ dakika sürer. Pencereyi kapatabilirsin: kod gelince siparişe yazılır; etiketi basınca sipariş kendiliğinden “Kargo hazırlandı” olur.</p>
                       <p className="text-[11px] text-purple-700 mt-1">Durum: {o.kargonomi_status || "—"}{o.kargonomi_checked_at ? ` · son sorgu ${new Date(o.kargonomi_checked_at).toLocaleTimeString("tr-TR")}` : ""}</p>
                     </div>
                   </div>

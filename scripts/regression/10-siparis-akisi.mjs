@@ -1156,6 +1156,17 @@ export default {
         ok(dm.status === 403, "Üye günlük özet gönderemiyor", `HTTP ${dm.status}`);
       });
 
+      await part("Kargonomi kodu: firma siparişi oluşunca entegrasyon kodu (ref no), takip kodu sonra", async () => {
+        let k;
+        try { k = await import(new URL("../../src/lib/kargonomi.ts", import.meta.url)); }
+        catch (e) { return add("warn", "Kargonomi kod kuralı denenemedi", `kargonomi.ts yüklenemedi: ${String(e?.message || e).slice(0, 120)}`); }
+        const created = { id: 1, status: "webservice_order_created", shipping_webservice_order_id: "KSURTEST1", shipping_webservice_tracking_code: null };
+        ok(k.trackingOf(created) === "KSURTEST1" && k.carrierTrackingOf(created) === null, "Takip kodu yokken entegrasyon kodu (ref no) siparişe yazılır — bekleme ekranında kalmaz", String(k.trackingOf(created)));
+        const moving = { ...created, status: "webservice_shipment_started", shipping_webservice_tracking_code: "0521TEST" };
+        ok(k.trackingOf(moving) === "KSURTEST1" && k.carrierTrackingOf(moving) === "0521TEST", "Firmanın takip kodu gelince etiket kodu değişmez, müşteri takip kodu ayrı", `${k.trackingOf(moving)} / ${k.carrierTrackingOf(moving)}`);
+        ok(k.trackingOf({ id: 1, status: "draft" }) === null, "Taslakta kod yok");
+      });
+
       await part("Ürünü yayına alma: fiyat kuralı açık numaraya bakar (önce numaralar, sonra ürün)", async () => {
         const r = one(`BEGIN;
           UPDATE public.products SET is_active = false, price = 0 WHERE id = ${lit(F.prod)};

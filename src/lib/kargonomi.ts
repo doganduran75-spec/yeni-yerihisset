@@ -137,9 +137,16 @@ export async function cancelShipment(token: string, shipmentId: string | number,
   return call(token, "POST", "/shipments/cancel", { json: { shipment_id: String(shipmentId) } });
 }
 
-/** Kargo firmasının verdiği takip kodu (yoksa barkod) */
+const str = (v: unknown) => String(v ?? "").trim() || null;
+
+/** Entegrasyon kodu — etikete basılan, kargo firmasının şubede okuttuğu kod (Kargonomi panelinde "Kargo Ref No", ör. KSUR…).
+ *  Firma onayından hemen sonra gelir ("Kargo Siparişi Oluşturuldu"); firmanın kendi takip kodu ise paketi okutunca gelir
+ *  (2026-11-04: ilk gönderide ref no vardı, takip kodu boştu → bekleme ekranında kalıyordu). */
 export const trackingOf = (s: KargonomiShipment) =>
-  String(s.shipping_webservice_tracking_code || s.shipping_webservice_barcode || "").trim() || null;
+  str(s.shipping_webservice_barcode) ?? str(s.shipping_webservice_order_id) ?? str(s.barcode_of_order_id) ?? str(s.shipping_webservice_tracking_code);
+
+/** Kargo firmasının kendi takip kodu (müşteriye giden takip bağlantısı için); paketi okutunca gelir */
+export const carrierTrackingOf = (s: KargonomiShipment) => str(s.shipping_webservice_tracking_code);
 
 export const FAILED_STATUSES = ["webservice_order_failed", "cancelled", "request_for_cancellation"];
 /** Kod geldikten sonraki durumlar (belge): teslim sürecinde → teslim edildi; sorunlu: teslim edilemedi / geri geliyor / kayıp */
