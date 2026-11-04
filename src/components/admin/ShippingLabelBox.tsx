@@ -28,6 +28,8 @@ export default function ShippingLabelBox({ order, onChange }: { order: O; onChan
   const [carriers, setCarriers] = useState<string[]>([]);
   const [carrier, setCarrier] = useState(order.cargo_provider || "");
   const [track, setTrack] = useState(order.cargo_tracking_number || "");
+  const [note, setNote] = useState(""); // teslimat notu — etiketin altına büyük basılır (kullanıcı 2026-11-04), kaydedilmez
+  useEffect(() => { setNote(""); }, [order.id]);
   useEffect(() => { setCarrier(order.cargo_provider || ""); setTrack(order.cargo_tracking_number || ""); setEdit(false); }, [order.id, order.cargo_provider, order.cargo_tracking_number]);
   useEffect(() => {
     if (!edit || carriers.length) return;
@@ -38,7 +40,7 @@ export default function ShippingLabelBox({ order, onChange }: { order: O; onChan
 
   async function print() {
     setBusy(true);
-    const r = await printShippingLabels([order.id]);
+    const r = await printShippingLabels([order.id], note.trim() ? { [order.id]: note.trim() } : undefined);
     setBusy(false);
     if (r.error) return siteAlert({ title: "Etiket yazdırılamadı", message: r.error, tone: "danger" });
     if (r.printed) onChange({ label_printed_code: code, label_printed_at: new Date().toISOString() });
@@ -95,6 +97,11 @@ export default function ShippingLabelBox({ order, onChange }: { order: O; onChan
           </Button>
         </span>
       </div>
+      {code && (
+        <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} maxLength={200}
+          placeholder="Teslimat notu (isteğe bağlı) — yapıştır, “Etiket yazdır”a bas: etiketin altına büyük harflerle basılır"
+          className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs" />
+      )}
       {outdated && (
         <p className="flex items-center gap-1.5 text-xs font-bold text-red-700 bg-red-50 border border-red-200 rounded-lg px-2.5 py-1.5">
           <AlertTriangle size={13} /> Kargo kodu değişti — etiketi yeniden yazdır (eski etiketteki kod: <span className="font-mono">{order.label_printed_code}</span>)

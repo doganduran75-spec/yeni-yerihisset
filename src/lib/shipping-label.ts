@@ -10,6 +10,7 @@ type Label = {
   id: string; order: string; channel: string; date: string; code: string; carrier: string;
   to: { name: string; company: string; address: string; district: string; city: string; phone: string };
   items: { qty: number; title: string; variant: string; sku: string }[];
+  note?: string; // teslimat notu (yazdırırken girilir, kaydedilmez) — etiketin altında 2 kat büyük
 };
 type Sender = { name: string; address: string; phone: string };
 
@@ -38,6 +39,7 @@ export function buildLabelsHtml(labels: Label[], sender: Sender, size: LabelSize
   </div>
   <div class="from"><span class="tag">GÖNDEREN</span> <b>${esc(sender.name)}</b>${sender.address ? ` · ${esc(sender.address)}` : ""}${sender.phone ? ` · ${esc(sender.phone)}` : ""}</div>
   <div class="pack"><div class="tag">PAKET İÇERİĞİ · ${qty} adet</div><ul>${items}${more}</ul></div>
+  ${l.note?.trim() ? `<div class="note">${esc(l.note.trim())}</div>` : ""}
   <footer><span>Sipariş: ${esc(day(l.date))}</span><span>Yazdırıldı: ${esc(new Date().toLocaleString("tr-TR"))}</span></footer>
 </section>`;
   }).join("");
@@ -66,6 +68,7 @@ header { display: flex; justify-content: space-between; align-items: flex-start;
 .pack ul { margin: 1mm 0 0; padding-left: 4mm; line-height: 1.35; }
 .sku { font-family: "Courier New", monospace; font-size: 0.85em; color: #333; }
 .more { list-style: none; font-style: italic; }
+.note { font-size: 2em; font-weight: bold; line-height: 1.2; white-space: pre-wrap; border: 0.6mm solid #000; border-radius: 2mm; padding: 1.5mm 2.5mm; }
 footer { display: flex; justify-content: space-between; font-size: 0.75em; color: #333; }
 @media print { body { background: #fff; } .bar { display: none; } .label { margin: 0; } }
 </style></head><body>
@@ -76,7 +79,7 @@ ${pages}
 }
 
 /** Etiketleri yazdır. Pencere tıklamayla hemen açılır (açılır pencere engeli), veri gelince dolar. */
-export async function printShippingLabels(ids: string[]): Promise<{ printed: number; skipped: { order: string; reason: string }[]; error?: string }> {
+export async function printShippingLabels(ids: string[], notes?: Record<string, string>): Promise<{ printed: number; skipped: { order: string; reason: string }[]; error?: string }> {
   const w = window.open("", "_blank");
   if (!w) return { printed: 0, skipped: [], error: "Tarayıcı yeni pencereyi engelledi — bu site için açılır pencerelere izin ver." };
   w.document.write("<p style='font-family:Arial;padding:24px'>Etiket hazırlanıyor…</p>");
@@ -91,7 +94,8 @@ export async function printShippingLabels(ids: string[]): Promise<{ printed: num
     if (!res.ok) throw new Error(d.error || `HTTP ${res.status}`);
     if (!d.labels?.length) { w.close(); return { printed: 0, skipped: d.skipped || [] }; }
     w.document.open();
-    w.document.write(buildLabelsHtml(d.labels, d.sender, d.size === "100x150" ? "100x150" : "a5"));
+    const labels = notes ? (d.labels as Label[]).map((l) => ({ ...l, note: notes[l.id] })) : d.labels;
+    w.document.write(buildLabelsHtml(labels, d.sender, d.size === "100x150" ? "100x150" : "a5"));
     w.document.close();
     return { printed: d.labels.length, skipped: d.skipped || [] };
   } catch (e: any) {
