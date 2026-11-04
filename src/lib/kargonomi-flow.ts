@@ -113,6 +113,12 @@ async function dropDraft(c: Cfg, p: Provider, shipmentId: string) {
   else await cancelShipment(c.kargonomi.token, shipmentId, true).catch(() => {});
 }
 
+/** Kargonomi'deki gönderi; yoksa (silinmiş) null */
+async function kargonomiDraft(c: Cfg, shipmentId: string) {
+  return getShipment(c.kargonomi.token, shipmentId)
+    .catch((e) => { if (e instanceof KargonomiError && (e.status === 404 || e.status === 422)) return null; throw e; });
+}
+
 /** 1) Taslak gönderi + teklifler. Aynı sağlayıcı + desiyle açık taslak varsa yeniden kullanılır. */
 export async function quoteOrder(sb: Sb, orderId: string, desi: number, want?: string): Promise<{ offers: KargonomiOffer[]; shipmentId: string; provider: Provider }> {
   if (!(desi > 0 && desi <= 1000)) throw new KargonomiError(400, "Geçerli bir desi gir.");
@@ -131,6 +137,15 @@ export async function quoteOrder(sb: Sb, orderId: string, desi: number, want?: s
   if (shipmentId && (Number(o.kargonomi_desi) !== desi || providerOfOrder(o) !== p)) {
     await dropDraft(c, providerOfOrder(o), shipmentId);
     shipmentId = null;
+  }
+  // Kargonomi'de taslak silinmiş / iptal olmuş olabilir (onayda "Seçili olan Gönderi ID geçersiz", 2026-11-04) → yenisi açılır.
+  // Taslaktan çıkmışsa (Kargonomi panelinden onaylanmış) ikinci gönderi açılmaz.
+  if (shipmentId && p === "kargonomi") {
+    const cur = await kargonomiDraft(c, shipmentId);
+    if (!cur || cur.status === "cancelled") shipmentId = null;
+    else if (cur.status && cur.status !== "draft") {
+      throw new KargonomiError(409, `Kargonomi'de bu gönderi (#${shipmentId}) “${cur.status_label || cur.status}” durumunda — Kargonomi panelinden kontrol et.`);
+    }
   }
   if (!shipmentId) {
     const r = recipient(o);
@@ -194,7 +209,19 @@ export async function confirmOrder(sb: Sb, orderId: string, providerId: string) 
     return checkOrder(sb, orderId);
   }
 
-  const sh = await confirmProvider(c.kargonomi.token, o.kargonomi_shipment_id, offer.id);
+  let sh;
+  try {
+    sh = await confirmProvider(c.kargonomi.token, o.kargonomi_shipment_id, offer.id);
+  } catch (e) {
+    if (!(e instanceof KargonomiError) || (e.status !== 422 && e.status !== 404)) throw e;
+    // Taslak Kargonomi'de yoksa kayıt temizlenir; "Teklifleri yenile" yeni taslak açar
+    const cur = await kargonomiDraft(c, o.kargonomi_shipment_id);
+    if (!cur || cur.status === "cancelled") {
+      await update(sb, orderId, { kargonomi_shipment_id: null, kargonomi_offers: null, kargonomi_status: null });
+      throw new KargonomiError(409, "Kargonomi bu taslağı artık tanımıyor (orada silinmiş ya da süresi dolmuş). “Teklifleri yenile”ye bas — yeni taslak açılır — sonra firmayı yeniden seç.");
+    }
+    throw new KargonomiError(e.status, `${e.message} (Kargonomi'deki gönderi #${o.kargonomi_shipment_id}: ${cur.status_label || cur.status || "durum yok"})`);
+  }
   await update(sb, orderId, {
     kargonomi_confirmed_at: new Date().toISOString(), kargonomi_status: sh?.status || "ready",
     kargonomi_provider: sh?.shipping_provider_name || (offer.id === "-1" ? null : offer.name), kargonomi_error: null,
