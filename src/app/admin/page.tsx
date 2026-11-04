@@ -189,7 +189,7 @@ export default function AdminDashboard() {
                   {(o.profiles ? `${o.profiles.first_name ?? ""} ${o.profiles.last_name ?? ""}`.trim() : "") || o.customer_name || "—"}
                 </span>
                 <span className="flex-1 min-w-0 truncate text-xs font-bold text-amber-800" title={o.step?.hint}>
-                  {o.step?.stage}{(() => { const a = o.step?.actions?.find((x: any) => x.key !== "invoice_parasut") ?? o.step?.actions?.[0]; return a ? ` → ${a.label}` : ""; })()}
+                  {o.step?.stage}{(() => { const a = o.step?.actions?.find((x: any) => x.key !== "invoice_parasut" && x.key !== "return_invoice_parasut") ?? o.step?.actions?.[0]; return a ? ` → ${a.label}` : ""; })()}
                   {o.step?.hint && <span className="font-normal text-slate-500"> · {o.step.hint}</span>}
                 </span>
                 <span className="text-sm text-slate-500 w-16 text-right shrink-0">₺{Number(o.total_amount).toFixed(0)}</span>

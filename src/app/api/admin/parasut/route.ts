@@ -5,7 +5,7 @@ import { getAuthUserFromRequest } from "@/lib/auth-from-request";
 import {
   ParasutError, connectionStatus, connectWithCode, disconnect, listAccounts, listInvoiceCategories, syncProducts, matchProducts, pushCodesToParasut,
 } from "@/lib/parasut";
-import { invoiceOrder, checkInvoice, invoicePdfUrl } from "@/lib/parasut-invoice";
+import { invoiceOrder, checkInvoice, invoicePdfUrl, refundInvoiceOrder } from "@/lib/parasut-invoice";
 import { pushInvoiceToMarketplace, MarketplaceInvoiceError } from "@/lib/marketplace-invoice";
 
 // Paraşüt (yalnız yönetici) — src/lib/parasut.ts
@@ -64,6 +64,10 @@ export async function POST(req: NextRequest) {
         if (body.op === "invoice_pdf") return NextResponse.json({ ok: true, url: await invoicePdfUrl(sb, body.order_id) });
         const r = body.op === "invoice" ? await invoiceOrder(sb, body.order_id, { acceptDiff: body.accept_diff === true, carrier: typeof body.carrier === "string" ? body.carrier.trim().slice(0, 80) : undefined }) : await checkInvoice(sb, body.order_id);
         return NextResponse.json({ ok: true, ...r });
+      }
+      case "refund_invoice": {
+        if (!uuid(body.order_id)) return NextResponse.json({ error: "order_id" }, { status: 400 });
+        return NextResponse.json({ ok: true, ...(await refundInvoiceOrder(sb, body.order_id)) });
       }
       default: return NextResponse.json({ error: "Geçersiz işlem" }, { status: 400 });
     }

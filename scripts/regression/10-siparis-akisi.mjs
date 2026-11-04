@@ -1007,6 +1007,12 @@ export default {
         const ac2 = await pa(F.admin.token, { op: "invoice", order_id: id, carrier: "REGRESYON-YOK kargo" });
         ok(ac2.status >= 400 && one(`SELECT cargo_provider IS NULL FROM public.orders WHERE id = ${lit(id)}`) === "t",
           "Paraşüt: listede olmayan kargo firması siparişe yazılmıyor", why(ac2));
+        // İade faturası: üye kesemez; faturası olmayan siparişte Paraşüt'e gidilmez
+        const mr = await pa(F.member.token, { op: "refund_invoice", order_id: id });
+        ok(mr.status === 403, "Paraşüt: üye iade faturası kesemiyor", why(mr));
+        const ar = await pa(F.admin.token, { op: "refund_invoice", order_id: id });
+        ok([400, 409].includes(ar.status) && one(`SELECT parasut_refund_id IS NULL AND coalesce(invoice_status, 'pending') <> 'return_invoiced' FROM public.orders WHERE id = ${lit(id)}`) === "t",
+          "Paraşüt: satış faturası olmayan siparişte iade faturası kesilmiyor", why(ar));
         // Faturayı pazaryerine yükleme: üye yapamaz; site siparişinde reddedilir (yalnız Trendyol)
         const mt = await pa(F.member.token, { op: "push_marketplace_invoice", order_id: id });
         ok(mt.status === 403, "Paraşüt: üye faturayı pazaryerine (Trendyol / Hepsiburada) yükleyemiyor", why(mt));
@@ -1206,6 +1212,7 @@ export default {
         const due = (o) => m.isReturnInvoiceDue(m.orderNextStep(o));
         const ty = { channel: "trendyol", status: "delivered", payment_status: "paid", shipment_status: "delivered", mp_claim_state: "done", total_amount: 849 };
         ok(due({ ...ty, invoice_status: "invoiced" }), "Trendyol iadesi işlenmiş, faturalı sipariş → 'İade faturası kesilecek'te sayılır");
+        ok(m.orderNextStep({ ...ty, invoice_status: "invoiced" }).actions.map((a) => a.key).join(",") === "return_invoice_parasut,return_invoice", "İade faturası adımında önce 'İade faturasını kes (Paraşüt)', sonra elle işaret");
         ok(!due({ ...ty, invoice_status: "return_invoiced" }), "'İade faturası kesildi' denince satırdan düşer");
         const site = { channel: "site", payment_status: "refunded", shipment_status: "returned", total_amount: 1000, refunded_amount: 1000 };
         ok(due({ ...site, invoice_status: "invoiced" }), "Site: iade geldi + ücret iade edildi + faturalı → sayılır");

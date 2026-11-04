@@ -8,7 +8,7 @@
 //   * Kanal ayarı (parasut_channel_settings): tahsilat hesabı + "tahsil edildi" (Trendyol → kasa "Trendyol").
 //   * Alıcı e-Fatura kullanıcısıysa (VKN gelen kutusu) e-Fatura, değilse e-Arşiv (internet satışı + kargo
 //     firması adı / VKN / tarih). İş arka planda → dakikada bir takip (cron) → PDF özel depoya → "Faturalandı".
-// İade faturası şimdilik Paraşüt'te elle.
+// İade faturası: refundInvoiceOrder (aşağıda) — siparişte "İade faturasını kes (Paraşüt)".
 
 import { createAdminClient } from "@/lib/supabase-admin";
 import { parasutCall, parasutConfig, ParasutError } from "@/lib/parasut";
@@ -25,7 +25,8 @@ const pastDay = (d: Date | string) => day(new Date(Math.min(new Date(d).getTime(
 const norm = (s: unknown) => String(s ?? "").toLocaleLowerCase("tr").replace(/[^a-z0-9çğıöşü]/g, "");
 const parse = (v: any) => { try { return typeof v === "string" ? JSON.parse(v) : v || {}; } catch { return {}; } };
 
-const ORDER_COLS = `id, order_number, external_order_number, channel, status, created_at, payment_method, payment_status, invoice_status,
+const ORDER_COLS = `id, order_number, external_order_number, channel, status, shipment_status, created_at, payment_method, payment_status, invoice_status,
+  parasut_refund_id, parasut_refund_paid,
   total_amount, shipping_cost, coupon_discount, credit_used, import_source, billing_address, shipping_address, customer_name, customer_email, customer_phone,
   cargo_provider, kargonomi_provider, shipping_method, parasut_invoice_id, parasut_status, parasut_job_id, parasut_e_doc_id, parasut_e_doc_type,
   parasut_paid, parasut_diff_ok, refunded_amount, profiles(email, first_name, last_name, phone),
@@ -271,6 +272,107 @@ export async function invoiceOrder(sb: Sb, orderId: string, opts: { acceptDiff?:
     throw e;
   }
   return checkInvoice(sb, orderId);
+}
+
+// ── İADE FATURASI (kullanıcı 2026-11-04) ─────────────────────────────────────────────────────────────────────────
+// Paraşüt'te "iade" türünde alış kaydı (purchase_bills, item_type refund) = Paraşüt'teki "İade Faturası" (Trendyol iadesi
+// elle böyle girildi: aynı müşteri + kategori, iade gelen kalemler, giriş deposu, ödendi). Kalemler satış faturasından
+// kopyalanır (aynı ürün, KDV hariç birim fiyat, KDV oranı, depo) → tutar satıştakiyle birebir. Yalnız iade gelen adet;
+// iptal / tamamı geri gelen siparişte (adet işaretlenmemişse) faturanın tamamı (kargo kalemi dahil).
+// Asıl faturaya bağlama API belgesinde yok → kayıt bağlantısız (Paraşüt'te "İade edilen faturaya git" çıkmaz).
+// Adımlar kaldığı yerden devam eder: iade kaydı → ödeme (kanal hesabı) → sipariş "İade faturası kesildi".
+export async function refundInvoiceOrder(sb: Sb, orderId: string) {
+  const c = await parasutConfig(sb);
+  if (!c.enabled) throw new ParasutError(400, "Paraşüt kapalı (Ayarlar › Entegrasyonlar).");
+  const o = await loadOrder(sb, orderId);
+  if (o.invoice_status === "return_invoiced") return { status: "done" };
+  if (o.invoice_status !== "invoiced") throw new ParasutError(409, "Satış faturası kesilmemiş sipariş — iade faturası gerekmez.");
+  if (!o.parasut_invoice_id) throw new ParasutError(409, "Satış faturası bu sistemden (Paraşüt bağlantısıyla) kesilmemiş — iade faturasını Paraşüt'te elle kes, sonra “İade faturası kesildi”.");
+  const channel = o.channel || "site";
+  const no = channel === "site" ? (o.order_number ? `YH${o.order_number}` : o.id.slice(0, 8)) : String(o.external_order_number || o.order_number || o.id.slice(0, 8));
+  const { data: ch } = await (sb as any).from("parasut_channel_settings").select("*").eq("channel", channel).maybeSingle();
+
+  let refundId: string | null = o.parasut_refund_id || null;
+  let paid = !!o.parasut_refund_paid;
+  // Paraşüt'te elle silindiyse baştan
+  if (refundId) {
+    try { await parasutCall(sb, "GET", `/purchase_bills/${refundId}`); }
+    catch (e: any) {
+      if (!(e instanceof ParasutError && e.status === 404)) throw e;
+      refundId = null; paid = false;
+      await save(sb, orderId, { parasut_refund_id: null, parasut_refund_paid: false });
+    }
+  }
+
+  if (!refundId) {
+    const inv = await parasutCall(sb, "GET", `/sales_invoices/${o.parasut_invoice_id}?include=details,details.product,details.warehouse`);
+    const details = ((inv?.included as any[]) || []).filter((x) => x.type === "sales_invoice_details");
+    const rel = inv?.data?.relationships || {};
+    const contactId = rel.contact?.data?.id;
+    const categoryId = rel.category?.data?.id || ch?.category_id;
+    if (!contactId || !details.length) throw new ParasutError(422, "Satış faturası Paraşüt'te okunamadı (müşteri / kalem yok).");
+
+    // İade gelen adet (Paraşüt ürünü başına)
+    const want = new Map<string, number>();
+    const errs: string[] = [];
+    for (const i of (o.order_items as any[]) || []) {
+      const q = Number(i.returned_qty || 0);
+      if (q <= 0) continue;
+      const pid = i.product_variants?.parasut_product_id || i.products?.parasut_product_id;
+      if (!pid) { errs.push(`Paraşüt ürünüyle eşleşmemiş: ${i.products?.title ?? i.title ?? "Ürün"}${i.variant_name ? ` — ${i.variant_name}` : ""}`); continue; }
+      want.set(String(pid), (want.get(String(pid)) || 0) + q);
+    }
+    const whole = !want.size && !errs.length && (o.status === "cancelled" || o.shipment_status === "returned" || o.payment_status === "refunded");
+    if (!want.size && !whole && !errs.length) errs.push("İade gelen ürün işaretlenmemiş — önce siparişte iadeyi işle.");
+
+    const lines: any[] = [];
+    for (const d of details) {
+      const pid = String(d.relationships?.product?.data?.id || "");
+      const a = d.attributes || {};
+      const full = Number(a.quantity) || 0;
+      const qty = whole ? full : Math.min(want.get(pid) || 0, full);
+      if (qty <= 0) continue;
+      if (!whole) want.set(pid, (want.get(pid) || 0) - qty);
+      const wh = d.relationships?.warehouse?.data?.id;
+      lines.push({ type: "purchase_bill_details", attributes: {
+        quantity: qty, unit_price: Number(a.unit_price), vat_rate: Number(a.vat_rate), ...(a.description ? { description: a.description } : {}),
+        ...(Number(a.discount_value) ? { discount_type: a.discount_type, discount_value: a.discount_type === "amount" ? r2((Number(a.discount_value) * qty) / full) : Number(a.discount_value) } : {}),
+      }, relationships: {
+        product: { data: { id: pid, type: "products" } },
+        ...(wh ? { warehouse: { data: { id: String(wh), type: "warehouses" } } } : {}),
+      } });
+    }
+    for (const [pid, q] of want) if (q > 0) errs.push(`İade gelen ${q} adet (Paraşüt ürün ${pid}) satış faturasında yok.`);
+    if (errs.length || !lines.length) throw new ParasutError(422, (errs.length ? errs : ["İade edilecek kalem bulunamadı."]).join("\n"));
+
+    const j = await parasutCall(sb, "POST", "/purchase_bills", { data: { type: "purchase_bills", attributes: {
+      item_type: "refund", description: no, invoice_no: no, issue_date: day(), due_date: day(), currency: "TRL",
+    }, relationships: {
+      supplier: { data: { id: String(contactId), type: "contacts" } },
+      ...(categoryId ? { category: { data: { id: String(categoryId), type: "item_categories" } } } : {}),
+      details: { data: lines },
+    } } });
+    refundId = String(j?.data?.id || "");
+    if (!refundId) throw new ParasutError(502, "Paraşüt iade kaydının numarası dönmedi — Paraşüt'te kontrol et.");
+    await save(sb, orderId, { parasut_refund_id: refundId });
+    await (sb as any).from("order_events").insert({ order_id: orderId, type: "note", note: `Paraşüt iade faturası oluşturuldu (${no}, ${lines.length} kalem)` });
+  }
+
+  // Ödeme: kanal "tahsil edildi" ise iade tutarı aynı hesaptan ödendi sayılır (Paraşüt'te "Ödendi")
+  if (ch?.mark_paid && ch.account_id && !paid) {
+    const cur = await parasutCall(sb, "GET", `/purchase_bills/${refundId}`);
+    const rem = r2(Number(cur?.data?.attributes?.remaining) || 0);
+    if (rem > 0) {
+      await parasutCall(sb, "POST", `/purchase_bills/${refundId}/payments`, { data: { type: "payments", attributes: {
+        account_id: Number(ch.account_id), date: day(), amount: rem,
+      } } });
+    }
+    await save(sb, orderId, { parasut_refund_paid: true });
+  }
+
+  await save(sb, orderId, { invoice_status: "return_invoiced" });
+  await (sb as any).from("order_events").insert({ order_id: orderId, type: "note", note: "İade faturası kesildi (Paraşüt)" });
+  return { status: "done", refundId };
 }
 
 /** YeriHisset siparişinde karar netleşince (müşteri "oldu" / "oldu say" / değişimde tutulmayan geri geldi) faturayı

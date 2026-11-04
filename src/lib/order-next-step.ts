@@ -10,7 +10,7 @@
 
 export type NextActionKey =
   | "mark_paid" | "cancel" | "ship_kargonomi" | "ship_manual" | "mark_delivered"
-  | "return" | "refund" | "invoice" | "invoice_parasut" | "return_invoice" | "mp_restock"
+  | "return" | "refund" | "invoice" | "invoice_parasut" | "return_invoice" | "return_invoice_parasut" | "mp_restock"
   // satış sonrası (B aşaması — src/lib/after-sale.ts)
   | "fit_ok" | "case_link" | "ship_alt" | "alt_delivered" | "send_label" | "close_case"
   // "İade gelecek": müşteri iadeyi telefonla bildirdi → yönetici talep açar; kod gerekmiyorsa doğrudan yolda
@@ -76,7 +76,7 @@ const SHIPPED = ["shipped", "delivered", "undelivered", "returned"];
 // Sırada yalnız iade faturası kesmek var (Trendyol iadesi işlendi / iade geldi + ücret iade edildi / faturalı iptal).
 // Panoda ayrı "İade faturası kesilecek" satırında sayılır, "Bekleyen sipariş işi"nde sayılmaz (kullanıcı 2026-11-03).
 export function isReturnInvoiceDue(s: NextStep) {
-  return s.needsAction && s.actions.length > 0 && s.actions.every((a) => a.key === "return_invoice");
+  return s.needsAction && s.actions.length > 0 && s.actions.every((a) => a.key === "return_invoice" || a.key === "return_invoice_parasut");
 }
 
 export function isMarketplaceOrder(o: OrderLike) {
@@ -117,6 +117,8 @@ function coreNextStep(o: OrderLike): NextStep {
   // Paraşüt açıksa ilk düğme (kapalıysa sipariş ekranı gizler)
   const invoiceActs: NextAction[] = [{ key: "invoice_parasut", label: "Faturayı kes (Paraşüt)", kind: "primary" }, invoiceAction];
   const packedAction: NextAction = { key: "packed", label: "Paket hazır", kind: "primary" };
+  // İade faturası: Paraşüt açıksa ve satış faturası oradan kesildiyse ilk düğme (değilse sipariş ekranı gizler), sonra elle işaret
+  const returnInvoiceActs: NextAction[] = [{ key: "return_invoice_parasut", label: "İade faturasını kes (Paraşüt)", kind: "primary" }, { key: "return_invoice", label: "İade faturası kesildi", kind: "primary" }];
 
   // ── Pazaryeri: durumları pazaryeri yönetir ──
   if (isMarketplaceOrder(o)) {
@@ -135,8 +137,8 @@ function coreNextStep(o: OrderLike): NextStep {
     if (cs === "in_transit") return { stage: "İade yolda (Trendyol)", hint: `${cn}Ürün depoya ulaşınca “İadeyi onayla” çıkar.`, actions: [], needsAction: false };
     if (cs === "disputed") return { stage: "İade itirazda (Trendyol)", hint: `${cn}Trendyol inceliyor.`, actions: [], needsAction: false };
     if (cs === "done" && inv === "invoiced") {
-      return { stage: "İade faturası kesilecek", hint: `${cn}İade işlendi; Paraşüt'te iade faturasını kes, sonra işaretle.`,
-        actions: [{ key: "return_invoice", label: "İade faturası kesildi", kind: "primary" }], needsAction: true };
+      return { stage: "İade faturası kesilecek", hint: `${cn}İade işlendi; “İade faturasını kes (Paraşüt)” — ya da Paraşüt'te elle kesip “İade faturası kesildi”.`,
+        actions: returnInvoiceActs, needsAction: true };
     }
     if (o.status === "refunded" || ship === "returned") {
       return o.mp_restocked_at
@@ -169,7 +171,7 @@ function coreNextStep(o: OrderLike): NextStep {
   // ── Site ──
   if (o.status === "cancelled") {
     if (paid && remaining > 0) return { stage: "İptal edildi", hint: "Ücret iadesi kaydı eksik.", actions: [{ key: "refund", label: "Ücret iadesi yap", kind: "danger" }], needsAction: true };
-    if (inv === "invoiced") return { stage: "İptal edildi", hint: "Fatura kesilmişti: iade faturası kes.", actions: [{ key: "return_invoice", label: "İade faturası kesildi", kind: "primary" }], needsAction: true };
+    if (inv === "invoiced") return { stage: "İptal edildi", hint: "Fatura kesilmişti: iade faturası kes.", actions: returnInvoiceActs, needsAction: true };
     return { stage: "İptal edildi", actions: [], needsAction: false };
   }
 
@@ -257,7 +259,7 @@ function coreNextStep(o: OrderLike): NextStep {
     const acts: NextAction[] = [];
     if (paid && remaining > 0) acts.push({ key: "refund", label: "Ücret iadesi yap", kind: "danger" });
     if (!allReturned) acts.push({ key: "return", label: "İade al", kind: "danger" });
-    if (inv === "invoiced" && (pay === "refunded" || pay === "partial_refund")) acts.push({ key: "return_invoice", label: "İade faturası kesildi", kind: "primary" });
+    if (inv === "invoiced" && (pay === "refunded" || pay === "partial_refund")) acts.push(...returnInvoiceActs);
     if (inv === "pending" && !allReturned) acts.push(...invoiceActs);
     const due = acts.some((a) => a.key === "refund" || a.key === "return_invoice");
     const refundDue = acts.some((a) => a.key === "refund");
@@ -265,7 +267,7 @@ function coreNextStep(o: OrderLike): NextStep {
     const onlyInvoice = !refundDue && acts.some((a) => a.key === "return_invoice");
     return {
       stage: onlyInvoice ? "İade faturası kesilecek" : allReturned ? "İade geldi" : "Kısmi iade geldi",
-      hint: refundDue ? "İade gelen ürünün ücretini iade et." : onlyInvoice ? "Ücret iade edildi; faturası kesilmiş siparişin iade faturasını kes, sonra “İade faturası kesildi”." : undefined,
+      hint: refundDue ? "İade gelen ürünün ücretini iade et." : onlyInvoice ? "Ücret iade edildi; “İade faturasını kes (Paraşüt)” — ya da Paraşüt'te elle kesip “İade faturası kesildi”." : undefined,
       actions: acts, needsAction: due,
     };
   }

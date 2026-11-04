@@ -879,6 +879,21 @@ export default function OrdersPage() {
     }
   }
 
+  // İade faturası — Paraşüt (src/lib/parasut-invoice.ts refundInvoiceOrder): iade gelen kalemler satış faturasındaki fiyatla
+  async function refundParasut(o: Order) {
+    if (!(await siteConfirm({ title: "İade faturası Paraşüt'te kesilsin mi?", message: "İade gelen ürünler satış faturasındaki fiyat ve KDV ile “İade Faturası” olarak girilir, stok girişi yapılır, kanal hesabından ödendi sayılır. Sipariş “İade faturası kesildi” olur.", confirmText: "İade faturasını kes" }))) return;
+    setUpdatingId(o.id);
+    try {
+      await parasutApi({ op: "refund_invoice", order_id: o.id });
+      siteAlert({ title: "Paraşüt", message: "İade faturası kesildi. Sipariş “İade faturası kesildi”.", tone: "success" });
+    } catch (e: any) {
+      siteAlert({ title: "İade faturası kesilemedi", message: String(e?.message || e), tone: "danger" });
+    } finally {
+      setUpdatingId(null);
+      refreshOrder(o.id);
+    }
+  }
+
   // Paket hazır: pazaryerinde fatura hemen kesilir (→ yükleme → Trendyol "İşleme al"); sitede "Kargo bekliyor"
   async function markPacked(o: Order) {
     const site = !isMarketplace(o);
@@ -951,6 +966,7 @@ Siparişte “Paraşüt — yeniden dene” ile tekrar dene.`, tone: "danger" })
         return;
       case "mark_delivered": return updateField(o.id, { shipment_status: "delivered" });
       case "invoice_parasut": return invoiceParasut(o);
+      case "return_invoice_parasut": return refundParasut(o);
       case "packed": return markPacked(o);
       case "picked_up":
         if (await siteConfirm({ title: "Kurye aldı mı?", message: "Sipariş “Kargoda” olur ve müşteriye takip numaralı kargo e-postası gider.", confirmText: "Kurye aldı" })) await pickedUp([o.id]);
@@ -1832,7 +1848,7 @@ ${courierQueue.slice(0, 20).map((o) => orderLabel(o)).join(", ")}${courierQueue.
                     )}
                     {step.actions.length > 0 && (
                       <div className="flex flex-wrap items-center gap-2">
-                        {step.actions.filter((a) => a.key !== "send_label" && a.key !== "ship_alt" && (a.key !== "invoice_parasut" || parasutOn)).map((a) => (
+                        {step.actions.filter((a) => a.key !== "send_label" && a.key !== "ship_alt" && (a.key !== "invoice_parasut" || parasutOn) && (a.key !== "return_invoice_parasut" || (parasutOn && !!(o as any).parasut_invoice_id))).map((a) => (
                           <Button
                             key={a.key}
                             size="sm"
