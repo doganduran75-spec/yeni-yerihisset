@@ -1182,6 +1182,20 @@ export default {
         ok(r === "a_closed_blocked,b_open_ok", "Numaralar kapalıyken ürün yayına alınamıyor; fiyatlı numara açılınca alınabiliyor (ürün formu numaraları önce kaydeder)", r);
       });
 
+      await part("Entegrasyonla kargo hazırlandı: yöneticiden iş beklenmez (Kurye aldı yalnız 2 gün gecikmede)", async () => {
+        let m;
+        try { m = await import(new URL("../../src/lib/order-next-step.ts", import.meta.url)); }
+        catch (e) { return add("warn", "Kargo hazırlandı kuralı denenemedi", `order-next-step.ts yüklenemedi: ${String(e?.message || e).slice(0, 120)}`); }
+        const ago = (d) => new Date(Date.now() - d * 86400000).toISOString();
+        const base = { channel: "site", payment_status: "paid", status: "processing", shipment_status: "preparing", invoice_status: "invoiced", total_amount: 100 };
+        const fresh = m.orderNextStep({ ...base, kargonomi_tracking_code: "KSURTEST", packed_at: ago(0) });
+        ok(!fresh.needsAction && !fresh.actions.some((a) => a.key === "picked_up"), "Entegrasyon kodlu paket hazır: bekleyen işlerde yok, 'Kurye aldı' düğmesi yok", fresh.stage);
+        const late = m.orderNextStep({ ...base, kargonomi_tracking_code: "KSURTEST", packed_at: ago(3) });
+        ok(late.needsAction && late.actions.some((a) => a.key === "picked_up"), "2 günü geçince bekleyen işe düşer, 'Kurye aldı' (yedek) çıkar", late.stage);
+        const manual = m.orderNextStep({ ...base, cargo_tracking_number: "ELLE1", packed_at: ago(0) });
+        ok(manual.actions.some((a) => a.key === "picked_up"), "Elle girilmiş kodda 'Kurye aldı' düğmesi durur", manual.stage);
+      });
+
       await part("Pano: 'İade faturası kesilecek' ayrı satır, 'Bekleyen sipariş işi'nde sayılmaz", async () => {
         let m;
         try { m = await import(new URL("../../src/lib/order-next-step.ts", import.meta.url)); }

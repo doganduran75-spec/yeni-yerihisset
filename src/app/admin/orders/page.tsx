@@ -199,6 +199,12 @@ const shipmentColors: Record<string, string> = {
   undelivered: "bg-orange-50 text-orange-700 ring-orange-500/20",
   returned:   "bg-amber-50   text-amber-700  ring-amber-500/20",
 };
+// Sevkiyat etiketi: "Hazırlanıyor" + paket hazır → "Kargo hazırlandı" (yalnız görünüm; durum değeri preparing kalır — 2026-11-04)
+const shipLabelOf = (o: { shipment_status?: string | null; packed_at?: string | null }, fallback = "waiting") => {
+  const s = o.shipment_status || fallback;
+  return s === "preparing" && o.packed_at ? "Kargo hazırlandı" : shipmentLabels[s] ?? s;
+};
+
 const shipmentLabels: Record<string, string> = {
   waiting:   "Bekleniyor",
   preparing: "Hazırlanıyor",
@@ -804,7 +810,7 @@ export default function OrdersPage() {
     { value: "cancelled", label: "İptal Edildi…" },
   ] : [
     { value: "waiting", label: "Bekleniyor" },
-    { value: "preparing", label: "Hazırlanıyor" },
+    { value: "preparing", label: o.packed_at && o.shipment_status === "preparing" ? "Kargo hazırlandı" : "Hazırlanıyor" },
     ...(o.kargonomi_tracking_code ? [] : [{ value: "ship_kargonomi", label: "Kargoya Ver (entegrasyon)" }]),
     { value: "shipped", label: o.kargonomi_tracking_code ? "Kargoya Verildi" : "Kargoya Verildi (elle)" },
     { value: "delivered", label: "Teslim Edildi" },
@@ -1262,7 +1268,8 @@ Siparişte “Paraşüt — yeniden dene” ile tekrar dene.`, tone: "danger" })
     && !["shipped", "delivered", "undelivered", "returned", "cancelled"].includes(o.shipment_status || "")
     && (!o.label_printed_code || labelOutdated(o)));
   // Kurye bekleyen site paketleri (Paket hazır, henüz kargoda değil) — sabah toplu "Kurye aldı"
-  const courierQueue = orders.filter((o) => !isMarketplace(o) && shipsHere(o) && !!o.packed_at && o.status !== "cancelled"
+  // Entegrasyon kodlu paketler hariç: onları kargo firmasının durumu kendiliğinden Kargoda yapar
+  const courierQueue = orders.filter((o) => !isMarketplace(o) && shipsHere(o) && !o.kargonomi_tracking_code && !!o.packed_at && o.status !== "cancelled"
     && !["shipped", "delivered", "undelivered", "returned", "cancelled"].includes(o.shipment_status || ""));
   async function printLabelQueue() {
     const list = labelQueue.slice(0, 200);
@@ -1512,7 +1519,7 @@ ${courierQueue.slice(0, 20).map((o) => orderLabel(o)).join(", ")}${courierQueue.
                       <TableCell>
                         {isMarketplace(order) ? (
                           <div className="flex flex-col gap-1">
-                            <StatusBadge label={shipmentLabels[sStatus] ?? sStatus} color={shipmentColors[sStatus] ?? shipmentColors.waiting} />
+                            <StatusBadge label={shipLabelOf(order)} color={shipmentColors[sStatus] ?? shipmentColors.waiting} />
                             {order.cargo_tracking_number && (
                               <span className="text-[10px] font-mono text-purple-600 flex items-center gap-1">
                                 <Truck size={9} /> {order.cargo_tracking_number}
@@ -1524,7 +1531,7 @@ ${courierQueue.slice(0, 20).map((o) => orderLabel(o)).join(", ")}${courierQueue.
                           <Loader2 size={14} className="animate-spin text-muted-foreground" />
                         ) : (
                           <div className="flex flex-col gap-1">
-                            <StatusMenu label={shipmentLabels[sStatus] ?? sStatus} color={shipmentColors[sStatus] ?? shipmentColors.waiting}
+                            <StatusMenu label={shipLabelOf(order)} color={shipmentColors[sStatus] ?? shipmentColors.waiting}
                               options={shipmentOptions(order)} current={sStatus} onSelect={(v) => selectShipment(order, v)} />
                             {openCaseOf(order) && (
                               <span className={`text-[10px] font-bold rounded px-1.5 py-0.5 w-fit ${openCaseOf(order).kind === "return" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}>
@@ -1748,7 +1755,7 @@ ${courierQueue.slice(0, 20).map((o) => orderLabel(o)).join(", ")}${courierQueue.
                 </div>
                 <div className="space-y-1">
                   <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Sevkiyat</p>
-                  <StatusBadge label={shipmentLabels[selectedOrder.shipment_status || "preparing"] ?? (selectedOrder.shipment_status || "")} color={shipmentColors[selectedOrder.shipment_status || "preparing"] ?? shipmentColors.waiting} />
+                  <StatusBadge label={shipLabelOf(selectedOrder, "preparing")} color={shipmentColors[selectedOrder.shipment_status || "preparing"] ?? shipmentColors.waiting} />
                 </div>
               </>
               ) : (

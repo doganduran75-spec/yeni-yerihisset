@@ -198,12 +198,22 @@ function coreNextStep(o: OrderLike): NextStep {
     if (o.packed_at) {
       // Entegrasyonla gelen kod: kurye alınca kargo firmasının durumu siparişi kendiliğinden Kargoda yapar (saatlik sorgu)
       const auto = !!o.kargonomi_tracking_code;
-      return { stage: "Kargo hazırlandı — kurye bekleniyor", hint: auto
-          ? "Kurye alınca sipariş kendiliğinden “Kargoda” olur, müşteriye e-posta gider (saatte bir sorgulanır). “Kurye aldı” yalnız gecikirse."
-          : "Kurye alınca “Kurye aldı” — müşteriye kargo e-postası o an gider.", actions: [
-        { key: "picked_up", label: "Kurye aldı", kind: "primary" },
-        { key: "cancel", label: "Siparişi iptal et + para iadesi", kind: "danger" },
-      ], needsAction: daysSince(o.packed_at) > (auto ? 2 : 1) };
+      // Entegrasyonda yöneticiden iş yok (kullanıcı 2026-11-04): "Kurye aldı" düğmesi yalnız 2 gün geçip kargo firması
+      // paketi hâlâ okutmadıysa (yedek) çıkar
+      const late = daysSince(o.packed_at) > (auto ? 2 : 1);
+      return auto
+        ? { stage: late ? "Kargo hazırlandı — kargo firması 2 gündür almadı" : "Kargo hazırlandı — kargo firması bekleniyor",
+            hint: late
+              ? "Kargo firması paketi okutmadı. Paket gittiyse “Kurye aldı” (müşteriye e-posta gider); gitmediyse kargo firmasıyla görüş."
+              : "Senden iş yok: kargo firması paketi okutunca sipariş kendiliğinden “Kargoda” olur, müşteriye e-posta gider.",
+            actions: [
+              ...(late ? [{ key: "picked_up", label: "Kurye aldı", kind: "primary" } as NextAction] : []),
+              { key: "cancel", label: "Siparişi iptal et + para iadesi", kind: "danger" },
+            ], needsAction: late }
+        : { stage: "Kargo hazırlandı — kurye bekleniyor", hint: "Kurye alınca “Kurye aldı” — müşteriye kargo e-postası o an gider.", actions: [
+            { key: "picked_up", label: "Kurye aldı", kind: "primary" },
+            { key: "cancel", label: "Siparişi iptal et + para iadesi", kind: "danger" },
+          ], needsAction: late };
     }
     const hasCode = !!(o.kargonomi_tracking_code || o.cargo_tracking_number);
     return { stage: o.kargonomi_shipment_id && !hasCode ? "Hazırlanıyor — kargo firması seçilmedi" : "Hazırlanıyor",
