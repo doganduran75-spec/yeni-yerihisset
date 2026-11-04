@@ -223,6 +223,10 @@ const CHANNEL_FALLBACK: SalesChannel[] = [
 const isMarketplace = (o?: { channel?: string | null; import_source?: string | null } | null) =>
   !!o?.channel && o.channel !== "site" && !o.import_source;
 const isImported = (o?: { import_source?: string | null } | null) => !!o?.import_source;
+// Aktarılmış ama kargosu bu sistemden (Kargoya ver) yapılan sipariş: etiket kutusu + toplu etiket / kurye listeleri ona da açık
+// (2026-11-04: site canlı olana kadar siparişler eski siteden aktarılıyor; 24765'te kod geldi, etiket düğmesi yoktu)
+const shipsHere = (o?: { import_source?: string | null; kargonomi_shipment_id?: string | null; kargonomi_tracking_code?: string | null } | null) =>
+  !isImported(o) || !!(o?.kargonomi_shipment_id || o?.kargonomi_tracking_code);
 function ChannelBadge({ code, channels, size = "sm" }: { code?: string | null; channels: SalesChannel[]; size?: "sm" | "md" }) {
   if (!code || code === "site") return null;
   const ch = channels.find((c) => c.code === code);
@@ -1254,11 +1258,11 @@ Siparişte “Paraşüt — yeniden dene” ile tekrar dene.`, tone: "danger" })
 
   // Toplu kargo etiketi: listede görünen, kargo kodu olan, gönderilmemiş ve etiketi basılmamış / kodu değişmiş siparişler
   const labelQueue = visibleOrders.filter((o) =>
-    !!(o.cargo_tracking_number || o.kargonomi_tracking_code) && o.status !== "cancelled" && !isImported(o)
+    !!(o.cargo_tracking_number || o.kargonomi_tracking_code) && o.status !== "cancelled" && shipsHere(o)
     && !["shipped", "delivered", "undelivered", "returned", "cancelled"].includes(o.shipment_status || "")
     && (!o.label_printed_code || labelOutdated(o)));
   // Kurye bekleyen site paketleri (Paket hazır, henüz kargoda değil) — sabah toplu "Kurye aldı"
-  const courierQueue = orders.filter((o) => !isMarketplace(o) && !isImported(o) && !!o.packed_at && o.status !== "cancelled"
+  const courierQueue = orders.filter((o) => !isMarketplace(o) && shipsHere(o) && !!o.packed_at && o.status !== "cancelled"
     && !["shipped", "delivered", "undelivered", "returned", "cancelled"].includes(o.shipment_status || ""));
   async function printLabelQueue() {
     const list = labelQueue.slice(0, 200);
@@ -1638,7 +1642,7 @@ ${courierQueue.slice(0, 20).map((o) => orderLabel(o)).join(", ")}${courierQueue.
               )}
 
               {/* Kargo etiketi (site + pazaryeri ortak) */}
-              {!isImported(selectedOrder) && (
+              {shipsHere(selectedOrder) && (
                 <ShippingLabelBox
                   order={selectedOrder}
                   onChange={(fields) => {

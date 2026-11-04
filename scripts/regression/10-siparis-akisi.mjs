@@ -1424,6 +1424,14 @@ export default {
         ok(one(`SELECT packed_at IS NOT NULL FROM public.orders WHERE id = ${lit(a)}`) === "t" && ord(a).shipment_status === "preparing",
           "Ödenmiş siparişte entegrasyon etiketi basılınca 'Kargo hazırlandı' (henüz Kargoda değil, e-posta yok)", `packed_at ${ord(a).packed_at} · ${ord(a).shipment_status}`);
         ok(one(`SELECT packed_at IS NULL FROM public.orders WHERE id = ${lit(b)}`) === "t", "Ödemesi alınmamış siparişte etiket 'Kargo hazırlandı' yapmıyor", "packed_at doldu");
+        // Eski siteden aktarılan, kargosu buradan yapılan sipariş de aynı (etiket kutusu ona da açık — 2026-11-04)
+        const r3 = await order([MAIN(1)]);
+        const c3 = r3.json?.orderId;
+        if (c3) {
+          sql(`UPDATE public.orders SET import_source = 'regresyon', payment_status = 'paid', status = 'processing', shipment_status = 'preparing', kargonomi_tracking_code = 'RGKI' || substr(id::text, 1, 6) WHERE id = ${lit(c3)};
+               UPDATE public.orders SET label_printed_code = kargonomi_tracking_code, label_printed_at = now() WHERE id = ${lit(c3)};`);
+          ok(one(`SELECT packed_at IS NOT NULL FROM public.orders WHERE id = ${lit(c3)}`) === "t", "Aktarılmış siparişte de entegrasyon etiketi basılınca 'Kargo hazırlandı'", `packed_at ${ord(c3).packed_at}`);
+        }
       });
 
       await part("Paket hazır → kurye aldı (gece paketlenir, e-posta kurye alınca)", async () => {
