@@ -1194,6 +1194,9 @@ export default {
         ok(late.needsAction && late.actions.some((a) => a.key === "picked_up"), "2 günü geçince bekleyen işe düşer, 'Kurye aldı' (yedek) çıkar", late.stage);
         const manual = m.orderNextStep({ ...base, cargo_tracking_number: "ELLE1", packed_at: ago(0) });
         ok(manual.actions.some((a) => a.key === "picked_up"), "Elle girilmiş kodda 'Kurye aldı' düğmesi durur", manual.stage);
+        // Pano, sipariş listesiyle aynı alanları okumalı (eksik alan → panoda farklı "Bekleyen işlerim" sayısı, 2026-11-04)
+        const dash = (await import("node:fs")).readFileSync(new URL("../../src/app/admin/page.tsx", import.meta.url), "utf8");
+        ok(/from\('orders'\)\s*(\/\/[^\n]*\n\s*)*\.select\('\*/.test(dash), "Pano bekleyen işleri siparişin tüm alanlarıyla hesaplar (sipariş listesiyle aynı sayı)");
       });
 
       await part("Pano: 'İade faturası kesilecek' ayrı satır, 'Bekleyen sipariş işi'nde sayılmaz", async () => {

@@ -62,7 +62,9 @@ export default function AdminDashboard() {
       // (kargoda / teslim / faturalı) ve eski aktarılmış siparişler burada görünmez.
       const { data: openData } = await (supabase as any)
         .from('orders')
-        .select('id, order_number, external_order_number, total_amount, refunded_amount, status, payment_status, shipment_status, invoice_status, created_at, channel, import_source, customer_name, kargonomi_tracking_code, kargonomi_shipment_id, kargonomi_confirmed_at, kargonomi_provider, kargonomi_error, parasut_status, parasut_error, mp_restocked_at, mp_claim_state, mp_claim_note, fit_status, delivered_at, profiles (first_name, last_name), order_cases (kind, status, return_method, label_sent_at, closed_at)')
+        // Sipariş listesiyle AYNI alanlar (*): sıradaki adım kuralı packed_at, mp_picking_at vb. okur — eksik alan panoda
+        // farklı sayı veriyordu (2026-11-04: paket hazır sipariş panoda "Paket hazır" bekliyor görünüyordu)
+        .select('*, profiles (first_name, last_name), order_cases (kind, status, return_method, label_sent_at, closed_at)')
         .eq('is_closed', false)
         .order('created_at', { ascending: false })
         .limit(1000);
