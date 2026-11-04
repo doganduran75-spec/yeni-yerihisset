@@ -80,5 +80,6 @@ bash scripts/server-health.sh --quiet >/dev/null 2>&1 || true
 # sonucu okuyup HATA varsa Claude'a ilet. Atlamak için: SKIP_REGRESSION=1 bash scripts/deploy.sh
 if [ "${SKIP_REGRESSION:-0}" != "1" ]; then
   echo
-  node scripts/regression.mjs || true
+  # Regresyon TS dosyalarını (order-next-step, kargonomi) doğrudan yükler; Node'un "Module type not specified" uyarısı gürültü
+  node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/regression.mjs || true
 fi
