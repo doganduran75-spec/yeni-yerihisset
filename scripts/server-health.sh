@@ -163,9 +163,9 @@ else add zombies ok "Zombi süreçler" "$ZOMBIE" ""; fi
 UPD=$(/usr/lib/update-notifier/apt-check 2>&1 || echo "0;0")
 UPD_ALL=${UPD%%;*}; UPD_SEC=${UPD##*;}
 if [ -f /var/run/reboot-required ]; then
-  add updates warn "Güncellemeler" "yeniden başlatma bekliyor (güvenlik: $UPD_SEC, toplam: $UPD_ALL)" "Güncellemelerin bir kısmı yeniden başlatmadan sonra devreye girer; sakin bir saatte bakım yapılmalı."
+  add updates warn "Güncellemeler" "yeniden başlatma bekliyor (güvenlik: $UPD_SEC, toplam: $UPD_ALL)" "Sakin bir saatte yeniden başlatılmalı — Ayrıntı › Sunucu Sağlığı › Ne yapmalıyım?"
 elif [ "${UPD_SEC:-0}" -gt 0 ] 2>/dev/null; then
-  add updates warn "Güncellemeler" "$UPD_SEC güvenlik güncellemesi bekliyor (toplam $UPD_ALL)" "Güvenlik güncellemeleri yüklenmeli (apt upgrade)."
+  add updates warn "Güncellemeler" "$UPD_SEC güvenlik güncellemesi bekliyor (toplam $UPD_ALL)" "Güvenlik güncellemeleri yüklenmeli — Ayrıntı › Sunucu Sağlığı › Ne yapmalıyım?"
 else
   add updates ok "Güncellemeler" "güvenlik güncellemesi yok (toplam $UPD_ALL)" ""
 fi

@@ -668,6 +668,15 @@ async function main() {
   const hfail = hrows.filter((x) => x[0] === "fail"), hwarn = hrows.filter((x) => x[0] === "warn");
   const hlist = (xs) => xs.map((x) => `${x[1]}: ${x[2]}`).join(" · ");
   hfail.length ? add("fail", "Sunucu sağlığı", `kırmızı — ${hlist(hfail)}`) : hwarn.length ? add("warn", "Sunucu sağlığı", `sarı — ${hlist(hwarn)}`) : add("ok", "Sunucu sağlığı", "yeşil");
+  // "Ne yapmalıyım?" (2026-11-05): güncelleme uyarısında panel adım adım yol gösterir → tek komut betiği + kart eşleşmeli
+  {
+    const upd = readFileSync(new URL("./server-update.sh", import.meta.url), "utf8");
+    const card = readFileSync(new URL("../src/components/admin/ServerHealthCard.tsx", import.meta.url), "utf8");
+    const okUpd = /--with-new-pkgs upgrade/.test(upd) && /SONUÇ: ✓ TAMAM/.test(upd) && /YENİDEN BAŞLATMA GEREKİYOR/.test(upd) && /pm2-root/.test(upd) && /RestartPolicy/.test(upd);
+    const okCard = /scripts\/server-update\.sh`/.test(card) && /server-update\.sh --reboot/.test(card) && /Ne yapmalıyım\?/.test(card);
+    add(okUpd && okCard ? "ok" : "fail", "Sunucu güncellemesi: panelde adım adım yol + tek komut (server-update.sh, yeniden başlatma hazırlık denetimi)",
+      okUpd && okCard ? "" : `${okUpd ? "" : "server-update.sh eksik/değişmiş "}${okCard ? "" : "kartta Ne yapmalıyım? yok"}`);
+  }
   // Kaynak eşikleri (2026-11-05): disk %80 / bellek %85 / işlemci %90 sarı da Telegram'a gider → bu kontrollerin sarısı "alert" işaretli olmalı
   {
     const rc = sql(`SELECT c->>'key', c->>'status', coalesce(c->>'alert', 'false'), c->>'value' FROM (SELECT checks FROM public.server_health_runs ORDER BY created_at DESC LIMIT 1) r,

@@ -8,7 +8,7 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/lib/supabase";
-import { ServerCog, CheckCircle2, AlertTriangle, XCircle, Loader2, ChevronDown, ChevronUp } from "lucide-react";
+import { ServerCog, CheckCircle2, AlertTriangle, XCircle, Loader2, ChevronDown, ChevronUp, Copy, Check as CheckIcon, LifeBuoy } from "lucide-react";
 
 type Check = { key: string; label: string; status: "ok" | "warn" | "fail"; value: string; hint: string };
 
@@ -24,6 +24,89 @@ const ICON = {
   warn: <AlertTriangle size={14} className="text-amber-500 shrink-0 mt-0.5" />,
   fail: <XCircle size={14} className="text-red-600 shrink-0 mt-0.5" />,
 };
+
+// "NE YAPMALIYIM?" — sarı / kırmızı kontrolün altında adım adım yol (kullanıcı 2026-11-05: Claude'a sormadan).
+// Komutlar sunucuda SSH ile (root) çalıştırılır; komut çıktının sonunda tek bir SONUÇ satırı verir
+// (scripts/server-update.sh). Hazır yolu olmayan uyarıda: çıktıyı / ekran görüntüsünü Claude'a gönder.
+type Step = { t: string; cmd?: string };
+const APP = "/opt/yerihisset-app";
+const ASK = "Çıktının tamamını kopyalayıp Claude'a gönder (silme / yeniden başlatma kararını birlikte veririz).";
+function runbook(c: Check): Step[] {
+  const k = c.key;
+  // Yalnız yeniden başlatma kaldıysa doğrudan --reboot; bekleyen güvenlik güncellemesi de varsa önce yükleme (aşağıdaki yol)
+  if (k === "updates" && /yeniden başlatma/.test(c.value) && Number(c.value.match(/güvenlik: (\d+)/)?.[1] || 0) === 0) return [
+    { t: "Sakin bir saat seç — site 2-3 dakika kapanır. Sunucuya SSH ile bağlan ve çalıştır:", cmd: `bash ${APP}/scripts/server-update.sh --reboot` },
+    { t: "Önce her şeyin açılışta kendiliğinden kalkacağını denetler; hazırsa 10 saniye sonra yeniden başlatır (SSH bağlantın kopar, bu normal)." },
+    { t: "5 dakika sonra bu sayfayı yenile (Ctrl+Shift+R). 15 dakika içindeki kontrolde kart yeşile dönmeli." },
+    { t: "Çıktıda “SONUÇ: ✗ HATA” yazarsa yeniden başlatılmaz — " + ASK },
+  ];
+  if (k === "updates") return [
+    { t: "Sunucuya SSH ile bağlan ve çalıştır (birkaç dakika sürer, site açık kalır):", cmd: `bash ${APP}/scripts/server-update.sh` },
+    { t: "Çıktının sonundaki SONUÇ satırına bak:" },
+    { t: "“✓ TAMAM” → bu sayfayı yenile (Ctrl+Shift+R); uyarı kalkar. İş bitti." },
+    { t: "“↻ YENİDEN BAŞLATMA GEREKİYOR” → sakin bir saatte (site 2-3 dk kapanır) şunu çalıştır:", cmd: `bash ${APP}/scripts/server-update.sh --reboot` },
+    { t: "“✗ HATA” → " + ASK },
+    { t: "Docker güncellemesi varsa betik önce sorar (veritabanı ~1 dk kesilir): “e” ile devam et ya da sakin saate bırak." },
+  ];
+  if (k === "disk") return [
+    { t: "Neyin yer kapladığını gör:", cmd: "df -h / && du -xh /var /opt /root 2>/dev/null | sort -rh | head -20" },
+    { t: ASK },
+  ];
+  if (k === "memory" || k === "load") return [
+    { t: "Neyin bellek / işlemci kullandığını gör:", cmd: "free -h && uptime && ps aux --sort=-%cpu | head -8 && docker stats --no-stream" },
+    { t: ASK },
+  ];
+  if (k === "app") return [
+    { t: "Site süreçlerinin durumu ve son kayıtlar:", cmd: "pm2 status && pm2 logs yerihisset --lines 40 --nostream" },
+    { t: "Süreç “stopped / errored” ise yeniden başlat:", cmd: "pm2 restart yerihisset" },
+    { t: "Düzelmezse ilk komutun çıktısını Claude'a gönder." },
+  ];
+  if (k === "containers") return [
+    { t: "Konteynerlerin durumu:", cmd: "docker ps -a --format 'table {{.Names}}	{{.Status}}'" },
+    { t: ASK },
+  ];
+  if (k === "clock") return [
+    { t: "Saat durumu:", cmd: "timedatectl" },
+    { t: ASK },
+  ];
+  return [{ t: "Bu uyarı için hazır adım yok — bu kartın ekran görüntüsünü Claude'a gönder." }];
+}
+
+function CopyCmd({ cmd }: { cmd: string }) {
+  const [done, setDone] = useState(false);
+  return (
+    <div className="mt-1 flex items-stretch gap-1">
+      <code className="flex-1 min-w-0 overflow-x-auto whitespace-nowrap rounded-md bg-slate-900 px-2 py-1.5 font-mono text-[11px] text-slate-100">{cmd}</code>
+      <button
+        type="button"
+        title="Kopyala"
+        onClick={() => { navigator.clipboard?.writeText(cmd).then(() => { setDone(true); setTimeout(() => setDone(false), 1500); }).catch(() => {}); }}
+        className="shrink-0 rounded-md border bg-white px-2 text-slate-600 hover:bg-slate-50"
+      >
+        {done ? <CheckIcon size={13} className="text-emerald-600" /> : <Copy size={13} />}
+      </button>
+    </div>
+  );
+}
+
+function Guide({ c }: { c: Check }) {
+  const [open, setOpen] = useState(c.key === "updates");
+  const steps = runbook(c);
+  return (
+    <div className="mt-2 pl-6">
+      <button type="button" onClick={() => setOpen((v) => !v)} className="flex items-center gap-1 text-xs font-semibold text-slate-700 hover:text-slate-900">
+        <LifeBuoy size={13} /> Ne yapmalıyım? {open ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+      </button>
+      {open && (
+        <ol className="mt-1.5 space-y-1.5 list-decimal pl-5 text-xs text-slate-700">
+          {steps.map((s, i) => (
+            <li key={i}>{s.t}{s.cmd && <CopyCmd cmd={s.cmd} />}</li>
+          ))}
+        </ol>
+      )}
+    </div>
+  );
+}
 
 export default function ServerHealthCard() {
   const [d, setD] = useState<{ status: "ok" | "warn" | "fail"; checkedAt: string | null; checks: Check[] } | null>(null);
@@ -82,6 +165,7 @@ export default function ServerHealthCard() {
                     {c.hint && <p className="text-xs text-slate-600 mt-0.5">→ {c.hint}</p>}
                   </div>
                 </div>
+                <Guide c={c} />
               </div>
             ))}
             <button onClick={() => setShowOk((v) => !v)} className="w-full flex items-center justify-between text-xs text-slate-500 hover:text-slate-700 py-1">

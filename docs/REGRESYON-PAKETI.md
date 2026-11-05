@@ -50,6 +50,7 @@ node scripts/regression.mjs --hizli
 - **Marka / kategori sayfa metni:** aktif ürünü olan marka ya da kategoride tanıtım metni veya SSS boşsa uyarı (ilk taslak: scripts/content/20261105-marka-kategori-metinleri.sql).
 - **Sunucu kaynak uyarıları:** disk %80 (kırmızı %90), bellek %85 30 dk (kırmızı %95), işlemci %90 30 dk (kırmızı %200; dağıtımda susar) — sarılar da Telegram + e-posta (alert). Regresyon son çalıştırmada bu kontrollerin sarısının işaretli olduğunu doğrular. Elle: Telegram › Sunucu uyarısı konusu açık olmalı.
 - **Hukuki metinler:** künye, ön bilgilendirme, çerez tercih bağlantısı; `--canli` ile taslak / eksik künye HATA.
+- **Sunucu güncellemesi (Ne yapmalıyım?):** sarı / kırmızı sunucu kontrolünün altında adım adım yol ve kopyalanabilir komut; güncellemede `scripts/server-update.sh` (yükler, site / veritabanını denetler, tek SONUÇ satırı: TAMAM / YENİDEN BAŞLATMA GEREKİYOR / HATA) ve `--reboot` (Docker / konteyner yeniden başlama kuralı / pm2 açılış / Caddy denetimi, pm2 açılışı kurulu değilse kurar, hazır değilse yeniden başlatmaz). Regresyon betik + kart eşleşmesini denetler. Elle: uyarı çıkınca karttaki adımları izle.
 - **Pano / Sistem:** sistem durumu ucu girişsiz açılmıyor, müşteri hata kayıtları ve e-posta sağlık kaydı dışarıya kapalı, `/admin/system` açılıyor.
 - **Arka plan işleri:** gece yedeği (<26 sa), sunucu sağlık kontrolü, pazaryeri senkronu (açıksa).
 
