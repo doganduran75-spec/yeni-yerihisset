@@ -1171,6 +1171,10 @@ export default {
         const moving = { ...created, status: "webservice_shipment_started", shipping_webservice_tracking_code: "0521TEST" };
         ok(k.trackingOf(moving) === "KSURTEST1" && k.carrierTrackingOf(moving) === "0521TEST", "Firmanın takip kodu gelince etiket kodu değişmez, müşteri takip kodu ayrı", `${k.trackingOf(moving)} / ${k.carrierTrackingOf(moving)}`);
         ok(k.trackingOf({ id: 1, status: "draft" }) === null, "Taslakta kod yok");
+        // Panelden elle açılmış gönderi: siparişteki takip kodu / ref no ile eşleşir (boşluk, harf büyüklüğü yok sayılır)
+        const mm = k.matchShipments([{ id: "a", code: "0521 4676 765861" }, { id: "b", code: "ksur999xx" }, { id: "c", code: "YOK123456" }],
+          [{ id: 11, shipping_webservice_tracking_code: "05214676765861" }, { id: 12, shipping_webservice_order_id: "KSUR999XX" }]);
+        ok(mm.map((x) => `${x.order.id}:${x.shipment.id}`).join(",") === "a:11,b:12", "Panelden açılmış Kargonomi gönderisi takip kodu / ref no ile siparişe eşleşir", JSON.stringify(mm.map((x) => x.order.id)));
       });
 
       await part("Ürünü yayına alma: fiyat kuralı açık numaraya bakar (önce numaralar, sonra ürün)", async () => {

@@ -145,6 +145,28 @@ const str = (v: unknown) => String(v ?? "").trim() || null;
 export const trackingOf = (s: KargonomiShipment) =>
   str(s.shipping_webservice_barcode) ?? str(s.shipping_webservice_order_id) ?? str(s.barcode_of_order_id) ?? str(s.shipping_webservice_tracking_code);
 
+/** Son gönderiler (sayfa başına 50, en yeni önce) */
+export async function listShipments(token: string, page = 1): Promise<KargonomiShipment[]> {
+  const j = await call(token, "GET", `/shipments?page=${page}`);
+  return ((j?.data ?? (Array.isArray(j) ? j : [])) as KargonomiShipment[]) || [];
+}
+
+const codeKey = (v: unknown) => String(v ?? "").replace(/\s+/g, "").toUpperCase();
+/** Siparişteki kargo kodunu Kargonomi gönderisiyle eşle: takip kodu / ref no / barkod (boşluk ve harf büyüklüğü yok sayılır).
+ *  Entegrasyondan önce Kargonomi panelinden elle açılmış gönderiler için (2026-11-05: YH24750 teslim edildi ama sitede güncellenmedi). */
+export function matchShipments<O extends { id: string; code: string }>(orders: O[], shipments: KargonomiShipment[]): { order: O; shipment: KargonomiShipment }[] {
+  const byCode = new Map<string, KargonomiShipment>();
+  for (const s of shipments) {
+    for (const v of [s.shipping_webservice_tracking_code, s.shipping_webservice_barcode, s.shipping_webservice_order_id, s.barcode_of_order_id]) {
+      const k = codeKey(v);
+      if (k.length >= 6 && !byCode.has(k)) byCode.set(k, s);
+    }
+  }
+  const out: { order: O; shipment: KargonomiShipment }[] = [];
+  for (const o of orders) { const s = byCode.get(codeKey(o.code)); if (s) out.push({ order: o, shipment: s }); }
+  return out;
+}
+
 /** Kargo firmasının kendi takip kodu (müşteriye giden takip bağlantısı için); paketi okutunca gelir */
 export const carrierTrackingOf = (s: KargonomiShipment) => str(s.shipping_webservice_tracking_code);
 

@@ -17,7 +17,7 @@
 import { createAdminClient } from "@/lib/supabase-admin";
 import {
   KargonomiError, createShipment, getOffers, confirmProvider, getShipment, cancelShipment,
-  findStateId, findCityId, stateCount, trackingOf, carrierTrackingOf, phone10, FAILED_STATUSES, MOVING_STATUS, DELIVERED_STATUS, PROBLEM_STATUSES, type KargonomiOffer,
+  findStateId, findCityId, stateCount, trackingOf, carrierTrackingOf, listShipments, matchShipments, phone10, FAILED_STATUSES, MOVING_STATUS, DELIVERED_STATUS, PROBLEM_STATUSES, type KargonomiOffer,
 } from "@/lib/kargonomi";
 import * as bk from "@/lib/basitkargo";
 import { markPickedUp, markDelivered } from "@/lib/order-ship-events";
@@ -387,7 +387,41 @@ export async function basitReturnCode(sb: Sb, orderId: string) {
 }
 
 /** Cron (dakikada bir): firma seçilmiş, kodu gelmemiş siparişler + kodu gelmiş, teslim edilmemiş gönderilerin saatlik durumu */
+/** Entegrasyon dışında (Kargonomi panelinden elle) açılmış gönderileri siparişe bağla: kargoda olan, Kargonomi kaydı olmayan,
+ *  kodu girilmiş siparişlerin kodu Kargonomi'nin son gönderilerinde aranır; eşleşince sipariş saatlik durum sorgusuna girer
+ *  (teslim edildi → Teslim edildi + e-posta). Saatte bir (dakikalık işleyicide 7. dakika). */
+export async function linkPanelShipments(sb: Sb) {
+  const c = await cargoConfig(sb);
+  if (!c.kargonomi.token) return { linked: 0 };
+  const { data } = await (sb as any).from("orders").select("id, cargo_tracking_number")
+    .is("kargonomi_shipment_id", null).not("cargo_tracking_number", "is", null)
+    .in("shipment_status", ["shipped", "undelivered"]).neq("status", "cancelled")
+    .gte("created_at", new Date(Date.now() - TRACK_DAYS * 86400_000).toISOString()).limit(100);
+  const orders = ((data as any[]) || []).map((o) => ({ id: String(o.id), code: String(o.cargo_tracking_number) }));
+  if (!orders.length) return { linked: 0 };
+  const shipments = [];
+  for (let page = 1; page <= 4; page++) {
+    const list = await listShipments(c.kargonomi.token, page);
+    shipments.push(...list);
+    if (list.length < 50) break;
+  }
+  let linked = 0;
+  for (const { order, shipment } of matchShipments(orders, shipments)) {
+    const { data: done } = await (sb as any).from("orders").update({
+      kargonomi_shipment_id: String(shipment.id), kargo_api: null, kargonomi_tracking_code: order.code,
+      kargonomi_confirmed_at: new Date().toISOString(), kargonomi_status: shipment.status || null,
+      ...(shipment.shipping_provider_name ? { kargonomi_provider: shipment.shipping_provider_name } : {}),
+    }).eq("id", order.id).is("kargonomi_shipment_id", null).select("id");
+    if (!done?.length) continue;
+    await note(sb, order.id, `Kargonomi gönderisi bağlandı (#${shipment.id}, panelden açılmış) — teslim durumu artık kendiliğinden güncellenir`);
+    linked++;
+  }
+  return { linked };
+}
+
 export async function pollKargonomi(sb: Sb = createAdminClient()) {
+  // Saatte bir: panelden açılmış gönderileri bağla (hata dakikalık işi durdurmasın)
+  if (new Date().getMinutes() === 7) await linkPanelShipments(sb).catch((e) => console.error("[kargonomi/link]", e?.message || e));
   const since = new Date(Date.now() - WAIT_DAYS * 86400_000).toISOString();
   const { data } = await (sb as any).from("orders").select("id, kargonomi_status")
     .not("kargonomi_shipment_id", "is", null).is("kargonomi_tracking_code", null)
