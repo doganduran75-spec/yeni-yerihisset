@@ -337,7 +337,7 @@ export async function refundInvoiceOrder(sb: Sb, orderId: string) {
       if (qty <= 0) continue;
       if (!whole) want.set(pid, (want.get(pid) || 0) - qty);
       const wh = d.relationships?.warehouse?.data?.id;
-      lines.push({ type: "purchase_bill_details", attributes: {
+      lines.push({ src: String(d.id), type: "purchase_bill_details", attributes: {
         quantity: qty, unit_price: Number(a.unit_price), vat_rate: Number(a.vat_rate), ...(a.description ? { description: a.description } : {}),
         ...(Number(a.discount_value) ? { discount_type: a.discount_type, discount_value: a.discount_type === "amount" ? r2((Number(a.discount_value) * qty) / full) : Number(a.discount_value) } : {}),
       }, relationships: {
@@ -348,13 +348,7 @@ export async function refundInvoiceOrder(sb: Sb, orderId: string) {
     for (const [pid, q] of want) if (q > 0) errs.push(`İade gelen ${q} adet (Paraşüt ürün ${pid}) satış faturasında yok.`);
     if (errs.length || !lines.length) throw new ParasutError(422, (errs.length ? errs : ["İade edilecek kalem bulunamadı."]).join("\n"));
 
-    const j = await parasutCall(sb, "POST", "/purchase_bills", { data: { type: "purchase_bills", attributes: {
-      item_type: "refund", description: no, invoice_no: no, issue_date: day(), due_date: day(), currency: "TRL",
-    }, relationships: {
-      supplier: { data: { id: String(contactId), type: "contacts" } },
-      ...(categoryId ? { category: { data: { id: String(categoryId), type: "item_categories" } } } : {}),
-      details: { data: lines },
-    } } });
+    const j = await createRefundBill(sb, { no, contactId: String(contactId), categoryId: categoryId ? String(categoryId) : null, invoiceId: String(o.parasut_invoice_id), lines, orderId });
     refundId = String(j?.data?.id || "");
     if (!refundId) throw new ParasutError(502, "Paraşüt iade kaydının numarası dönmedi — Paraşüt'te kontrol et.");
     await save(sb, orderId, { parasut_refund_id: refundId });
@@ -376,6 +370,51 @@ export async function refundInvoiceOrder(sb: Sb, orderId: string) {
   await save(sb, orderId, { invoice_status: "return_invoiced" });
   await (sb as any).from("order_events").insert({ order_id: orderId, type: "note", note: "İade faturası kesildi (Paraşüt)" });
   return { status: "done", refundId };
+}
+
+// İade kaydı asıl satış faturasına (ve her kalem asıl kalemine) bağlı olmalı — Paraşüt 422: "İadeye konu olan fatura
+// doldurulmalı; Details refund of doldurulmalı; category type_should_match" (2026-11-05). Bu alanlar API belgesinde yok →
+// iki olası biçim sırayla denenir (reddedilen istek Paraşüt'te kayıt açmaz): A) refund_of ilişkisi, B) refund_of_id
+// alanı. Bağ tamam da yalnız kategori tutmuyorsa kategorisiz denenir (Paraşüt satış faturasınınkini kullanır).
+// Hepsi reddedilirse Paraşüt'te elle girilmiş son iade faturasının alan adları siparişe not düşülür (bir sonraki düzeltme için).
+async function createRefundBill(sb: Sb, x: { no: string; contactId: string; categoryId: string | null; invoiceId: string; lines: any[]; orderId: string }) {
+  const linkErr = (m: string) => /iadeye konu|refund.?of/i.test(m);
+  const body = (shape: "rel" | "attr", withCat: boolean) => ({ data: { type: "purchase_bills", attributes: {
+    item_type: "refund", description: x.no, invoice_no: x.no, issue_date: day(), due_date: day(), currency: "TRL",
+    ...(shape === "attr" ? { refund_of_id: Number(x.invoiceId) } : {}),
+  }, relationships: {
+    supplier: { data: { id: x.contactId, type: "contacts" } },
+    ...(withCat && x.categoryId ? { category: { data: { id: x.categoryId, type: "item_categories" } } } : {}),
+    ...(shape === "rel" ? { refund_of: { data: { id: x.invoiceId, type: "sales_invoices" } } } : {}),
+    details: { data: x.lines.map(({ src, ...l }) => shape === "rel"
+      ? { ...l, relationships: { ...l.relationships, refund_of: { data: { id: src, type: "sales_invoice_details" } } } }
+      : { ...l, attributes: { ...l.attributes, refund_of_id: Number(src) } }) },
+  } } });
+  const tried: string[] = [];
+  for (const shape of ["rel", "attr"] as const) {
+    for (const withCat of [true, false]) {
+      try { return await parasutCall(sb, "POST", "/purchase_bills", body(shape, withCat)); }
+      catch (e: any) {
+        if (!(e instanceof ParasutError) || ![400, 422].includes(e.status)) throw e;
+        tried.push(`${shape}${withCat ? "" : "-kategorisiz"}: ${e.message}`);
+        // Bağ kabul edildi, yalnız kategori kaldı → aynı biçimi kategorisiz dene; bağ hâlâ yoksa sonraki biçime geç
+        if (linkErr(e.message) || !/category/i.test(e.message)) break;
+      }
+    }
+  }
+  let probe = "";
+  try {
+    const l = await parasutCall(sb, "GET", "/purchase_bills?filter[item_type]=refund&sort=-id&page[size]=1&include=details");
+    const b = (l?.data as any[])?.[0];
+    if (b) {
+      const det = ((l?.included as any[]) || []).find((i) => i.type === "purchase_bill_details");
+      const rels = (r: any) => Object.entries(r || {}).map(([k, v]: [string, any]) => `${k}${v?.data ? `→${Array.isArray(v.data) ? "[]" : v.data.type}` : ""}`).join(", ");
+      probe = `Paraşüt'teki son iade faturası #${b.id} alanları: ${Object.keys(b.attributes || {}).join(", ")} | ilişkiler: ${rels(b.relationships)}`
+        + (det ? ` | kalem alanları: ${Object.keys(det.attributes || {}).join(", ")} | kalem ilişkileri: ${rels(det.relationships)}` : "");
+    }
+  } catch { /* yalnız tanı */ }
+  await (sb as any).from("order_events").insert({ order_id: x.orderId, type: "note", note: ["Paraşüt iade faturası denemeleri reddedildi:", ...tried, ...(probe ? [probe] : [])].join("\n") });
+  throw new ParasutError(422, `Paraşüt iade faturasını kabul etmedi (${tried.length} biçim denendi; ayrıntı siparişin notlarında). Son hata: ${tried[tried.length - 1]?.replace(/^[a-z-]+: /, "") || "?"}`);
 }
 
 /** YeriHisset siparişinde karar netleşince (müşteri "oldu" / "oldu say" / değişimde tutulmayan geri geldi) faturayı
