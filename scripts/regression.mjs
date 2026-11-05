@@ -300,6 +300,13 @@ async function main() {
     left.length ? add("warn", "Ürün metninde doldurulmamış not", `${left.join(" · ")} — Panel › Ürünler › Kısa / Detaylı Açıklama`)
       : add("ok", "Ürün metinlerinde doldurulmamış not yok");
   }
+  // Marka / kategori sayfa metni (scripts/content/20261105-marka-kategori-metinleri.sql): ürünü olan sayfada tanıtım + SSS boş kalmasın
+  {
+    const empty = sql(`SELECT 'marka ' || b.name FROM public.brands b WHERE (b.intro IS NULL OR b.faq IS NULL) AND EXISTS (SELECT 1 FROM public.products p WHERE p.brand_id = b.id AND p.is_active)
+      UNION ALL SELECT 'kategori ' || c.name FROM public.categories c WHERE (c.intro IS NULL OR c.faq IS NULL) AND EXISTS (SELECT 1 FROM public.products p WHERE p.category_id = c.id AND p.is_active)`).map((x) => x[0]);
+    empty.length ? add("warn", "Marka / kategori sayfa metni boş", `${empty.join(" · ")} — Ayarlar › Markalar / Kategoriler › Sayfa metni`)
+      : add("ok", "Ürünü olan marka ve kategorilerin sayfa metni dolu");
+  }
   // Eşleşmeyen eski ürünler ekranı kaldırıldı (kullanıcı 2026-11-03) — geri gelmesin
   {
     const lm = await get("/api/admin/legacy-match");
