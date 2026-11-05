@@ -28,10 +28,18 @@ const KUNYE: { key: string; label: string; hint?: string }[] = [
   { key: "company_tax_number", label: "Vergi numarası" },
   { key: "company_mersis", label: "MERSİS no" },
   { key: "company_kep", label: "KEP adresi" },
+  { key: "contact_whatsapp", label: "WhatsApp numarası", hint: "Boşsa telefon numarası kullanılır" },
+  { key: "contact_whatsapp_hours", label: "WhatsApp yanıt saatleri", hint: "ör. Hafta içi 09:00 – 18:00 yanıtlanır" },
+];
+// Açık / kapalı ayarlar (künye kartının altında)
+const KUNYE_FLAGS: { key: string; label: string; def: boolean }[] = [
+  { key: "contact_whatsapp_only", label: "Telefon yalnız WhatsApp mesajı (aranmıyor) — künyede belirtilir", def: false },
+  { key: "whatsapp_button", label: "İletişim sayfasında WhatsApp düğmesi", def: true },
 ];
 
 function KunyeCard() {
   const [v, setV] = useState<Record<string, string> | null>(null);
+  const [flags, setFlags] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState(false);
   useEffect(() => {
     (async () => {
@@ -39,6 +47,7 @@ function KunyeCard() {
       const d = await r.json().catch(() => ({}));
       const s = d?.settings || {};
       setV(Object.fromEntries(KUNYE.map((k) => [k.key, s[k.key] ?? ""])));
+      setFlags(Object.fromEntries(KUNYE_FLAGS.map((f) => [f.key, typeof s[f.key] === "boolean" ? s[f.key] : f.def])));
     })();
   }, []);
   async function save() {
@@ -47,7 +56,7 @@ function KunyeCard() {
     try {
       const r = await fetch("/api/admin/settings", {
         method: "POST", headers: { "Content-Type": "application/json", ...(await authHeaders()) },
-        body: JSON.stringify({ settings: Object.fromEntries(Object.entries(v).map(([k, x]) => [k, x.trim() || null])) }),
+        body: JSON.stringify({ settings: { ...Object.fromEntries(Object.entries(v).map(([k, x]) => [k, x.trim() || null])), ...flags } }),
       });
       const d = await r.json().catch(() => ({}));
       if (!r.ok || !d.ok) throw new Error(d.error || "Kaydedilemedi");
@@ -72,6 +81,14 @@ function KunyeCard() {
                   <Input value={v[k.key]} onChange={(e) => setV({ ...v, [k.key]: e.target.value })} />
                   {k.hint && <p className="text-[11px] text-muted-foreground">{k.hint}</p>}
                 </div>
+              ))}
+            </div>
+            <div className="space-y-1.5">
+              {KUNYE_FLAGS.map((f) => (
+                <label key={f.key} className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={!!flags[f.key]} onChange={(e) => setFlags({ ...flags, [f.key]: e.target.checked })} />
+                  {f.label}
+                </label>
               ))}
             </div>
             <Button disabled={saving} onClick={save} className="gap-1.5">

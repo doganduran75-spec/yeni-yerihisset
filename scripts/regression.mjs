@@ -189,6 +189,7 @@ async function main() {
     ["20261154 kişiler kartı: herkes tek grupta (toplam = hesaplar + bağlanmamış kişi kayıtları)", "SELECT (SELECT count(*) FROM public.people_tiers()) = 6 AND (SELECT sum(total) FROM public.people_tiers()) = (SELECT count(*) FROM public.profiles WHERE deleted_at IS NULL) + (SELECT count(*) FROM public.contacts WHERE linked_user_id IS NULL)"],
     ["20261155 fatura numarası gelen sipariş 'Faturalandı' (Bekleniyor'da takılan yok)", "SELECT NOT EXISTS(SELECT 1 FROM public.orders WHERE parasut_invoice_no IS NOT NULL AND coalesce(invoice_status, 'pending') = 'pending')"],
     ["20261156 Trendyol ReadyToShip paket 'işleme alındı' sayılıp atlanmıyor", "SELECT NOT EXISTS(SELECT 1 FROM public.orders WHERE channel = 'trendyol' AND external_status = 'ReadyToShip' AND mp_picking_at IS NOT NULL AND coalesce(shipment_status, 'waiting') NOT IN ('shipped', 'delivered', 'undelivered', 'returned'))"],
+    ["20261167 WhatsApp iletişim ayarları", "SELECT count(*) = 4 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'settings' AND column_name IN ('contact_whatsapp', 'contact_whatsapp_only', 'contact_whatsapp_hours', 'whatsapp_button')"],
     ["20261166 Paraşüt iade faturası alanları", "SELECT count(*) = 2 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'orders' AND column_name IN ('parasut_refund_id', 'parasut_refund_paid')"],
     ["20261165 entegrasyon etiketi → kargo hazırlandı (tetikleyici)", "SELECT EXISTS(SELECT 1 FROM pg_trigger WHERE tgname = 'trg_orders_label_auto_packed' AND NOT tgisinternal) AND NOT has_function_privilege('authenticated', 'public.orders_label_auto_packed()', 'EXECUTE')"],
     ["20261164 Basit Kargo (ayarlar + siparişte kargo sağlayıcısı)", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'settings' AND column_name = 'basitkargo_api_token') AND EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'kargo_api') AND NOT has_column_privilege('anon', 'public.settings', 'basitkargo_api_token', 'SELECT') AND NOT has_column_privilege('authenticated', 'public.settings', 'basitkargo_webhook_key', 'SELECT')"],
@@ -273,6 +274,18 @@ async function main() {
     raw ? add("fail", `Yer tutucu doldurulmamış: ${path}`, `${raw} — Ayarlar › Sayfalar'da yazım hatası olabilir`) : add("ok", `Yer tutucular dolu: ${path}`);
     liveOnly(!r.text.includes("Taslak:") && !r.text.includes("noindex"), `Hukuki metin yayında: ${path}`, "taslak / arama motoruna kapalı — onaydan sonra draft kaldırılmalı");
     liveOnly(!r.text.includes("(eklenecek)"), `Künye eksiksiz: ${path}`, "telefon / MERSİS / KEP eksik (src/config/company.ts)");
+  }
+  // İletişim › WhatsApp (2026-11-05): numara varsa ve düğme açıksa wa.me bağlantısı; "yalnız WhatsApp" ise künyede yazar
+  {
+    const st = SETTINGS();
+    const num = String(st.contact_whatsapp || st.contact_phone || "").replace(/\D/g, "");
+    const r = await get("/iletisim");
+    if (r.status === 200 && num.length >= 10) {
+      st.whatsapp_button === false
+        ? add(r.text.includes("wa.me/") ? "fail" : "ok", "İletişim: WhatsApp düğmesi kapalıyken görünmüyor")
+        : add(r.text.includes("wa.me/90") ? "ok" : "fail", "İletişim: WhatsApp düğmesi (wa.me bağlantısı) görünüyor", r.text.includes("wa.me/90") ? "" : "numara geçersiz olabilir — Ayarlar › Sayfalar › Şirket künyesi");
+      if (st.contact_whatsapp_only === true) add(r.text.includes("Yalnız WhatsApp mesajı") ? "ok" : "fail", "İletişim: telefonun yalnız WhatsApp olduğu yazıyor");
+    } else add("ok", "İletişim: WhatsApp — numara girilmemiş, düğme yok");
   }
   // Hakkımızda › "Ayakkabılarımız hakkında" sekmeleri: taslakken görünmez; yayına alınınca köşeli parantezli not kalmasın
   {

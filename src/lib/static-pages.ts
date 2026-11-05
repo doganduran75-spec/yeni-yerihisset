@@ -9,7 +9,22 @@ import { TRIAL_DAYS } from "@/lib/order-next-step";
 export type Company = {
   brand: string; title: string; address: string; email: string; phone: string | null;
   taxOffice: string; taxNumber: string; mersis: string | null; kep: string | null; hosting: string;
+  // WhatsApp (2026-11-05): numara (boşsa telefon), telefon yalnız WhatsApp mı, yanıt saatleri, İletişim'de düğme
+  whatsapp: string | null; whatsappOnly: boolean; whatsappHours: string | null; whatsappButton: boolean;
 };
+
+/** wa.me bağlantısı için numara: 0532… / 532… / +90 532… → 90532… (geçersizse null) */
+export function waNumber(v: string | null | undefined): string | null {
+  let d = String(v ?? "").replace(/\D/g, "");
+  if (d.startsWith("00")) d = d.slice(2);
+  else if (d.startsWith("0")) d = d.slice(1);
+  if (d.length === 10) d = "90" + d;
+  return /^90\d{10}$/.test(d) ? d : null;
+}
+
+/** Künyede telefon satırı: yalnız WhatsApp ise belirtilir */
+export const phoneText = (c: Company) =>
+  c.phone ? `${c.phone}${c.whatsappOnly ? " (yalnız WhatsApp mesajı — telefonla arama alınmıyor)" : ""}` : null;
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 export const orTodo = (v: string | null | undefined) => (v && v.trim()) || "(eklenecek)";
@@ -34,6 +49,10 @@ export async function getCompany(st?: any): Promise<Company> {
     mersis: s.company_mersis || COMPANY.mersis,
     kep: s.company_kep || COMPANY.kep,
     hosting: COMPANY.hosting,
+    whatsapp: s.contact_whatsapp || s.contact_phone || COMPANY.phone,
+    whatsappOnly: s.contact_whatsapp_only === true,
+    whatsappHours: s.contact_whatsapp_hours || null,
+    whatsappButton: s.whatsapp_button !== false,
   };
 }
 
@@ -42,13 +61,13 @@ function sellerList(c: Company): string {
 <li><b>Unvan:</b> ${esc(c.title)} (${esc(c.brand)})</li>
 <li><b>Adres:</b> ${esc(c.address)}</li>
 <li><b>Vergi dairesi / no:</b> ${esc(c.taxOffice)} / ${esc(c.taxNumber)} · <b>MERSİS:</b> ${esc(orTodo(c.mersis))}</li>
-<li><b>E-posta:</b> ${esc(c.email)} · <b>Telefon:</b> ${esc(orTodo(c.phone))} · <b>KEP:</b> ${esc(orTodo(c.kep))}</li>
+<li><b>E-posta:</b> ${esc(c.email)} · <b>Telefon${c.whatsappOnly ? " / WhatsApp" : ""}:</b> ${esc(orTodo(phoneText(c)))} · <b>KEP:</b> ${esc(orTodo(c.kep))}</li>
 </ul>`;
 }
 
 export function fillPlaceholders(html: string, c: Company, strict: boolean): string {
   const map: Record<string, string> = {
-    marka: esc(c.brand), unvan: esc(c.title), adres: esc(c.address), eposta: esc(c.email), telefon: esc(orTodo(c.phone)),
+    marka: esc(c.brand), unvan: esc(c.title), adres: esc(c.address), eposta: esc(c.email), telefon: esc(orTodo(phoneText(c))),
     vergi_dairesi: esc(c.taxOffice), vergi_no: esc(c.taxNumber), mersis: esc(orTodo(c.mersis)), kep: esc(orTodo(c.kep)),
     satici_bilgileri: sellerList(c), deneme_gunu: String(TRIAL_DAYS), barindirma: esc(c.hosting),
     istatistik_onay: strict

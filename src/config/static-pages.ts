@@ -34,7 +34,7 @@ export const STATIC_PAGES: Record<StaticPageSlug, { title: string; intro: string
 <table><thead><tr><th>Veri</th><th>Amaç</th><th>Hukuki sebep (KVKK md. 5)</th></tr></thead><tbody>
 <tr><td>Ad soyad, e-posta, telefon, teslimat ve fatura adresi; kurumsal faturada vergi dairesi ve numarası</td><td>Üyelik, siparişin alınması, teslimatı, faturalandırılması</td><td>Sözleşmenin kurulması ve ifası; kanuni yükümlülük (fatura, tüketici mevzuatı)</td></tr>
 <tr><td>Sipariş, ödeme ve iade kayıtları; iade için IBAN</td><td>Ödemenin alınması, iade ve değişim, muhasebe</td><td>Sözleşmenin ifası; kanuni yükümlülük</td></tr>
-<tr><td>Mesajlarınız, değişim/iade talepleriniz, ürün yorumlarınız</td><td>Sorularınızı yanıtlamak, satış sonrası hizmet</td><td>Sözleşmenin ifası; meşru menfaat</td></tr>
+<tr><td>Mesajlarınız (site, e-posta ya da WhatsApp), değişim/iade talepleriniz, ürün yorumlarınız</td><td>Sorularınızı yanıtlamak, satış sonrası hizmet</td><td>Sözleşmenin ifası; meşru menfaat</td></tr>
 <tr><td>Stok bildirimi ve talep formlarında verdiğiniz e-posta, telefon, Instagram adı, numara bilgisi</td><td>İstediğiniz ürün stoğa girince size haber vermek</td><td>Talebinizle kurulan ilişkinin ifası</td></tr>
 <tr><td>E-posta adresiniz (kampanya izni verdiyseniz)</td><td>Kampanya ve yeni ürün duyuruları</td><td>Açık rızanız / ticari ileti izniniz — istediğiniz an geri alabilirsiniz</td></tr>
 <tr><td>IP adresi, tarayıcı bilgisi, ziyaret edilen sayfalar</td><td>Site güvenliği, kötüye kullanımın önlenmesi, ziyaret istatistiği</td><td>Meşru menfaat; istatistik ve reklam ölçümü için çerez tercihiniz (<a href="/cerez-politikasi">Çerez Politikası</a>)</td></tr>
@@ -47,6 +47,7 @@ export const STATIC_PAGES: Record<StaticPageSlug, { title: string; intro: string
 <li><b>Muhasebe ve e-fatura hizmeti aldığımız kişi/kuruluşlar</b> — yasal kayıt ve fatura için.</li>
 <li><b>Barındırma hizmeti:</b> sitemiz ve veritabanımız {{barindirma}} sunucularında tutulur. Bu aktarım KVKK md. 9 kapsamında, Kurul'un ilan ettiği standart sözleşme ile yapılır.</li>
 <li><b>Google ve Meta</b> — yalnız çerezlere onay verdiyseniz, ziyaret istatistiği ve reklam ölçümü için (yurt dışında işlenir).</li>
+<li><b>WhatsApp (Meta)</b> — bize WhatsApp'tan yazarsanız telefon numaranız ve mesajlarınız WhatsApp altyapısında (yurt dışında) işlenir. WhatsApp'tan yazmak isteğe bağlıdır; bize e-postayla da ulaşabilirsiniz.</li>
 <li><b>Yetkili kamu kurumları</b> — yasal zorunluluk hâlinde.</li>
 </ul>
 <h2>4. Ne kadar süre saklıyoruz?</h2>
