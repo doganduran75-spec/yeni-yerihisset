@@ -667,6 +667,17 @@ async function main() {
   const hfail = hrows.filter((x) => x[0] === "fail"), hwarn = hrows.filter((x) => x[0] === "warn");
   const hlist = (xs) => xs.map((x) => `${x[1]}: ${x[2]}`).join(" · ");
   hfail.length ? add("fail", "Sunucu sağlığı", `kırmızı — ${hlist(hfail)}`) : hwarn.length ? add("warn", "Sunucu sağlığı", `sarı — ${hlist(hwarn)}`) : add("ok", "Sunucu sağlığı", "yeşil");
+  // Kaynak eşikleri (2026-11-05): disk %80 / bellek %85 / işlemci %90 sarı da Telegram'a gider → bu kontrollerin sarısı "alert" işaretli olmalı
+  {
+    const rc = sql(`SELECT c->>'key', c->>'status', coalesce(c->>'alert', 'false'), c->>'value' FROM (SELECT checks FROM public.server_health_runs ORDER BY created_at DESC LIMIT 1) r,
+      jsonb_array_elements(r.checks) c WHERE c->>'key' IN ('disk', 'memory', 'load')`);
+    const load = rc.find((x) => x[0] === "load");
+    if (!load || !String(load[3] || "").includes("%")) add("warn", "Sunucu kaynak uyarıları", "sağlık betiği henüz yeni eşiklerle çalışmadı (15 dk içinde çalışır)");
+    else {
+      const silent = rc.filter((x) => x[1] === "warn" && x[2] !== "true").map((x) => x[0]);
+      add(silent.length ? "fail" : "ok", "Sunucu kaynak uyarıları (disk / bellek / işlemci sarısı Telegram'a gider)", silent.length ? `uyarı işaretsiz: ${silent.join(", ")}` : "");
+    }
+  }
   const S = SETTINGS();
   const mktOn = !!(S.trendyol_enabled || S.hepsiburada_enabled || S.amazon_enabled);
   const beat = () => Number(one("SELECT extract(epoch FROM now()-last_run_at)/60 FROM public.cron_heartbeats WHERE name='marketplace-sync'") || 9999);

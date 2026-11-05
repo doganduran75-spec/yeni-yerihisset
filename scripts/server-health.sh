@@ -63,25 +63,48 @@ add() { # key status label value hint [alert]
   fi
 }
 
-# 1) Disk
-DISK=$(df -P / | awk 'NR==2 {gsub("%","",$5); print $5}')
-if   [ "${DISK:-0}" -ge 90 ]; then add disk fail "Disk" "%$DISK dolu" "Disk neredeyse dolu; eski yedekler ve loglar temizlenmeli."
-elif [ "${DISK:-0}" -ge 80 ]; then add disk warn "Disk" "%$DISK dolu" "Disk dolmaya başladı; yer açılması planlanmalı."
-else add disk ok "Disk" "%$DISK dolu" ""; fi
+# Dağıtım sürüyor mu? (scripts/deploy.sh işareti; 20 dakikadan eskiyse dikkate alınmaz) — yük uyarısı dağıtımda susar
+DEPLOYING=false
+if [ -f /run/yerihisset-deploying ]; then
+  DEP_AGE=$(( $(date +%s) - $(cat /run/yerihisset-deploying 2>/dev/null || echo 0) ))
+  [ "$DEP_AGE" -lt 1200 ] && DEPLOYING=true
+fi
 
-# 2) Bellek (kullanılan = toplam - kullanılabilir)
+# Kaynak eşikleri (kullanıcı 2026-11-05: Telegram'a da gitsin; sunucu 4 çekirdek AMD EPYC, 7,8 GB RAM, 96 GB disk).
+# Sarı (uyarı) da Telegram + e-posta gönderir (alert=true); kırmızı zaten gönderir. Bellek ve işlemci için
+# "üst üste 2 kontrol" (≈30 dk) şartı: kısa süreli sıçramalar (gece yedeği, npm build) uyarı üretmez.
+streak() { # anahtar koşul(true/false) → üst üste kaç kontrol (durum dosyasında)
+  local f="$STATE_DIR/streak-$1" n=0
+  if [ "$2" = true ]; then n=$(( $(cat "$f" 2>/dev/null || echo 0) + 1 )); fi
+  echo "$n" > "$f"; echo "$n"
+}
+
+# 1) Disk — %80 sarı (≈19 GB boş kalır), %90 kırmızı (≈10 GB)
+DISK=$(df -P / | awk 'NR==2 {gsub("%","",$5); print $5}')
+DISK_FREE=$(df -Ph / | awk 'NR==2 {print $4}')
+if   [ "${DISK:-0}" -ge 90 ]; then add disk fail "Disk" "%$DISK dolu ($DISK_FREE boş)" "Disk neredeyse dolu; eski yedekler ve loglar temizlenmeli."
+elif [ "${DISK:-0}" -ge 80 ]; then add disk warn "Disk" "%$DISK dolu ($DISK_FREE boş)" "Disk dolmaya başladı; yer açılması planlanmalı." true
+else add disk ok "Disk" "%$DISK dolu ($DISK_FREE boş)" ""; fi
+
+# 2) Bellek (kullanılan = toplam - kullanılabilir) — %85 sarı (30 dk sürerse), %95 kırmızı
 MEM=$(free -m | awk '/^Mem:/ {printf "%d", ($2-$7)*100/$2}')
-if   [ "${MEM:-0}" -ge 95 ]; then add memory fail "Bellek" "%$MEM kullanımda" "Bellek bitmek üzere; site yavaşlayabilir veya çökebilir."
-elif [ "${MEM:-0}" -ge 85 ]; then add memory warn "Bellek" "%$MEM kullanımda" "Bellek yüksek; yeniden başlatma veya inceleme gerekebilir."
+SWAP_MB=$(free -m | awk '/^Swap:/ {print $3+0}')
+MEM_N=$(streak mem "$([ "${MEM:-0}" -ge 85 ] && echo true || echo false)")
+if   [ "${MEM:-0}" -ge 95 ]; then add memory fail "Bellek" "%$MEM kullanımda (swap ${SWAP_MB} MB)" "Bellek bitmek üzere; site yavaşlayabilir veya çökebilir."
+elif [ "$MEM_N" -ge 2 ]; then add memory warn "Bellek" "%$MEM kullanımda (swap ${SWAP_MB} MB)" "Bellek 30 dakikadır yüksek; yeniden başlatma veya inceleme gerekebilir." true
+elif [ "$MEM_N" -ge 1 ]; then add memory ok "Bellek" "%$MEM kullanımda (swap ${SWAP_MB} MB) — yüksek, izleniyor" ""
 else add memory ok "Bellek" "%$MEM kullanımda" ""; fi
 
-# 3) İşlemci yükü (15 dk ortalaması / çekirdek sayısı)
+# 3) İşlemci yükü (15 dk ortalaması / çekirdek sayısı; %100 = bütün çekirdekler dolu)
+#    %90 sarı (30 dk sürerse, dağıtım hariç), %200 kırmızı (iş kuyruğu çekirdek sayısının iki katı)
 CPUS=$(nproc 2>/dev/null || echo 1)
 LOAD15=$(awk '{print $3}' /proc/loadavg)
 LOADPCT=$(awk -v l="$LOAD15" -v c="$CPUS" 'BEGIN {printf "%d", l*100/c}')
-if   [ "$LOADPCT" -ge 300 ]; then add load fail "İşlemci yükü" "$LOAD15 ($CPUS çekirdek)" "Sunucu aşırı yüklü; site yavaşlar."
-elif [ "$LOADPCT" -ge 150 ]; then add load warn "İşlemci yükü" "$LOAD15 ($CPUS çekirdek)" "Yük uzun süredir yüksek."
-else add load ok "İşlemci yükü" "$LOAD15 ($CPUS çekirdek)" ""; fi
+LOAD_N=$(streak load "$([ "$LOADPCT" -ge 90 ] && ! $DEPLOYING && echo true || echo false)")
+if   [ "$LOADPCT" -ge 200 ] && ! $DEPLOYING; then add load fail "İşlemci yükü" "%$LOADPCT ($LOAD15 / $CPUS çekirdek)" "Sunucu aşırı yüklü; site yavaşlar."
+elif [ "$LOAD_N" -ge 2 ]; then add load warn "İşlemci yükü" "%$LOADPCT ($LOAD15 / $CPUS çekirdek)" "İşlemci 30 dakikadır %90'ın üstünde; site yavaşlayabilir, kaynağı incelenmeli." true
+elif $DEPLOYING && [ "$LOADPCT" -ge 90 ]; then add load ok "İşlemci yükü" "%$LOADPCT ($LOAD15 / $CPUS çekirdek) — dağıtım sürüyor" ""
+else add load ok "İşlemci yükü" "%$LOADPCT ($LOAD15 / $CPUS çekirdek)" ""; fi
 
 # 4) Supabase konteynerleri (aynı compose projesindekiler)
 PROJECT=$(docker inspect -f '{{index .Config.Labels "com.docker.compose.project"}}' "$DB_CONTAINER" 2>/dev/null || true)
@@ -95,12 +118,6 @@ else
   else add containers ok "Supabase konteynerleri" "$TOTAL/$TOTAL çalışıyor" ""; fi
 fi
 
-# Dağıtım sürüyor mu? (scripts/deploy.sh işareti; 20 dakikadan eskiyse dikkate alınmaz)
-DEPLOYING=false
-if [ -f /run/yerihisset-deploying ]; then
-  DEP_AGE=$(( $(date +%s) - $(cat /run/yerihisset-deploying 2>/dev/null || echo 0) ))
-  [ "$DEP_AGE" -lt 1200 ] && DEPLOYING=true
-fi
 
 # 5) Site süreçleri (pm2)
 if command -v pm2 >/dev/null 2>&1 && command -v node >/dev/null 2>&1; then

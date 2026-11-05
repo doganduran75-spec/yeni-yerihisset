@@ -48,6 +48,7 @@ node scripts/regression.mjs --hizli
 - **SEO / yapay zekâ görünürlüğü:** eğitim ve ürün sayfası kendi canonical'ı, ürün meta açıklaması ≤160, Product yapısal verisi, ürün içeriği JavaScript'siz HTML'de, OnlineStore + arama yapısal verisi, site haritasında kategori/rehber; `--canli`: robots.txt tarayıcılara açık. İçerik denetimi ayrı: `node scripts/seo-audit.mjs`.
 - **İletişim › WhatsApp:** numara girilmişse ve düğme açıksa İletişim'de wa.me bağlantısı; kapalıysa yok; "yalnız WhatsApp" işaretliyse künyede yazar. MIG 20261167. Elle: düğme mobilde WhatsApp'ı, bilgisayarda WhatsApp Web'i hazır mesajla açar.
 - **Marka / kategori sayfa metni:** aktif ürünü olan marka ya da kategoride tanıtım metni veya SSS boşsa uyarı (ilk taslak: scripts/content/20261105-marka-kategori-metinleri.sql).
+- **Sunucu kaynak uyarıları:** disk %80 (kırmızı %90), bellek %85 30 dk (kırmızı %95), işlemci %90 30 dk (kırmızı %200; dağıtımda susar) — sarılar da Telegram + e-posta (alert). Regresyon son çalıştırmada bu kontrollerin sarısının işaretli olduğunu doğrular. Elle: Telegram › Sunucu uyarısı konusu açık olmalı.
 - **Hukuki metinler:** künye, ön bilgilendirme, çerez tercih bağlantısı; `--canli` ile taslak / eksik künye HATA.
 - **Pano / Sistem:** sistem durumu ucu girişsiz açılmıyor, müşteri hata kayıtları ve e-posta sağlık kaydı dışarıya kapalı, `/admin/system` açılıyor.
 - **Arka plan işleri:** gece yedeği (<26 sa), sunucu sağlık kontrolü, pazaryeri senkronu (açıksa).
