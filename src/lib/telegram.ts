@@ -246,6 +246,14 @@ async function scanIntegrationErrors(sb: SB, cfg: TelegramConfig): Promise<numbe
     lines.push(`✗ <b>${esc(MP[ch] || ch)} stok</b>: ${rs.length} gönderim reddedildi\n   ${rs.slice(0, 3).map((r) => `${esc(r.listing_key)} — ${short(r.message, 80)}`).join("\n   ")}`);
   }
 
+  // c0) Paraşüt oturumu yenilenemedi (izin geri alındı / süresi doldu / yetki yok) — aynı hata bir kez
+  const { data: pa } = await sb.from("parasut_auth").select("last_error, last_error_at").eq("id", 1).maybeSingle();
+  if ((pa as any)?.last_error && (pa as any).last_error_at > since) {
+    const key = `ie:parasut_auth:${String((pa as any).last_error_at).slice(0, 10)}:${hash(String((pa as any).last_error))}`;
+    const { data: seen } = await sb.from("telegram_outbox").select("dedupe_key").eq("dedupe_key", key).limit(1);
+    if (!(seen as any[])?.length) { lines.push(`✗ <b>Paraşüt bağlantısı</b>\n   ${short((pa as any).last_error)}`); keys.push(key); }
+  }
+
   // c) Google Merchant gönderimi hatalı
   const { data: st } = await sb.from("settings").select("gmc_api_enabled").limit(1).maybeSingle();
   if (st?.gmc_api_enabled) {

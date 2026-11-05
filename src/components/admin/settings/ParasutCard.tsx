@@ -3,7 +3,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // Ayarlar › Entegrasyonlar › Paraşüt (ön muhasebe — fatura). src/lib/parasut.ts
 //   1) Client ID / Secret (destek@parasut.com verir) + firma no → Kaydet
-//   2) "Paraşüt’te izin ver" → Paraşüt’ün gösterdiği kodu yapıştır → Bağlan (şifre sunucuya yazılmaz)
+//   2) "Paraşüt ile bağlan" (yeni altyapı, DevHub client'ı) → Paraşüt girişi + onay → /admin/parasut/baglan'a döner.
+//      Eski yöntem (kod yapıştırma, api.parasut.com) 10 Aralık 2026'ya kadar duruyor. Şifre sunucuya yazılmaz.
 //   3) Kanal ayarları: tahsilat hesabı (kasa/banka), tahsil edildi, e-Arşiv internet satışı bilgileri
 //   4) Kargo firmalarının VKN’si (e-Arşiv internet satışında zorunlu)
 //   5) Ürün eşleştirme: /admin/parasut
@@ -40,7 +41,7 @@ type Ch = { channel: string; account_id: string | null; account_name: string | n
 type Carrier = { name: string; vkn: string | null };
 
 export default function ParasutCard() {
-  const [f, setF] = useState({ parasut_enabled: false, parasut_client_id: "", parasut_client_secret: "", parasut_company_id: "", parasut_shipment_included: true, parasut_shipping_product_id: "" });
+  const [f, setF] = useState({ parasut_enabled: false, parasut_client_id: "", parasut_client_secret: "", parasut_v2_client_id: "", parasut_v2_client_secret: "", parasut_company_id: "", parasut_shipment_included: true, parasut_shipping_product_id: "" });
   const [pps, setPps] = useState<{ parasut_id: string; name: string | null; code: string | null; vat_rate: number | null }[]>([]);
   const [st, setSt] = useState<any>(null);
   const [code, setCode] = useState("");
@@ -56,6 +57,7 @@ export default function ParasutCard() {
     const d = (await r.json().catch(() => ({})))?.settings || {};
     setF({
       parasut_enabled: !!d.parasut_enabled, parasut_client_id: d.parasut_client_id ?? "", parasut_client_secret: d.parasut_client_secret ?? "",
+      parasut_v2_client_id: d.parasut_v2_client_id ?? "", parasut_v2_client_secret: d.parasut_v2_client_secret ?? "",
       parasut_company_id: d.parasut_company_id ?? "", parasut_shipment_included: d.parasut_shipment_included !== false,
       parasut_shipping_product_id: d.parasut_shipping_product_id ?? "",
     });
@@ -85,13 +87,20 @@ export default function ParasutCard() {
     try {
       const r = await fetch("/api/admin/settings", {
         method: "POST", headers: { "Content-Type": "application/json", ...(await authHeaders()) },
-        body: JSON.stringify({ settings: { ...next, parasut_client_id: next.parasut_client_id.trim(), parasut_client_secret: next.parasut_client_secret.trim(), parasut_company_id: next.parasut_company_id.trim() } }),
+        body: JSON.stringify({ settings: { ...next, parasut_client_id: next.parasut_client_id.trim(), parasut_client_secret: next.parasut_client_secret.trim(),
+          parasut_v2_client_id: next.parasut_v2_client_id.trim(), parasut_v2_client_secret: next.parasut_v2_client_secret.trim(), parasut_company_id: next.parasut_company_id.trim() } }),
       });
       if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || "Kaydedilemedi");
       setF(next);
       setSt(await api({ op: "status" }));
     } catch (e: any) { siteAlert({ title: "Kaydedilemedi", message: e?.message, tone: "danger" }); }
     finally { setBusy(null); }
+  }
+
+  // Yeni altyapı: Paraşüt giriş + onay sayfasına git; dönüş /admin/parasut/baglan (aynı adres: dev / www / yerihisset.com)
+  async function connectNew() {
+    const r = await api({ op: "authorize", origin: window.location.origin });
+    window.location.href = r.url;
   }
 
   async function run(kind: string, fn: () => Promise<void>) {
@@ -122,11 +131,21 @@ export default function ParasutCard() {
             <input type="checkbox" checked={f.parasut_enabled} disabled={busy === "save"} onChange={(e) => saveSettings({ parasut_enabled: e.target.checked })} /> Açık
           </label>}>
         <p className="text-sm text-muted-foreground">Siparişte “Faturayı kes (Paraşüt)”: müşteri, fatura, tahsilat ve e-Arşiv / e-Fatura Paraşüt’te otomatik oluşur. Kanal (site / pazaryeri) başına ayrı tahsilat hesabı.</p>
-        {/* 1) Uygulama bilgileri */}
+        {/* 1) Uygulama bilgileri — yeni (DevHub) + eski (10 Aralık 2026'da kapanır) */}
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50/40 p-3 space-y-2">
+          <p className="text-xs font-semibold">Yeni Paraşüt uygulaması (DevHub)</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <label className="space-y-1"><span className={lbl}>Yeni Client ID</span>
+              <Input value={f.parasut_v2_client_id} onChange={(e) => setF({ ...f, parasut_v2_client_id: e.target.value })} autoComplete="off" /></label>
+            <label className="space-y-1"><span className={lbl}>Yeni Client Secret</span>
+              <Input type="password" value={f.parasut_v2_client_secret} onChange={(e) => setF({ ...f, parasut_v2_client_secret: e.target.value })} autoComplete="off" /></label>
+          </div>
+          <p className="text-[11px] text-muted-foreground">devhub.parasut.com → “Paraşüt Kullanıcısıyım”. Dönüş adresleri (Redirect URI): <span className="font-mono">https://dev.yerihisset.com/admin/parasut/baglan</span> · <span className="font-mono">https://www.yerihisset.com/admin/parasut/baglan</span> · <span className="font-mono">https://yerihisset.com/admin/parasut/baglan</span>. Paraşüt’te kullanıcına “Uygulama Entegrasyonları” yetkisi açık olmalı.</p>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <label className="space-y-1"><span className={lbl}>Client ID</span>
+          <label className="space-y-1"><span className={lbl}>Eski Client ID (10 Aralık’ta kapanır)</span>
             <Input value={f.parasut_client_id} onChange={(e) => setF({ ...f, parasut_client_id: e.target.value })} autoComplete="off" /></label>
-          <label className="space-y-1"><span className={lbl}>Client Secret</span>
+          <label className="space-y-1"><span className={lbl}>Eski Client Secret</span>
             <Input type="password" value={f.parasut_client_secret} onChange={(e) => setF({ ...f, parasut_client_secret: e.target.value })} autoComplete="off" /></label>
           <label className="space-y-1"><span className={lbl}>Firma no</span>
             <Input value={f.parasut_company_id} onChange={(e) => setF({ ...f, parasut_company_id: e.target.value })} placeholder="uygulama.parasut.com/123456 → 123456" /></label>
@@ -135,19 +154,28 @@ export default function ParasutCard() {
           <Button size="sm" onClick={() => saveSettings()} disabled={busy === "save"}>{busy === "save" && <Loader2 size={14} className="animate-spin mr-1" />} Kaydet</Button>
           <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={f.parasut_shipment_included} onChange={(e) => saveSettings({ parasut_shipment_included: e.target.checked })} />
             İrsaliyeli fatura (Paraşüt’teki stok da düşer)</label>
-          <span className="text-xs text-muted-foreground">Client ID / Secret: destek@parasut.com’dan istenir.</span>
+
         </div>
 
         {/* 2) Bağlantı */}
         <div className="rounded-lg border p-3 space-y-2">
+          {st?.connected && !st.newAuth && (
+            <div className="rounded-md bg-amber-50 border border-amber-200 p-2 text-xs text-amber-900 flex flex-wrap items-center gap-2">
+              Bu bağlantı eski altyapıda — <b>10 Aralık 2026’da kapanır</b>. {st.hasNewApp ? "Yeni altyapıya geçmek için:" : "Önce yukarıya yeni (DevHub) Client ID ve Secret’ı gir ve kaydet."}
+              {st.hasNewApp && <Button size="sm" disabled={!!busy} onClick={() => run("auth", connectNew)}>{busy === "auth" ? <Loader2 size={14} className="animate-spin" /> : <Link2 size={14} />} Paraşüt ile yeniden bağlan</Button>}
+            </div>
+          )}
+          {st?.lastError && <p className="text-xs text-red-600">{st.lastError}</p>}
           {st?.connected ? (
             <div className="flex flex-wrap items-center gap-3">
-              <span className="flex items-center gap-1.5 text-green-700 font-medium"><CheckCircle2 size={16} /> Bağlı{st.userEmail ? ` — ${st.userEmail}` : ""}</span>
+              <span className="flex items-center gap-1.5 text-green-700 font-medium"><CheckCircle2 size={16} /> Bağlı{st.newAuth ? " (yeni altyapı)" : ""}{st.userEmail ? ` — ${st.userEmail}` : ""}</span>
               <Button size="sm" variant="outline" disabled={!!busy} onClick={async () => {
                 if (await siteConfirm({ title: "Paraşüt bağlantısı kesilsin mi?", message: "Fatura kesme durur; yeniden bağlanmak için izin adımı tekrarlanır.", confirmText: "Bağlantıyı kes", tone: "danger" }))
                   run("disc", async () => { await api({ op: "disconnect" }); setSt(await api({ op: "status" })); setAccounts([]); });
               }}>Bağlantıyı kes</Button>
             </div>
+          ) : st?.hasNewApp ? (
+            <Button size="sm" disabled={!!busy} onClick={() => run("auth", connectNew)}>{busy === "auth" ? <Loader2 size={14} className="animate-spin" /> : <Link2 size={14} />} Paraşüt ile bağlan</Button>
           ) : st?.authorizeUrl ? (
             <div className="space-y-2">
               <p className="text-xs">1) <a href={st.authorizeUrl} target="_blank" rel="noopener noreferrer" className="underline font-semibold inline-flex items-center gap-1">Paraşüt’te izin ver <ExternalLink size={12} /></a> — giriş yap, “izin ver” de, ekranda çıkan kodu kopyala. 2) Kodu buraya yapıştır:</p>

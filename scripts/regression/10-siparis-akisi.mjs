@@ -982,6 +982,17 @@ export default {
         ok(mk.status === 403, "Paraşüt: üye fatura kategorilerini göremiyor", why(mk));
         const s = await pa(F.admin.token, { op: "status" });
         ok(s.status === 200 && s.json?.ok === true && !("clientSecret" in (s.json || {})), "Paraşüt: yönetici bağlantı durumunu görüyor (gizli bilgi dönmeden)", why(s));
+        // Yeni kimlik altyapısı (id.parasut.com, PKCE): üye bağlanamaz; yabancı adresten giriş adresi üretilmez; yanlış state mevcut bağlantıya dokunmaz
+        const ma = await pa(F.member.token, { op: "authorize", origin: "https://dev.yerihisset.com" });
+        ok(ma.status === 403, "Paraşüt: üye yeni bağlantı başlatamıyor", why(ma));
+        const ea = await pa(F.admin.token, { op: "authorize", origin: "https://kotu.example.com" });
+        ok(ea.status === 400 && !ea.json?.url, "Paraşüt: kayıtlı olmayan adresten bağlantı başlatılamıyor", why(ea));
+        const rt0 = one("SELECT coalesce(md5(refresh_token), '-') FROM public.parasut_auth WHERE id = 1") || "-";
+        const bs = await pa(F.admin.token, { op: "connect_oidc", code: "REGRESYON", state: "yanlis-state" });
+        ok(bs.status === 400 && (one("SELECT coalesce(md5(refresh_token), '-') FROM public.parasut_auth WHERE id = 1") || "-") === rt0,
+          "Paraşüt: yanlış state ile gelen dönüş reddediliyor, mevcut bağlantı değişmiyor", why(bs));
+        const v2 = await rest("settings?select=parasut_v2_client_secret");
+        ok(v2.status >= 400, "Paraşüt yeni Client Secret dışarıdan okunamıyor", `HTTP ${v2.status}`);
         // Gizli bilgiler tarayıcıya kapalı: settings'teki secret, oturum tablosu
         const sec = await rest("settings?select=parasut_client_secret");
         ok(sec.status >= 400, "Paraşüt Client Secret dışarıdan okunamıyor", `HTTP ${sec.status}`);

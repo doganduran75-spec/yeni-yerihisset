@@ -1,16 +1,27 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // Paraşüt API v4 istemcisi — yalnız sunucuda. Belge: https://apidocs.parasut.com (JSONAPI)
-//   Kimlik: OAuth2 authorization_code — yönetici Paraşüt'te "izin ver" der, çıkan kodu panele yapıştırır
-//   (redirect urn:ietf:wg:oauth:2.0:oob; Paraşüt şifresi sunucuya hiç yazılmaz). access_token 2 saat;
-//   refresh_token HER yenilemede değişir → parasut_auth tablosunda saklanır.
+//   Kimlik (2026-11 Paraşüt duyurusu; eski yöntem 10 Aralık 2026'da kapanır):
+//   • YENİ: id.parasut.com (OpenID Connect) — Authorization Code + PKCE + state. DevHub client'ı (parasut_v2_*).
+//     Panelde "Paraşüt ile bağlan" → Paraşüt girişi + onay → /admin/parasut/baglan'a döner (kod yapıştırma yok).
+//     refresh_token ~30 gün; kullanılmazsa düşer → parasutKeepAlive birkaç günde bir yeniler.
+//   • ESKİ: api.parasut.com/oauth, kod yapıştırma (redirect urn:ietf:wg:oauth:2.0:oob). Geçiş paralel: yeniden
+//     bağlanılana kadar çalışır (parasut_auth.issuer boş = eski).
+//   Paraşüt şifresi sunucuya hiç yazılmaz. access_token 2 saat; refresh_token yenilemede değişebilir → parasut_auth.
 //   Hız sınırı: 10 saniyede 10 istek → süreç içinde sıraya alınır, 429'da bekleyip bir kez daha denenir.
 //   Uç: https://api.parasut.com/v4/{firma_no}/…
 
+import { createHash, randomBytes } from "node:crypto";
 import type { createAdminClient } from "@/lib/supabase-admin";
 type Sb = ReturnType<typeof createAdminClient>;
 
 const BASE = "https://api.parasut.com";
 export const PARASUT_REDIRECT = "urn:ietf:wg:oauth:2.0:oob";
+// Yeni kimlik altyapısı (DevHub OAuth rehberi)
+const ID_BASE = "https://id.parasut.com/realms/parasut/protocol/openid-connect";
+export const PARASUT_CALLBACK = "/admin/parasut/baglan";
+// DevHub başvurusundaki dönüş adresleri (en fazla 3, sonradan değişmez) — yalnız bunlardan bağlanılır
+export const PARASUT_ORIGINS = ["https://dev.yerihisset.com", "https://www.yerihisset.com", "https://yerihisset.com"];
+const RECONNECT = "Paraşüt bağlantısı sona erdi ya da izin geri alındı — Ayarlar › Entegrasyonlar › Paraşüt › “Paraşüt ile bağlan”.";
 
 export class ParasutError extends Error {
   status: number;
@@ -22,12 +33,14 @@ export class ParasutError extends Error {
 
 export async function parasutConfig(sb: Sb) {
   const { data } = await (sb as any).from("settings")
-    .select("parasut_enabled, parasut_client_id, parasut_client_secret, parasut_company_id, parasut_shipment_included")
+    .select("parasut_enabled, parasut_client_id, parasut_client_secret, parasut_v2_client_id, parasut_v2_client_secret, parasut_company_id, parasut_shipment_included")
     .order("id").limit(1).maybeSingle();
   return {
     enabled: !!data?.parasut_enabled,
     clientId: String(data?.parasut_client_id || "").trim(),
     clientSecret: String(data?.parasut_client_secret || "").trim(),
+    v2ClientId: String(data?.parasut_v2_client_id || "").trim(),
+    v2ClientSecret: String(data?.parasut_v2_client_secret || "").trim(),
     companyId: String(data?.parasut_company_id || "").trim(),
     shipmentIncluded: data?.parasut_shipment_included !== false,
   };
@@ -39,25 +52,72 @@ export const authorizeUrl = (clientId: string) =>
 
 // ── Oturum ──────────────────────────────────────────────────────────────────
 
-async function tokenRequest(form: Record<string, string>) {
-  const f = new FormData();
-  for (const [k, v] of Object.entries(form)) f.append(k, v);
+type Tokens = { access_token: string; refresh_token?: string; expires_in: number; refresh_expires_in?: number };
+
+/** issuer "id" = id.parasut.com (form-urlencoded); diğeri eski api.parasut.com/oauth */
+async function tokenRequest(form: Record<string, string>, issuer: string | null = null): Promise<Tokens> {
+  const id = issuer === "id";
   let res: Response;
-  try { res = await fetch(`${BASE}/oauth/token`, { method: "POST", body: f, signal: AbortSignal.timeout(20000), cache: "no-store" }); }
-  catch (e: any) { throw new ParasutError(0, `Paraşüt'e bağlanılamadı: ${e?.message || e}`); }
+  try {
+    res = id
+      ? await fetch(`${ID_BASE}/token`, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
+          body: new URLSearchParams(form).toString(), signal: AbortSignal.timeout(20000), cache: "no-store" })
+      : await fetch(`${BASE}/oauth/token`, { method: "POST", body: (() => { const f = new FormData(); for (const [k, v] of Object.entries(form)) f.append(k, v); return f; })(),
+          signal: AbortSignal.timeout(20000), cache: "no-store" });
+  } catch (e: any) { throw new ParasutError(0, `Paraşüt'e bağlanılamadı: ${e?.message || e}`); }
   const j: any = await res.json().catch(() => null);
   if (!res.ok || !j?.access_token) {
+    if (j?.error === "invalid_grant" && form.grant_type === "refresh_token") throw new ParasutError(401, RECONNECT);
     throw new ParasutError(401, `Paraşüt oturumu alınamadı: ${j?.error_description || j?.error || res.status}`);
   }
-  return j as { access_token: string; refresh_token: string; expires_in: number };
+  return j as Tokens;
 }
 
-async function saveTokens(sb: Sb, t: { access_token: string; refresh_token: string; expires_in: number }, extra: Record<string, unknown> = {}) {
+async function saveTokens(sb: Sb, t: Tokens, extra: Record<string, unknown> = {}, prevRefresh?: string) {
   await (sb as any).from("parasut_auth").upsert({
-    id: 1, access_token: t.access_token, refresh_token: t.refresh_token,
+    id: 1, access_token: t.access_token, refresh_token: t.refresh_token || prevRefresh || null,
     expires_at: new Date(Date.now() + Number(t.expires_in || 7200) * 1000).toISOString(),
+    ...(t.refresh_expires_in ? { refresh_expires_at: new Date(Date.now() + Number(t.refresh_expires_in) * 1000).toISOString() } : {}),
+    last_error: null, last_error_at: null,
     updated_at: new Date().toISOString(), ...extra,
   });
+}
+
+const b64url = (b: Buffer) => b.toString("base64url");
+
+/** Yeni altyapı: Paraşüt giriş + onay adresini üret (PKCE). origin = panelin açıldığı adres (dönüş oraya). */
+export async function startAuthorize(sb: Sb, origin: string) {
+  const c = await parasutConfig(sb);
+  if (!c.v2ClientId || !c.v2ClientSecret) throw new ParasutError(400, "Önce DevHub'dan aldığın yeni Client ID ve Client Secret'ı kaydet.");
+  const o = String(origin || "").replace(/\/+$/, "");
+  if (!PARASUT_ORIGINS.includes(o)) throw new ParasutError(400, `Bu adresten bağlanılamaz (${o || "?"}) — dev.yerihisset.com ya da yerihisset.com üzerinden bağlan.`);
+  const verifier = b64url(randomBytes(48)); // 64 karakter (43–128)
+  const challenge = b64url(createHash("sha256").update(verifier).digest());
+  const state = b64url(randomBytes(24));
+  const redirect = o + PARASUT_CALLBACK;
+  await (sb as any).from("parasut_auth").upsert({ id: 1, pending_state: state, pending_verifier: verifier, pending_redirect: redirect, pending_at: new Date().toISOString() });
+  return `${ID_BASE}/auth?${new URLSearchParams({
+    client_id: c.v2ClientId, redirect_uri: redirect, response_type: "code", scope: "openid", state,
+    code_challenge: challenge, code_challenge_method: "S256", kc_idp_hint: "parasut",
+  })}`;
+}
+
+/** Yeni altyapı: Paraşüt'ten dönen kodla bağlan (state + PKCE doğrulanır) */
+export async function connectWithOidc(sb: Sb, code: string, state: string) {
+  const c = await parasutConfig(sb);
+  if (!c.v2ClientId || !c.v2ClientSecret) throw new ParasutError(400, "Yeni Client ID / Secret kayıtlı değil.");
+  const { data: a } = await (sb as any).from("parasut_auth").select("pending_state, pending_verifier, pending_redirect, pending_at").eq("id", 1).maybeSingle();
+  if (!a?.pending_state || a.pending_state !== state) throw new ParasutError(400, "Bağlanma isteği eşleşmedi — panelden yeniden “Paraşüt ile bağlan”a bas.");
+  if (!a.pending_at || Date.now() - new Date(a.pending_at).getTime() > 15 * 60_000) throw new ParasutError(400, "Bağlanma isteğinin süresi doldu — panelden yeniden “Paraşüt ile bağlan”a bas.");
+  const t = await tokenRequest({ grant_type: "authorization_code", client_id: c.v2ClientId, client_secret: c.v2ClientSecret,
+    code: code.trim(), redirect_uri: a.pending_redirect, code_verifier: a.pending_verifier }, "id");
+  if (!t.refresh_token) throw new ParasutError(502, "Paraşüt yenileme anahtarı (refresh_token) vermedi — DevHub başvurusunu kontrol et.");
+  await saveTokens(sb, t, { issuer: "id", connected_at: new Date().toISOString(), user_email: null,
+    pending_state: null, pending_verifier: null, pending_redirect: null, pending_at: null });
+  try {
+    const me = await rawCall(t.access_token, "GET", "/v4/me");
+    await (sb as any).from("parasut_auth").update({ user_email: me?.data?.attributes?.email ?? null }).eq("id", 1);
+  } catch { /* bilgi amaçlı */ }
 }
 
 /** Paraşüt'ün verdiği tek kullanımlık kodla bağlan */
@@ -65,7 +125,7 @@ export async function connectWithCode(sb: Sb, code: string) {
   const c = await parasutConfig(sb);
   if (!c.clientId || !c.clientSecret) throw new ParasutError(400, "Önce Client ID ve Client Secret'ı kaydet.");
   const t = await tokenRequest({ grant_type: "authorization_code", client_id: c.clientId, client_secret: c.clientSecret, code: code.trim(), redirect_uri: PARASUT_REDIRECT });
-  await saveTokens(sb, t, { connected_at: new Date().toISOString() });
+  await saveTokens(sb, t, { connected_at: new Date().toISOString(), issuer: null });
   try {
     const me = await rawCall(t.access_token, "GET", "/v4/me");
     await (sb as any).from("parasut_auth").update({ user_email: me?.data?.attributes?.email ?? null }).eq("id", 1);
@@ -78,23 +138,40 @@ export async function disconnect(sb: Sb) {
 
 // Aynı süreçte eşzamanlı yenileme olmasın (refresh_token tek kullanımlık)
 let refreshing: Promise<string> | null = null;
-async function accessToken(sb: Sb, c: ParasutConfig): Promise<string> {
+async function accessToken(sb: Sb, c: ParasutConfig, force = false): Promise<string> {
   const { data: a } = await (sb as any).from("parasut_auth").select("*").eq("id", 1).maybeSingle();
   if (!a?.refresh_token) throw new ParasutError(401, "Paraşüt bağlı değil (Ayarlar › Entegrasyonlar › Paraşüt › Bağlan).");
-  if (a.access_token && a.expires_at && new Date(a.expires_at).getTime() > Date.now() + 5 * 60_000) return a.access_token;
+  if (!force && a.access_token && a.expires_at && new Date(a.expires_at).getTime() > Date.now() + 5 * 60_000) return a.access_token;
+  // Bağlantının türüne göre: yeni (id.parasut.com, DevHub client) ya da eski (api.parasut.com, eski client)
+  const id = a.issuer === "id";
+  const [cid, csec] = id ? [c.v2ClientId, c.v2ClientSecret] : [c.clientId, c.clientSecret];
   refreshing ??= (async () => {
     try {
-      const t = await tokenRequest({ grant_type: "refresh_token", client_id: c.clientId, client_secret: c.clientSecret, refresh_token: a.refresh_token });
-      await saveTokens(sb, t);
+      const t = await tokenRequest({ grant_type: "refresh_token", client_id: cid, client_secret: csec, refresh_token: a.refresh_token }, a.issuer);
+      await saveTokens(sb, t, {}, a.refresh_token);
       return t.access_token;
-    } catch (e) {
+    } catch (e: any) {
       // Başka bir süreç az önce yenilemiş olabilir → kayıtlı yeni token'ı dene
       const { data: b } = await (sb as any).from("parasut_auth").select("access_token, expires_at, refresh_token").eq("id", 1).maybeSingle();
       if (b?.refresh_token !== a.refresh_token && b?.access_token && new Date(b.expires_at).getTime() > Date.now()) return b.access_token;
+      // Panelde ve Telegram'da (entegrasyon hatası) görünsün
+      await (sb as any).from("parasut_auth").update({ last_error: String(e?.message || e).slice(0, 300), last_error_at: new Date().toISOString() }).eq("id", 1);
       throw e;
     } finally { setTimeout(() => { refreshing = null; }, 0); }
   })();
   return refreshing;
+}
+
+/** Yeni altyapıda refresh_token ~30 gün kullanılmazsa düşer: fatura kesilmeyen sakin günlerde de oturum taze kalsın
+ *  (dakikalık işleyicide saatte bir çağrılır; son yenilemeden 3 gün geçtiyse yeniler). */
+export async function parasutKeepAlive(sb: Sb) {
+  const { data: a } = await (sb as any).from("parasut_auth").select("issuer, refresh_token, updated_at, last_error").eq("id", 1).maybeSingle();
+  if (!a?.refresh_token || a.issuer !== "id") return { refreshed: false };
+  if (Date.now() - new Date(a.updated_at).getTime() < 3 * 86400_000) return { refreshed: false };
+  const c = await parasutConfig(sb);
+  if (!c.enabled) return { refreshed: false };
+  await accessToken(sb, c, true);
+  return { refreshed: true };
 }
 
 // ── İstek ───────────────────────────────────────────────────────────────────
@@ -163,10 +240,13 @@ async function listAll(sb: Sb, path: string, params: Record<string, string> = {}
 
 export async function connectionStatus(sb: Sb) {
   const c = await parasutConfig(sb);
-  const { data: a } = await (sb as any).from("parasut_auth").select("connected_at, user_email, expires_at").eq("id", 1).maybeSingle();
+  const { data: a } = await (sb as any).from("parasut_auth").select("connected_at, user_email, expires_at, issuer, refresh_token, refresh_expires_at, last_error").eq("id", 1).maybeSingle();
+  const connected = !!(a?.connected_at && a?.refresh_token);
   return {
-    enabled: c.enabled, hasApp: !!(c.clientId && c.clientSecret), companyId: c.companyId,
-    connected: !!a?.connected_at, connectedAt: a?.connected_at ?? null, userEmail: a?.user_email ?? null,
+    enabled: c.enabled, hasApp: !!(c.clientId && c.clientSecret), hasNewApp: !!(c.v2ClientId && c.v2ClientSecret), companyId: c.companyId,
+    connected, connectedAt: a?.connected_at ?? null, userEmail: a?.user_email ?? null,
+    // Yeni altyapı mı (id.parasut.com)? Eski bağlantı 10 Aralık 2026'da kapanır → "yeniden bağlan" gerekir
+    newAuth: connected && a?.issuer === "id", refreshExpiresAt: a?.refresh_expires_at ?? null, lastError: a?.last_error ?? null,
     authorizeUrl: c.clientId ? authorizeUrl(c.clientId) : null,
   };
 }

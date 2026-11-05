@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { getAuthUserFromRequest } from "@/lib/auth-from-request";
 import {
-  ParasutError, connectionStatus, connectWithCode, disconnect, listAccounts, listInvoiceCategories, syncProducts, matchProducts, pushCodesToParasut,
+  ParasutError, connectionStatus, connectWithCode, connectWithOidc, startAuthorize, disconnect, listAccounts, listInvoiceCategories, syncProducts, matchProducts, pushCodesToParasut,
 } from "@/lib/parasut";
 import { invoiceOrder, checkInvoice, invoicePdfUrl, refundInvoiceOrder } from "@/lib/parasut-invoice";
 import { pushInvoiceToMarketplace, MarketplaceInvoiceError } from "@/lib/marketplace-invoice";
@@ -28,6 +28,12 @@ export async function POST(req: NextRequest) {
       case "connect":
         if (!String(body.code || "").trim()) return NextResponse.json({ error: "Kodu yapıştır" }, { status: 400 });
         await connectWithCode(sb, String(body.code));
+        return NextResponse.json({ ok: true, ...(await connectionStatus(sb)) });
+      // Yeni altyapı (id.parasut.com, PKCE): giriş adresi → Paraşüt onayı → /admin/parasut/baglan → connect_oidc
+      case "authorize": return NextResponse.json({ ok: true, url: await startAuthorize(sb, String(body.origin || "")) });
+      case "connect_oidc":
+        if (!String(body.code || "").trim() || !String(body.state || "").trim()) return NextResponse.json({ error: "Kod ya da state eksik" }, { status: 400 });
+        await connectWithOidc(sb, String(body.code), String(body.state));
         return NextResponse.json({ ok: true, ...(await connectionStatus(sb)) });
       case "disconnect": await disconnect(sb); return NextResponse.json({ ok: true });
       case "accounts": return NextResponse.json({ ok: true, accounts: await listAccounts(sb) });
