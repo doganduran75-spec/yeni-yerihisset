@@ -12,7 +12,8 @@ import { siteConfirm } from "@/components/ui/site-dialog";
 import { supabase } from "@/lib/supabase";
 import { orderLabel } from "@/lib/order-label";
 import { printBasitLabel } from "@/lib/basit-label-print";
-import { Truck, Loader2, AlertCircle, CheckCircle, Copy, RefreshCw, Send } from "lucide-react";
+import { printShippingLabels } from "@/lib/shipping-label";
+import { Truck, Loader2, AlertCircle, CheckCircle, Copy, RefreshCw, Send, Printer } from "lucide-react";
 
 type Offer = { id: string; name: string; price: string | null; amount: number | null };
 
@@ -118,6 +119,18 @@ export default function KargonomiDialog({ order, onClose, onChanged }: {
                     <code className="block font-mono font-bold">{o.kargonomi_tracking_code}</code></span>
                   <button onClick={() => navigator.clipboard.writeText(o.kargonomi_tracking_code)} className="text-blue-500 text-xs flex items-center gap-1"><Copy size={12} /> Kopyala</button>
                 </div>
+                {!basit && (
+                  // Etiket buradan da basılır (kullanıcı 2026-11-05) — sipariş detayındaki "Etiket yazdır" ile aynı (src/lib/shipping-label.ts);
+                  // basılınca sipariş kendiliğinden "Kargo hazırlandı" (MIG 20261165). Teslimat notu sipariş detayındaki etiket kutusunda.
+                  <Button className="w-full gap-1.5" variant={o.label_printed_at ? "outline" : "default"} disabled={!!busy} onClick={async () => {
+                    setBusy("label"); setErr(null);
+                    const r = await printShippingLabels([o.id]);
+                    if (r.error) setErr(r.error);
+                    else if (!r.printed && r.skipped.length) setErr(`Etiket basılmadı: ${r.skipped[0].reason}.`);
+                    await reload(o.id);
+                    setBusy(null);
+                  }}>{busy === "label" ? <Loader2 size={14} className="animate-spin" /> : <Printer size={14} />} {o.label_printed_at ? "Etiketi yeniden yazdır" : "Etiketi yazdır"}</Button>
+                )}
                 {basit && (
                   <div className="flex gap-2">
                     <Button className="flex-1 gap-1.5" disabled={!!busy} onClick={async () => {

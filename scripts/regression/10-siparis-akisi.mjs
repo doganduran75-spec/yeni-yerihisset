@@ -1436,6 +1436,9 @@ export default {
       });
 
       await part("Kargo etiketi: kodsuz basılmaz, yazdırılan kod saklanır, kod değişince fark görünür", async () => {
+        // Kargoya ver penceresinden de basılır (kod gelince; Basit Kargo'da resmî etiket) — 2026-11-05
+        const kd = (await import("node:fs")).readFileSync(new URL("../../src/components/admin/KargonomiDialog.tsx", import.meta.url), "utf8");
+        ok(/printShippingLabels\(\[o\.id\]\)/.test(kd) && /Etiketi yazdır/.test(kd), "Kargoya ver penceresinde kod gelince “Etiketi yazdır” var", "KargonomiDialog'da etiket düğmesi yok");
         const r1 = await order([MAIN(1)]);
         const r2 = await order([MAIN(1)]);
         const a = r1.json?.orderId, b = r2.json?.orderId;
