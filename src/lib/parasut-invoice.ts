@@ -305,12 +305,15 @@ export async function refundInvoiceOrder(sb: Sb, orderId: string) {
   }
 
   if (!refundId) {
-    const inv = await parasutCall(sb, "GET", `/sales_invoices/${o.parasut_invoice_id}?include=details,details.product,details.warehouse`);
-    const details = ((inv?.included as any[]) || []).filter((x) => x.type === "sales_invoice_details");
+    // Paraşüt ilişkinin kimliğini (relationships.x.data) yalnız include'da istenince döndürür — müşteri + kategori de istenir
+    // (YH Trendyol 11763872499: yalnız details istenince "müşteri yok" hatası).
+    const inv = await parasutCall(sb, "GET", `/sales_invoices/${o.parasut_invoice_id}?include=contact,category,details,details.product,details.warehouse`);
+    const inc = ((inv?.included as any[]) || []);
+    const details = inc.filter((x) => x.type === "sales_invoice_details");
     const rel = inv?.data?.relationships || {};
-    const contactId = rel.contact?.data?.id;
-    const categoryId = rel.category?.data?.id || ch?.category_id;
-    if (!contactId || !details.length) throw new ParasutError(422, "Satış faturası Paraşüt'te okunamadı (müşteri / kalem yok).");
+    const contactId = rel.contact?.data?.id || inc.find((x) => x.type === "contacts")?.id;
+    const categoryId = rel.category?.data?.id || inc.find((x) => x.type === "item_categories")?.id || ch?.category_id;
+    if (!contactId || !details.length) throw new ParasutError(422, `Satış faturası Paraşüt'te okunamadı (${!contactId ? "müşteri" : ""}${!contactId && !details.length ? " / " : ""}${!details.length ? "kalem" : ""} yok).`);
 
     // İade gelen adet (Paraşüt ürünü başına)
     const want = new Map<string, number>();

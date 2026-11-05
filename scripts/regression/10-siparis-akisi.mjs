@@ -1024,6 +1024,10 @@ export default {
         const ar = await pa(F.admin.token, { op: "refund_invoice", order_id: id });
         ok([400, 409].includes(ar.status) && one(`SELECT parasut_refund_id IS NULL AND coalesce(invoice_status, 'pending') <> 'return_invoiced' FROM public.orders WHERE id = ${lit(id)}`) === "t",
           "Paraşüt: satış faturası olmayan siparişte iade faturası kesilmiyor", why(ar));
+        // Satış faturası okunurken müşteri + kategori de istenir (Paraşüt ilişki kimliğini yalnız include'da verir)
+        const pinv = (await import("node:fs")).readFileSync(new URL("../../src/lib/parasut-invoice.ts", import.meta.url), "utf8");
+        ok(/sales_invoices\/\$\{o\.parasut_invoice_id\}\?include=contact,category,details/.test(pinv),
+          "Paraşüt iade faturası: satış faturası müşteri + kategori + kalemleriyle okunuyor", "include=contact,category,details yok");
         // Faturayı pazaryerine yükleme: üye yapamaz; site siparişinde reddedilir (yalnız Trendyol)
         const mt = await pa(F.member.token, { op: "push_marketplace_invoice", order_id: id });
         ok(mt.status === 403, "Paraşüt: üye faturayı pazaryerine (Trendyol / Hepsiburada) yükleyemiyor", why(mt));
