@@ -10,7 +10,7 @@ import KargonomiDialog from "@/components/admin/KargonomiDialog";
 import CarrierPickDialog from "@/components/admin/CarrierPickDialog";
 import ReturnExpectedDialog from "@/components/admin/ReturnExpectedDialog";
 import ShippingLabelBox from "@/components/admin/ShippingLabelBox";
-import { printShippingLabels, labelOutdated } from "@/lib/shipping-label";
+import { printShippingLabels, labelOutdated, labelCode } from "@/lib/shipping-label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -1295,7 +1295,7 @@ Siparişte “Paraşüt — yeniden dene” ile tekrar dene.`, tone: "danger" })
       const now = new Date().toISOString();
       const skip = new Set(r.skipped.map((x) => x.order));
       setOrders((prev) => prev.map((o) => list.some((x) => x.id === o.id) && !skip.has(orderLabel(o))
-        ? { ...o, label_printed_code: o.cargo_tracking_number || o.kargonomi_tracking_code || null, label_printed_at: now } : o));
+        ? { ...o, label_printed_code: labelCode(o) || null, label_printed_at: now } : o));
     }
     if (r.skipped.length) siteAlert({ message: `Basılmayan: ${r.skipped.map((x) => `${x.order} (${x.reason})`).join(", ")}` });
   }

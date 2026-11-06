@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { getAuthUserFromRequest } from "@/lib/auth-from-request";
 import { orderLabel } from "@/lib/order-label";
+import { labelCode } from "@/lib/label-code";
 
 const SIZES = ["a5", "100x150"];
 
@@ -53,7 +54,7 @@ export async function POST(req: NextRequest) {
     const o = ((orders as any[]) || []).find((x) => x.id === id);
     if (!o) continue;
     const no = orderLabel(o);
-    const code = String(o.cargo_tracking_number || o.kargonomi_tracking_code || "").trim();
+    const code = labelCode(o); // entegrasyon kodu (KSUR…) önce — firmanın sonradan ürettiği takip kodu etikete basılmaz
     if (!code) { skipped.push({ id, order: no, reason: "kargo kodu yok" }); continue; }
     if (o.status === "cancelled") { skipped.push({ id, order: no, reason: "sipariş iptal" }); continue; }
     let a: any = {};

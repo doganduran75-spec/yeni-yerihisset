@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/lib/supabase";
 import { siteAlert } from "@/components/ui/site-dialog";
-import { printShippingLabels, labelOutdated } from "@/lib/shipping-label";
+import { printShippingLabels, labelOutdated, labelCode } from "@/lib/shipping-label";
 import { printBasitLabel } from "@/lib/basit-label-print";
 
 type O = {
@@ -21,7 +21,8 @@ type O = {
 };
 
 export default function ShippingLabelBox({ order, onChange }: { order: O; onChange: (fields: Record<string, any>) => void }) {
-  const code = order.cargo_tracking_number || order.kargonomi_tracking_code || "";
+  const code = labelCode(order); // etiketteki kod (entegrasyonda KSUR… — firmanın takip kodu ayrı gösterilir)
+  const carrierCode = order.kargonomi_tracking_code && order.cargo_tracking_number && order.cargo_tracking_number !== order.kargonomi_tracking_code ? order.cargo_tracking_number : null;
   const isSite = !order.channel || order.channel === "site";
   const [busy, setBusy] = useState(false);
   const [edit, setEdit] = useState(false);
@@ -75,7 +76,7 @@ export default function ShippingLabelBox({ order, onChange }: { order: O; onChan
         <Printer size={15} className="text-slate-500" />
         <b>Kargo etiketi</b>
         {code
-          ? <span className="text-xs text-slate-600">{order.cargo_provider || "Kargo"} · <span className="font-mono">{code}</span></span>
+          ? <span className="text-xs text-slate-600">{order.cargo_provider || "Kargo"} · <span className="font-mono">{code}</span>{carrierCode && <> · firma takip kodu <span className="font-mono">{carrierCode}</span></>}</span>
           : <span className="text-xs text-amber-700">Kargo kodu yok — etiket basılamaz{isSite ? " (Kargoya ver ile al ya da elle gir)" : order.channel === "hepsiburada" ? " (Hepsiburada'da kod paketlenince oluşur: “Paket hazır” de, birkaç dakika içinde gelir)" : " (pazaryerinden kod gelince basılır)"}</span>}
         {order.label_printed_at && !outdated && (
           <span className="text-[11px] text-slate-400">· yazdırıldı {new Date(order.label_printed_at).toLocaleString("tr-TR", { dateStyle: "short", timeStyle: "short" })}</span>

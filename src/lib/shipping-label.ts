@@ -104,8 +104,5 @@ export async function printShippingLabels(ids: string[], notes?: Record<string, 
   }
 }
 
-/** Kargo kodu son yazdırılan etiketten farklı mı (etiket yeniden basılmalı) */
-export function labelOutdated(o: { label_printed_code?: string | null; cargo_tracking_number?: string | null; kargonomi_tracking_code?: string | null }): boolean {
-  const code = o.cargo_tracking_number || o.kargonomi_tracking_code || "";
-  return !!o.label_printed_code && !!code && o.label_printed_code !== code;
-}
+// Etiket kodu kuralı ayrı dosyada (sunucu ucu da kullanır): src/lib/label-code.ts
+export { labelCode, labelOutdated } from "@/lib/label-code";

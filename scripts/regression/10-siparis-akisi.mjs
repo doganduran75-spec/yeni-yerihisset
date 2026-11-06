@@ -1442,6 +1442,13 @@ export default {
         // Kargoya ver penceresinden de basılır (kod gelince; Basit Kargo'da resmî etiket) — 2026-11-05
         const kd = (await import("node:fs")).readFileSync(new URL("../../src/components/admin/KargonomiDialog.tsx", import.meta.url), "utf8");
         ok(/printShippingLabels\(\[o\.id\]\)/.test(kd) && /Etiketi yazdır/.test(kd), "Kargoya ver penceresinde kod gelince “Etiketi yazdır” var", "KargonomiDialog'da etiket düğmesi yok");
+        // Entegrasyon kodu (KSUR…) etikette kalır: firma şubede okutup kendi takip kodunu üretince "yeniden yazdır" denmez (2026-11-06)
+        try {
+          const lc = await import(new URL("../../src/lib/label-code.ts", import.meta.url));
+          const ksur = { kargonomi_tracking_code: "KSURTEST1", cargo_tracking_number: "13078239122931", label_printed_code: "KSURTEST1" };
+          ok(lc.labelCode(ksur) === "KSURTEST1" && !lc.labelOutdated(ksur), "Firma kendi takip kodunu üretince etiket “eski” sayılmıyor, etikete entegrasyon kodu basılıyor", JSON.stringify({ code: lc.labelCode(ksur), outdated: lc.labelOutdated(ksur) }));
+          ok(lc.labelOutdated({ ...ksur, kargonomi_tracking_code: "KSURTEST2", cargo_tracking_number: "KSURTEST2" }), "Entegrasyon kodu değişince (iptal + yeniden gönderim) “yeniden yazdır” deniyor");
+        } catch (e) { add("warn", "Etiket kodu kuralı denenemedi", String(e?.message || e).slice(0, 120)); }
         const r1 = await order([MAIN(1)]);
         const r2 = await order([MAIN(1)]);
         const a = r1.json?.orderId, b = r2.json?.orderId;
