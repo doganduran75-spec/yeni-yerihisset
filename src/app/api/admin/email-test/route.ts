@@ -9,8 +9,10 @@ import { createAdminClient } from "@/lib/supabase-admin";
 import { getAuthUserFromRequest } from "@/lib/auth-from-request";
 import { runWithMailRedirect } from "@/lib/mail-guard";
 import { sendOrderNotification, sendCouponAssignedNotification, renderEmailTemplate, sendEmailVerification, sendPasswordRecoveryEmail,
-  sendGuestActivationEmail, sendStockNotifySignupWelcome, sendBackInStockNotification, sendLeadMagnetWelcome, escapeHtml } from "@/lib/notifications";
-import { sendAltDeliveredEmail, sendReturnLabelEmail } from "@/lib/after-sale-mail";
+  sendGuestActivationEmail, sendStockNotifySignupWelcome, sendBackInStockNotification, sendLeadMagnetWelcome, escapeHtml,
+  sendMessageNotification, sendAdminNewOrderNotification, sendAdminOutOfStockAlert, sendAdminSystemAlert } from "@/lib/notifications";
+import { sendAltDeliveredEmail, sendReturnLabelEmail, sendAdminCaseEmail } from "@/lib/after-sale-mail";
+import { sendCreditLoadedEmail } from "@/lib/affiliate-mail";
 import { sendInvoiceEmail } from "@/lib/invoice-mail";
 import { sendClaimEmail, campaignEmailHtml } from "@/lib/crm-campaign";
 import { sendRawSiteMail } from "@/lib/site-mail";
@@ -39,6 +41,14 @@ const KINDS: { kind: string; group: string; label: string; order?: boolean }[] =
   { kind: "guest_activation", group: "Üyelik", label: "Misafir hesabı etkinleştir" },
   { kind: "stock_welcome", group: "Stok", label: "Stok bildirimi kaydı" },
   { kind: "back_in_stock", group: "Stok", label: "Stoğa girdi" },
+  // 2026-11-06: eksik kalanlar (müşteriye mesaj yanıtı, satış ortaklığı) + yöneticiye gidenler
+  { kind: "message_reply", group: "Mesaj / satış ortaklığı", label: "Mesajına yanıt verdik (müşteriye)", order: true },
+  { kind: "affiliate_credit", group: "Mesaj / satış ortaklığı", label: "Hakedişin hesabına yüklendi (satış ortağı)" },
+  { kind: "admin_new_order", group: "Yöneticiye", label: "Yeni sipariş", order: true },
+  { kind: "admin_message", group: "Yöneticiye", label: "Müşteri mesaj yazdı", order: true },
+  { kind: "admin_case", group: "Yöneticiye", label: "Değişim / iade talebi", order: true },
+  { kind: "admin_out_of_stock", group: "Yöneticiye", label: "Stok bitti" },
+  { kind: "admin_system", group: "Yöneticiye", label: "Sistem uyarısı" },
 ];
 
 export async function POST(req: NextRequest) {
@@ -130,6 +140,13 @@ export async function POST(req: NextRequest) {
       case "password_recovery": return sendPasswordRecoveryEmail({ to, name: me.first_name, actionUrl: `${site}/sifre-belirle` });
       case "guest_activation": return sendGuestActivationEmail({ email: to, name: me.first_name, orderLabel: orderNo || "YH00000" });
       case "stock_welcome": return sendStockNotifySignupWelcome({ to, name: me.first_name, productTitle: "Deneme ürünü", productUrl: `${site}/magaza`, variantLabel: "42" });
+      case "message_reply": return sendMessageNotification(order.id, "admin");
+      case "admin_message": return sendMessageNotification(order.id, "user");
+      case "affiliate_credit": return sendCreditLoadedEmail({ to, name: me.first_name, amount: 245.5, balance: 610, period: "Ekim 2026", orderCount: 3 });
+      case "admin_new_order": return sendAdminNewOrderNotification(order.id);
+      case "admin_case": return sendAdminCaseEmail(order.id, "Değişim talebi (deneme)", ["Müşteri 42 numarayı 43 ile değiştirmek istiyor.", "Sebep: Bedeni/Ebatı küçük geldi"]);
+      case "admin_out_of_stock": return sendAdminOutOfStockAlert([{ title: "Deneme ürünü", variantLabel: "42", sku: "DENEME42" }]);
+      case "admin_system": return sendAdminSystemAlert("Sistem uyarısı (deneme)", [{ key: "disk", label: "Disk", status: "warn", value: "%82 dolu (17G boş)", hint: "Disk dolmaya başladı; yer açılması planlanmalı." }]);
       case "back_in_stock": {
         const { data: pr } = await sb.from("products").select("title, slug, image_url, images").eq("is_active", true).not("image_url", "is", null).limit(1).maybeSingle();
         return sendBackInStockNotification({ to, name: me.first_name, productTitle: pr?.title || "Deneme ürünü", productUrl: pr?.slug ? `${site}/products/${pr.slug}` : `${site}/magaza`,

@@ -1615,6 +1615,10 @@ export default {
         ok(m.status === 403, "Üye e-posta denemesi yapamıyor", why(m));
         const l = await api("/api/admin/email-test", { token: F.admin.token, body: { list: true } });
         ok(l.status === 200 && (l.json?.kinds || []).length >= 20 && l.json?.to === F.admin.email, "Deneme listesi geliyor, alıcı yöneticinin kendisi", `${why(l)} → ${(l.json?.kinds || []).length} tür, ${l.json?.to}`);
+        // 2026-11-06: tüm e-postalar listede — mesaj yanıtı, satış ortaklığı hakedişi ve yöneticiye gidenler dahil
+        const want = ["message_reply", "affiliate_credit", "admin_new_order", "admin_message", "admin_case", "admin_out_of_stock", "admin_system"];
+        const miss = want.filter((k) => !(l.json?.kinds || []).some((x) => x.kind === k));
+        ok(!miss.length, "E-posta denemesinde mesaj yanıtı, satış ortaklığı ve yönetici e-postaları da var", `eksik: ${miss.join(", ")}`);
         const r = await order([MAIN(1)]);
         const id = r.json?.orderId;
         if (!id) return add("fail", "E-posta denemesi için sipariş oluşturulamadı", why(r));
