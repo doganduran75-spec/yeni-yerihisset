@@ -141,9 +141,31 @@ async function composeRefMessage(sb: SB, topic: string, id: string): Promise<{ t
     const o = await orderIdentity(sb, c.order_id);
     if (!o) return null;
     const wants = ((c.items as any[]) || []).map((i) => i?.want_label).filter(Boolean);
+    // Talepteki ürünler: ad + numara + ürün kodu (kullanıcı 2026-11-06) — embed'siz (self-host PostgREST)
+    const itemIds = ((c.items as any[]) || []).map((i) => i?.order_item_id).filter(Boolean);
+    const lines: string[] = [];
+    if (itemIds.length) {
+      const { data: its } = await sb.from("order_items").select("id, product_id, variant_id, title, variant_name, size_label, sku, quantity").in("id", itemIds);
+      const rows = (its as any[]) || [];
+      const pids = [...new Set(rows.map((r) => r.product_id).filter(Boolean))], vids = [...new Set(rows.map((r) => r.variant_id).filter(Boolean))];
+      const [{ data: ps }, { data: vs }] = await Promise.all([
+        pids.length ? sb.from("products").select("id, title").in("id", pids) : Promise.resolve({ data: [] as any[] }),
+        vids.length ? sb.from("product_variants").select("id, sku").in("id", vids) : Promise.resolve({ data: [] as any[] }),
+      ]);
+      const pt = new Map(((ps as any[]) || []).map((p) => [p.id, p.title])), vs2 = new Map(((vs as any[]) || []).map((v) => [v.id, v.sku]));
+      for (const id of itemIds) {
+        const r = rows.find((x) => x.id === id);
+        if (!r) continue;
+        const name = pt.get(r.product_id) || r.title || "Ürün";
+        const size = r.size_label || r.variant_name;
+        const sku = vs2.get(r.variant_id) || r.sku;
+        lines.push(`• ${esc(name)}${size ? ` · <b>${esc(size)}</b>` : ""}${sku ? ` · <code>${esc(sku)}</code>` : ""}${Number(r.quantity) > 1 ? ` · ${r.quantity} adet` : ""}`);
+      }
+    }
     const text = [
       `${c.kind === "exchange" ? "🔁 <b>Değişim talebi</b>" : "↩️ <b>İade talebi</b>"}`,
       `<b>${esc(o.no)}</b> — ${esc(o.name)}`,
+      ...lines,
       ...(c.reason ? [`Sebep: ${esc(c.reason)}`] : []),
       ...(wants.length ? [`İstenen: ${esc(wants.join(", "))}`] : []),
       ...(c.customer_note ? [`Not: <i>${esc(String(c.customer_note).slice(0, 300))}</i>`] : []),

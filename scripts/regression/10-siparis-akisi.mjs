@@ -1173,6 +1173,9 @@ export default {
           ROLLBACK;`).flat().map(String).filter((x) => /^(mesaj|talep|stok):/.test(x));
         ok(k.includes("mesaj:1"), "Müşteri mesajı kuyruğa giriyor, yönetici yanıtı girmiyor", k.join(" / "));
         ok(k.includes("talep:1"), "İade / değişim talebi kuyruğa giriyor", k.join(" / "));
+        // Talep mesajında ürün adı + numara + ürün kodu (2026-11-06)
+        const tg = (await import("node:fs")).readFileSync(new URL("../../src/lib/telegram.ts", import.meta.url), "utf8");
+        ok(/Talepteki ürünler/.test(tg) && /from\("product_variants"\)\.select\("id, sku"\)/.test(tg), "İade / değişim talebi mesajında ürün adı, numara ve ürün kodu var", "telegram.ts after_sale_request ürün satırı yok");
         ok(k.includes("stok:1"), "Yeni stok talebi kuyruğa giriyor", k.join(" / "));
         const dl = await api("/api/admin/telegram", { token: F.admin.token, body: { op: "preview_daily" } });
         ok(dl.status === 200 && /Günlük özet/.test(dl.json?.text || "") && /Dünkü satış/.test(dl.json?.text || ""), "Günlük özet hazırlanıyor (dünkü satış + bekleyen işler)", why(dl));
