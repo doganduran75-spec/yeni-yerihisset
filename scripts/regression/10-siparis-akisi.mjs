@@ -291,7 +291,7 @@ export default {
 
         // Tam iade (ödenmiş sipariş iptali) → iki kupon da geri verilir
         await rest(`orders?id=eq.${oid}`, { token: F.admin.token, method: "PATCH", body: { payment_status: "paid", status: "processing", shipment_status: "preparing" } });
-        const c = await api("/api/admin/orders/action", { token: F.admin.token, body: { action: "cancel", orderId: oid, method: "bank_transfer", confirmed: true, note: "regresyon" } });
+        const c = await api("/api/admin/orders/action", { token: F.admin.token, body: { action: "cancel", orderId: oid, method: "bank_transfer", confirmed: true, note: "regresyon", reason: "customer" } });
         const mine = num(`SELECT coalesce(sum(use_count), 0) FROM public.user_coupons u JOIN public.coupons c ON c.id = u.coupon_id WHERE u.user_id = ${lit(F.member.id)} AND c.code IN (${lit(cIn)}, ${lit(cFix)})`);
         ok(c.status === 200 && ord(oid).payment_status === "refunded" && used() === 0 && mine === 0,
           "Tam iadede kuponlar geri verildi", `${why(c)} → ödeme ${ord(oid).payment_status}, toplam kullanım ${used()}, üyenin ${mine} (0/0 olmalı)`);
@@ -349,8 +349,15 @@ export default {
         if (!O.paid || !O.cancel) return add("fail", "Önceki adımda sipariş oluşmadı", "bu bölüm denenemedi");
         // Ödenmemiş siparişi iptal → stok geri, ödeme "başarısız", fatura "gerekmiyor"
         let s0 = stock();
-        const c = await api("/api/admin/orders/action", { token: F.admin.token, body: { action: "cancel", orderId: O.cancel, note: "regresyon" } });
+        // İptal nedeni zorunlu (2026-11-06); "Diğer"de müşteriye not zorunlu
+        const nr = await api("/api/admin/orders/action", { token: F.admin.token, body: { action: "cancel", orderId: O.cancel, note: "regresyon" } });
+        const no = await api("/api/admin/orders/action", { token: F.admin.token, body: { action: "cancel", orderId: O.cancel, note: "regresyon", reason: "other" } });
+        ok(nr.status === 400 && no.status === 400 && ord(O.cancel).status !== "cancelled", "İptal nedeni seçilmeden (ve “Diğer”de not yazılmadan) iptal edilmiyor", `${why(nr)} / ${why(no)}`);
+        const c = await api("/api/admin/orders/action", { token: F.admin.token, body: { action: "cancel", orderId: O.cancel, note: "regresyon", reason: "stock", customer_note: "REGRESYON-TEST not" } });
         const oc = ord(O.cancel);
+        ok(one(`SELECT cancel_reason || '|' || cancel_customer_note FROM public.orders WHERE id = ${lit(O.cancel)}`) === "stock|REGRESYON-TEST not"
+          && num(`SELECT count(*) FROM public.order_events WHERE order_id = ${lit(O.cancel)} AND note LIKE '%İptal nedeni: Stokta kalmadı%'`) >= 1,
+          "İptal nedeni ve müşteriye not siparişe kaydedildi, notlara yazıldı");
         ok(c.status === 200 && oc.status === "cancelled" && oc.payment_status === "failed" && oc.invoice_status === "not_required" && oc.shipment_status === "cancelled",
           "Ödenmemiş sipariş iptali", `${why(c)} → ${oc.status}/${oc.payment_status}/${oc.shipment_status}/${oc.invoice_status}`);
         ok(stock() === s0 + 1, "İptalde stok geri eklendi", `stok ${s0} → ${stock()}`);
@@ -371,7 +378,7 @@ export default {
 
         // Ödenmiş siparişi iptal → kalan tutar iade, stok geri
         s0 = stock();
-        const c2 = await api("/api/admin/orders/action", { token: F.admin.token, body: { action: "cancel", orderId: O.paid, method: "bank_transfer", confirmed: true, note: "regresyon" } });
+        const c2 = await api("/api/admin/orders/action", { token: F.admin.token, body: { action: "cancel", orderId: O.paid, method: "bank_transfer", confirmed: true, note: "regresyon", reason: "customer" } });
         const o3 = ord(O.paid);
         ok(c2.status === 200 && o3.status === "cancelled" && o3.payment_status === "refunded" && eq(o3.refunded_amount, o3.total_amount),
           "Ödenmiş sipariş iptali (kalan tutar iade)", `${why(c2)} → ${o3.status}/${o3.payment_status}, iade ${o3.refunded_amount}/${o3.total_amount}`);

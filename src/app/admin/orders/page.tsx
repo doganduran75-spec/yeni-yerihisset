@@ -11,6 +11,7 @@ import CarrierPickDialog from "@/components/admin/CarrierPickDialog";
 import ReturnExpectedDialog from "@/components/admin/ReturnExpectedDialog";
 import ShippingLabelBox from "@/components/admin/ShippingLabelBox";
 import { printShippingLabels, labelOutdated, labelCode } from "@/lib/shipping-label";
+import { CANCEL_REASONS, cancelReason } from "@/lib/cancel-reasons";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -2564,6 +2565,9 @@ function OrderActionDialog({ mode, order, onClose, onDone }: {
   const cardPaid = !iyzicoOk && ["credit_card", "card", "iyzico"].includes(String(order.payment_method || ""));
   const [method, setMethod] = useState(iyzicoOk ? "iyzico" : cardPaid ? "card" : "bank_transfer");
   const [note, setNote] = useState("");
+  // İptal nedeni (zorunlu) + müşteriye not — iptal e-postasında görünür (src/lib/cancel-reasons.ts, 2026-11-06)
+  const [reason, setReason] = useState("");
+  const [customerNote, setCustomerNote] = useState("");
   const [amount, setAmount] = useState(mode === "refund" ? String(remaining) : "");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -2598,7 +2602,11 @@ function OrderActionDialog({ mode, order, onClose, onDone }: {
       if (needsConfirm && !confirmed) throw new Error("Önce iadeyi yaptığını onayla.");
       const body: any = { action: mode, orderId: order.id, note: note.trim() || undefined, confirmed: needsConfirm ? true : undefined };
       if (mode === "refund") { body.amount = Number(String(amount).replace(",", ".")); body.method = method; }
-      if (mode === "cancel") body.method = method;
+      if (mode === "cancel") {
+        if (!reason) throw new Error("İptal nedenini seç.");
+        if (reason === "other" && !customerNote.trim()) throw new Error("“Diğer” için müşteriye notu yaz (e-postada görünür).");
+        body.method = method; body.reason = reason; body.customer_note = customerNote.trim() || undefined;
+      }
       if (mode === "return") {
         body.items = items.filter((i) => ret[i.id]?.on && ret[i.id].qty > 0).map((i) => ({ item_id: i.id, qty: ret[i.id].qty, restock: ret[i.id].restock }));
         if (!body.items.length) throw new Error("İade gelen ürünü seç.");
@@ -2661,8 +2669,21 @@ function OrderActionDialog({ mode, order, onClose, onDone }: {
                 {paidNow
                   ? <li>Ödeme alınmış: <b>₺{remaining.toFixed(2)}</b> ücret iadesi yapılır, ödeme <b>İade edildi</b> olur; kullanılan YeriHisset Kredisi cüzdana döner.</li>
                   : <li>Ödeme alınmamış: ödeme <b>Alınmadı</b> olur.</li>}
-                <li>Müşteriye iptal e-postası gider (ödeme alındıysa iadenin nasıl yapıldığını da yazar).</li>
+                <li>Müşteriye iptal e-postası gider: seçtiğin neden, yazdığın not ve (ödeme alındıysa) iadenin nasıl yapıldığı.</li>
               </ul>
+              <label className="block space-y-1">
+                <span className="text-xs font-semibold">İptal nedeni <span className="text-red-600">*</span></span>
+                <select value={reason} onChange={(e) => setReason(e.target.value)} className={sel}>
+                  <option value="">Seç…</option>
+                  {CANCEL_REASONS.map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}
+                </select>
+                {cancelReason(reason)?.customer && <span className="block text-[11px] text-muted-foreground">E-postada: “{cancelReason(reason)!.customer}”</span>}
+              </label>
+              <label className="block space-y-1">
+                <span className="text-xs font-semibold">Müşteriye not {reason === "other" ? <span className="text-red-600">*</span> : <span className="font-normal text-muted-foreground">(isteğe bağlı — e-postada aynen görünür)</span>}</span>
+                <textarea value={customerNote} onChange={(e) => setCustomerNote(e.target.value)} rows={2} maxLength={500}
+                  placeholder="ör. Bu numarayı yeniden ürettiğimizde sana haber vereceğiz." className="w-full rounded-lg border border-input bg-background px-2 py-1.5 text-sm" />
+              </label>
               {paidNow && methodSelect}
               {confirmBox}
             </>
@@ -2742,14 +2763,14 @@ function OrderActionDialog({ mode, order, onClose, onDone }: {
           )}
 
           <label className="block space-y-1">
-            <span className="text-xs font-semibold">Not (sipariş geçmişine yazılır)</span>
+            <span className="text-xs font-semibold">{mode === "cancel" ? "İç not (yalnız sipariş notlarına yazılır, müşteri görmez)" : "Not (sipariş geçmişine yazılır)"}</span>
             <input value={note} onChange={(e) => setNote(e.target.value)} placeholder={mode === "cancel" ? "ör. stoktaki üründe sorun, müşteriyle görüşüldü" : "ör. numara küçük geldi"} className={sel} />
           </label>
           {err && <p className="text-xs font-semibold text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{err}</p>}
         </div>
         <div className="sticky bottom-0 flex justify-end gap-2 px-5 py-3 border-t bg-slate-50 rounded-b-2xl">
           <Button variant="outline" size="sm" onClick={onClose} disabled={busy}>Vazgeç</Button>
-          <Button size="sm" onClick={submit} disabled={busy || (needsConfirm && !confirmed)} className={mode === "cancel" ? "bg-red-600 hover:bg-red-700" : ""}>
+          <Button size="sm" onClick={submit} disabled={busy || (needsConfirm && !confirmed) || (mode === "cancel" && (!reason || (reason === "other" && !customerNote.trim())))} className={mode === "cancel" ? "bg-red-600 hover:bg-red-700" : ""}>
             {busy ? <Loader2 size={14} className="animate-spin" /> : title}
           </Button>
         </div>

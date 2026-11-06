@@ -3,6 +3,7 @@ import { createMailTransport, isTestEmail, mailRedirectActive } from "./mail-gua
 import { consentUrl } from "./marketing-consent";
 import { fitBoxHtml } from "./after-sale";
 import { afterSaleHere } from "./order-next-step";
+import { cancelReason } from "./cancel-reasons";
 import { createAdminClient } from "./supabase-admin";
 import { buildSmtpConfig } from "./smtp-config";
 
@@ -281,6 +282,11 @@ function buildCancelInfoHtml(order: any, storeUrl: string): string {
   const credit = Number(order.credit_used || 0);
   const lines: string[] = [];
   let tone: "green" | "slate" = "slate";
+  // Neden + yöneticinin müşteriye notu en üstte (kullanıcı 2026-11-06: e-postada neden iptal edildiği yoktu)
+  const reason = cancelReason(order.cancel_reason);
+  if (reason?.customer) lines.push(reason.customer);
+  if (order.cancel_customer_note) lines.push(escapeHtml(String(order.cancel_customer_note)).replace(/\n/g, "<br>"));
+  const reasonLines = lines.length;
 
   if (refunded > 0) {
     tone = "green";
@@ -299,7 +305,7 @@ function buildCancelInfoHtml(order: any, storeUrl: string): string {
     tone = "green";
     lines.push(`Siparişte kullandığın <b>${money(credit)}</b> YeriHisset Kredisi hesabına geri yüklendi.`);
   }
-  if (!lines.length) {
+  if (lines.length === reasonLines) {
     lines.push(order.auto_expired
       ? "Ödemen belirtilen süre içinde bize ulaşmadığı için sipariş iptal edildi. Senden herhangi bir ödeme alınmadı."
       : "Bu sipariş için senden herhangi bir ödeme alınmadı; bir iade işlemi gerekmiyor.");
@@ -322,7 +328,7 @@ export async function sendOrderNotification(
   // 1. Sipariş + ilişkileri EMBED'SİZ getir (self-host PostgREST embed kırılgan)
   const { data: order, error: orderError } = await (supabase
     .from("orders")
-    .select("id, order_number, total_amount, status, created_at, shipping_address, payment_method, user_id, channel, payment_status, refunded_amount, refund_method, credit_used, auto_expired, import_source, kargonomi_shipment_id, kargonomi_tracking_code")
+    .select("id, order_number, total_amount, status, created_at, shipping_address, payment_method, user_id, channel, payment_status, refunded_amount, refund_method, credit_used, auto_expired, import_source, kargonomi_shipment_id, kargonomi_tracking_code, cancel_reason, cancel_customer_note")
     .eq("id", context.orderId)
     .maybeSingle() as any) as { data: any; error: any };
 

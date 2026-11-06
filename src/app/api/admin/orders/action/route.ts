@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cancelReason } from "@/lib/cancel-reasons";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { getAuthUserFromRequest } from "@/lib/auth-from-request";
 import { iyzicoRefund } from "@/lib/iyzico-refund";
@@ -85,12 +86,19 @@ export async function POST(req: NextRequest) {
       : shippedNow ? "Kargolanmış sipariş iptal edilemez — \"İade al\" kullanın"
       : null;
     if (blocked) return NextResponse.json({ error: blocked }, { status: 400 });
+    // İptal nedeni (zorunlu) + müşteriye not (e-postada görünür; "Diğer"de zorunlu) — src/lib/cancel-reasons.ts
+    const reason = cancelReason(String(body.reason || ""));
+    const customerNote = String(body.customer_note || "").trim().slice(0, 500) || null;
+    if (!reason) return NextResponse.json({ error: "İptal nedenini seç" }, { status: 400 });
+    if (reason.key === "other" && !customerNote) return NextResponse.json({ error: "“Diğer” için müşteriye notu yaz (e-postada görünür)" }, { status: 400 });
     if (paid && remaining > 0) {
       const err = await doRefund(remaining, String(body.method || ""), body.note);
       if (err) return NextResponse.json({ error: `Ücret iadesi yapılamadı: ${err}` }, { status: 400 });
     }
-    const { error } = await sb.rpc("order_mark_cancelled", { p_order: orderId, p_note: body.note || null, p_actor: user.id });
+    const cancelNote = [`İptal nedeni: ${reason.label.replace(/ \(.*\)$/, "")}`, customerNote ? `müşteriye not: “${customerNote}”` : "", body.note ? String(body.note) : ""].filter(Boolean).join(" — ");
+    const { error } = await sb.rpc("order_mark_cancelled", { p_order: orderId, p_note: cancelNote, p_actor: user.id });
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    await sb.from("orders").update({ cancel_reason: reason.key, cancel_customer_note: customerNote }).eq("id", orderId);
     await restoreOrderCredit(sb, orderId!).catch(() => {});
     kickMarketplaceSync(500);
     if (order.user_id && (order.channel || "site") === "site") {
