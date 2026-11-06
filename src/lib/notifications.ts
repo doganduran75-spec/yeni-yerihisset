@@ -2,6 +2,7 @@ import { randomBytes } from "crypto";
 import { createMailTransport, isTestEmail, mailRedirectActive } from "./mail-guard";
 import { consentUrl } from "./marketing-consent";
 import { fitBoxHtml } from "./after-sale";
+import { afterSaleHere } from "./order-next-step";
 import { createAdminClient } from "./supabase-admin";
 import { buildSmtpConfig } from "./smtp-config";
 
@@ -321,7 +322,7 @@ export async function sendOrderNotification(
   // 1. Sipariş + ilişkileri EMBED'SİZ getir (self-host PostgREST embed kırılgan)
   const { data: order, error: orderError } = await (supabase
     .from("orders")
-    .select("id, order_number, total_amount, status, created_at, shipping_address, payment_method, user_id, channel, payment_status, refunded_amount, refund_method, credit_used, auto_expired, import_source")
+    .select("id, order_number, total_amount, status, created_at, shipping_address, payment_method, user_id, channel, payment_status, refunded_amount, refund_method, credit_used, auto_expired, import_source, kargonomi_shipment_id, kargonomi_tracking_code")
     .eq("id", context.orderId)
     .maybeSingle() as any) as { data: any; error: any };
 
@@ -463,7 +464,7 @@ export async function sendOrderNotification(
   }
   // Teslim edildi: "acele yok, evde dene — oldu mu?" + Oldu / Değişim / İade (site siparişi; src/lib/after-sale.ts)
   // (E-posta denemesinde eski siteden aktarılmış sipariş seçilse de kutu görünür — gerçek site siparişindeki hâli)
-  if (trigger === "order_delivered" && (order.channel || "site") === "site" && (!order.import_source || mailRedirectActive())) {
+  if (trigger === "order_delivered" && (afterSaleHere(order) || ((order.channel || "site") === "site" && mailRedirectActive()))) {
     bodyHtml += fitBoxHtml(order.id);
   }
   // Mesafeli Sözleşmeler Yönetmeliği: sözleşme + ön bilgilendirme tüketiciye kalıcı veri saklayıcısıyla (e-posta)

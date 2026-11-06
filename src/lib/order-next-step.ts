@@ -55,6 +55,13 @@ export type OrderLike = {
 };
 
 export const TRIAL_DAYS = 14;
+
+/** Satış sonrası (oldu / değişim / iade) bu sistemden yürüyen site siparişi mi: sitede verilen ya da eski siteden aktarılıp
+ *  kargosu buradan (Kargonomi / Basit Kargo) yapılan (kullanıcı 2026-11-06: aktarılmış siparişte müşteri değişim istedi,
+ *  yol yoktu). Aynı kural: DB tetikleyicisi trg_orders_delivered (MIG 20261170), after-sale.ts, teslim e-postası. */
+export function afterSaleHere(o: { channel?: string | null; import_source?: string | null; kargonomi_shipment_id?: string | null; kargonomi_tracking_code?: string | null }): boolean {
+  return (o.channel || "site") === "site" && (!o.import_source || !!(o.kargonomi_shipment_id || o.kargonomi_tracking_code));
+}
 export const UPS_WAIT_DAYS = 5;
 // Kargolanmış ama faturası kesilmemiş (kullanıcı 2026-10-28). Paraşüt'e geçiş (2026-10-21) öncesinin pazaryeri ve eski siteden
 // aktarılan siparişleri sayılmaz (eski düzende faturalandı); sonrasında eski siteden aktarılanlar DAHİL. VUK: teslimden (kargoya verilişten) itibaren 7 gün.
@@ -293,6 +300,9 @@ function coreNextStep(o: OrderLike): NextStep {
   const acts: NextAction[] = [];
   if (inv === "pending") acts.push(...invoiceActs);
   if (ship === "delivered") acts.push({ key: "return_expected", label: "İade gelecek", kind: "danger" });
+  // Müşteri (e-posta / telefon) değişim istedi: henüz cevap vermemiş ve deneme süresindeyse müşteri sayfasını onun adına doldur
+  if (ship === "delivered" && afterSaleHere(o) && !o.fit_status && (!o.delivered_at || daysSince(o.delivered_at) < TRIAL_DAYS))
+    acts.push({ key: "case_link", label: "Müşteri adına değişim / iade aç", kind: "primary" });
   acts.push({ key: "return", label: "İade al", kind: "danger" });
   const silent = o.fit_status === "trial"; // 14 gün doldu, müşteri cevap vermedi → fatura otomatik DEĞİL, yönetici onaylar
   return inv === "pending"

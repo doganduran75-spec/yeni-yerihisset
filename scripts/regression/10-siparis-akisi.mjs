@@ -1230,6 +1230,21 @@ export default {
         ok(/from\('orders'\)\s*(\/\/[^\n]*\n\s*)*\.select\('\*/.test(dash), "Pano bekleyen işleri siparişin tüm alanlarıyla hesaplar (sipariş listesiyle aynı sayı)");
       });
 
+      await part("Satış sonrası: aktarılıp kargosu buradan yapılan siparişte de değişim / iade açılır", async () => {
+        let m;
+        try { m = await import(new URL("../../src/lib/order-next-step.ts", import.meta.url)); }
+        catch (e) { return add("warn", "Satış sonrası kuralı denenemedi", `order-next-step.ts yüklenemedi: ${String(e?.message || e).slice(0, 120)}`); }
+        const base = { channel: "site", import_source: "woo_yerihisset", status: "delivered", payment_status: "paid", shipment_status: "delivered", invoice_status: "pending",
+          total_amount: 3499, order_items: [{ quantity: 1 }], delivered_at: new Date(Date.now() - 2 * 86400_000).toISOString(), fit_status: null };
+        ok(m.afterSaleHere({ ...base, kargonomi_tracking_code: "KSURTEST" }) && !m.afterSaleHere(base) && m.afterSaleHere({ channel: "site" }) && !m.afterSaleHere({ channel: "trendyol" }),
+          "Kural: sitede verilen ya da aktarılıp kargosu buradan yapılan sipariş satış sonrasına açık; eski sitede gönderilen ve pazaryeri değil");
+        const keys = (o) => m.orderNextStep(o).actions.map((a) => a.key);
+        ok(keys({ ...base, kargonomi_tracking_code: "KSURTEST" }).includes("case_link") && !keys(base).includes("case_link"),
+          "Cevapsız teslim edilmiş siparişte “Müşteri adına değişim / iade aç” var (aktarılıp eski sitede gönderilende yok)", JSON.stringify(keys({ ...base, kargonomi_tracking_code: "KSURTEST" })));
+        ok(!keys({ ...base, kargonomi_tracking_code: "KSURTEST", delivered_at: new Date(Date.now() - 20 * 86400_000).toISOString() }).includes("case_link"),
+          "14 günlük deneme süresi geçince müşteri adına değişim açılmaz (İade gelecek / İade al kalır)");
+      });
+
       await part("Pano: 'İade faturası kesilecek' ayrı satır, 'Bekleyen sipariş işi'nde sayılmaz", async () => {
         let m;
         try { m = await import(new URL("../../src/lib/order-next-step.ts", import.meta.url)); }

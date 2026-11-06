@@ -6,7 +6,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { rowMatches, type SizeRow } from "@/lib/size-chart";
 
-import { TRIAL_DAYS, UPS_WAIT_DAYS } from "@/lib/order-next-step"; // 14 gün deneme · UPS 5 gün
+import { TRIAL_DAYS, UPS_WAIT_DAYS, afterSaleHere } from "@/lib/order-next-step"; // 14 gün deneme · UPS 5 gün
 export { TRIAL_DAYS, UPS_WAIT_DAYS };
 
 const key = () => `after-sale:${process.env.SUPABASE_SERVICE_ROLE_KEY || ""}`;
@@ -51,9 +51,9 @@ export type AfterSaleView = {
 export async function loadAfterSale(orderId: string): Promise<AfterSaleView | null> {
   const sb = createAdminClient() as any;
   const { data: o } = await sb.from("orders")
-    .select("id, order_number, channel, import_source, status, payment_method, payment_status, shipment_status, fit_status, delivered_at")
+    .select("id, order_number, channel, import_source, kargonomi_shipment_id, kargonomi_tracking_code, status, payment_method, payment_status, shipment_status, fit_status, delivered_at")
     .eq("id", orderId).maybeSingle();
-  if (!o || (o.channel || "site") !== "site" || o.import_source) return null;
+  if (!o || !afterSaleHere(o)) return null; // eski siteden aktarılıp kargosu buradan yapılan da (2026-11-06)
   const { data: rows } = await sb.from("order_items")
     .select("id, product_id, variant_id, unit_price, variant_name, quantity, returned_qty, exchange_of, products(title, slug, image_url, images)")
     .eq("order_id", orderId).order("created_at");
