@@ -21,6 +21,8 @@
 //   node scripts/woo-import.mjs                    # DENEME (rapor)
 //   node scripts/woo-import.mjs --apply            # aktar
 //   node scripts/woo-import.mjs --site=attipas     # tek site
+//   --hepsi    tüm siparişleri baştan çek (varsayılan: ilk aktarımdan sonra yalnız değişenler)
+//   --urunler  eski sitenin ürün kartlarını da çek (barkodla eşleşme; yavaş — varsayılan kapalı)
 
 import { createClient } from "@supabase/supabase-js";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -29,6 +31,8 @@ import { loadEnv, wooClient, mapAddress, phone10, lower, normSku, round2, BARCOD
 loadEnv();
 const APPLY = process.argv.includes("--apply");
 const onlySite = (process.argv.find((a) => a.startsWith("--site=")) || "").split("=")[1];
+const WITH_PRODUCTS = process.argv.includes("--urunler"); // ürün kartlarını da çek (barkodla eşleşme için; yavaş)
+const FULL = process.argv.includes("--hepsi");            // tüm siparişleri baştan çek (varsayılan: son aktarımdan beri değişenler)
 const OUT_DIR = new URL("../.woo-report/", import.meta.url);
 const SKIP_ZERO_BEFORE = "2021-01-01";
 const UNPAID_CANCEL_DAYS = 30;
@@ -157,7 +161,10 @@ async function main() {
   for (const site of sites) {
     console.log(`\n▶ ${site.label} (${site.url})`);
     const wc = wooClient(site);
-    const products = await wc.all("/products", { status: "any" }, "ürünler");
+    // Ürün kartları varsayılan olarak ÇEKİLMEZ (kullanıcı 2026-11-06: stok kartına eklenmiyor, yalnız üye + sipariş) —
+    // en yavaş adımdı (her varyasyonlu ürün için ayrı istek). Satırın SKU'su, ürün adı ve numarası siparişin kendisinden
+    // gelir; yalnız barkodla eşleşme kaybolur. Gerekirse: --urunler
+    const products = WITH_PRODUCTS ? await wc.all("/products", { status: "any" }, "ürünler") : [];
     const prod = new Map(); // woo id → { parent, sku, barcode, size }
     for (const p of products) {
       const bc = (m) => [p.global_unique_id, ...(m || []).filter((x) => BARCODE_KEY.test(x.key) && typeof x.value !== "object").map((x) => x.value)].filter(Boolean)[0] || null;
@@ -172,7 +179,12 @@ async function main() {
       }
     }
     const customers = await wc.all("/customers", { role: "all" }, "üyeler");
-    const orders = await wc.all("/orders", { status: "any", order: "asc", orderby: "date" }, "siparişler");
+    // Tekrar çalıştırmada yalnız son aktarımdan beri DEĞİŞEN siparişler çekilir (önceki tur değişmeyenleri zaten atlıyordu);
+    // 1 gün geriden başlanır (saat farkı / aynı anda değişen). Hepsini baştan çekmek için: --hepsi
+    const lastMod = FULL ? null : existingOrders.filter((x) => x.import_source === site.source).map((x) => x.external_raw?.wc_modified).filter(Boolean).sort().pop();
+    const since = lastMod ? new Date(Date.parse(lastMod) - 86400_000).toISOString().slice(0, 19) : null;
+    if (since) console.log(`  siparişler: yalnız ${since.slice(0, 10)} sonrası değişenler (hepsi için --hepsi)`);
+    const orders = await wc.all("/orders", { status: "any", order: "asc", orderby: "date", ...(since ? { modified_after: since, dates_are_gmt: "true" } : {}) }, "siparişler");
 
     // ── Müşteriler (üyeler + sipariş verenler; son siparişin bilgisi esas) ──
     const people = new Map();
@@ -335,7 +347,7 @@ async function main() {
       if (!hasAccount && site.channel === "site") { inc(skipped, "e-postasız site siparişi"); continue; }
 
       const items = (o.line_items || []).map((li) => {
-        const info = prod.get(li.variation_id) || prod.get(li.product_id);
+        const info = prod.get(li.variation_id) || prod.get(li.product_id) || (li.parent_name ? { parent: li.parent_name } : null);
         const sku = normSku(li.sku || info?.sku);
         const barcode = info?.barcode ? String(info.barcode) : null;
         const size = String(metaVal(li.meta_data, "pa_numara") || info?.size || "").trim();

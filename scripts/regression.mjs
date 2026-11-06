@@ -553,6 +553,12 @@ async function main() {
   noSku ? add("warn", "SKU'su boş aktif numara", `${noSku} adet (pazaryeriyle eşleşmez)`) : add("ok", "Aktif numaraların SKU'su dolu");
   const impPw = num("SELECT count(*) FROM auth.users u JOIN public.profiles p ON p.id = u.id WHERE p.import_source IS NOT NULL AND u.last_sign_in_at IS NULL AND coalesce(u.encrypted_password, '') <> ''");
   impPw ? add("fail", "Aktarılan müşteri hesabı şifreli görünüyor", `${impPw} hesap — misafir siparişinde bilmediği şifreyle "giriş yapın" denir (20261026 migration'ı / woo-import)`) : add("ok", "Aktarılan müşteriler şifresiz (misafir olarak sipariş verebilir)");
+  // WooCommerce aktarımı hızlı (2026-11-06): ürün kartı varsayılan çekilmez, tekrar çalıştırmada yalnız değişen siparişler, sayfalar paralel
+  {
+    const wi = readFileSync(new URL("./woo-import.mjs", import.meta.url), "utf8"), wcm = readFileSync(new URL("./lib/woo-common.mjs", import.meta.url), "utf8");
+    const fast = /WITH_PRODUCTS \? await wc\.all\("\/products"/.test(wi) && /modified_after: since/.test(wi) && /par = 4/.test(wcm);
+    add(fast ? "ok" : "fail", "WooCommerce aktarımı hızlı yolda (ürün kartı yok, yalnız değişen siparişler, paralel sayfa)", fast ? "" : "woo-import.mjs / woo-common.mjs değişmiş");
+  }
   const uyeBad = num("SELECT count(*) FROM public.profiles p WHERE (public.member_account_state(p.id) = 'member') <> EXISTS (SELECT 1 FROM public.user_roles ur JOIN public.roles r ON r.id = ur.role_id WHERE ur.user_id = p.id AND r.slug = 'uye')");
   uyeBad ? add("fail", "'Üye' rolü hesap durumuyla tutarsız", `${uyeBad} kişi — Üye rolü yalnız şifreli + e-postası doğrulanmış hesapta olmalı (20261028)`) : add("ok", "'Üye' rolü yalnız doğrulanmış hesaplarda");
   const empty = num("SELECT count(*) FROM public.orders o WHERE coalesce(o.channel,'site')='site' AND o.import_source IS NULL AND NOT EXISTS (SELECT 1 FROM public.order_items i WHERE i.order_id=o.id)");

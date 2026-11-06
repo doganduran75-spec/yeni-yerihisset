@@ -101,18 +101,28 @@ export function wooClient(site) {
       return { data: JSON.parse(text), total: Number(res.headers.get("x-wp-total") || 0), pages: Number(res.headers.get("x-wp-totalpages") || 1) };
     }
   }
-  async function all(path, params = {}, label = path) {
-    const out = [];
-    let page = 1, pages = 1;
-    do {
-      const r = await get(path, { per_page: 100, page, ...params });
-      out.push(...r.data);
-      pages = r.pages || 1;
-      process.stdout.write(`\r  ${label}: ${out.length}${r.total ? ` / ${r.total}` : ""}   `);
-      page++;
-    } while (page <= pages);
+  // İlk sayfa toplam sayfa sayısını verir; kalanlar PARALEL (aynı anda en çok `par` istek — eski sitenin
+  // barındırması yorulmasın), sonuç sayfa sırasıyla birleşir (siparişler tarih sırasında kalır).
+  async function all(path, params = {}, label = path, par = 4) {
+    const first = await get(path, { per_page: 100, page: 1, ...params });
+    const pages = first.pages || 1, total = first.total;
+    const byPage = new Array(pages + 1);
+    byPage[1] = first.data;
+    let got = first.data.length;
+    const show = () => process.stdout.write(`\r  ${label}: ${got}${total ? ` / ${total}` : ""}   `);
+    show();
+    let next = 2;
+    await Promise.all(Array.from({ length: Math.min(par, Math.max(0, pages - 1)) }, async () => {
+      while (next <= pages) {
+        const p = next++;
+        const r = await get(path, { per_page: 100, page: p, ...params });
+        byPage[p] = r.data;
+        got += r.data.length;
+        show();
+      }
+    }));
     process.stdout.write("\n");
-    return out;
+    return byPage.slice(1).flat();
   }
   return { get, all };
 }
