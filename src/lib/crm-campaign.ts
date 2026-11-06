@@ -27,13 +27,12 @@ export function couponValueText(c: { type: string; amount: number }) {
   return c.type === "percentage" ? `%${Number(c.amount)} indirim` : c.type === "fixed" ? `${tl(c.amount)} indirim` : "Ücretsiz kargo";
 }
 
-/** E-postadaki kupon kutusu: kod YOK — "sepetinde hazır" */
-export function couponBoxHtml(c: { type: string; amount: number; min_order_amount?: number | null }, expires: Date | string, scope: string, note = true) {
+/** E-postadaki kupon kutusu: kod YOK (sepette seçilir; "kod yazmana gerek yok" satırı 2026-11-06 kalktı) */
+export function couponBoxHtml(c: { type: string; amount: number; min_order_amount?: number | null }, expires: Date | string, scope: string) {
   return `<div style="margin:22px 0;border:2px dashed #65a30d;border-radius:16px;padding:18px;text-align:center;background:#f7fee7">
   <div style="font-size:12px;font-weight:800;letter-spacing:.12em;color:#4d7c0f">SANA ÖZEL</div>
   <div style="font-size:26px;font-weight:900;color:#1a2e05;margin:6px 0">${escapeHtml(couponValueText(c))}</div>
   <div style="font-size:13px;color:#3f6212;line-height:1.6">${scope ? `${escapeHtml(scope)} · ` : ""}${Number(c.min_order_amount || 0) > 0 ? `${tl(Number(c.min_order_amount))} ve üstü · ` : ""}<b>${day(expires)}</b> tarihine kadar</div>
-  ${note ? `<div style="font-size:12px;color:#4d7c0f;margin-top:8px">Kod yazmana gerek yok — giriş yaptığında sepetinde hazır.</div>` : ""}
 </div>`;
 }
 
@@ -83,7 +82,6 @@ export function couponReminderHtml(firstName: string | null | undefined, coupons
   return `<h1 style="font-size:21px;font-weight:800;color:#111827;margin:0 0 12px">${many ? "Kuponlarının" : "Kuponunun"} süresi doluyor ⏳</h1>
 <p style="font-size:15px;color:#374151;line-height:1.6;margin:0 0 14px">Merhaba${name ? ` ${name}` : ""}, hesabındaki ${many ? "şu kuponların" : "şu kuponun"} süresi birkaç gün içinde bitiyor. Bittikten sonra kullanılamaz.</p>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:12px;border-collapse:separate;overflow:hidden">${rows}</table>
-<p style="font-size:13px;color:#6b7280;line-height:1.6;margin:12px 0 0">Kod yazmana gerek yok — giriş yaptığında sepetindeki “İndirimlerin” bölümünde hazır.</p>
 ${button(`${site()}/sepet?utm_source=crm&utm_medium=email&utm_campaign=kupon-hatirlatma`, "Sepetime git")}`;
 }
 
@@ -125,7 +123,7 @@ export async function queueCouponReminders(sb: Sb): Promise<number> {
 export async function sendClaimEmail(opts: { to: string; coupon: { name: string; type: string; amount: number; min_order_amount?: number | null };
   expires: string | null; added: boolean; actionUrl: string; mode: "created" | "passwordless" | "member" }) {
   const { sendSiteMail } = await import("./site-mail");
-  const box = opts.expires ? couponBoxHtml(opts.coupon, opts.expires, "", false) : `<p style="font-size:18px;font-weight:900;color:#1a2e05;text-align:center;margin:18px 0">${escapeHtml(couponValueText(opts.coupon))}</p>`;
+  const box = opts.expires ? couponBoxHtml(opts.coupon, opts.expires, "") : `<p style="font-size:18px;font-weight:900;color:#1a2e05;text-align:center;margin:18px 0">${escapeHtml(couponValueText(opts.coupon))}</p>`;
   const intro = opts.added ? "Kuponun hesabına eklendi 🎁" : "Bu kupon zaten hesabında 🎁";
   const howTo = opts.mode === "member"
     ? "Giriş yaptığında sepetinde hazır olacak."

@@ -1629,6 +1629,14 @@ export default {
         const want = ["message_reply", "affiliate_credit", "admin_new_order", "admin_message", "admin_case", "admin_out_of_stock", "admin_system"];
         const miss = want.filter((k) => !(l.json?.kinds || []).some((x) => x.kind === k));
         ok(!miss.length, "E-posta denemesinde mesaj yanıtı, satış ortaklığı ve yönetici e-postaları da var", `eksik: ${miss.join(", ")}`);
+        // Metin düzeltmeleri (2026-11-06): kupon e-postalarında "kod yazmana gerek yok" yok, çift ₺ engelli, iade kodu nazik,
+        // denemede aktarılmış sipariş seçilse de teslim e-postasında "oldu mu?" kutusu
+        {
+          const rd = async (f) => (await import("node:fs")).readFileSync(new URL(`../../src/lib/${f}`, import.meta.url), "utf8");
+          const cc = await rd("crm-campaign.ts"), nt = await rd("notifications.ts"), am = await rd("after-sale-mail.ts");
+          ok(!/Kod yazmana gerek yok/.test(cc) && /noDup/.test(nt) && /kargoya uygun şekilde paketleyip/.test(am) && /import_source \|\| mailRedirectActive\(\)/.test(nt),
+            "E-posta metinleri: kod satırı yok, çift ₺ yok, iade kodu metni nazik, denemede teslim kutusu görünür", "metin düzeltmelerinden biri geri gelmiş");
+        }
         const r = await order([MAIN(1)]);
         const id = r.json?.orderId;
         if (!id) return add("fail", "E-posta denemesi için sipariş oluşturulamadı", why(r));

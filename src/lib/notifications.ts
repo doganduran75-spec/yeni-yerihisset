@@ -414,8 +414,10 @@ export async function sendOrderNotification(
   let subject: string;
   let bodyHtml: string;
   if (template?.is_active) {
-    subject = replaceVariables(template.subject, vars, false);
-    bodyHtml = addUtmTracking(replaceVariables(template.body_html, vars), trigger);
+    // {{order_total}} zaten "₺" ile gelir — şablonda önünde ₺ varsa çift olmasın ("₺₺3499.00", 2026-11-06)
+    const noDup = (t: string) => String(t || "").replace(/₺\s*\{\{order_total\}\}/g, "{{order_total}}");
+    subject = replaceVariables(noDup(template.subject), vars, false);
+    bodyHtml = addUtmTracking(replaceVariables(noDup(template.body_html), vars), trigger);
     // Şablon {{cancel_info_html}} içermiyorsa (elle düzenlenmiş eski şablon) açıklamayı sona ekle
     if (cancelInfoHtml && !template.body_html.includes("{{cancel_info_html}}")) bodyHtml += cancelInfoHtml;
   } else if (trigger === "order_cancelled") {
@@ -460,7 +462,8 @@ export async function sendOrderNotification(
     bodyHtml += await buildVerifyBoxHtml(supabase, uid, storeUrl).catch(() => "");
   }
   // Teslim edildi: "acele yok, evde dene — oldu mu?" + Oldu / Değişim / İade (site siparişi; src/lib/after-sale.ts)
-  if (trigger === "order_delivered" && (order.channel || "site") === "site" && !order.import_source) {
+  // (E-posta denemesinde eski siteden aktarılmış sipariş seçilse de kutu görünür — gerçek site siparişindeki hâli)
+  if (trigger === "order_delivered" && (order.channel || "site") === "site" && (!order.import_source || mailRedirectActive())) {
     bodyHtml += fitBoxHtml(order.id);
   }
   // Mesafeli Sözleşmeler Yönetmeliği: sözleşme + ön bilgilendirme tüketiciye kalıcı veri saklayıcısıyla (e-posta)

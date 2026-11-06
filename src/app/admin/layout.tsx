@@ -110,11 +110,6 @@ export default function AdminLayout({
                     render={<Link href="/admin/crm/bulk-email"><Send size={18} className="mr-2" /> Toplu Email</Link>}
                   />
                 </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    render={<Link href="/admin/crm/email-test"><Mail size={18} className="mr-2" /> E-posta denemesi</Link>}
-                  />
-                </SidebarMenuItem>
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
@@ -131,6 +126,12 @@ export default function AdminLayout({
                 <SidebarMenuItem>
                   <SidebarMenuButton
                     render={<Link href="/admin/system"><ShieldCheck size={18} className="mr-2" /> Sistem</Link>}
+                  />
+                </SidebarMenuItem>
+                {/* E-posta denemesi Sistem'de (CRM ile ilgisi yok — kullanıcı 2026-11-06) */}
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    render={<Link href="/admin/crm/email-test"><Mail size={18} className="mr-2" /> E-posta denemesi</Link>}
                   />
                 </SidebarMenuItem>
                 <SidebarMenuItem>

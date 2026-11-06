@@ -43,7 +43,7 @@ export async function sendReturnLabelEmail(orderId: string, method: string, code
   if (!c?.email) return { status: "failed" as const, error: "e-posta yok" };
   const how = method === "ups"
     ? "UPS kargo görevlisi ürünü <b>adresinden alacak</b>. Gelme saatini önceden bilemiyoruz; adreste teslim edecek biri olmalı. 5 gün içinde gelmezlerse bize yaz, Sürat ya da Aras şubesine bırakman için yeni kod gönderelim."
-    : `Ürünü paketleyip <b>${method === "surat" ? "Sürat Kargo" : "Aras Kargo"}</b> şubesine bırak, aşağıdaki kodu görevliye söyle. Ücreti bize ait.`;
+    : `Lütfen ürünü kargoya uygun şekilde paketleyip <b>${method === "surat" ? "Sürat Kargo" : "Aras Kargo"}</b> şubesine bırakın ve aşağıdaki kodu görevliye iletin. Kargo ücreti bize aittir.`;
   const body = `
     <h1 style="font-size:21px;font-weight:800;color:#111827;margin:0 0 12px">${exchange ? "Değişim" : "İade"} kargo kodun hazır</h1>
     <p style="font-size:15px;color:#374151;line-height:1.6;margin:0 0 12px">Merhaba${c.name ? ` ${c.name}` : ""}, <b>${c.label}</b> siparişin için ${exchange ? "geri göndereceğin ürünün" : "iaden için"} kargo bilgisi:</p>
