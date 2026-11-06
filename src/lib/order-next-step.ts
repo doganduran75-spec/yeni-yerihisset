@@ -56,6 +56,12 @@ export type OrderLike = {
 
 export const TRIAL_DAYS = 14;
 
+/** Değişim / iade talebinin sebebi: müşteri sayfası kod yazar (small / big / other) → okunur metin (Telegram "Sebep: big", 2026-11-06) */
+export function caseReasonLabel(r?: string | null): string {
+  const m: Record<string, string> = { small: "Küçük geldi", big: "Büyük geldi", other: "Diğer" };
+  return r ? m[r] ?? r : "";
+}
+
 /** Satış sonrası (oldu / değişim / iade) bu sistemden yürüyen site siparişi mi: sitede verilen ya da eski siteden aktarılıp
  *  kargosu buradan (Kargonomi / Basit Kargo) yapılan (kullanıcı 2026-11-06: aktarılmış siparişte müşteri değişim istedi,
  *  yol yoktu). Aynı kural: DB tetikleyicisi trg_orders_delivered (MIG 20261170), after-sale.ts, teslim e-postası. */

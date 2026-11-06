@@ -2,7 +2,7 @@
 
 import { orderLabel } from "@/lib/order-label";
 import { useEffect, useState, useCallback } from "react";
-import { orderNextStep, isReturnInvoiceDue, type NextActionKey, UNINVOICED_SINCE, INVOICE_DAYS } from "@/lib/order-next-step";
+import { orderNextStep, isReturnInvoiceDue, type NextActionKey, UNINVOICED_SINCE, INVOICE_DAYS, caseReasonLabel } from "@/lib/order-next-step";
 import { useSearchParams, useRouter } from "next/navigation";
 import AdminOpsTabs from "@/components/admin/AdminOpsTabs";
 import OrderTimeline from "@/components/admin/OrderTimeline";
@@ -2821,7 +2821,7 @@ function CaseBox({ order, kase, canSendLabel, canShipAlt, onDone }: {
         <span className="rounded-full bg-purple-50 text-purple-700 px-2 py-0.5">{CASE_STATUS[kase.status] ?? kase.status}</span>
         <span className="text-muted-foreground ml-auto">{new Date(kase.created_at).toLocaleString("tr-TR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
       </div>
-      {kase.reason && <p><span className="text-muted-foreground">Sebep:</span> {kase.reason === "small" ? "Küçük geldi" : kase.reason === "big" ? "Büyük geldi" : kase.reason}</p>}
+      {kase.reason && <p><span className="text-muted-foreground">Sebep:</span> {caseReasonLabel(kase.reason)}</p>}
       {(kase.items || []).map((x: any, i: number) => (
         <p key={i}>
           {label(x.order_item_id)}

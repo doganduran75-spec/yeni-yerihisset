@@ -1245,6 +1245,8 @@ export default {
           total_amount: 3499, order_items: [{ quantity: 1 }], delivered_at: new Date(Date.now() - 2 * 86400_000).toISOString(), fit_status: null };
         ok(m.afterSaleHere({ ...base, kargonomi_tracking_code: "KSURTEST" }) && !m.afterSaleHere(base) && m.afterSaleHere({ channel: "site" }) && !m.afterSaleHere({ channel: "trendyol" }),
           "Kural: sitede verilen ya da aktarılıp kargosu buradan yapılan sipariş satış sonrasına açık; eski sitede gönderilen ve pazaryeri değil");
+        ok(m.caseReasonLabel("big") === "Büyük geldi" && m.caseReasonLabel("small") === "Küçük geldi" && m.caseReasonLabel("Beğenmedim") === "Beğenmedim",
+          "Talep sebebi okunur yazılıyor (Telegram / panel: “big” değil “Büyük geldi”)");
         const keys = (o) => m.orderNextStep(o).actions.map((a) => a.key);
         ok(keys({ ...base, kargonomi_tracking_code: "KSURTEST" }).includes("case_link") && !keys(base).includes("case_link"),
           "Cevapsız teslim edilmiş siparişte “Müşteri adına değişim / iade aç” var (aktarılıp eski sitede gönderilende yok)", JSON.stringify(keys({ ...base, kargonomi_tracking_code: "KSURTEST" })));

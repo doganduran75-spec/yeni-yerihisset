@@ -9,6 +9,7 @@
 // Çağıranlar: dakikalık cron (/api/cron/marketplace-sync) + site siparişinden hemen sonra kickTelegram().
 // Test siparişi (@….test üye / REGRESYON-TEST ürün) GÖNDERİLMEZ. Token hiçbir yanıtta / hata metninde dönmez.
 import { createAdminClient } from "@/lib/supabase-admin";
+import { caseReasonLabel } from "@/lib/order-next-step";
 import { isTestEmail } from "@/lib/mail-guard";
 
 type SB = any;
@@ -166,7 +167,7 @@ async function composeRefMessage(sb: SB, topic: string, id: string): Promise<{ t
       `${c.kind === "exchange" ? "🔁 <b>Değişim talebi</b>" : "↩️ <b>İade talebi</b>"}`,
       `<b>${esc(o.no)}</b> — ${esc(o.name)}`,
       ...lines,
-      ...(c.reason ? [`Sebep: ${esc(c.reason)}`] : []),
+      ...(c.reason ? [`Sebep: ${esc(caseReasonLabel(c.reason))}`] : []),
       ...(wants.length ? [`İstenen: ${esc(wants.join(", "))}`] : []),
       ...(c.customer_note ? [`Not: <i>${esc(String(c.customer_note).slice(0, 300))}</i>`] : []),
       "",
