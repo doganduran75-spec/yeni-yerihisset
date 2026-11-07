@@ -1247,6 +1247,7 @@ Siparişte “Paraşüt — yeniden dene” ile tekrar dene.`, tone: "danger" })
         if (fRet === "any_refund" && !refundedPay) return false;
         if (fRet === "uninvoiced_shipped" && !isUninvoicedShipped(o)) return false;
         if (fRet === "return_invoice_due" && !isReturnInvoiceDue(nx(o))) return false;
+        if (fRet === "exchange_open" && openCaseOf(o)?.kind !== "exchange") return false; // panodaki "Süren değişim"
       }
       if (fMethod !== "all" && (o.payment_method || "credit_card") !== fMethod) return false;
       if (fTodo && !nx(o).needsAction) return false;
@@ -1395,6 +1396,7 @@ Siparişte “Paraşüt — yeniden dene” ile tekrar dene.`, tone: "danger" })
                 <option value="cancelled_unrefunded">İptal, ücret iade edilmedi</option>
                 <option value="any_refund">Ücret iadesi olanlar</option>
                 <option value="return_invoice_due">İade faturası kesilecek</option>
+                <option value="exchange_open">Süren değişim</option>
                 <option value="uninvoiced_shipped">Kargolanmış, faturası kesilmemiş</option>
               </select>
               <label className="inline-flex items-center gap-1.5 text-xs text-muted-foreground px-1" title="Kartla ödeme başlatılıp tamamlanmayan (iptal + ödeme alınmadı) siparişler">

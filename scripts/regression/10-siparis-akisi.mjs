@@ -1254,6 +1254,26 @@ export default {
           "14 günlük deneme süresi geçince müşteri adına değişim açılmaz (İade gelecek / İade al kalır)");
       });
 
+      await part("Pano: 'Süren değişim' ayrı satır, 'Bekleyen sipariş işi'nde sayılmaz", async () => {
+        const fs = await import("node:fs");
+        const dash = fs.readFileSync(new URL("../../src/app/admin/page.tsx", import.meta.url), "utf8");
+        const list = fs.readFileSync(new URL("../../src/app/admin/orders/page.tsx", import.meta.url), "utf8");
+        ok(/label: "Süren değişim", href: "\/admin\/orders\?iade=exchange_open"/.test(dash) && /openOrders\.length - returnInvoiceDue - exchangeTodo/.test(dash)
+          && /fRet === "exchange_open"/.test(list) && /value="exchange_open"/.test(list),
+          "Panoda “Süren değişim” satırı (açık değişim talepleri), sipariş listesinde aynı filtre; bekleyen sipariş işinde iki kez sayılmıyor");
+        // Satırın saydığı: açık değişim talebi (kapanan sayılmaz) — geri alınan işlemle
+        const r = await order([MAIN(1)]);
+        const id = r.json?.orderId;
+        if (!id) return add("fail", "Süren değişim testi için sipariş oluşturulamadı", why(r));
+        const k = sql(`BEGIN;
+          INSERT INTO public.order_cases (order_id, kind, status, reason) VALUES (${lit(id)}, 'exchange', 'requested', 'big');
+          SELECT 'acik:' || count(*) FROM public.order_cases WHERE order_id = ${lit(id)} AND kind = 'exchange' AND closed_at IS NULL;
+          UPDATE public.order_cases SET closed_at = now() WHERE order_id = ${lit(id)};
+          SELECT 'kapali:' || count(*) FROM public.order_cases WHERE order_id = ${lit(id)} AND kind = 'exchange' AND closed_at IS NULL;
+          ROLLBACK;`).flat().map(String).filter((x) => /^(acik|kapali):/.test(x));
+        ok(k.includes("acik:1") && k.includes("kapali:0"), "Süren değişim: açık talep sayılıyor, kapanan sayılmıyor", k.join(" / "));
+      });
+
       await part("Pano: 'İade faturası kesilecek' ayrı satır, 'Bekleyen sipariş işi'nde sayılmaz", async () => {
         let m;
         try { m = await import(new URL("../../src/lib/order-next-step.ts", import.meta.url)); }

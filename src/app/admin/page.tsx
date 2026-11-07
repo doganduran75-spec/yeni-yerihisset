@@ -33,6 +33,7 @@ export default function AdminDashboard() {
   const [reviewCount, setReviewCount] = useState(0);   // onay bekleyen yorum
   const [feedbackCount, setFeedbackCount] = useState(0); // bekleyen talep (Talep & Geri Bildirim)
   const [returnsOpen, setReturnsOpen] = useState(0); // yoldaki iadeler (kod gönderildi / müşteri gönderiyor) — iş: gelince "İade geldi"
+  const [exchangeOpen, setExchangeOpen] = useState(0); // süren değişim (açık değişim talebi) — sonuçlanınca fatura
   const [uninvoiced, setUninvoiced] = useState({ n: 0, late: 0 }); // kargolanmış, faturası kesilmemiş (late: 7 günü geçen)
   const [searchCount, setSearchCount] = useState(0);   // bakılmamış sonuçsuz arama (30 gün)
   const [stockTasks, setStockTasks] = useState<any[]>([]); // pazaryeri stok görevleri (bekleyen)
@@ -95,6 +96,9 @@ export default function AdminDashboard() {
         fetchNoResultSearches(30),
         (supabase as any).from("order_cases").select("id", { count: "exact", head: true }).eq("kind", "return").eq("status", "label_sent").is("closed_at", null),
       ]);
+      // Süren değişim: açık değişim talebi (talep → alternatif → müşteri seçer → tutulmayan geri gelir)
+      const { count: exOpen } = await (supabase as any).from("order_cases").select("id", { count: "exact", head: true }).eq("kind", "exchange").is("closed_at", null);
+      setExchangeOpen(exOpen || 0);
       // + Trendyol'da iade talebi açılmış, ürün yolda (src/lib/marketplace/trendyol-claims.ts)
       const { count: tyRet } = await (supabase as any).from("orders").select("id", { count: "exact", head: true }).eq("mp_claim_state", "in_transit");
       setReturnsOpen((rt.count || 0) + (tyRet || 0));
@@ -129,6 +133,8 @@ export default function AdminDashboard() {
   // TEK EKRAN PANO (≈1600×830): üstte sistem şeridi, ortada satış + kişiler + bugünün işleri,
   // altta bekleyen işlerim (mesaj / yorum / talep / sonuçsuz arama sayıları "Bugünün işleri"nde). Liste uzunlukları ekrana sığacak kadar; "Tümü" ile devamı.
   const returnInvoiceDue = openOrders.filter((o) => o.step && isReturnInvoiceDue(o.step)).length;
+  // Süren değişimdeki siparişin işi "Süren değişim" satırında (iki yerde sayılmasın)
+  const exchangeTodo = openOrders.filter((o: any) => (o.order_cases || []).some((c: any) => !c.closed_at && c.kind === "exchange")).length;
   const CH: Record<string, string> = { trendyol: "TY", hepsiburada: "HB", amazon: "AZ", attipas: "AT" };
   const head = (icon: React.ReactNode, title: string, n: number, href: string, tone: string) => (
     <div className="flex items-center justify-between px-4 pt-3 pb-1">
@@ -152,7 +158,7 @@ export default function AdminDashboard() {
           <div className="px-2 text-sm">
             {[
               // İade faturası bekleyenler ayrı satırda (aşağıda), burada sayılmaz (kullanıcı 2026-11-03)
-              { n: openOrders.length - returnInvoiceDue, label: "Bekleyen sipariş işi", href: "/admin/orders?todo=1" },
+              { n: openOrders.length - returnInvoiceDue - exchangeTodo, label: "Bekleyen sipariş işi", href: "/admin/orders?todo=1" },
               { n: msgCount, label: "Cevapsız müşteri mesajı", href: "/admin/messages" },
               { n: reviewCount, label: "Onay bekleyen yorum", href: "/admin/reviews" },
               { n: feedbackCount, label: "Talep", href: "/admin/feedback" },
@@ -162,6 +168,8 @@ export default function AdminDashboard() {
               // Yoldaki iadeler (kullanıcı 2026-10-28: iş olarak burada takip; ürün gelince siparişte "İade geldi")
               { n: returnsOpen, label: "Yolda olan iade", href: "/admin/orders?iade=return_in_transit" },
               { n: returnInvoiceDue, label: "İade faturası kesilecek", href: "/admin/orders?iade=return_invoice_due" },
+              // Değişim talebinden sonuçlanana kadar (kullanıcı 2026-11-07: süreç bitince fatura kesilecek; işi burada izlenir)
+              { n: exchangeOpen, label: "Süren değişim", href: "/admin/orders?iade=exchange_open" },
               // Kargolanmış, faturası kesilmemiş — 7 günü geçen varsa kırmızı not (VUK)
               { n: uninvoiced.n, label: "Faturası kesilmemiş", href: "/admin/orders?iade=uninvoiced_shipped", late: uninvoiced.late },
             ].map((x: { n: number; label: string; href: string; info?: boolean; late?: number }) => (
