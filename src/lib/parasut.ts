@@ -67,7 +67,8 @@ async function tokenRequest(form: Record<string, string>, issuer: string | null 
   } catch (e: any) { throw new ParasutError(0, `Paraşüt'e bağlanılamadı: ${e?.message || e}`); }
   const j: any = await res.json().catch(() => null);
   if (!res.ok || !j?.access_token) {
-    if (j?.error === "invalid_grant" && form.grant_type === "refresh_token") throw new ParasutError(401, RECONNECT);
+    // Paraşüt'ün kendi açıklaması da yazılsın (neden düştüğünü görmek için: süre / oturum kapandı / yeniden kullanım)
+    if (j?.error === "invalid_grant" && form.grant_type === "refresh_token") throw new ParasutError(401, `${RECONNECT}${j?.error_description ? ` (Paraşüt: ${j.error_description})` : ""}`);
     throw new ParasutError(401, `Paraşüt oturumu alınamadı: ${j?.error_description || j?.error || res.status}`);
   }
   return j as Tokens;
@@ -146,17 +147,37 @@ async function accessToken(sb: Sb, c: ParasutConfig, force = false): Promise<str
   const id = a.issuer === "id";
   const [cid, csec] = id ? [c.v2ClientId, c.v2ClientSecret] : [c.clientId, c.clientSecret];
   refreshing ??= (async () => {
+    // SÜREÇLER ARASI KİLİT (2026-11-08): site pm2 cluster'da 4 işlem. refresh_token tek kullanımlık — iki işlem (ör. dakikalık
+    // iş + paneldeki "Faturayı kes") aynı anda aynı token'la yenilerse Paraşüt (id.parasut.com) bunu çalıntı sayıp OTURUMU
+    // KAPATIR → "bağlantı sona erdi". Kilidi alan yeniler; diğerleri yeni token'ı bekler (en çok ~25 sn).
+    const lockFree = `refresh_lock_until.is.null,refresh_lock_until.lt."${new Date().toISOString()}"`;
+    const { data: claim } = await (sb as any).from("parasut_auth")
+      .update({ refresh_lock_until: new Date(Date.now() + 30_000).toISOString() })
+      .eq("id", 1).eq("refresh_token", a.refresh_token).or(lockFree).select("id");
     try {
-      const t = await tokenRequest({ grant_type: "refresh_token", client_id: cid, client_secret: csec, refresh_token: a.refresh_token }, a.issuer);
-      await saveTokens(sb, t, {}, a.refresh_token);
-      return t.access_token;
-    } catch (e: any) {
-      // Başka bir süreç az önce yenilemiş olabilir → kayıtlı yeni token'ı dene
-      const { data: b } = await (sb as any).from("parasut_auth").select("access_token, expires_at, refresh_token").eq("id", 1).maybeSingle();
-      if (b?.refresh_token !== a.refresh_token && b?.access_token && new Date(b.expires_at).getTime() > Date.now()) return b.access_token;
-      // Panelde ve Telegram'da (entegrasyon hatası) görünsün
-      await (sb as any).from("parasut_auth").update({ last_error: String(e?.message || e).slice(0, 300), last_error_at: new Date().toISOString() }).eq("id", 1);
-      throw e;
+      if (!claim?.length) {
+        for (let i = 0; i < 25; i++) {
+          await new Promise((r) => setTimeout(r, 1000));
+          const { data: b } = await (sb as any).from("parasut_auth").select("access_token, expires_at, refresh_token, last_error, refresh_lock_until").eq("id", 1).maybeSingle();
+          if (!b?.refresh_token) throw new ParasutError(401, "Paraşüt bağlı değil (Ayarlar › Entegrasyonlar › Paraşüt › Bağlan).");
+          if (b.refresh_token !== a.refresh_token && b.access_token && new Date(b.expires_at).getTime() > Date.now()) return b.access_token as string;
+          // Kilidi alan yenileyemedi (hata yazdı) ya da kilit bırakıldı → bekleme biter
+          if (b.refresh_token === a.refresh_token && (!b.refresh_lock_until || new Date(b.refresh_lock_until).getTime() < Date.now())) {
+            if (b.last_error) throw new ParasutError(401, b.last_error);
+            break;
+          }
+        }
+        throw new ParasutError(503, "Paraşüt oturumu şu an yenileniyor — birkaç saniye sonra tekrar dene.");
+      }
+      try {
+        const t = await tokenRequest({ grant_type: "refresh_token", client_id: cid, client_secret: csec, refresh_token: a.refresh_token }, a.issuer);
+        await saveTokens(sb, t, { refresh_lock_until: null }, a.refresh_token);
+        return t.access_token;
+      } catch (e: any) {
+        // Panelde ("Bağlantı koptu" + yeniden bağlan) ve Telegram'da (entegrasyon hatası) görünsün; kilidi bırak
+        await (sb as any).from("parasut_auth").update({ last_error: String(e?.message || e).slice(0, 300), last_error_at: new Date().toISOString(), refresh_lock_until: null }).eq("id", 1);
+        throw e;
+      }
     } finally { setTimeout(() => { refreshing = null; }, 0); }
   })();
   return refreshing;

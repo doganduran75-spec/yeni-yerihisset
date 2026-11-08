@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/lib/supabase";
 import { siteAlert, siteConfirm } from "@/components/ui/site-dialog";
-import { Receipt, Loader2, ExternalLink, CheckCircle2, Link2, Plus } from "lucide-react";
+import { Receipt, Loader2, ExternalLink, CheckCircle2, Link2, Plus, AlertCircle } from "lucide-react";
 
 async function authHeaders(): Promise<Record<string, string>> {
   const { data: { session } } = await supabase.auth.getSession();
@@ -126,7 +126,7 @@ export default function ParasutCard() {
   const lbl = "text-xs font-medium";
   return (
     <IntegrationSection id="parasut" icon={<Receipt size={20} className="text-emerald-600" />} title="Paraşüt" summary="Fatura, tahsilat, e-Arşiv / e-Fatura"
-      status={st?.connected ? (f.parasut_enabled ? "Bağlı · açık" : "Bağlı · kapalı") : f.parasut_enabled ? "Bağlı değil" : "Kapalı"} tone={st?.connected && f.parasut_enabled ? "ok" : f.parasut_enabled ? "warn" : "off"}
+      status={st?.connected && st.lastError ? "Bağlantı koptu" : st?.connected ? (f.parasut_enabled ? "Bağlı · açık" : "Bağlı · kapalı") : f.parasut_enabled ? "Bağlı değil" : "Kapalı"} tone={st?.connected && !st.lastError && f.parasut_enabled ? "ok" : f.parasut_enabled ? "warn" : "off"}
       right={<label className="flex items-center gap-2 text-sm font-semibold">
             <input type="checkbox" checked={f.parasut_enabled} disabled={busy === "save"} onChange={(e) => saveSettings({ parasut_enabled: e.target.checked })} /> Açık
           </label>}>
@@ -165,16 +165,23 @@ export default function ParasutCard() {
               {st.hasNewApp && <Button size="sm" disabled={!!busy} onClick={() => run("auth", connectNew)}>{busy === "auth" ? <Loader2 size={14} className="animate-spin" /> : <Link2 size={14} />} Paraşüt ile yeniden bağlan</Button>}
             </div>
           )}
-          {st?.lastError && <p className="text-xs text-red-600">{st.lastError}</p>}
-          {st?.connected ? (
+          {/* Oturum yenilenemedi (süre doldu / izin geri alındı): "Bağlı" yazıp yeniden bağlanma yolu vermemesi yanlıştı (2026-11-08) */}
+          {st?.connected && st.lastError ? (
+            <div className="rounded-md bg-red-50 border border-red-200 p-2.5 text-xs text-red-800 flex flex-wrap items-center gap-2">
+              <span className="flex items-center gap-1.5 font-semibold"><AlertCircle size={14} /> Bağlantı koptu — fatura kesilemez.</span>
+              {st.hasNewApp && <Button size="sm" disabled={!!busy} onClick={() => run("auth", connectNew)}>{busy === "auth" ? <Loader2 size={14} className="animate-spin" /> : <Link2 size={14} />} Paraşüt ile yeniden bağlan</Button>}
+            </div>
+          ) : st?.lastError && <p className="text-xs text-red-600">{st.lastError}</p>}
+          {st?.connected && !st.lastError ? (
             <div className="flex flex-wrap items-center gap-3">
               <span className="flex items-center gap-1.5 text-green-700 font-medium"><CheckCircle2 size={16} /> Bağlı{st.newAuth ? " (yeni altyapı)" : ""}{st.userEmail ? ` — ${st.userEmail}` : ""}</span>
+              {st.newAuth && st.refreshExpiresAt && <span className="text-[11px] text-muted-foreground">oturum {new Date(st.refreshExpiresAt).toLocaleString("tr-TR", { dateStyle: "short", timeStyle: "short" })} tarihine kadar (kendiliğinden yenilenir)</span>}
               <Button size="sm" variant="outline" disabled={!!busy} onClick={async () => {
                 if (await siteConfirm({ title: "Paraşüt bağlantısı kesilsin mi?", message: "Fatura kesme durur; yeniden bağlanmak için izin adımı tekrarlanır.", confirmText: "Bağlantıyı kes", tone: "danger" }))
                   run("disc", async () => { await api({ op: "disconnect" }); setSt(await api({ op: "status" })); setAccounts([]); });
               }}>Bağlantıyı kes</Button>
             </div>
-          ) : st?.hasNewApp ? (
+          ) : st?.connected ? null : st?.hasNewApp ? (
             <Button size="sm" disabled={!!busy} onClick={() => run("auth", connectNew)}>{busy === "auth" ? <Loader2 size={14} className="animate-spin" /> : <Link2 size={14} />} Paraşüt ile bağlan</Button>
           ) : st?.authorizeUrl ? (
             <div className="space-y-2">

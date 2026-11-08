@@ -1039,6 +1039,13 @@ export default {
         const pinv = (await import("node:fs")).readFileSync(new URL("../../src/lib/parasut-invoice.ts", import.meta.url), "utf8");
         ok(/sales_invoices\/\$\{o\.parasut_invoice_id\}\?include=contact,category,details/.test(pinv),
           "Paraşüt iade faturası: satış faturası müşteri + kategori + kalemleriyle okunuyor", "include=contact,category,details yok");
+        // Oturum yenileme süreçler arası kilitli (4 pm2 işlemi aynı token'la yenilerse Paraşüt oturumu kapatıyordu — 2026-11-08);
+        // koptuğunda panel "Bağlantı koptu" + "Paraşüt ile yeniden bağlan" gösterir
+        const card = (await import("node:fs")).readFileSync(new URL("../../src/components/admin/settings/ParasutCard.tsx", import.meta.url), "utf8");
+        const plib = (await import("node:fs")).readFileSync(new URL("../../src/lib/parasut.ts", import.meta.url), "utf8");
+        ok(/refresh_lock_until: new Date\(Date\.now\(\) \+ 30_000\)/.test(plib) && /\.eq\("refresh_token", a\.refresh_token\)\.or\(lockFree\)/.test(plib)
+          && /st\?\.connected && st\.lastError \?/.test(card) && /Paraşüt ile yeniden bağlan/.test(card),
+          "Paraşüt oturum yenilemesi işlemler arası kilitli; koptuğunda panelde “Bağlantı koptu” + yeniden bağlan");
         // İade kaydı asıl faturaya + her kalem asıl kalemine bağlanır (Paraşüt 422 "İadeye konu olan fatura doldurulmalı")
         ok(/refund_of: \{ data: \{ id: x\.invoiceId, type: "sales_invoices"/.test(pinv) && /type: "sales_invoice_details"/.test(pinv) && /refund_of_id/.test(pinv),
           "Paraşüt iade faturası: asıl faturaya ve kalemlerine bağlanıyor (refund_of)", "refund_of bağı yok");
