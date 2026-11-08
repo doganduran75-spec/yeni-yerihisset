@@ -46,14 +46,14 @@ export async function sendReturnLabelEmail(orderId: string, method: string, code
     : `Lütfen ürünü kargoya uygun şekilde paketleyip <b>${method === "surat" ? "Sürat Kargo" : "Aras Kargo"}</b> şubesine bırakın ve aşağıdaki kodu görevliye iletin. Kargo ücreti bize aittir.`;
   const body = `
     <h1 style="font-size:21px;font-weight:800;color:#111827;margin:0 0 12px">${exchange ? "Değişim" : "İade"} kargo kodun hazır</h1>
-    <p style="font-size:15px;color:#374151;line-height:1.6;margin:0 0 12px">Merhaba${c.name ? ` ${c.name}` : ""}, <b>${c.label}</b> siparişin için ${exchange ? "geri göndereceğin ürünün" : "iaden için"} kargo bilgisi:</p>
-    <div style="margin:0 0 14px;padding:14px 16px;border:1px dashed #84cc16;border-radius:12px;background:#f7fee7;text-align:center">
+    <p style="font-size:15px;color:#374151;line-height:1.6;margin:0 0 12px">Merhaba${c.name ? ` ${c.name}` : ""}, <b>${c.label}</b> siparişin için ${exchange ? "geri göndereceğin ürünün" : "iaden için"} kargo bilgisi hazır.</p>
+    <p style="font-size:15px;color:#374151;line-height:1.6;margin:0 0 12px">${how}</p>
+    <div style="margin:0 0 16px;padding:14px 16px;border:1px dashed #84cc16;border-radius:12px;background:#f7fee7;text-align:center">
       <div style="font-size:12px;color:#4d7c0f">${escapeHtml(RETURN_METHOD_LABEL[method] ?? method)} · kargo kodu</div>
       <div style="font-size:24px;font-weight:800;letter-spacing:2px;color:#1a2e05;margin-top:4px">${escapeHtml(code)}</div>
     </div>
-    <p style="font-size:14px;color:#374151;line-height:1.6;margin:0 0 8px">${how}</p>
-    <p style="font-size:13px;color:#6b7280;line-height:1.6;margin:0">Ürünü kutusuyla ve temiz göndermeni rica ederiz. Bize ulaşınca ${exchange ? "değişimini tamamlayıp" : "iadeni onaylayıp ödemeni"} hemen ${exchange ? "haber veririz" : "iade ederiz"}.</p>
-    ${btn(afterSaleUrl(orderId), "Talebimi görüntüle")}`;
+    <p style="font-size:13px;color:#6b7280;line-height:1.6;margin:0 0 14px">Ürünü kutusuyla ve temiz göndermeni rica ederiz. Bize ulaşınca ${exchange ? "değişimini tamamlayıp" : "iadeni onaylayıp ödemeni"} hemen ${exchange ? "haber veririz" : "iade ederiz"}. Gönderdiğini ayrıca bildirmene gerek yok.</p>
+    <p style="font-size:12px;color:#9ca3af;line-height:1.6;margin:0;text-align:center">Talebinizi dilediğiniz zaman hesabınızdan ya da <a href="${afterSaleUrl(orderId)}" style="color:#6b7280">buradan</a> görüntüleyebilirsiniz.</p>`;
   return send(c.email, `${c.label} — ${exchange ? "değişim" : "iade"} kargo kodun`, body);
 }
 

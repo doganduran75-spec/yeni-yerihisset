@@ -1678,7 +1678,7 @@ export default {
         {
           const rd = async (f) => (await import("node:fs")).readFileSync(new URL(`../../src/lib/${f}`, import.meta.url), "utf8");
           const cc = await rd("crm-campaign.ts"), nt = await rd("notifications.ts"), am = await rd("after-sale-mail.ts");
-          ok(!/Kod yazmana gerek yok/.test(cc) && /noDup/.test(nt) && /kargoya uygun şekilde paketleyip/.test(am) && /order_delivered" && \(afterSaleHere\(order\) \|\| [^\n]*mailRedirectActive\(\)/.test(nt),
+          ok(!/Kod yazmana gerek yok/.test(cc) && /noDup/.test(nt) && /kargoya uygun şekilde paketleyip/.test(am) && !/Talebimi görüntüle/.test(am) && /\$\{how\}<\/p>\s*<div[^>]*dashed/.test(am) && /order_delivered" && \(afterSaleHere\(order\) \|\| [^\n]*mailRedirectActive\(\)/.test(nt),
             "E-posta metinleri: kod satırı yok, çift ₺ yok, iade kodu metni nazik, denemede teslim kutusu görünür", "metin düzeltmelerinden biri geri gelmiş");
         }
         const r = await order([MAIN(1)]);
