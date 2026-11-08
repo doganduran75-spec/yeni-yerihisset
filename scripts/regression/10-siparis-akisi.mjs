@@ -385,6 +385,10 @@ export default {
         ok(stock() === s0 + 1, "Ödenmiş sipariş iptalinde stok geri eklendi", `stok ${s0} → ${stock()}`);
         const again = await api("/api/admin/orders/action", { token: F.admin.token, body: { action: "cancel", orderId: O.paid, method: "bank_transfer", confirmed: true } });
         ok(again.status === 400, "İptal edilmiş sipariş tekrar iptal edilemiyor", why(again));
+        // Panel: iptal edilmiş siparişin ödeme / sevkiyatı geri açılamaz (2026-11-08: "Bekliyor" yapılınca çelişki kalıyordu)
+        const pg = (await import("node:fs")).readFileSync(new URL("../../src/app/admin/orders/page.tsx", import.meta.url), "utf8");
+        ok(/if \(cancelledLock\(o, v === "cancelled"\)\) return;/.test(pg) && /if \(cancelledLock\(o, v === "failed"/.test(pg),
+          "İptal edilmiş siparişin ödeme / sevkiyat durumu panelde geri açılamıyor (yalnız İptal / Alınmadı seçilebilir)");
       });
 
       await part("Kargo → teslim → iade al", async () => {

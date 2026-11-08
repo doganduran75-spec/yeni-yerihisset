@@ -1058,7 +1058,17 @@ Siparişte “Paraşüt — yeniden dene” ile tekrar dene.`, tone: "danger" })
     setActionMode(mode);
   }
 
+  // İptal edilmiş sipariş kesin sonuçtur: ödeme / sevkiyat durumu geri açılmaz (kullanıcı 2026-11-08: iptalde sevkiyatı
+  // "Bekliyor" yapınca sipariş hem iptal hem bekliyor kaldı; yeniden iptal "zaten iptal" diyordu). Yalnız tutarlı hâle
+  // döndüren seçim serbest: sevkiyat "İptal", ödeme "Alınmadı". Yeniden satış gerekiyorsa yeni sipariş açılır.
+  const cancelledLock = (o: Order, ok: boolean) => {
+    if (o.status !== "cancelled" || ok) return false;
+    siteAlert({ title: "İptal edilmiş sipariş", message: "İptal edilmiş siparişin ödeme / sevkiyat durumu değiştirilemez. Müşteri yine istiyorsa yeni sipariş açılmalı.", tone: "danger" });
+    return true;
+  };
+
   function selectPayment(o: Order, v: string) {
+    if (cancelledLock(o, v === "failed" && !(Number(o.refunded_amount || 0) > 0))) return;
     const cur = o.payment_status || "pending";
     const paidNow = cur === "paid" || cur === "partial_refund";
     if (v === "partial_refund" || v === "refunded") {
@@ -1081,6 +1091,8 @@ Siparişte “Paraşüt — yeniden dene” ile tekrar dene.`, tone: "danger" })
   }
 
   function selectShipment(o: Order, v: string) {
+    if (cancelledLock(o, v === "cancelled")) return;
+    if (o.status === "cancelled" && v === "cancelled") { updateField(o.id, { shipment_status: "cancelled" }); return; } // tutarsızlığı düzelt
     const shippedNow = ["shipped", "delivered", "undelivered", "returned"].includes(o.shipment_status || "");
     if (v === "cancelled") {
       if (shippedNow) { siteAlert({ message: "Kargolanmış sipariş iptal edilemez — “İade al” kullan.", tone: "danger" }); return; }
