@@ -32,7 +32,7 @@ export function couponBoxHtml(c: { type: string; amount: number; min_order_amoun
   return `<div style="margin:22px 0;border:2px dashed #65a30d;border-radius:16px;padding:18px;text-align:center;background:#f7fee7">
   <div style="font-size:12px;font-weight:800;letter-spacing:.12em;color:#4d7c0f">SANA ÖZEL</div>
   <div style="font-size:26px;font-weight:900;color:#1a2e05;margin:6px 0">${escapeHtml(couponValueText(c))}</div>
-  <div style="font-size:13px;color:#3f6212;line-height:1.6">${scope ? `${escapeHtml(scope)} · ` : ""}${Number(c.min_order_amount || 0) > 0 ? `${tl(Number(c.min_order_amount))} ve üstü · ` : ""}<b>${day(expires)}</b> tarihine kadar</div>
+  <div style="font-size:13px;color:#3f6212;line-height:1.6">${scope ? `${escapeHtml(scope)} · ` : ""}${Number(c.min_order_amount || 0) > 0 ? `${tl(Number(c.min_order_amount))} ve üstü · ` : ""}<b>${day(expires)}</b> tarihine kadar yapacağın alışverişlerde geçerli</div>
 </div>`;
 }
 
