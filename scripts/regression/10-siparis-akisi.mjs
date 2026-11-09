@@ -1049,6 +1049,11 @@ export default {
         // İade kaydı asıl faturaya + her kalem asıl kalemine bağlanır (Paraşüt 422 "İadeye konu olan fatura doldurulmalı")
         ok(/refund_of: \{ data: \{ id: x\.invoiceId, type: "sales_invoices"/.test(pinv) && /type: "sales_invoice_details"/.test(pinv) && /refund_of_id/.test(pinv),
           "Paraşüt iade faturası: asıl faturaya ve kalemlerine bağlanıyor (refund_of)", "refund_of bağı yok");
+        // Kendi web sitelerimiz (site + attipas): kargo ücreti ve aktarılan WooCommerce ek ücreti / indirimi faturaya girer;
+        // havale siparişinde e-Arşiv platformu "Banka" (2026-11-09 Attipas: "Kalemler 1099 TL sipariş tutarıyla 1142.5 TL tutmuyor")
+        ok(/const ownWeb = !MARKETPLACES\.includes\(channel\)/.test(pinv) && /const ship = ownWeb \?/.test(pinv) && /extra_fee/.test(pinv)
+          && /x\.ch\?\.payment_type \? x\.ch\?\.payment_platform \|\| "Banka" : card \?/.test(pinv) && /attipas: "Attipas/.test(card),
+          "Paraşüt: attipas kanalı; kendi sitelerde kargo + ek ücret faturada; havalede platform Banka", "ownWeb / extra_fee / platform kuralı yok");
         // Faturayı pazaryerine yükleme: üye yapamaz; site siparişinde reddedilir (yalnız Trendyol)
         const mt = await pa(F.member.token, { op: "push_marketplace_invoice", order_id: id });
         ok(mt.status === 403, "Paraşüt: üye faturayı pazaryerine (Trendyol / Hepsiburada) yükleyemiyor", why(mt));

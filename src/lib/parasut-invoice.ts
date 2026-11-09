@@ -17,6 +17,7 @@ import { sendInvoiceEmail } from "@/lib/invoice-mail";
 import { isTestOrder } from "@/lib/notifications";
 
 type Sb = ReturnType<typeof createAdminClient>;
+const MARKETPLACES = ["trendyol", "hepsiburada", "amazon"];
 const r2 = (n: number) => Math.round(n * 100) / 100;
 const r4 = (n: number) => Math.round(n * 10000) / 10000;
 const day = (d: Date | string = new Date()) => new Date(d).toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" });
@@ -27,7 +28,7 @@ const parse = (v: any) => { try { return typeof v === "string" ? JSON.parse(v) :
 
 const ORDER_COLS = `id, order_number, external_order_number, channel, status, shipment_status, created_at, payment_method, payment_status, invoice_status,
   parasut_refund_id, parasut_refund_paid,
-  total_amount, shipping_cost, coupon_discount, credit_used, import_source, billing_address, shipping_address, customer_name, customer_email, customer_phone,
+  total_amount, shipping_cost, coupon_discount, credit_used, extra_fee, import_source, billing_address, shipping_address, customer_name, customer_email, customer_phone,
   cargo_provider, kargonomi_provider, shipping_method, parasut_invoice_id, parasut_status, parasut_job_id, parasut_e_doc_id, parasut_e_doc_type,
   parasut_paid, parasut_diff_ok, refunded_amount, profiles(email, first_name, last_name, phone),
   order_items(id, quantity, returned_qty, unit_price, product_id, variant_id, variant_name, title, sku, barcode, products(title, parasut_product_id), product_variants(parasut_product_id))`;
@@ -73,9 +74,14 @@ async function prepare(sb: Sb, o: any) {
   // Kupon + kredi (yalnız site) → ürün kalemlerine orantılı; kuruş farkı en büyük kaleme.
   // Eski siteden (WooCommerce) aktarılan siparişte satır fiyatı ZATEN kupon düşülmüş gelir → ikinci kez düşülmez
   // (2026-10-31: "Kalemler 2799.2 TL sipariş tutarıyla 3149.1 TL tutmuyor").
-  const disc = channel === "site" && !o.import_source ? r2(Number(o.coupon_discount || 0) + Number(o.credit_used || 0)) : 0;
+  // Kendi web sitemiz (YeriHisset + eski siteden aktarılan attipas.com.tr): kargo ücreti ve WooCommerce ek ücreti / indirimi
+  // (fee_lines → extra_fee, ör. havale indirimi eksi tutar) faturaya girer; pazaryerinde kargo bizim faturamızda değil.
+  // (2026-11-09 Attipas siparişi: "Kalemler 1099 TL sipariş tutarıyla 1142.5 TL tutmuyor" — kargo kalemi eklenmiyordu.)
+  const ownWeb = !MARKETPLACES.includes(channel);
+  const fee = ownWeb && o.import_source ? r2(Number(o.extra_fee || 0)) : 0;
+  const disc = r2((channel === "site" && !o.import_source ? Number(o.coupon_discount || 0) + Number(o.credit_used || 0) : 0) - fee);
   const base = lines.reduce((a, l) => a + l.gross, 0);
-  if (disc > 0 && base > 0) {
+  if (disc !== 0 && base > 0) {
     let left = disc;
     const order = [...lines].sort((a, b) => b.gross - a.gross);
     for (const l of order.slice(1)) { const d = r2((disc * l.gross) / base); l.gross = r2(l.gross - d); left = r2(left - d); }
@@ -84,7 +90,7 @@ async function prepare(sb: Sb, o: any) {
   }
 
   // Kargo ücreti → ayrı kalem (Paraşüt "Kargo" hizmeti; KDV oranı onun kaydından, genelde %20)
-  const ship = channel === "site" ? r2(Number(o.shipping_cost || 0)) : 0;
+  const ship = ownWeb ? r2(Number(o.shipping_cost || 0)) : 0;
   if (ship > 0) {
     const { data: st } = await s.from("settings").select("parasut_shipping_product_id").order("id").limit(1).maybeSingle();
     const sp = String(st?.parasut_shipping_product_id || "");
@@ -258,7 +264,8 @@ export async function invoiceOrder(sb: Sb, orderId: string, opts: { acceptDiff?:
           internet_sale: {
             url: x.ch?.internet_url || "https://yerihisset.com",
             payment_type: x.ch?.payment_type || (card ? "KREDIKARTI/BANKAKARTI" : "EFT/HAVALE"),
-            payment_platform: x.ch?.payment_platform || (card ? "iyzico" : "Banka"),
+            // Kanalda ödeme tipi sabit değilse (site / attipas: ödeme yönteminden) havalede platform "Banka" — kanalın "iyzico"su değil
+            payment_platform: x.ch?.payment_type ? x.ch?.payment_platform || "Banka" : card ? x.ch?.payment_platform || "iyzico" : "Banka",
             payment_date: o.payment_method === "bank_transfer" ? day() : pastDay(o.created_at),
           },
           shipment: { title: x.carrier!.name, vkn: x.carrier!.vkn, date: day() },

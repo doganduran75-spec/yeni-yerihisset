@@ -28,7 +28,7 @@ async function api(body: Record<string, unknown>) {
   return j;
 }
 
-const CH_LABEL: Record<string, string> = { site: "YeriHisset (site)", trendyol: "Trendyol", hepsiburada: "Hepsiburada", amazon: "Amazon" };
+const CH_LABEL: Record<string, string> = { site: "YeriHisset (site)", attipas: "Attipas (attipas.com.tr)", trendyol: "Trendyol", hepsiburada: "Hepsiburada", amazon: "Amazon" };
 const PAY_TYPES = [
   ["", "Siparişin ödeme yönteminden (kart / havale)"],
   ["KREDIKARTI/BANKAKARTI", "Kredi / banka kartı"],
