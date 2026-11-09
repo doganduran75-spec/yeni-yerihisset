@@ -49,6 +49,7 @@ function Inner() {
   const [v, setV] = useState<any>(null);
   const [mode, setMode] = useState<"" | "oldu" | "degisim" | "iade">((params.get("secim") as any) || "");
   const [err, setErr] = useState<string | null>(null);
+  const [loadErr, setLoadErr] = useState<string | null>(null); // sunucunun söylediği neden (bağlantı geçersiz / eski sitede kargolanmış …)
   const [busy, setBusy] = useState(false);
   // değişim
   const [exItem, setExItem] = useState<string>("");
@@ -74,7 +75,7 @@ function Inner() {
   const load = useCallback(async () => {
     const res = await fetch(`/api/after-sale?${q}`, { headers: await auth(), cache: "no-store" });
     const j = await res.json().catch(() => ({}));
-    if (!res.ok) { setState("error"); return; }
+    if (!res.ok) { setLoadErr(res.status === 404 ? j.error || null : null); setState("error"); return; }
     setV(j);
     if (j.items?.length === 1) setExItem(j.items[0].id);
     setRetItems(new Set((j.items || []).filter((i: any) => i.returned < 1).map((i: any) => i.id)));
@@ -105,8 +106,8 @@ function Inner() {
     <Shell>
       <div className="text-center space-y-3">
         <AlertCircle className="text-amber-500 mx-auto" size={44} />
-        <h1 className="text-xl font-black text-slate-900">Bağlantı geçersiz</h1>
-        <p className="text-sm text-slate-500">Bu bağlantı açılamadı. Siparişini Hesabım › Siparişlerim’den görebilir ya da bize mesaj yazabilirsin.</p>
+        <h1 className="text-xl font-black text-slate-900">{loadErr ? "Bu sayfa açılamadı" : "Bağlantı geçersiz"}</h1>
+        <p className="text-sm text-slate-500">{loadErr || "Bu bağlantı açılamadı."} Siparişini Hesabım › Siparişlerim’den görebilir ya da bize mesaj yazabilirsin.</p>
         <Link href="/account" className="inline-block border rounded-xl px-5 py-2.5 text-sm font-bold text-slate-700">Hesabıma git</Link>
       </div>
     </Shell>

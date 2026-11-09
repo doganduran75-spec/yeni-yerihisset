@@ -1263,6 +1263,10 @@ export default {
           "Cevapsız teslim edilmiş siparişte “Müşteri adına değişim / iade aç” var (aktarılıp eski sitede gönderilende yok)", JSON.stringify(keys({ ...base, kargonomi_tracking_code: "KSURTEST" })));
         ok(!keys({ ...base, kargonomi_tracking_code: "KSURTEST", delivered_at: new Date(Date.now() - 20 * 86400_000).toISOString() }).includes("case_link"),
           "14 günlük deneme süresi geçince müşteri adına değişim açılmaz (İade gelecek / İade al kalır)");
+        ok(!keys({ ...base, fit_status: "trial" }).includes("case_link") && keys({ ...base, fit_status: "trial", kargonomi_tracking_code: "KSURTEST" }).includes("case_link"),
+          "“Müşteri deniyor” durumunda da düğme yalnız sayfası açılabilen siparişte (eski sitede kargolanan aktarılmışta yok)");
+        const as = await api("/api/after-sale?r=00000000-0000-0000-0000-000000000000.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", { method: "GET" }).catch(() => null);
+        ok(!as || as.status === 400, "Satış sonrası sayfası: imzası tutmayan bağlantı reddediliyor", as ? why(as) : "istek atılamadı");
       });
 
       await part("Pano: 'Süren değişim' ayrı satır, 'Bekleyen sipariş işi'nde sayılmaz", async () => {

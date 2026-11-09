@@ -33,7 +33,15 @@ export async function GET(req: NextRequest) {
     return opts ? NextResponse.json({ ok: true, ...opts }) : NextResponse.json({ error: "Ürün bulunamadı" }, { status: 404 });
   }
   const view = await loadAfterSale(orderId);
-  if (!view) return NextResponse.json({ error: "Sipariş bulunamadı" }, { status: 404 });
+  if (!view) {
+    // Neden açılmadı (2026-11-09: yönetici "müşteri adına" açınca yalnız "bağlantı geçersiz" görüyordu)
+    const { data: o } = await (createAdminClient() as any).from("orders").select("channel, import_source").eq("id", orderId).maybeSingle();
+    const why = !o ? "Sipariş bulunamadı."
+      : (o.channel || "site") !== "site" ? "Pazaryeri siparişinin değişim / iadesi pazaryerinden yapılır."
+      : o.import_source ? "Bu sipariş eski sitede kargolanmış; değişim / iade bu sayfadan açılamıyor — siparişte “İade gelecek” ya da elle değişim."
+      : "Sipariş bulunamadı.";
+    return NextResponse.json({ error: why }, { status: 404 });
+  }
   return NextResponse.json({ ok: true, ...view });
 }
 

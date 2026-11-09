@@ -297,7 +297,7 @@ function coreNextStep(o: OrderLike): NextStep {
     return { stage: "Teslim edildi — müşteri deniyor", hint: `Müşteri ${TRIAL_DAYS} gün içinde “oldu / değişim / iade” diyecek.`, actions: [
       { key: "fit_ok", label: "Oldu say", kind: "primary" },
       { key: "return_expected", label: "İade gelecek", kind: "danger" },
-      { key: "case_link", label: "Müşteri adına değişim / iade aç", kind: "primary" },
+      ...(afterSaleHere(o) ? [{ key: "case_link", label: "Müşteri adına değişim / iade aç", kind: "primary" } as NextAction] : []),
       { key: "return", label: "İade al", kind: "danger" },
     ], needsAction: false };
   }
