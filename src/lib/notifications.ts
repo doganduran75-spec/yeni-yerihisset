@@ -328,7 +328,7 @@ export async function sendOrderNotification(
   // 1. Sipariş + ilişkileri EMBED'SİZ getir (self-host PostgREST embed kırılgan)
   const { data: order, error: orderError } = await (supabase
     .from("orders")
-    .select("id, order_number, total_amount, status, created_at, shipping_address, payment_method, user_id, channel, payment_status, refunded_amount, refund_method, credit_used, auto_expired, import_source, kargonomi_shipment_id, kargonomi_tracking_code, cancel_reason, cancel_customer_note")
+    .select("id, order_number, total_amount, status, created_at, shipping_address, payment_method, user_id, channel, payment_status, refunded_amount, refund_method, credit_used, auto_expired, import_source, kargonomi_shipment_id, kargonomi_tracking_code, delivered_at, cancel_reason, cancel_customer_note")
     .eq("id", context.orderId)
     .maybeSingle() as any) as { data: any; error: any };
 

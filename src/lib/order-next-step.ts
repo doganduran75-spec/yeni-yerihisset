@@ -62,11 +62,13 @@ export function caseReasonLabel(r?: string | null): string {
   return r ? m[r] ?? r : "";
 }
 
-/** Satış sonrası (oldu / değişim / iade) bu sistemden yürüyen site siparişi mi: sitede verilen ya da eski siteden aktarılıp
- *  kargosu buradan (Kargonomi / Basit Kargo) yapılan (kullanıcı 2026-11-06: aktarılmış siparişte müşteri değişim istedi,
- *  yol yoktu). Aynı kural: DB tetikleyicisi trg_orders_delivered (MIG 20261170), after-sale.ts, teslim e-postası. */
-export function afterSaleHere(o: { channel?: string | null; import_source?: string | null; kargonomi_shipment_id?: string | null; kargonomi_tracking_code?: string | null }): boolean {
-  return (o.channel || "site") === "site" && (!o.import_source || !!(o.kargonomi_shipment_id || o.kargonomi_tracking_code));
+/** Satış sonrası (oldu / değişim / iade) bu sistemden yürüyen site siparişi mi: sitede verilen; eski siteden aktarılıp kargosu
+ *  buradan (Kargonomi / Basit Kargo) yapılan (2026-11-06); ya da aktarılmış olup TESLİMİ BU SİSTEMDE KAYDEDİLEN (delivered_at
+ *  dolu — teslim aktarımdan sonra işlendi; elle kodlu gönderi ya da eski sitede "tamamlandı"ya geçen yeni sipariş; YH24395,
+ *  2026-11-09). Aktarımdan önce teslim edilmiş eski siparişlerde delivered_at boş → dışarıda. Süre (14 gün) ayrıca denetlenir.
+ *  Aynı kural: DB tetikleyicisi trg_orders_delivered (MIG 20261174), after-sale.ts, teslim e-postası. */
+export function afterSaleHere(o: { channel?: string | null; import_source?: string | null; kargonomi_shipment_id?: string | null; kargonomi_tracking_code?: string | null; delivered_at?: string | null }): boolean {
+  return (o.channel || "site") === "site" && (!o.import_source || !!(o.kargonomi_shipment_id || o.kargonomi_tracking_code || o.delivered_at));
 }
 export const UPS_WAIT_DAYS = 5;
 // Kargolanmış ama faturası kesilmemiş (kullanıcı 2026-10-28). Paraşüt'e geçiş (2026-10-21) öncesinin pazaryeri ve eski siteden

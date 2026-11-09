@@ -1254,17 +1254,19 @@ export default {
         catch (e) { return add("warn", "Satış sonrası kuralı denenemedi", `order-next-step.ts yüklenemedi: ${String(e?.message || e).slice(0, 120)}`); }
         const base = { channel: "site", import_source: "woo_yerihisset", status: "delivered", payment_status: "paid", shipment_status: "delivered", invoice_status: "pending",
           total_amount: 3499, order_items: [{ quantity: 1 }], delivered_at: new Date(Date.now() - 2 * 86400_000).toISOString(), fit_status: null };
-        ok(m.afterSaleHere({ ...base, kargonomi_tracking_code: "KSURTEST" }) && !m.afterSaleHere(base) && m.afterSaleHere({ channel: "site" }) && !m.afterSaleHere({ channel: "trendyol" }),
-          "Kural: sitede verilen ya da aktarılıp kargosu buradan yapılan sipariş satış sonrasına açık; eski sitede gönderilen ve pazaryeri değil");
+        // old = aktarımdan önce eski sitede teslim edilmiş (delivered_at boş)
+        const old = { ...base, delivered_at: null };
+        ok(m.afterSaleHere({ ...old, kargonomi_tracking_code: "KSURTEST" }) && m.afterSaleHere(base) && !m.afterSaleHere(old) && m.afterSaleHere({ channel: "site" }) && !m.afterSaleHere({ channel: "trendyol", delivered_at: base.delivered_at }),
+          "Kural: sitede verilen, aktarılıp kargosu buradan yapılan ya da teslimi bu sistemde kaydedilen (YH24395) sipariş satış sonrasına açık; aktarımdan önce teslim edilen ve pazaryeri değil");
         ok(m.caseReasonLabel("big") === "Büyük geldi" && m.caseReasonLabel("small") === "Küçük geldi" && m.caseReasonLabel("Beğenmedim") === "Beğenmedim",
           "Talep sebebi okunur yazılıyor (Telegram / panel: “big” değil “Büyük geldi”)");
         const keys = (o) => m.orderNextStep(o).actions.map((a) => a.key);
-        ok(keys({ ...base, kargonomi_tracking_code: "KSURTEST" }).includes("case_link") && !keys(base).includes("case_link"),
-          "Cevapsız teslim edilmiş siparişte “Müşteri adına değişim / iade aç” var (aktarılıp eski sitede gönderilende yok)", JSON.stringify(keys({ ...base, kargonomi_tracking_code: "KSURTEST" })));
+        ok(keys({ ...base, kargonomi_tracking_code: "KSURTEST" }).includes("case_link") && keys(base).includes("case_link") && !keys(old).includes("case_link"),
+          "Cevapsız teslim edilmiş siparişte “Müşteri adına değişim / iade aç” var (aktarımdan önce teslim edilende yok)", JSON.stringify(keys(base)));
         ok(!keys({ ...base, kargonomi_tracking_code: "KSURTEST", delivered_at: new Date(Date.now() - 20 * 86400_000).toISOString() }).includes("case_link"),
           "14 günlük deneme süresi geçince müşteri adına değişim açılmaz (İade gelecek / İade al kalır)");
-        ok(!keys({ ...base, fit_status: "trial" }).includes("case_link") && keys({ ...base, fit_status: "trial", kargonomi_tracking_code: "KSURTEST" }).includes("case_link"),
-          "“Müşteri deniyor” durumunda da düğme yalnız sayfası açılabilen siparişte (eski sitede kargolanan aktarılmışta yok)");
+        ok(!keys({ ...old, fit_status: "trial" }).includes("case_link") && keys({ ...base, fit_status: "trial" }).includes("case_link"),
+          "“Müşteri deniyor” durumunda da düğme yalnız sayfası açılabilen siparişte (aktarımdan önce teslim edilende yok)");
         const as = await api("/api/after-sale?r=00000000-0000-0000-0000-000000000000.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", { method: "GET" }).catch(() => null);
         ok(!as || as.status === 400, "Satış sonrası sayfası: imzası tutmayan bağlantı reddediliyor", as ? why(as) : "istek atılamadı");
       });

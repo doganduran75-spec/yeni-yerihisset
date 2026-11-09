@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
     const { data: o } = await (createAdminClient() as any).from("orders").select("channel, import_source").eq("id", orderId).maybeSingle();
     const why = !o ? "Sipariş bulunamadı."
       : (o.channel || "site") !== "site" ? "Pazaryeri siparişinin değişim / iadesi pazaryerinden yapılır."
-      : o.import_source ? "Bu sipariş eski sitede kargolanmış; değişim / iade bu sayfadan açılamıyor — siparişte “İade gelecek” ya da elle değişim."
+      : o.import_source ? "Bu sipariş eski sitede teslim edilmiş; değişim / iade bu sayfadan açılamıyor — siparişte “İade gelecek” ya da elle değişim."
       : "Sipariş bulunamadı.";
     return NextResponse.json({ error: why }, { status: 404 });
   }
