@@ -1046,6 +1046,11 @@ export default {
         ok(/refresh_lock_until: new Date\(Date\.now\(\) \+ 30_000\)/.test(plib) && /\.eq\("refresh_token", a\.refresh_token\)\.or\(lockFree\)/.test(plib)
           && /st\?\.connected && st\.lastError \?/.test(card) && /Paraşüt ile yeniden bağlan/.test(card),
           "Paraşüt oturum yenilemesi işlemler arası kilitli; koptuğunda panelde “Bağlantı koptu” + yeniden bağlan");
+        // "Session not active" (2026-11-10): bağlanırken süresiz oturum (offline_access) istenir, reddedilirse normal oturum;
+        // yeniden bağlanınca son kopmanın nedeni saklanır ve panelde "Son kopma" görünür
+        ok(/prev\?\.offline_denied \? "openid" : "openid offline_access"/.test(plib) && /last_drop_error: a\.last_error/.test(plib)
+          && /Son kopma:/.test(card) && /süresiz oturum/.test(card),
+          "Paraşüt: süresiz oturum isteniyor (reddedilirse normal); son kopma nedeni panelde", "offline_access / Son kopma yok");
         // İade kaydı asıl faturaya + her kalem asıl kalemine bağlanır (Paraşüt 422 "İadeye konu olan fatura doldurulmalı")
         ok(/refund_of: \{ data: \{ id: x\.invoiceId, type: "sales_invoices"/.test(pinv) && /type: "sales_invoice_details"/.test(pinv) && /refund_of_id/.test(pinv),
           "Paraşüt iade faturası: asıl faturaya ve kalemlerine bağlanıyor (refund_of)", "refund_of bağı yok");

@@ -52,7 +52,7 @@ export const authorizeUrl = (clientId: string) =>
 
 // ── Oturum ──────────────────────────────────────────────────────────────────
 
-type Tokens = { access_token: string; refresh_token?: string; expires_in: number; refresh_expires_in?: number };
+type Tokens = { access_token: string; refresh_token?: string; expires_in: number; refresh_expires_in?: number; scope?: string };
 
 /** issuer "id" = id.parasut.com (form-urlencoded); diğeri eski api.parasut.com/oauth */
 async function tokenRequest(form: Record<string, string>, issuer: string | null = null): Promise<Tokens> {
@@ -78,7 +78,8 @@ async function saveTokens(sb: Sb, t: Tokens, extra: Record<string, unknown> = {}
   await (sb as any).from("parasut_auth").upsert({
     id: 1, access_token: t.access_token, refresh_token: t.refresh_token || prevRefresh || null,
     expires_at: new Date(Date.now() + Number(t.expires_in || 7200) * 1000).toISOString(),
-    ...(t.refresh_expires_in ? { refresh_expires_at: new Date(Date.now() + Number(t.refresh_expires_in) * 1000).toISOString() } : {}),
+    // Süresiz (offline_access) oturumda refresh_expires_in 0 gelir → bitiş tarihi yok
+    ...(t.refresh_expires_in != null ? { refresh_expires_at: Number(t.refresh_expires_in) > 0 ? new Date(Date.now() + Number(t.refresh_expires_in) * 1000).toISOString() : null } : {}),
     last_error: null, last_error_at: null,
     updated_at: new Date().toISOString(), ...extra,
   });
@@ -96,9 +97,13 @@ export async function startAuthorize(sb: Sb, origin: string) {
   const challenge = b64url(createHash("sha256").update(verifier).digest());
   const state = b64url(randomBytes(24));
   const redirect = o + PARASUT_CALLBACK;
+  // Süresiz oturum (offline_access): Paraşüt giriş oturumu kapansa da ("Session not active", 2026-11-10) bağlantı yaşar.
+  // Paraşüt bir kez reddettiyse (offline_denied) normal oturum istenir.
+  const { data: prev } = await (sb as any).from("parasut_auth").select("offline_denied").eq("id", 1).maybeSingle();
+  const scope = prev?.offline_denied ? "openid" : "openid offline_access";
   await (sb as any).from("parasut_auth").upsert({ id: 1, pending_state: state, pending_verifier: verifier, pending_redirect: redirect, pending_at: new Date().toISOString() });
   return `${ID_BASE}/auth?${new URLSearchParams({
-    client_id: c.v2ClientId, redirect_uri: redirect, response_type: "code", scope: "openid", state,
+    client_id: c.v2ClientId, redirect_uri: redirect, response_type: "code", scope, state,
     code_challenge: challenge, code_challenge_method: "S256", kc_idp_hint: "parasut",
   })}`;
 }
@@ -107,18 +112,33 @@ export async function startAuthorize(sb: Sb, origin: string) {
 export async function connectWithOidc(sb: Sb, code: string, state: string) {
   const c = await parasutConfig(sb);
   if (!c.v2ClientId || !c.v2ClientSecret) throw new ParasutError(400, "Yeni Client ID / Secret kayıtlı değil.");
-  const { data: a } = await (sb as any).from("parasut_auth").select("pending_state, pending_verifier, pending_redirect, pending_at").eq("id", 1).maybeSingle();
+  const { data: a } = await (sb as any).from("parasut_auth").select("pending_state, pending_verifier, pending_redirect, pending_at, last_error, last_error_at").eq("id", 1).maybeSingle();
   if (!a?.pending_state || a.pending_state !== state) throw new ParasutError(400, "Bağlanma isteği eşleşmedi — panelden yeniden “Paraşüt ile bağlan”a bas.");
   if (!a.pending_at || Date.now() - new Date(a.pending_at).getTime() > 15 * 60_000) throw new ParasutError(400, "Bağlanma isteğinin süresi doldu — panelden yeniden “Paraşüt ile bağlan”a bas.");
-  const t = await tokenRequest({ grant_type: "authorization_code", client_id: c.v2ClientId, client_secret: c.v2ClientSecret,
-    code: code.trim(), redirect_uri: a.pending_redirect, code_verifier: a.pending_verifier }, "id");
+  let t: Tokens;
+  try {
+    t = await tokenRequest({ grant_type: "authorization_code", client_id: c.v2ClientId, client_secret: c.v2ClientSecret,
+      code: code.trim(), redirect_uri: a.pending_redirect, code_verifier: a.pending_verifier }, "id");
+  } catch (e: any) {
+    // Paraşüt süresiz oturuma izin vermiyorsa ("Offline tokens not allowed …") bir dahaki bağlanma normal oturumla
+    if (/offline/i.test(String(e?.message))) { await markOfflineDenied(sb); throw new ParasutError(400, "Paraşüt süresiz oturuma izin vermedi — bir kez daha “Paraşüt ile bağlan”a bas (normal oturumla bağlanır)."); }
+    throw e;
+  }
   if (!t.refresh_token) throw new ParasutError(502, "Paraşüt yenileme anahtarı (refresh_token) vermedi — DevHub başvurusunu kontrol et.");
   await saveTokens(sb, t, { issuer: "id", connected_at: new Date().toISOString(), user_email: null,
+    offline: /offline_access/.test(String(t.scope || "")),
+    // Son kopmanın nedeni yeniden bağlanınca kaybolmasın (panelde "Son kopma")
+    ...(a.last_error ? { last_drop_error: a.last_error, last_drop_at: a.last_error_at || new Date().toISOString() } : {}),
     pending_state: null, pending_verifier: null, pending_redirect: null, pending_at: null });
   try {
     const me = await rawCall(t.access_token, "GET", "/v4/me");
     await (sb as any).from("parasut_auth").update({ user_email: me?.data?.attributes?.email ?? null }).eq("id", 1);
   } catch { /* bilgi amaçlı */ }
+}
+
+/** Paraşüt süresiz oturumu (offline_access) reddetti → sonraki bağlanmada normal oturum istenir */
+export async function markOfflineDenied(sb: Sb) {
+  await (sb as any).from("parasut_auth").upsert({ id: 1, offline_denied: true });
 }
 
 /** Paraşüt'ün verdiği tek kullanımlık kodla bağlan */
@@ -261,13 +281,14 @@ async function listAll(sb: Sb, path: string, params: Record<string, string> = {}
 
 export async function connectionStatus(sb: Sb) {
   const c = await parasutConfig(sb);
-  const { data: a } = await (sb as any).from("parasut_auth").select("connected_at, user_email, expires_at, issuer, refresh_token, refresh_expires_at, last_error").eq("id", 1).maybeSingle();
+  const { data: a } = await (sb as any).from("parasut_auth").select("connected_at, user_email, expires_at, issuer, refresh_token, refresh_expires_at, last_error, offline, last_drop_error, last_drop_at").eq("id", 1).maybeSingle();
   const connected = !!(a?.connected_at && a?.refresh_token);
   return {
     enabled: c.enabled, hasApp: !!(c.clientId && c.clientSecret), hasNewApp: !!(c.v2ClientId && c.v2ClientSecret), companyId: c.companyId,
     connected, connectedAt: a?.connected_at ?? null, userEmail: a?.user_email ?? null,
     // Yeni altyapı mı (id.parasut.com)? Eski bağlantı 10 Aralık 2026'da kapanır → "yeniden bağlan" gerekir
     newAuth: connected && a?.issuer === "id", refreshExpiresAt: a?.refresh_expires_at ?? null, lastError: a?.last_error ?? null,
+    offline: !!a?.offline, lastDropError: a?.last_drop_error ?? null, lastDropAt: a?.last_drop_at ?? null,
     authorizeUrl: c.clientId ? authorizeUrl(c.clientId) : null,
   };
 }

@@ -169,17 +169,24 @@ export default function ParasutCard() {
           {st?.connected && st.lastError ? (
             <div className="rounded-md bg-red-50 border border-red-200 p-2.5 text-xs text-red-800 flex flex-wrap items-center gap-2">
               <span className="flex items-center gap-1.5 font-semibold"><AlertCircle size={14} /> Bağlantı koptu — fatura kesilemez.</span>
+              <span className="basis-full text-red-700">{st.lastError}</span>
               {st.hasNewApp && <Button size="sm" disabled={!!busy} onClick={() => run("auth", connectNew)}>{busy === "auth" ? <Loader2 size={14} className="animate-spin" /> : <Link2 size={14} />} Paraşüt ile yeniden bağlan</Button>}
             </div>
           ) : st?.lastError && <p className="text-xs text-red-600">{st.lastError}</p>}
           {st?.connected && !st.lastError ? (
             <div className="flex flex-wrap items-center gap-3">
               <span className="flex items-center gap-1.5 text-green-700 font-medium"><CheckCircle2 size={16} /> Bağlı{st.newAuth ? " (yeni altyapı)" : ""}{st.userEmail ? ` — ${st.userEmail}` : ""}</span>
-              {st.newAuth && st.refreshExpiresAt && <span className="text-[11px] text-muted-foreground">oturum {new Date(st.refreshExpiresAt).toLocaleString("tr-TR", { dateStyle: "short", timeStyle: "short" })} tarihine kadar (kendiliğinden yenilenir)</span>}
+              {st.newAuth && st.offline && <span className="text-[11px] text-muted-foreground">süresiz oturum — Paraşüt'ten çıkış yapsan da bağlı kalır</span>}
+              {st.newAuth && !st.offline && st.refreshExpiresAt && <span className="text-[11px] text-muted-foreground">oturum {new Date(st.refreshExpiresAt).toLocaleString("tr-TR", { dateStyle: "short", timeStyle: "short" })} tarihine kadar (kendiliğinden yenilenir)</span>}
               <Button size="sm" variant="outline" disabled={!!busy} onClick={async () => {
                 if (await siteConfirm({ title: "Paraşüt bağlantısı kesilsin mi?", message: "Fatura kesme durur; yeniden bağlanmak için izin adımı tekrarlanır.", confirmText: "Bağlantıyı kes", tone: "danger" }))
                   run("disc", async () => { await api({ op: "disconnect" }); setSt(await api({ op: "status" })); setAccounts([]); });
               }}>Bağlantıyı kes</Button>
+              {/* Normal (süresiz olmayan) oturum: Paraşüt girişi kapanınca "Session not active" ile kopar (2026-11-10) */}
+              {st.newAuth && !st.offline && st.hasNewApp && (
+                <span className="basis-full text-[11px] text-amber-700">Normal oturum: Paraşüt'ten çıkış yapınca ya da uzun süre kullanılmayınca kopabilir. Süresiz oturum için bir kez <button type="button" className="underline font-semibold" disabled={!!busy} onClick={() => run("auth", connectNew)}>Paraşüt ile yeniden bağlan</button>.</span>
+              )}
+              {st.lastDropAt && <span className="basis-full text-[11px] text-muted-foreground">Son kopma: {new Date(st.lastDropAt).toLocaleString("tr-TR", { dateStyle: "short", timeStyle: "short" })} — {st.lastDropError}</span>}
             </div>
           ) : st?.connected ? null : st?.hasNewApp ? (
             <Button size="sm" disabled={!!busy} onClick={() => run("auth", connectNew)}>{busy === "auth" ? <Loader2 size={14} className="animate-spin" /> : <Link2 size={14} />} Paraşüt ile bağlan</Button>

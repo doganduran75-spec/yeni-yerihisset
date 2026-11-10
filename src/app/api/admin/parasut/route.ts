@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { getAuthUserFromRequest } from "@/lib/auth-from-request";
 import {
-  ParasutError, connectionStatus, connectWithCode, connectWithOidc, startAuthorize, disconnect, listAccounts, listInvoiceCategories, syncProducts, matchProducts, pushCodesToParasut,
+  ParasutError, connectionStatus, connectWithCode, connectWithOidc, markOfflineDenied, startAuthorize, disconnect, listAccounts, listInvoiceCategories, syncProducts, matchProducts, pushCodesToParasut,
 } from "@/lib/parasut";
 import { invoiceOrder, checkInvoice, invoicePdfUrl, refundInvoiceOrder } from "@/lib/parasut-invoice";
 import { pushInvoiceToMarketplace, MarketplaceInvoiceError } from "@/lib/marketplace-invoice";
@@ -35,6 +35,8 @@ export async function POST(req: NextRequest) {
         if (!String(body.code || "").trim() || !String(body.state || "").trim()) return NextResponse.json({ error: "Kod ya da state eksik" }, { status: 400 });
         await connectWithOidc(sb, String(body.code), String(body.state));
         return NextResponse.json({ ok: true, ...(await connectionStatus(sb)) });
+      // Paraşüt girişi süresiz oturumu (offline_access) reddetti → sonraki bağlanma normal oturumla
+      case "offline_denied": await markOfflineDenied(sb); return NextResponse.json({ ok: true });
       case "disconnect": await disconnect(sb); return NextResponse.json({ ok: true });
       case "accounts": return NextResponse.json({ ok: true, accounts: await listAccounts(sb) });
       case "categories": return NextResponse.json({ ok: true, categories: await listInvoiceCategories(sb) });

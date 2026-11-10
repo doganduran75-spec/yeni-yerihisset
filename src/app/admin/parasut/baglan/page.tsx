@@ -21,6 +21,14 @@ export default function ParasutCallbackPage() {
     window.history.replaceState(null, "", window.location.pathname);
     (async () => {
       if (error || !code || !state) {
+        // Süresiz oturum (offline_access) istenip reddedildiyse: işaretle, bir sonraki bağlanma normal oturumla
+        if (error && /scope|offline/i.test(`${error} ${q.get("error_description") || ""}`)) {
+          const { data: { session } } = await supabase.auth.getSession();
+          await fetch("/api/admin/parasut", { method: "POST", headers: { "Content-Type": "application/json", ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
+            body: JSON.stringify({ op: "offline_denied" }) }).catch(() => null);
+          setSt({ kind: "err", msg: "Paraşüt süresiz oturuma izin vermedi — entegrasyonlara dönüp bir kez daha “Paraşüt ile bağlan”a bas (normal oturumla bağlanır)." });
+          return;
+        }
         setSt({ kind: "err", msg: error === "access_denied" ? "Paraşüt'te izin verilmedi." : `Paraşüt bağlantısı kurulamadı${q.get("error_description") ? `: ${q.get("error_description")}` : error ? ` (${error})` : " (kod gelmedi)"}.` });
         return;
       }
