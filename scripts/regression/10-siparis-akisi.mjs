@@ -1054,6 +1054,10 @@ export default {
         ok(/const ownWeb = !MARKETPLACES\.includes\(channel\)/.test(pinv) && /const ship = ownWeb \?/.test(pinv) && /extra_fee/.test(pinv)
           && /x\.ch\?\.payment_type \? x\.ch\?\.payment_platform \|\| "Banka" : card \?/.test(pinv) && /attipas: "Attipas/.test(card),
           "Paraşüt: attipas kanalı; kendi sitelerde kargo + ek ücret faturada; havalede platform Banka", "ownWeb / extra_fee / platform kuralı yok");
+        // Ürün sayfası stok adedini göstermez: 1 → "Son 1 adet", 2 → "Hızla tükeniyor", fazlası → "Stokta" (2026-11-10)
+        const ppc = (await import("node:fs")).readFileSync(new URL("../../src/app/products/[slug]/ProductPageClient.tsx", import.meta.url), "utf8");
+        ok(!/\{currentStock\} Adet Stokta/.test(ppc) && /currentStock === 1 \? "Son 1 adet" : "Hızla tükeniyor"/.test(ppc),
+          "Ürün sayfası: stok adedi yazmıyor (Son 1 adet / Hızla tükeniyor / Stokta)", "adet yazısı duruyor");
         // Faturayı pazaryerine yükleme: üye yapamaz; site siparişinde reddedilir (yalnız Trendyol)
         const mt = await pa(F.member.token, { op: "push_marketplace_invoice", order_id: id });
         ok(mt.status === 403, "Paraşüt: üye faturayı pazaryerine (Trendyol / Hepsiburada) yükleyemiyor", why(mt));

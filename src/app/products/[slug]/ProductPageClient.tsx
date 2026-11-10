@@ -559,10 +559,18 @@ export default function ProductPageClient({ product, initialSize = null, initial
                       <Plus size={18} />
                     </button>
                   </div>
-                  <span className="text-sm font-medium text-green-600 flex items-center gap-1.5">
-                    <span className="w-2 h-2 bg-green-500 rounded-full inline-block" />
-                    {currentStock} Adet Stokta
-                  </span>
+                  {/* Stok adedi gösterilmez (kullanıcı 2026-11-10): 1 → "Son 1 adet", 2 → "Hızla tükeniyor", fazlası → "Stokta" */}
+                  {currentStock <= 2 ? (
+                    <span className="text-sm font-bold text-amber-600 flex items-center gap-1.5">
+                      <span className="w-2 h-2 bg-amber-500 rounded-full inline-block animate-pulse" />
+                      {currentStock === 1 ? "Son 1 adet" : "Hızla tükeniyor"}
+                    </span>
+                  ) : (
+                    <span className="text-sm font-medium text-green-600 flex items-center gap-1.5">
+                      <span className="w-2 h-2 bg-green-500 rounded-full inline-block" />
+                      Stokta
+                    </span>
+                  )}
                 </div>
               )}
 
