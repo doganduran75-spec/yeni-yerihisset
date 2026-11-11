@@ -133,7 +133,7 @@ export default function DashboardSummary({ children }: { children?: ReactNode })
               </tr>
             </thead>
             <tbody>
-              {/* Her kişi tek grupta (Yönetici › Affiliate › Müdavim › Müşteri › Üye › Kişi); fonksiyon yoksa eski rol sayımı */}
+              {/* Her kişi tek grupta (Yönetici › Guru › Affiliate › Tutkun › Meraklı › Üye › Kişi); fonksiyon yoksa eski rol sayımı */}
               {(d.tiers || d.roles).map((r: any) => (
                 <tr key={r.slug} className="border-b last:border-0">
                   <td className="py-1 pr-2 font-bold text-slate-600">{r.name}</td>

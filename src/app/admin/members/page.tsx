@@ -78,6 +78,8 @@ const ROLE_COLORS: Record<string, string> = {
   admin:     "bg-purple-100 text-purple-700 border-purple-200",
   uye:       "bg-slate-100 text-slate-700 border-slate-200",
   musteri:   "bg-green-100 text-green-700 border-green-200",
+  mudavim:   "bg-emerald-100 text-emerald-800 border-emerald-300",
+  guru:      "bg-olive-100 text-olive-800 border-olive-300",
   affiliate: "bg-blue-100 text-blue-700 border-blue-200",
 };
 function roleColor(slug: string) {
@@ -499,7 +501,7 @@ export default function MembersPage() {
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-wrap gap-1">
-                            {/* Hesap durumu: Misafir (şifresiz) · Doğrulanmamış · Üye — alışveriş seviyesi (Müşteri/Müdavim) roller olarak yanında */}
+                            {/* Hesap durumu: Misafir (şifresiz) · Doğrulanmamış · Üye — alışveriş seviyesi (Meraklı / Tutkun / Guru) roller olarak yanında */}
                             {member.account_state === "guest" ? (
                               <Badge className="text-[10px] font-semibold border px-1.5 py-0 bg-slate-100 text-slate-600 border-slate-200" title="Şifresiz hesap (misafir siparişi / eski siteden aktarım) — şifre belirleyince Üye olur">Misafir</Badge>
                             ) : member.account_state === "unverified" ? (

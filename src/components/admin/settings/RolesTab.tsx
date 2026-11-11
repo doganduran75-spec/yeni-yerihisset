@@ -22,7 +22,8 @@ async function authHeaders(): Promise<Record<string, string>> {
   return session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
 }
 
-// Otomatik roller: Müşteri (ödenmiş ilk sipariş) + Müdavim (en az N ödenmiş sipariş).
+// Otomatik roller (topluluk katmanları 2026-11-11): Barefoot Meraklısı (musteri, ödenmiş ilk sipariş) + Barefoot Tutkunu
+// (mudavim, en az N ödenmiş sipariş) + Barefoot Gurusu (guru, kendi siparişi + iş ortağı olarak en az 1 satış).
 // Kural veritabanında (refresh_member_auto_tags); eşik settings.mudavim_min_orders.
 function AutoRolesCard() {
   const [min, setMin] = useState<number | "">("");
@@ -47,7 +48,7 @@ function AutoRolesCard() {
       const r = await fetch("/api/admin/members/refresh-roles", { method: "POST", headers: await authHeaders() });
       const j = await r.json().catch(() => ({}));
       if (!r.ok || !j.ok) throw new Error(j.error || "Uygulanamadı");
-      siteAlert({ message: `Kaydedildi ve uygulandı: ${j.roles_added ?? 0} yeni Müşteri, ${j.mudavim_added ?? 0} yeni Müdavim, ${j.tags_added ?? 0} yeni etiket.`, tone: "success" });
+      siteAlert({ message: `Kaydedildi ve uygulandı: ${j.roles_added ?? 0} yeni Meraklı, ${j.mudavim_added ?? 0} yeni Tutkun, ${j.guru_added ?? 0} yeni Guru, ${j.tags_added ?? 0} yeni etiket.`, tone: "success" });
     } catch (e: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
       siteAlert({ title: "Hata", message: e.message, tone: "danger" });
     } finally {
@@ -63,15 +64,16 @@ function AutoRolesCard() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3 text-sm">
-        <p><b>Müşteri:</b> ödemesi alınmış ilk sipariş.</p>
+        <p><b>Barefoot Meraklısı:</b> ödemesi alınmış ilk sipariş.</p>
         <div className="flex flex-wrap items-center gap-2">
-          <b>Müdavim:</b> en az
+          <b>Barefoot Tutkunu:</b> en az
           <Input type="number" min={2} max={100} value={min} onChange={(e) => setMin(e.target.value === "" ? "" : Number(e.target.value))} className="h-8 w-20" />
           ödenmiş sipariş
           <Button size="sm" onClick={saveAndApply} disabled={busy || min === ""} className="gap-1.5 ml-2">
             {busy ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />} Kaydet ve tüm üyelere uygula
           </Button>
         </div>
+        <p><b>Barefoot Gurusu:</b> kendisi en az bir ödenmiş sipariş vermiş ve iş ortağı olarak en az bir ödenmiş satış getirmiş (kendi siparişi sayılmaz). Üyeler sayfasından elle de verilebilir.</p>
       </CardContent>
     </Card>
   );
@@ -237,7 +239,7 @@ export default function RolesTab() {
                       {role.created_at ? new Date(role.created_at).toLocaleDateString("tr-TR") : "—"}
                     </TableCell>
                     <TableCell className="text-right">
-                      {!["admin", "customer", "musteri", "uye"].includes(role.slug) && ( // sistem rolleri silinemez (kod bu kısa adlara bağlı)
+                      {!["admin", "customer", "musteri", "mudavim", "guru", "uye"].includes(role.slug) && ( // sistem rolleri silinemez (kod bu kısa adlara bağlı)
                         <Button
                           variant="ghost"
                           size="icon"

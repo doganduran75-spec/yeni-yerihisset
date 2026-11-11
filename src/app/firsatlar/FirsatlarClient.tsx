@@ -95,8 +95,9 @@ export default function FirsatlarClient({ opps, allRoles }: Props) {
   // yine de standart merdiven iskeleti gösterilsin diye varsayılan seviyeler.
   const DEFAULT_TIERS = [
     { level: 1, name: "Üye", slug: "uye" },
-    { level: 2, name: "Müşteri", slug: "musteri" },
-    { level: 3, name: "Müdavim", slug: "mudavim" },
+    { level: 2, name: "Barefoot Meraklısı", slug: "musteri" },
+    { level: 3, name: "Barefoot Tutkunu", slug: "mudavim" },
+    { level: 4, name: "Barefoot Gurusu", slug: "guru" },
   ];
   const roleTiers = allRoles.filter((r) => (r.level ?? 0) > 0).sort((a, b) => a.level - b.level);
   const usedRoleTiers = roleTiers.length ? roleTiers : DEFAULT_TIERS;
@@ -109,6 +110,9 @@ export default function FirsatlarClient({ opps, allRoles }: Props) {
   function unlockCta(slug: string): { label: string; href: string } {
     if (slug === "uye") return { label: "Üye Ol", href: "/account?tab=register" };
     if (slug === "musteri") return { label: "İlk Siparişini Ver", href: "/magaza" };
+    if (slug === "mudavim") return { label: "Yeni Bir Çift Seç", href: "/magaza" };
+    // Guru: iş ortağı olarak en az bir satış getirmek (topluluk katmanları 2026-11-11)
+    if (slug === "guru") return { label: "İş Ortağı Ol", href: "/affiliate" };
     return { label: "Nasıl açılır?", href: "/account" };
   }
 

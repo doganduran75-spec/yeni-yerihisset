@@ -370,6 +370,17 @@ export default {
         ok(p.status < 300 && ord(O.paid).payment_status === "paid", "Yönetici ödemeyi onaylayabiliyor", `HTTP ${p.status} ${p.text.slice(0, 100)}`);
         const role = num(`SELECT count(*) FROM public.user_roles ur JOIN public.roles r ON r.id = ur.role_id WHERE ur.user_id = ${lit(F.member.id)} AND r.slug = 'musteri'`);
         ok(role === 1, "Ödenen siparişle üye 'Müşteri' rolü aldı", "refresh_member_auto_tags tetikleyicisi çalışmadı");
+        // Barefoot Gurusu (topluluk katmanları 2026-11-11): kendi ödenmiş siparişi var + iş ortağı olarak başkasına ödenmiş satış
+        {
+          const isGuru = () => num(`SELECT count(*) FROM public.user_roles ur JOIN public.roles r ON r.id = ur.role_id WHERE ur.user_id = ${lit(F.member.id)} AND r.slug = 'guru'`);
+          const g0 = isGuru();
+          const myAff = one(`SELECT id FROM public.affiliate_profiles WHERE code = ${lit(F.affSelf)}`);
+          insert("orders", { channel: "site", user_id: F.admin.id, affiliate_id: myAff, status: "processing", payment_status: "paid",
+            shipment_status: "preparing", invoice_status: "pending", total_amount: 100, shipping_address: "{}" });
+          ok(g0 === 0 && isGuru() === 1, "Barefoot Gurusu: siparişi olan iş ortağı ilk satışıyla Guru oldu (satıştan önce değildi)", `önce ${g0}, sonra ${isGuru()}`);
+          ok(num(`SELECT count(*) FROM public.roles WHERE (slug, name) IN (('musteri', 'Barefoot Meraklısı'), ('mudavim', 'Barefoot Tutkunu'), ('guru', 'Barefoot Gurusu')) OR (slug = 'guru' AND level = 4)`) === 3
+            && num(`SELECT level FROM public.roles WHERE slug = 'guru'`) === 4, "Topluluk katmanları: Meraklı / Tutkun / Guru (seviye 4) adları");
+        }
 
         // Sıra kuralı: ürün geri gelmeden (ve iptal olmadan) tek başına ücret iadesi yapılamaz
         const r2 = await api("/api/admin/orders/action", { token: F.admin.token, body: { action: "refund", orderId: O.paid, amount: 100, method: "bank_transfer", confirmed: true, note: "regresyon" } });

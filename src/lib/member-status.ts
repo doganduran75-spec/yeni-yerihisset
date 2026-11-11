@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // ÜYELİK DURUMU (migration 20261028000001) — iki eksen:
 //   hesap: guest (şifresiz) · unverified (şifre var, e-posta doğrulanmadı) · member (şifre + doğrulanmış)
-//   alışveriş: Müşteri / Müdavim rolleri (ödenmiş siparişe göre)
+//   alışveriş: Barefoot Meraklısı / Tutkunu / Gurusu rolleri (slug musteri / mudavim / guru — ödenmiş sipariş, iş ortağı satışı)
 // Ayrıcalıklar (Fırsatlar, hoş geldin kuponu, iş ortaklığı) yalnız "member"da açılır.
 // Sipariş / giriş / Hesabım doğrulamadan bağımsızdır.
 import { createAdminClient } from "@/lib/supabase-admin";
