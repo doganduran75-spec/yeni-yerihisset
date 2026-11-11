@@ -19,6 +19,7 @@ const TRIGGER_LABELS: Record<string, string> = {
   cart_abandonment: "Sepet Hatırlatma",
   order_recovery: "Sipariş Kurtarma",
   review_request: "Yorum İsteme",
+  trial_reminder: "Deneme Hatırlatması (teslimden 4 gün sonra)",
   winback: "Seni Özledik",
 };
 
@@ -27,6 +28,7 @@ const TRIGGER_VARS: Record<string, string[]> = {
   cart_abandonment: ["{{customer_name}}", "{{items_html}}", "{{store_url}}", "{{store_name}}"],
   order_recovery: ["{{customer_name}}", "{{order_id}}", "{{store_url}}", "{{store_name}}"],
   review_request: ["{{customer_name}}", "{{product_names}}", "{{stars_html}}", "{{store_url}}", "{{store_name}}"],
+  trial_reminder: ["{{customer_name}}", "{{order_id}}", "{{days_left}}", "{{fit_buttons_html}}", "{{store_url}}", "{{store_name}}"],
   winback: ["{{customer_name}}", "{{coupon_code}}", "{{coupon_percent}}", "{{coupon_expires}}", "{{store_url}}", "{{store_name}}"],
 };
 

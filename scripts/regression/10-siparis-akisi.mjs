@@ -700,6 +700,52 @@ export default {
         ok(hasRole("guru"), "Ortak ilk satışıyla Barefoot Gurusu oldu", "guru rolü yok");
       });
 
+      // SATIŞ KESİNLEŞTİ + DENEME HATIRLATMASI (2026-11-11, MIG 20261178): hakediş "süreç kapanınca" — fatura erken kesilse de
+      // müşteri denerken, açık değişim / iade varken sipariş tamamlanmış sayılmaz; 14 gün cevapsız dolunca saatlik iş kesinleştirir
+      await part("Satış kesinleşti (hakediş) + deneme hatırlatması", async () => {
+        const mk = (o) => insert("orders", { channel: "site", user_id: F.member.id, status: "processing", payment_status: "paid", shipment_status: "delivered",
+          invoice_status: "invoiced", total_amount: 100, shipping_address: "{}", ...o });
+        const done = (id) => one(`SELECT completed_at IS NOT NULL FROM public.orders WHERE id = ${lit(id)}`) === "t";
+        // Fatura sevkiyatta kesilmiş, müşteri deniyor → tamamlanmadı; "oldu" deyince tamamlandı
+        const t1 = mk({ fit_status: "trial", delivered_at: new Date().toISOString() });
+        const before = done(t1);
+        sql(`UPDATE public.orders SET fit_status = 'ok', fit_answered_at = now() WHERE id = ${lit(t1)}`);
+        ok(!before && done(t1), "Faturası kesilmiş ama müşterinin denediği sipariş tamamlanmış sayılmıyor; “oldu” deyince tamamlanıyor (hakediş)", `önce ${before}, sonra ${done(t1)}`);
+        // Değişim talebi açıkken tamamlanmaz; talep kapanınca tamamlanır
+        const t2 = mk({ fit_status: "exchange", delivered_at: new Date().toISOString() });
+        const cs = insert("order_cases", { order_id: t2, kind: "exchange", status: "requested" });
+        sql(`UPDATE public.orders SET updated_at = now() WHERE id = ${lit(t2)}`);
+        const open = done(t2);
+        sql(`UPDATE public.order_cases SET closed_at = now() WHERE id = ${lit(cs)}`);
+        ok(!open && done(t2), "Açık değişim talebi varken sipariş tamamlanmıyor; değişim kapanınca tamamlanıyor", `açıkken ${open}, kapanınca ${done(t2)}`);
+        // 14 gün cevapsız doldu (faturası kesilmiş) → saatlik iş kesinleştirir; 10 günlük deneme kesinleşmez
+        const t3 = mk({ fit_status: "trial", delivered_at: new Date(Date.now() - 15 * 86400000).toISOString() });
+        const t4 = mk({ fit_status: "trial", delivered_at: new Date(Date.now() - 10 * 86400000).toISOString() });
+        sql(`UPDATE public.orders SET completed_at = NULL WHERE id IN (${lit(t3)}, ${lit(t4)})`);
+        one("SELECT public.stamp_settled_orders()");
+        ok(done(t3) && !done(t4), "14 günü cevapsız dolan sipariş saatlik işte kesinleşiyor; süresi dolmayan kesinleşmiyor", `15 gün ${done(t3)}, 10 gün ${done(t4)}`);
+        // Pazaryeri siparişi deneme akışına girmez: teslim + fatura → tamamlandı
+        const t5 = mk({ channel: "trendyol", external_order_number: `RGT${RUN}SET`, fit_status: null });
+        ok(done(t5), "Pazaryeri siparişi eskisi gibi: ödendi + teslim + fatura → tamamlandı", "tamamlanmadı");
+
+        // Deneme hatırlatması: teslimden 4 gün sonra, cevap yoksa, bir kez
+        let m = null;
+        try { m = await import(new URL("../../src/lib/order-next-step.ts", import.meta.url)); } catch { /* eski Node */ }
+        if (m) {
+          const D = 86400000, now = Date.now();
+          const base = { channel: "site", import_source: null, status: "processing", shipment_status: "delivered", fit_status: "trial", delivered_at: new Date(now - 5 * D).toISOString() };
+          ok(m.trialReminderDue(base, now) && !m.trialReminderDue({ ...base, delivered_at: new Date(now - 3 * D).toISOString() }, now)
+            && !m.trialReminderDue({ ...base, delivered_at: new Date(now - 13 * D).toISOString() }, now) && !m.trialReminderDue({ ...base, fit_status: "ok" }, now)
+            && !m.trialReminderDue({ ...base, trial_reminded_at: new Date().toISOString() }, now) && !m.trialReminderDue({ ...base, has_open_case: true }, now)
+            && !m.trialReminderDue({ ...base, channel: "trendyol" }, now) && !m.trialReminderDue({ ...base, status: "cancelled" }, now),
+            "Deneme hatırlatması: teslimden 4 gün sonra, cevap yoksa, bir kez (erken / son 2 gün / cevaplı / talepli / pazaryeri / iptal hariç)");
+        }
+        const cron = (await import("node:fs")).readFileSync(new URL("../../src/app/api/cron/marketplace-sync/route.ts", import.meta.url), "utf8");
+        ok(/processTrialReminders\(supabase\)/.test(cron) && /rpc\("stamp_settled_orders"\)/.test(cron)
+          && num("SELECT count(*) FROM public.email_templates WHERE trigger = 'trial_reminder' AND body_html LIKE '%{{fit_buttons_html}}%'") === 1,
+          "Saatlik iş: hatırlatma + 14 gün kesinleştirme çalışıyor; “Ayakkabınız oldu mu?” şablonu var", "cron ya da şablon eksik");
+      });
+
       await part("Reklamdan gelen sipariş (kaynak + Meta bildirimi)", async () => {
         // Tarayıcının gönderdiği bağlam (src/lib/ad-context.ts › getAdContext) — Instagram reklamı, çerez onaylı
         const adContext = {

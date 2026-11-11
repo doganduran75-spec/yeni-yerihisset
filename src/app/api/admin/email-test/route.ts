@@ -17,12 +17,14 @@ import { sendInvoiceEmail } from "@/lib/invoice-mail";
 import { sendClaimEmail, campaignEmailHtml } from "@/lib/crm-campaign";
 import { sendRawSiteMail } from "@/lib/site-mail";
 import { afterSaleUrl } from "@/lib/after-sale";
+import { fitButtonsHtml } from "@/lib/trial-reminder";
 
 const KINDS: { kind: string; group: string; label: string; order?: boolean }[] = [
   { kind: "order_placed", group: "Sipariş", label: "Sipariş alındı", order: true },
   { kind: "order_paid", group: "Sipariş", label: "Ödeme onaylandı", order: true },
   { kind: "order_shipped", group: "Sipariş", label: "Kargoya verildi (takip no)", order: true },
   { kind: "order_delivered", group: "Sipariş", label: "Teslim edildi + “oldu mu?”", order: true },
+  { kind: "trial_reminder", group: "Sipariş", label: "Oldu mu? hatırlatması (teslimden 4 gün sonra)", order: true },
   { kind: "order_cancelled", group: "Sipariş", label: "İptal edildi", order: true },
   { kind: "invoice", group: "Sipariş", label: "Fatura (PDF ekli)", order: true },
   { kind: "order_recovery", group: "Sipariş", label: "Yarım kalan sipariş (ertesi sabah)", order: true },
@@ -98,6 +100,7 @@ export async function POST(req: NextRequest) {
         return sendOrderNotification("order_shipped", { orderId: order.id, userId: order.user_id, trackingNumber: order.cargo_provider ? `${code} (${order.cargo_provider})` : code });
       }
       case "invoice": return sendInvoiceEmail(sb, order.id);
+      case "trial_reminder": return tplSend("trial_reminder", { customer_name: name, order_id: orderNo, days_left: "10", fit_buttons_html: fitButtonsHtml(order.id) });
       case "order_recovery": return tplSend("order_recovery", { customer_name: name, order_id: orderNo });
       case "alt_delivered": return sendAltDeliveredEmail(order.id);
       case "return_label": return sendReturnLabelEmail(order.id, "surat", "DENEME123", false);

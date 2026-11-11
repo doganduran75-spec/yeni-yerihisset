@@ -13,6 +13,7 @@ import { parasutKeepAlive } from "@/lib/parasut";
 import { pollMarketplaceInvoices } from "@/lib/marketplace-invoice";
 import { processGmcQueue } from "@/lib/gmc-sync";
 import { processReviewRequests, processWinback } from "@/lib/review-winback";
+import { processTrialReminders } from "@/lib/trial-reminder";
 import { processTelegramOutbox } from "@/lib/telegram";
 
 // Pazaryeri SİPARİŞLERİ (önce: yeni siparişleri al, iptallerde stoğu geri ekle) +
@@ -73,6 +74,11 @@ async function run(req: NextRequest) {
   if (new Date().getMinutes() === 23) {
     await processReviewRequests(supabase).catch((e: any) => console.error("[cron/review-request]", e?.message || e));
     await processWinback(supabase).catch((e: any) => console.error("[cron/winback]", e?.message || e));
+    // Teslimden 4 gün sonra "Ayakkabınız oldu mu?" hatırlatması (src/lib/trial-reminder.ts)
+    await processTrialReminders(supabase).catch((e: any) => console.error("[cron/trial-reminder]", e?.message || e));
+    // 14 günü cevapsız dolan (faturası kesilmiş) siparişler kesinleşir → satış ortaklığı hakedişine girer (MIG 20261178)
+    const { error: stErr } = await (supabase as any).rpc("stamp_settled_orders");
+    if (stErr) console.error("[cron/settle]", stErr.message);
   }
   await (supabase as any).from("marketplace_stock_log")
     .delete().lt("created_at", new Date(Date.now() - 180 * 86400_000).toISOString());

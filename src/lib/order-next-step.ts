@@ -319,3 +319,24 @@ function coreNextStep(o: OrderLike): NextStep {
         actions: acts, needsAction: true }
     : { stage: "Tamamlandı", actions: acts, needsAction: false };
 }
+
+// ── Deneme hatırlatması (src/lib/trial-reminder.ts; kullanıcı 2026-11-11) ──────────────────────────────────────────
+/** Teslimden kaç gün sonra "oldu mu?" hatırlatması */
+export const REMIND_AFTER_DAYS = 4;
+/** Son 2 günde hatırlatma anlamsız (ör. sonradan teslim işaretlenen eski sipariş) */
+export const REMIND_MIN_LEFT_DAYS = 2;
+
+/** Hatırlatma bu siparişe şimdi gitmeli mi? (saf — regresyon) */
+export function trialReminderDue(o: {
+  channel?: string | null; import_source?: string | null; kargonomi_shipment_id?: string | null; kargonomi_tracking_code?: string | null;
+  status?: string | null; shipment_status?: string | null; fit_status?: string | null; delivered_at?: string | null; trial_reminded_at?: string | null;
+  has_open_case?: boolean;
+}, now = Date.now()): boolean {
+  if (o.trial_reminded_at || o.fit_status !== "trial" || o.shipment_status !== "delivered" || o.status === "cancelled" || o.has_open_case) return false;
+  if (!afterSaleHere(o) || !o.delivered_at) return false;
+  const DAY = 86400_000;
+  const age = now - new Date(o.delivered_at).getTime();
+  return age >= REMIND_AFTER_DAYS * DAY && age <= (TRIAL_DAYS - REMIND_MIN_LEFT_DAYS) * DAY;
+}
+
+
