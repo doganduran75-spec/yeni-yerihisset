@@ -52,6 +52,7 @@ export default {
         DELETE FROM public.profiles WHERE email ILIKE '%@${DOMAIN}';
         DELETE FROM auth.users WHERE email ILIKE '%@${DOMAIN}';
         DELETE FROM public.affiliate_profiles WHERE code LIKE 'RGT%';
+        DELETE FROM public.affiliate_payout_runs WHERE period = '2001-01'; -- uçtan uca satış ortaklığı testinin dönemi
         DELETE FROM public.stock_notifications WHERE product_id IN (${prods}) OR email ILIKE '%@${DOMAIN}';
         DELETE FROM public.free_gift_rules WHERE name LIKE 'REGRESYON-TEST%';
         DELETE FROM public.shipping_methods WHERE name LIKE 'REGRESYON-TEST%' AND NOT is_default;
@@ -77,7 +78,7 @@ export default {
       cleanup(); // önceki çalıştırmadan kalan (yarıda kesildiyse)
       F.cat = insert("categories", { name: "REGRESYON-TEST", slug: "regresyon-test" });
       F.prod = insert("products", { title: "REGRESYON-TEST Ayakkabı", slug: `regresyon-test-urun-${RUN}`, price: 1000, stock: 0, is_active: false, category_id: F.cat });
-      F.var = insert("product_variants", { product_id: F.prod, price: 1000, stock: 60, is_active: true }); // yeni senaryolar stok tüketir (99 = stoktan fazla testi)
+      F.var = insert("product_variants", { product_id: F.prod, price: 1000, stock: 70, is_active: true }); // yeni senaryolar stok tüketir (99 = stoktan fazla testi)
       F.var2 = insert("product_variants", { product_id: F.prod, price: 1000, stock: 5, is_active: true }); // değişim alternatifi
       F.gift = insert("products", { title: "REGRESYON-TEST Hediye", slug: `regresyon-test-hediye-${RUN}`, price: 200, stock: 5, is_active: false });
       insert("free_gift_rules", { name: "REGRESYON-TEST hediye", trigger_category_id: F.cat, gift_product_id: F.gift, is_active: true });
@@ -121,6 +122,13 @@ export default {
       F.affOff = `RGT${RUN.toUpperCase()}PASIF`;
       F.affOffUser = (await mkUser("ortak", false)).id;
       insert("affiliate_profiles", { user_id: F.affOffUser, code: F.affOff, status: "suspended", commission_rate: 10 });
+      // Uçtan uca satış ortaklığı: başvurudan krediyi harcamaya kadar giden, e-postası doğrulanmış yeni üye
+      F.partner = await mkUser("ortak2", false);
+      sql(`UPDATE public.profiles SET email_verified = true WHERE id = ${lit(F.partner.id)}`);
+      F.partnerAddr = insert("user_addresses", {
+        user_id: F.partner.id, address_name: "Ev", first_name: "Regresyon", last_name: "Ortak", phone: "5550000000",
+        address_detail: "Moda Caddesi No 14 Daire 5", district: "Kadıköy", city: "İstanbul",
+      });
       F.ship = row("SELECT fee, free_over FROM public.shipping_methods WHERE is_active ORDER BY is_default DESC, sort_order LIMIT 1"); // = src/lib/shipping.ts
       F.shipOff = insert("shipping_methods", { name: "REGRESYON-TEST kargo", fee: 1, is_active: false, sort_order: 999 }); // pasif → müşteri görmez
       F.ip = `10.254.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}`; // misafir hız sınırı her çalıştırmada temiz
@@ -580,6 +588,94 @@ export default {
         ok(!!r3.json?.orderId && !affOf(r3), "Askıya alınmış ortağın linki sayılmıyor (sipariş yine verilir)", `${why(r3)} affiliate_id ${affOf(r3)}`);
         const r4 = await order([MAIN(1)], { affiliateCode: "RGTOLMAYANKOD" });
         ok(!!r4.json?.orderId && !affOf(r4), "Olmayan ortak kodu siparişi bozmuyor", `${why(r4)} affiliate_id ${affOf(r4)}`);
+      });
+
+      // UÇTAN UCA SATIŞ ORTAKLIĞI (2026-11-11): başvuru → tıklama → link + kupon siparişi → dönem hakedişi → kredi →
+      // sepette harcama → iptalde geri yükleme → ortağın paneli → Barefoot Gurusu. Hakediş GERÇEK siparişlere dokunmasın diye
+      // test siparişleri boş bir geçmiş döneme (2001-01) konur; dönem hesabı yalnız o dönemi işler.
+      await part("Satış ortaklığı uçtan uca (kredi)", async () => {
+        const P = F.partner;
+        const PERIOD = "2001-01";
+        const pOrder = (items, extra = {}) => api("/api/orders/create", {
+          token: P.token, body: { items, shippingAddressId: F.partnerAddr, billingSameAsShipping: true, paymentMethod: "bank_transfer", ...extra },
+        });
+        // 1) Başvuru: doğrulanmış üye anında onaylanır, "Affiliate" rolü alır; ikinci başvuru reddedilir
+        const ap = await api("/api/affiliate/apply", { token: P.token, body: { answers: { neden: "REGRESYON-TEST" } } });
+        const aff = ap.json?.affiliate;
+        if (!aff?.id) return add("fail", "İş ortaklığı başvurusu yapılamadı", why(ap));
+        const hasRole = (slug) => num(`SELECT count(*) FROM public.user_roles ur JOIN public.roles r ON r.id = ur.role_id WHERE ur.user_id = ${lit(P.id)} AND r.slug = ${lit(slug)}`) === 1;
+        ok(aff.status === "active" && hasRole("affiliate"), "Ortaklık başvurusu anında onaylandı, 'Affiliate' rolü verildi", `durum ${aff.status}, rol ${hasRole("affiliate")}`);
+        const ap2 = await api("/api/affiliate/apply", { token: P.token, body: { answers: {} } });
+        ok(ap2.status === 409, "İkinci ortaklık başvurusu reddediliyor", why(ap2));
+        sql(`UPDATE public.affiliate_profiles SET commission_rate = 10 WHERE id = ${lit(aff.id)}`); // hesap kolay izlensin: %10
+
+        // 2) Tıklama sayılır
+        const ck = await api("/api/affiliate/click", { body: { code: aff.code, path: "/magaza" } });
+        ok(ck.status === 200 && num(`SELECT count(*) FROM public.affiliate_clicks WHERE affiliate_id = ${lit(aff.id)}`) >= 1,
+          "Ortak linkine tıklama sayıldı", why(ck));
+
+        // 3) Siparişler: A link (komisyon), B ortağın kuponu (komisyon, kupon düşülür), C ortağın kendi kuponuyla kendi
+        //    siparişi (komisyon YOK), D link ama tamamen iade (komisyon YOK)
+        const cAff = `RGT${RUN.toUpperCase()}ORTAK`;
+        insert("coupons", { code: cAff, name: "REGRESYON-TEST ortak kuponu", type: "percentage", amount: 10, min_order_amount: 0, per_user_limit: 99,
+          is_active: true, is_personal: false, auto_assign_on_signup: false, affiliate_id: aff.id });
+        const A = (await order([MAIN(1)], { affiliateCode: aff.code })).json?.orderId;
+        const B = (await order([MAIN(1)], { couponCode: cAff })).json?.orderId;
+        const C = (await pOrder([MAIN(1)], { couponCode: cAff })).json?.orderId;
+        const D = (await order([MAIN(1)], { affiliateCode: aff.code })).json?.orderId;
+        if (!A || !B || !C || !D) return add("fail", "Satış ortaklığı test siparişleri oluşturulamadı", `A ${A} B ${B} C ${C} D ${D}`);
+        ok(ord(A).affiliate_id === aff.id && eq(ord(B).coupon_discount, 100), "Link siparişi ortağa yazıldı; ortak kuponu %10 indirim yaptı", `A ${ord(A).affiliate_id}, B indirim ${ord(B).coupon_discount}`);
+        // Ödendi + teslim + faturalandı → tamamlandı; tamamlanma tarihi test dönemine
+        const done = (id, extra = "") => sql(`UPDATE public.orders SET status = 'processing', payment_status = 'paid', shipment_status = 'delivered', invoice_status = 'invoiced',
+          completed_at = '2001-01-15T10:00:00Z'${extra} WHERE id = ${lit(id)}`);
+        [A, B, C].forEach((id) => done(id));
+        done(D, ", refund_status = 'full', refunded_amount = total_amount");
+
+        // 4) Hakediş: üye çalıştıramaz; önizleme yazmaz; A = 1000 × %10 = 100, B = (1000 − 100) × %10 = 90
+        const pay = (token, mode) => api("/api/admin/affiliate/payout", { token, body: { period: PERIOD, mode } });
+        const pm = await pay(F.member.token, "preview");
+        ok(pm.status === 403, "Üye hakediş hesabı çalıştıramıyor", why(pm));
+        const bal = () => Number(one(`SELECT credit_balance FROM public.affiliate_profiles WHERE id = ${lit(aff.id)}`));
+        const pv = await pay(F.admin.token, "preview");
+        ok(pv.status === 200 && eq(pv.json?.grandTotal, 190) && pv.json?.orderCount === 2 && eq(bal(), 0),
+          "Hakediş önizlemesi: link + kupon satışı 190 TL; kendi siparişi ve tam iade sayılmadı; önizleme bakiye yazmadı",
+          `${why(pv)} → toplam ${pv.json?.grandTotal}, sipariş ${pv.json?.orderCount}, bakiye ${bal()}`);
+        const c1 = await pay(F.admin.token, "commit");
+        ok(c1.status === 200 && c1.json?.committed === 2 && eq(bal(), 190)
+          && num(`SELECT count(*) FROM public.affiliate_conversions WHERE affiliate_id = ${lit(aff.id)} AND status = 'paid'`) === 2
+          && num(`SELECT count(*) FROM public.store_credit_ledger WHERE affiliate_id = ${lit(aff.id)} AND type = 'earning' AND amount = 190 AND balance_after = 190`) === 1
+          && num(`SELECT count(*) FROM public.orders WHERE id IN (${lit(A)}, ${lit(B)}) AND commission_run_id IS NOT NULL`) === 2,
+          "Hakediş hesaba işlendi: 190 TL YeriHisset Kredisi, hareket kaydı, siparişler döneme bağlandı", `${why(c1)} → işlenen ${c1.json?.committed}, bakiye ${bal()}`);
+        const c2 = await pay(F.admin.token, "commit");
+        ok(c2.status === 200 && !c2.json?.committed && eq(bal(), 190), "Aynı dönem ikinci kez işlenince çift kredi yazılmıyor", `${why(c2)} → bakiye ${bal()}`);
+
+        // 5) Ortağın paneli: tıklama, kazanç, hareket; başka üye göremez
+        const stt = await api("/api/affiliate/stats", { token: P.token, method: "GET" });
+        ok(stt.status === 200 && stt.json?.affiliate?.total_clicks >= 1 && eq(stt.json?.affiliate?.total_earnings, 190)
+          && (stt.json?.conversions || []).length === 2 && (stt.json?.ledger || []).some((l) => l.type === "earning" && eq(l.amount, 190)),
+          "Ortağın panelinde tıklama, 190 TL kazanç ve hakediş hareketi görünüyor", `${why(stt)} → tıklama ${stt.json?.affiliate?.total_clicks}, kazanç ${stt.json?.affiliate?.total_earnings}`);
+        const stm = await api("/api/affiliate/stats", { token: F.member.token, method: "GET" });
+        ok(stm.json?.affiliate?.id !== aff.id, "Başka üye ortağın panel verisini göremiyor", "ortak verisi başka üyeye döndü");
+
+        // 6) Krediyi sepette harca: 50 TL düşer; bakiyeden fazlası istenirse bakiye kadar
+        const sp = await pOrder([MAIN(1)], { creditApply: 50 });
+        const so = sp.json?.orderId ? ord(sp.json.orderId) : null;
+        ok(!!so && eq(so.credit_used, 50) && eq(bal(), 140) && eq(so.total_amount, 1000 + S1000 - 50)
+          && num(`SELECT count(*) FROM public.store_credit_ledger WHERE affiliate_id = ${lit(aff.id)} AND type = 'spend' AND amount = -50`) === 1,
+          "Sepette 50 TL kredi kullanıldı: sipariş tutarından düştü, bakiye 140", `${why(sp)} → kredi ${so?.credit_used}, tutar ${so?.total_amount}, bakiye ${bal()}`);
+        const big = await pOrder([MAIN(1)], { creditApply: 99999 });
+        const bo = big.json?.orderId ? ord(big.json.orderId) : null;
+        ok(!!bo && eq(bo.credit_used, 140) && eq(bal(), 0), "Bakiyeden fazla kredi istenince yalnız bakiye kadar düşüyor", `${why(big)} → kredi ${bo?.credit_used}, bakiye ${bal()}`);
+        // 7) İptal → kredi geri yüklenir (ikinci iptal denemesi ikinci kez yüklemez)
+        for (const o of [so, bo]) {
+          if (o) await api("/api/admin/orders/action", { token: F.admin.token, body: { action: "cancel", orderId: o.id, note: "regresyon", reason: "customer" } });
+        }
+        if (so) await api("/api/admin/orders/action", { token: F.admin.token, body: { action: "cancel", orderId: so.id, note: "regresyon", reason: "customer" } });
+        ok(eq(bal(), 190) && num(`SELECT count(*) FROM public.store_credit_ledger WHERE affiliate_id = ${lit(aff.id)} AND type = 'refund'`) === 2,
+          "İptal edilen siparişlerin kredisi cüzdana geri döndü (bir kez)", `bakiye ${bal()} (190 olmalı)`);
+
+        // 8) Kendi siparişi (C) + ortak olarak satış (A) → Barefoot Gurusu
+        ok(hasRole("guru"), "Ortak ilk satışıyla Barefoot Gurusu oldu", "guru rolü yok");
       });
 
       await part("Reklamdan gelen sipariş (kaynak + Meta bildirimi)", async () => {

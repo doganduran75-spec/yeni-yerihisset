@@ -44,7 +44,7 @@ async function computeRows(supabase: any, period: string) {
   // Aday siparişler: dönemde tamamlanmış, ödenmemiş, tam iade değil
   const { data: orders } = await supabase
     .from("orders")
-    .select("id, total_amount, coupon_discount, coupon_id, affiliate_id, refund_status, refunded_amount, completed_at")
+    .select("id, user_id, total_amount, coupon_discount, coupon_id, affiliate_id, refund_status, refunded_amount, completed_at")
     .gte("completed_at", bounds.start)
     .lt("completed_at", bounds.end)
     .is("commission_run_id", null);
@@ -77,10 +77,12 @@ async function computeRows(supabase: any, period: string) {
     list.map((o) => o.affiliate_id || (o.coupon_id ? couponAff[o.coupon_id] : null)).filter(Boolean)
   )] as string[];
   const rateById: Record<string, number> = {};
+  const userById: Record<string, string | null> = {};
   if (affIds.length) {
     const { data: affs } = await supabase
-      .from("affiliate_profiles").select("id, commission_rate, status").in("id", affIds);
+      .from("affiliate_profiles").select("id, user_id, commission_rate, status").in("id", affIds);
     for (const a of (affs as any[]) || []) {
+      userById[a.id] = a.user_id ?? null;
       // Sadece aktif affiliate'ler komisyon kazanır
       if (a.status === "active") rateById[a.id] = Number(a.commission_rate);
     }
@@ -92,6 +94,9 @@ async function computeRows(supabase: any, period: string) {
     if (!affiliateId) continue;                 // atıfsız → komisyon yok
     const rate = rateById[affiliateId];
     if (rate == null) continue;                 // pasif/eksik affiliate → atla
+    // Ortağın KENDİ siparişi komisyon getirmez — link bunu sipariş anında eler, kupon atfı burada elenir
+    // (uçtan uca test 2026-11-11: ortak kendi kuponuyla alınca kendine komisyon yazılıyordu)
+    if (o.user_id && userById[affiliateId] === o.user_id) continue;
     const itemsTotal = itemsByOrder[o.id] || 0;
     const discount = Number(o.coupon_discount || 0);
     const refunded = Number(o.refunded_amount || 0);
@@ -167,7 +172,9 @@ export async function POST(req: NextRequest) {
   }
   const runId = (run as any).id;
 
-  // Sipariş başına konversiyon + siparişi run'a bağla (idempotent guard)
+  // Sipariş başına konversiyon + siparişi run'a bağla (idempotent guard). Bakiyeye YALNIZ gerçekten yazılan
+  // konversiyonlar eklenir: aynı dönem iki kez (ör. çift tıklama) işlenirse ikinci tur kredi yazmaz.
+  const done: Record<string, { n: number; sum: number }> = {};
   for (const r of rows) {
     const { error: cErr } = await supabase.from("affiliate_conversions").insert({
       affiliate_id: r.affiliateId,
@@ -181,11 +188,18 @@ export async function POST(req: NextRequest) {
     // order_id UNIQUE → daha önce sayıldıysa atla (çift işlemeye karşı)
     if (cErr) continue;
     await supabase.from("orders").update({ commission_run_id: runId }).eq("id", r.orderId).is("commission_run_id", null);
+    const d = (done[r.affiliateId] ??= { n: 0, sum: 0 });
+    d.n += 1; d.sum = round2(d.sum + r.commission);
   }
+  for (const g of Object.values(byAff)) { g.order_count = done[g.affiliate_id]?.n ?? 0; g.total_commission = done[g.affiliate_id]?.sum ?? 0; }
+  const committed = Object.values(done).reduce((a, d) => a + d.n, 0);
+  const committedTotal = round2(Object.values(done).reduce((a, d) => a + d.sum, 0));
+  await supabase.from("affiliate_payout_runs").update({ order_count: committed, total_commission: committedTotal }).eq("id", runId);
 
   // Affiliate başına cüzdan bakiyesi + ledger + bilgilendirme e-postası
   let emailed = 0;
   for (const g of Object.values(byAff)) {
+    if (g.total_commission <= 0) continue;
     const prevBal = Number(affInfo[g.affiliate_id]?.credit_balance || 0);
     const newBal = round2(prevBal + g.total_commission);
     const prevEarn = Number(affInfo[g.affiliate_id]?.total_earnings || 0);
@@ -211,5 +225,5 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, period, mode, committed: rows.length, grandTotal, runId, summary, emailed });
+  return NextResponse.json({ ok: true, period, mode, committed, grandTotal: committedTotal, runId, summary, emailed });
 }
