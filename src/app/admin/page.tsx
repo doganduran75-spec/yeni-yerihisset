@@ -11,6 +11,7 @@ import SystemStatusStrip from "@/components/admin/SystemStatusStrip";
 import { fetchNoResultSearches } from "@/components/admin/NoResultSearches";
 import { Loader2, ArrowRight, Clock, PackageOpen } from "lucide-react";
 import { UNINVOICED_SINCE, INVOICE_DAYS } from "@/lib/order-next-step";
+import { commissionOwner, commissionPeriod, currentPeriodStart, periodLabel, type CommissionAffiliate } from "@/lib/affiliate-commission";
 
 type OpenOrder = {
   id: string;
@@ -36,6 +37,7 @@ export default function AdminDashboard() {
   const [exchangeOpen, setExchangeOpen] = useState(0); // süren değişim (açık değişim talebi) — sonuçlanınca fatura
   const [uninvoiced, setUninvoiced] = useState({ n: 0, late: 0 }); // kargolanmış, faturası kesilmemiş (late: 7 günü geçen)
   const [searchCount, setSearchCount] = useState(0);   // bakılmamış sonuçsuz arama (30 gün)
+  const [payoutDue, setPayoutDue] = useState<{ n: number; period: string | null }>({ n: 0, period: null }); // hakedişi işlenmemiş geçmiş ay
   const [stockTasks, setStockTasks] = useState<any[]>([]); // pazaryeri stok görevleri (bekleyen)
   const [loading, setLoading] = useState(true);
 
@@ -115,6 +117,30 @@ export default function AdminDashboard() {
       if (ui.error) console.error("Faturası kesilmemiş sayısı okunamadı:", ui.error.message);
       setUninvoiced({ n: ui.count || 0, late: uiLate.count || 0 });
       setSearchCount(nrs.length);
+      // Hakediş işlenecek (kullanıcı 2026-11-11): geçmiş aylarda tamamlanmış, komisyonu henüz ortağın hesabına
+      // işlenmemiş siparişler — kural hakediş hesabıyla aynı (src/lib/affiliate-commission.ts)
+      try {
+        const { data: cand } = await (supabase as any).from("orders")
+          .select("id, user_id, affiliate_id, coupon_id, refund_status, completed_at")
+          .not("completed_at", "is", null).lt("completed_at", currentPeriodStart()).is("commission_run_id", null)
+          .or("affiliate_id.not.is.null,coupon_id.not.is.null").limit(2000);
+        const rows = (cand as any[]) || [];
+        const cIds = [...new Set(rows.map((o) => o.coupon_id).filter(Boolean))];
+        const couponAff: Record<string, string | null> = {};
+        if (cIds.length) {
+          const { data: cs } = await (supabase as any).from("coupons").select("id, affiliate_id").in("id", cIds).not("affiliate_id", "is", null);
+          for (const c of (cs as any[]) || []) couponAff[c.id] = c.affiliate_id;
+        }
+        const aIds = [...new Set(rows.map((o) => o.affiliate_id || couponAff[o.coupon_id]).filter(Boolean))];
+        const affs: Record<string, CommissionAffiliate> = {};
+        if (aIds.length) {
+          const { data: afs } = await (supabase as any).from("affiliate_profiles").select("id, user_id, status, commission_rate").in("id", aIds);
+          for (const a of (afs as any[]) || []) affs[a.id] = { user_id: a.user_id, status: a.status, commission_rate: Number(a.commission_rate) };
+        }
+        const due = rows.filter((o) => commissionOwner(o, couponAff, affs));
+        const oldest = due.map((o) => commissionPeriod(o.completed_at)).filter(Boolean).sort()[0] ?? null;
+        setPayoutDue({ n: due.length, period: oldest });
+      } catch { /* kritik değil */ }
     } catch (error) {
       console.error("Dashboard data fetch error:", error);
     } finally {
@@ -172,6 +198,9 @@ export default function AdminDashboard() {
               { n: exchangeOpen, label: "Süren değişim", href: "/admin/orders?iade=exchange_open" },
               // Kargolanmış, faturası kesilmemiş — 7 günü geçen varsa kırmızı not (VUK)
               { n: uninvoiced.n, label: "Faturası kesilmemiş", href: "/admin/orders?iade=uninvoiced_shipped", late: uninvoiced.late },
+              // Ay bitti, ortakların hakedişi işlenmedi (Satış Ortaklığı › Hakediş; en eski dönem açılır)
+              { n: payoutDue.n, label: payoutDue.period ? `Hakediş işlenecek (${periodLabel(payoutDue.period)})` : "Hakediş işlenecek",
+                href: `/admin/affiliates?view=payout${payoutDue.period ? `&period=${payoutDue.period}` : ""}` },
             ].map((x: { n: number; label: string; href: string; info?: boolean; late?: number }) => (
               <Link key={x.label} href={x.href} className={`flex items-center justify-between rounded-lg px-2 py-1 hover:bg-slate-50 ${x.n ? "font-semibold text-slate-800" : "text-muted-foreground"}`}>
                 <span>{x.label}{x.late ? <span className="ml-1.5 text-[11px] font-bold text-red-600">· {x.late} tanesi {INVOICE_DAYS} günü geçti</span> : null}</span>

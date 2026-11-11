@@ -648,6 +648,28 @@ export default {
           "Hakediş hesaba işlendi: 190 TL YeriHisset Kredisi, hareket kaydı, siparişler döneme bağlandı", `${why(c1)} → işlenen ${c1.json?.committed}, bakiye ${bal()}`);
         const c2 = await pay(F.admin.token, "commit");
         ok(c2.status === 200 && !c2.json?.committed && eq(bal(), 190), "Aynı dönem ikinci kez işlenince çift kredi yazılmıyor", `${why(c2)} → bakiye ${bal()}`);
+        // Sipariş ekranı komisyonu ödenmiş siparişte "… hakedişinde ödendi" notu için bu alanları okur (sorgu bozulursa sipariş listesi açılmaz)
+        const so2 = await rest(`orders?id=eq.${A}&select=id,completed_at,affiliate_profiles(code),affiliate_conversions(commission_amount,affiliate_profiles(code)),order_cases(*)`, { token: F.admin.token });
+        const cv = so2.status === 200 ? JSON.parse(so2.text)[0]?.affiliate_conversions?.[0] : null;
+        ok(cv && eq(cv.commission_amount, 100) && cv.affiliate_profiles?.code === aff.code,
+          "Sipariş ekranı: komisyonu ödenmiş sipariş ödenen komisyonu ve ortağı okuyor", `HTTP ${so2.status} ${so2.text.slice(0, 120)}`);
+        // Pano "Hakediş işlenecek" ve hakediş hesabı aynı kural (src/lib/affiliate-commission.ts)
+        {
+          let m = null;
+          try { m = await import(new URL("../../src/lib/affiliate-commission.ts", import.meta.url)); } catch { /* eski Node */ }
+          if (m) {
+            const affs = { a1: { user_id: "u1", status: "active", commission_rate: 10 }, a2: { user_id: "u2", status: "suspended", commission_rate: 10 } };
+            const cAff = { k1: "a1", k2: null };
+            ok(m.commissionOwner({ user_id: "x", affiliate_id: "a1" }, cAff, affs) === "a1" && m.commissionOwner({ user_id: "x", coupon_id: "k1" }, cAff, affs) === "a1"
+              && m.commissionOwner({ user_id: "u1", coupon_id: "k1" }, cAff, affs) === null && m.commissionOwner({ user_id: "x", affiliate_id: "a2" }, cAff, affs) === null
+              && m.commissionOwner({ user_id: "x", affiliate_id: "a1", refund_status: "full" }, cAff, affs) === null && m.commissionOwner({ user_id: "x", coupon_id: "k2" }, cAff, affs) === null
+              && m.commissionPeriod("2001-01-15T10:00:00Z") === "2001-01" && m.periodLabel("2026-10") === "Ekim 2026",
+              "Komisyon kuralı: link / ortak kuponu evet; kendi siparişi, pasif ortak, tam iade, atıfsız kupon hayır; dönem adı");
+          }
+          const dash = (await import("node:fs")).readFileSync(new URL("../../src/app/admin/page.tsx", import.meta.url), "utf8");
+          ok(/Hakediş işlenecek/.test(dash) && /commissionOwner\(o, couponAff, affs\)/.test(dash) && /lt\("completed_at", currentPeriodStart\(\)\)\.is\("commission_run_id", null\)/.test(dash),
+            "Pano: geçmiş ayın işlenmemiş hakedişi “Hakediş işlenecek” satırında (hakediş hesabıyla aynı kural)", "pano satırı / kural yok");
+        }
 
         // 5) Ortağın paneli: tıklama, kazanç, hareket; başka üye göremez
         const stt = await api("/api/affiliate/stats", { token: P.token, method: "GET" });

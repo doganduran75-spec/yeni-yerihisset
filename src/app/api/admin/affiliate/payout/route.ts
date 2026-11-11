@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { sendCreditLoadedEmail } from "@/lib/affiliate-mail";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { getAuthUserFromRequest } from "@/lib/auth-from-request";
+import { commissionOwner, type CommissionAffiliate } from "@/lib/affiliate-commission";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -76,27 +77,20 @@ async function computeRows(supabase: any, period: string) {
   const affIds = [...new Set(
     list.map((o) => o.affiliate_id || (o.coupon_id ? couponAff[o.coupon_id] : null)).filter(Boolean)
   )] as string[];
-  const rateById: Record<string, number> = {};
-  const userById: Record<string, string | null> = {};
+  const affById: Record<string, CommissionAffiliate> = {};
   if (affIds.length) {
     const { data: affs } = await supabase
       .from("affiliate_profiles").select("id, user_id, commission_rate, status").in("id", affIds);
-    for (const a of (affs as any[]) || []) {
-      userById[a.id] = a.user_id ?? null;
-      // Sadece aktif affiliate'ler komisyon kazanır
-      if (a.status === "active") rateById[a.id] = Number(a.commission_rate);
-    }
+    for (const a of (affs as any[]) || []) affById[a.id] = { user_id: a.user_id ?? null, status: a.status, commission_rate: Number(a.commission_rate) };
   }
 
   const rows: Row[] = [];
   for (const o of list) {
-    const affiliateId = o.affiliate_id || (o.coupon_id ? couponAff[o.coupon_id] : null);
-    if (!affiliateId) continue;                 // atıfsız → komisyon yok
-    const rate = rateById[affiliateId];
-    if (rate == null) continue;                 // pasif/eksik affiliate → atla
-    // Ortağın KENDİ siparişi komisyon getirmez — link bunu sipariş anında eler, kupon atfı burada elenir
-    // (uçtan uca test 2026-11-11: ortak kendi kuponuyla alınca kendine komisyon yazılıyordu)
-    if (o.user_id && userById[affiliateId] === o.user_id) continue;
+    // Kimin komisyonu? (src/lib/affiliate-commission.ts — pano "Hakediş işlenecek" de aynı kural): atıfsız, pasif ortak,
+    // ortağın KENDİ siparişi (kendi kuponuyla da — uçtan uca test 2026-11-11) → komisyon yok
+    const affiliateId = commissionOwner(o, couponAff, affById);
+    if (!affiliateId) continue;
+    const rate = affById[affiliateId].commission_rate;
     const itemsTotal = itemsByOrder[o.id] || 0;
     const discount = Number(o.coupon_discount || 0);
     const refunded = Number(o.refunded_amount || 0);

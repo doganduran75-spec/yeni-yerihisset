@@ -3,6 +3,7 @@
 import { orderLabel } from "@/lib/order-label";
 import { useEffect, useState, useCallback } from "react";
 import { orderNextStep, isReturnInvoiceDue, type NextActionKey, UNINVOICED_SINCE, INVOICE_DAYS, caseReasonLabel } from "@/lib/order-next-step";
+import { commissionPeriod, periodLabel } from "@/lib/affiliate-commission";
 import { useSearchParams, useRouter } from "next/navigation";
 import AdminOpsTabs from "@/components/admin/AdminOpsTabs";
 import OrderTimeline from "@/components/admin/OrderTimeline";
@@ -130,6 +131,9 @@ type Order = {
   coupon_discount?: number | null;
   credit_used?: number | null;
   affiliate_profiles?: { code: string } | null;
+  // Hakedişi işlenmiş komisyon (dönem = completed_at ayı; src/lib/affiliate-commission.ts)
+  affiliate_conversions?: { commission_amount: number; affiliate_profiles?: { code: string } | null }[] | null;
+  completed_at?: string | null;
   attribution?: { source?: Record<string, unknown>; capi?: { status?: string; error?: string; reason?: string; test?: boolean } } | null;
   // Pazaryeri siparişi (Trendyol / Hepsiburada)
   channel?: string | null;
@@ -383,7 +387,7 @@ export default function OrdersPage() {
       for (let from = 0; ; from += 1000) {
         const { data, error } = await supabase
           .from("orders")
-          .select(`*, profiles(first_name, last_name, email, phone, email_verified), affiliate_profiles(code), order_cases(*)`)
+          .select(`*, profiles(first_name, last_name, email, phone, email_verified), affiliate_profiles(code), affiliate_conversions(commission_amount, affiliate_profiles(code)), order_cases(*)`)
           .order("created_at", { ascending: false })
           .range(from, from + 999);
         if (error) {
@@ -842,7 +846,7 @@ export default function OrdersPage() {
   // Tek siparişi (talepleriyle) yeniden oku → liste + detay güncellenir
   async function refreshOrder(id: string) {
     const { data } = await (supabase as any).from("orders")
-      .select(`*, profiles(first_name, last_name, email, phone, email_verified), affiliate_profiles(code), order_cases(*)`)
+      .select(`*, profiles(first_name, last_name, email, phone, email_verified), affiliate_profiles(code), affiliate_conversions(commission_amount, affiliate_profiles(code)), order_cases(*)`)
       .eq("id", id).maybeSingle();
     if (!data) return;
     setOrders((prev) => prev.map((x) => (x.id === id ? { ...x, ...data } : x)));
@@ -854,7 +858,7 @@ export default function OrdersPage() {
   // (ör. "Yolda olan iade"de iadesi işlenen sipariş listeden düşer; kullanıcı 2026-11-01)
   async function syncOrder(id: string) {
     const { data } = await (supabase as any).from("orders")
-      .select(`*, profiles(first_name, last_name, email, phone, email_verified), affiliate_profiles(code), order_cases(*)`)
+      .select(`*, profiles(first_name, last_name, email, phone, email_verified), affiliate_profiles(code), affiliate_conversions(commission_amount, affiliate_profiles(code)), order_cases(*)`)
       .eq("id", id).maybeSingle();
     if (data) setOrders((prev) => prev.map((x) => (x.id === id ? { ...x, ...data } : x)));
   }
@@ -2040,6 +2044,17 @@ ${courierQueue.slice(0, 20).map((o) => orderLabel(o)).join(", ")}${courierQueue.
                           {o.affiliate_profiles?.code && (
                             <div className="flex justify-between text-xs pt-1"><span>Satış ortağı (komisyon)</span><span className="font-mono font-semibold text-olive-700">{o.affiliate_profiles.code}</span></div>
                           )}
+                          {/* Komisyonu ortağın hesabına işlenmiş sipariş (kullanıcı 2026-11-11): sonradan iade gelirse karar anında
+                              bilinsin — iade komisyonu kendiliğinden geri almaz */}
+                          {(o.affiliate_conversions || []).map((cv, i) => {
+                            const late = Number(o.refunded_amount || 0) > 0 || ((o as any).order_cases || []).some((c: any) => !c.closed_at && c.kind === "return");
+                            return (
+                              <div key={i} className={`text-xs rounded-md px-2 py-1 mt-1 ${late ? "bg-amber-50 border border-amber-200 text-amber-800" : "text-muted-foreground"}`}>
+                                Bu siparişin komisyonu <b>{periodLabel(commissionPeriod(o.completed_at))}</b> hakedişinde ödendi ({fmt(Number(cv.commission_amount))}{cv.affiliate_profiles?.code ? ` · ${cv.affiliate_profiles.code}` : ""}).
+                                {late && " İade komisyonu kendiliğinden geri almaz."}
+                              </div>
+                            );
+                          })}
                           {adSourceLabel(o) && (
                             <div className="flex justify-between gap-3 text-xs pt-1"><span>Kaynak</span><span className="font-semibold text-indigo-700 text-right">{adSourceLabel(o)}</span></div>
                           )}

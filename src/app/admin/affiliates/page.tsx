@@ -49,6 +49,13 @@ export default function AdminAffiliatesPage() {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
   }
   const [period, setPeriod] = useState<string>(lastMonthPeriod());
+  // Panodan "Hakediş işlenecek" → ?view=payout&period=YYYY-MM (o dönem açılır)
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    if (q.get("view") === "payout") setActiveView("payout"); // eslint-disable-line react-hooks/set-state-in-effect
+    const p = q.get("period");
+    if (p && /^\d{4}-\d{2}$/.test(p)) setPeriod(p);
+  }, []);
   const [payoutBusy, setPayoutBusy] = useState(false);
   const [payoutPreview, setPayoutPreview] = useState<any | null>(null);
   const [payoutMsg, setPayoutMsg] = useState<string | null>(null);
