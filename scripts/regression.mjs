@@ -261,7 +261,7 @@ async function main() {
     ["/", "Ana sayfa"], ["/magaza", "Mağaza"],
     ...(prod ? [[`/products/${prod[0]}`, "Ürün sayfası", prod[1]]] : []),
     ...(cat ? [[`/kategori/${cat}`, "Kategori"]] : []), ...(brand ? [[`/marka/${brand}`, "Marka"]] : []),
-    ["/ara?q=barefoot", "Arama"], ["/firsatlar", "Fırsatlar"], ["/bilgi-bankasi", "Bilgi bankası"],
+    ["/ara?q=barefoot", "Arama"], ["/ara", "Arama: mobilde yazılacak kutu", 'role="search"'], ["/firsatlar", "Fırsatlar"], ["/bilgi-bankasi", "Bilgi bankası"],
     ...(kb ? [[`/bilgi-bankasi/${kb}`, "Bilgi bankası makalesi"]] : []),
     ["/barefoot-nedir", "Barefoot nedir (ana rehber)", "Zero drop"], ["/magaza", "Mağaza başlığı (H1)", "Barefoot Ayakkabı Mağazası"],
     ["/magaza/yetiskin", "Yetişkin mağazası", "Yetişkin Barefoot Ayakkabı"], ["/magaza/ilkadim", "0–4 Yaş İlkadım mağazası", "0–4 Yaş İlkadım"], ["/sepet", "Sepet"], ["/checkout", "Ödeme"], ["/siparis-tamam", "Sipariş sonucu"],

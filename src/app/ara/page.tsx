@@ -92,9 +92,27 @@ export default async function SearchPage({
             {query && <p className="text-slate-400 mt-1 text-sm">{list.length} ürün bulundu</p>}
           </div>
 
+          {/* MOBİL ARAMA KUTUSU (kullanıcı 2026-11-12): mobilde üst menüde arama yok, alt çubuktaki "Arama" buraya geliyor —
+              yazılacak alan yoktu. Düz form (JS gerekmez, /ara?q=). Masaüstünde üst menüdeki kutu yeterli. */}
+          <form action="/ara" method="get" role="search" className="md:hidden -mt-6 mb-10 space-y-3">
+            <div className="relative">
+              <Search size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              <input
+                type="search" name="q" defaultValue={query} autoFocus={!query} enterKeyHint="search"
+                placeholder="Ürün, marka ya da numara yazın" aria-label="Ürün ara"
+                className="w-full h-14 pl-12 pr-4 rounded-2xl border-2 border-slate-200 bg-white text-base text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-olive-500"
+              />
+            </div>
+            <button type="submit" className="w-full h-12 rounded-2xl bg-olive-600 hover:bg-olive-700 text-white font-black text-sm uppercase tracking-widest flex items-center justify-center gap-2">
+              <Search size={18} /> Ara
+            </button>
+          </form>
+
           {!query ? (
-            <div className="text-center py-20 text-slate-400">
-              Aramak istediğiniz ürünü üstteki arama kutusuna yazın. Örnek: <b>bot siyah</b>, <b>sandalet 40</b>.
+            <div className="text-center py-10 md:py-20 text-slate-400">
+              <span className="hidden md:inline">Aramak istediğiniz ürünü üstteki arama kutusuna yazın.</span>
+              <span className="md:hidden">Aramak istediğiniz ürünü yukarıdaki kutuya yazın.</span>{" "}
+              Örnek: <b>bot siyah</b>, <b>sandalet 40</b>.
             </div>
           ) : list.length === 0 ? (
             <div className="text-center py-20 text-slate-400 space-y-3">
