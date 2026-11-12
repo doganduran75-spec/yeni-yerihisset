@@ -103,7 +103,7 @@ function DesktopFooter() {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, ...bot.fields() }),
       });
       const d = await res.json().catch(() => ({}));
-      if (res.ok) { setState("ok"); setMsg("Teşekkürler! Kaydınız alındı."); setEmail(""); }
+      if (res.ok) { setState("ok"); setMsg(d.message || "Teşekkürler! Kaydınız alındı."); setEmail(""); }
       else { setState("err"); setMsg(d.error || "Bir sorun oluştu."); }
     } catch {
       setState("err"); setMsg("Bağlantı hatası, tekrar deneyin.");

@@ -20,6 +20,7 @@ const TRIGGER_LABELS: Record<string, string> = {
   order_recovery: "Sipariş Kurtarma",
   review_request: "Yorum İsteme",
   trial_reminder: "Deneme Hatırlatması (teslimden 4 gün sonra)",
+  newsletter_welcome: "Bülten — Hoş Geldin",
   winback: "Seni Özledik",
 };
 
@@ -29,6 +30,7 @@ const TRIGGER_VARS: Record<string, string[]> = {
   order_recovery: ["{{customer_name}}", "{{order_id}}", "{{store_url}}", "{{store_name}}"],
   review_request: ["{{customer_name}}", "{{product_names}}", "{{stars_html}}", "{{store_url}}", "{{store_name}}"],
   trial_reminder: ["{{customer_name}}", "{{order_id}}", "{{days_left}}", "{{fit_buttons_html}}", "{{store_url}}", "{{store_name}}"],
+  newsletter_welcome: ["{{email}}", "{{unsubscribe_url}}", "{{store_url}}", "{{store_name}}"],
   winback: ["{{customer_name}}", "{{coupon_code}}", "{{coupon_percent}}", "{{coupon_expires}}", "{{store_url}}", "{{store_name}}"],
 };
 

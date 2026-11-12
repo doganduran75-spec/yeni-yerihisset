@@ -899,6 +899,23 @@ export default {
           const c2 = row(`SELECT marketing_consent AS mc, marketing_opt_out_at IS NOT NULL AS out FROM public.contacts WHERE id = ${lit(c.id)}`);
           ok(un.status === 200 && c2?.mc === false && c2?.out === true, "Abonelikten çık bağlantısı çalışıyor", `${why(un)} ${JSON.stringify(c2)}`);
         }
+        // 2026-11-12: yeni kayıt "katıldınız" (hoş geldin e-postası), aynı adres tekrar "zaten listemizde", çıkan tekrar
+        // abone olabilir; kampanya iznini kapatmış üyenin kararını bülten formu ezmez (Hesabım'a yönlendirir)
+        const nl2 = await api("/api/newsletter", { headers: { "x-forwarded-for": F.ip }, body: { email: ne, _hp: "", _t: 6000 } });
+        const nl3 = await api("/api/newsletter", { headers: { "x-forwarded-for": F.ip }, body: { email: ne, _hp: "", _t: 6000 } });
+        sql(`UPDATE public.profiles SET marketing_consent = false, marketing_consent_at = now() WHERE id = ${lit(F.member.id)}`);
+        const nl4 = await api("/api/newsletter", { headers: { "x-forwarded-for": F.ip }, body: { email: F.member.email, _hp: "", _t: 6000 } });
+        const memberC = num(`SELECT count(*) FROM public.contacts WHERE email = ${lit(String(F.member.email).toLowerCase())} AND marketing_consent AND marketing_consent_at > now() - interval '1 minute'`);
+        sql(`UPDATE public.profiles SET marketing_consent = false, marketing_consent_at = NULL WHERE id = ${lit(F.member.id)}`);
+        ok(nl.json?.result === "subscribed" && /katıldınız/.test(nl.json?.message || "") && nl2.json?.result === "resubscribed" && nl3.json?.result === "already" && /zaten/.test(nl3.json?.message || "")
+          && nl4.json?.result === "member_opted_out" && memberC === 0,
+          "Bülten: yeni kayıt “katıldınız”, tekrar yazınca “zaten listemizde”, çıkan yeniden katılabiliyor, iznini kapatmış üyenin kararı ezilmiyor",
+          `${nl.json?.result} / ${nl2.json?.result} / ${nl3.json?.result} / ${nl4.json?.result} · üye kişi kaydı ${memberC}`);
+        const nlSrc = (await import("node:fs")).readFileSync(new URL("../../src/lib/newsletter.ts", import.meta.url), "utf8");
+        ok(/sendNewsletterWelcome\(contactId, email\)/.test((await import("node:fs")).readFileSync(new URL("../../src/app/api/newsletter/route.ts", import.meta.url), "utf8"))
+          && /contactConsentUrl\(contactId, true\)/.test(nlSrc)
+          && num("SELECT count(*) FROM public.email_templates WHERE trigger = 'newsletter_welcome' AND body_html LIKE '%{{unsubscribe_url}}%' AND body_html LIKE '%abonelikten çık%'") === 1,
+          "Bülten hoş geldin e-postası: çıkış bağlantısı + “her bültenin altında abonelikten çık var” bilgisi", "şablon ya da gönderim eksik");
       });
 
       await part("Stok bildirimi (Stoğa girince haber ver)", async () => {

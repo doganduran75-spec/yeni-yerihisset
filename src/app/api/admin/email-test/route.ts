@@ -16,6 +16,7 @@ import { sendCreditLoadedEmail } from "@/lib/affiliate-mail";
 import { sendInvoiceEmail } from "@/lib/invoice-mail";
 import { sendClaimEmail, campaignEmailHtml } from "@/lib/crm-campaign";
 import { sendRawSiteMail } from "@/lib/site-mail";
+import { sendNewsletterWelcome } from "@/lib/newsletter";
 import { afterSaleUrl } from "@/lib/after-sale";
 import { fitButtonsHtml } from "@/lib/trial-reminder";
 
@@ -38,6 +39,7 @@ const KINDS: { kind: string; group: string; label: string; order?: boolean }[] =
   { kind: "coupon_reminder", group: "Kupon / kampanya", label: "Kuponun bitmesine 3 gün" },
   { kind: "claim", group: "Kupon / kampanya", label: "Kuponu hesabına ekle (misafir)" },
   { kind: "lead_magnet", group: "Kupon / kampanya", label: "Ücretsiz kargo (e-posta karşılığı)" },
+  { kind: "newsletter_welcome", group: "Kupon / kampanya", label: "Bülten — hoş geldin" },
   { kind: "email_verify", group: "Üyelik", label: "E-posta onayı" },
   { kind: "password_recovery", group: "Üyelik", label: "Şifre sıfırlama" },
   { kind: "guest_activation", group: "Üyelik", label: "Misafir hesabı etkinleştir" },
@@ -142,6 +144,10 @@ export async function POST(req: NextRequest) {
       case "email_verify": return sendEmailVerification({ to, name: me.first_name, verifyUrl: `${site}/eposta-onay?deneme=1` });
       case "password_recovery": return sendPasswordRecoveryEmail({ to, name: me.first_name, actionUrl: `${site}/sifre-belirle` });
       case "guest_activation": return sendGuestActivationEmail({ email: to, name: me.first_name, orderLabel: orderNo || "YH00000" });
+      case "newsletter_welcome": {
+        // Çıkış bağlantısı olmayan bir kişi kimliğiyle — tıklansa da kimsenin kaydı değişmez
+        return sendNewsletterWelcome("00000000-0000-0000-0000-000000000000", to);
+      }
       case "stock_welcome": return sendStockNotifySignupWelcome({ to, name: me.first_name, productTitle: "Deneme ürünü", productUrl: `${site}/magaza`, variantLabel: "42" });
       case "message_reply": return sendMessageNotification(order.id, "admin");
       case "admin_message": return sendMessageNotification(order.id, "user");
