@@ -4,6 +4,7 @@ import { consentUrl } from "./marketing-consent";
 import { fitBoxHtml } from "./after-sale";
 import { afterSaleHere } from "./order-next-step";
 import { cancelReason } from "./cancel-reasons";
+import { applyHavalePending, orderStepsHtml } from "./havale-email";
 import { createAdminClient } from "./supabase-admin";
 import { buildSmtpConfig } from "./smtp-config";
 
@@ -389,6 +390,27 @@ export async function sendOrderNotification(
          </div>`
       : "";
 
+  // ÖDEME BEKLEYEN HAVALE (kullanıcı 2026-11-12): "Siparişiniz başarıyla oluşturuldu!" + yeşil tutar, ödeme yapılmış
+  // gibi okunuyordu; müşteriler çok okumuyor. Başlık / konu "ödemeni bekliyoruz" olur, en üstte adımlar + son ödeme
+  // zamanı + banka bilgisi. Süre: expire_unpaid_orders (havale 24 saat, MIG 20261139) — orası değişirse burası da.
+  const havalePending = trigger === "order_placed" && isBankTransfer && (order as any).payment_status !== "paid";
+  const BANK_TRANSFER_HOURS = 24;
+  const payDeadline = new Date(new Date(order.created_at).getTime() + BANK_TRANSFER_HOURS * 3600_000)
+    .toLocaleString("tr-TR", { timeZone: "Europe/Istanbul", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
+  const havaleTopHtml = havalePending ? `
+    ${orderStepsHtml(["Sipariş oluşturuldu", "Ödeme bekleniyor", "Hazırlanıyor", "Kargoda"], 1)}
+    <div style="background:#fffbeb;border:2px solid #f59e0b;border-radius:10px;padding:16px;margin:0 0 20px 0;">
+      <p style="margin:0 0 8px 0;color:#92400e;font-size:16px;font-weight:800;">⏳ Ödemen henüz bize ulaşmadı</p>
+      <p style="margin:0 0 8px 0;color:#78350f;font-size:14px;line-height:1.6;">Siparişinin hazırlanması için <b>₺${Number(order.total_amount).toFixed(2)}</b> tutarını
+        aşağıdaki hesaba havale / EFT ile gönder. Açıklamaya <b>${shortId}</b> yaz.<br>Son ödeme zamanı: <b>${payDeadline}</b></p>
+      <p style="margin:0 0 12px 0;color:#92400e;font-size:13px;line-height:1.6;">Ödemen ulaşınca sana e-postayla haber vereceğiz.
+        Bu süre içinde ödeme gelmezse sipariş kendiliğinden iptal olur.</p>
+      ${bankInfo ? `<div style="background:#ffffff;border:1px solid #fcd34d;border-radius:8px;padding:12px 14px;">
+        <p style="margin:0 0 6px 0;color:#92400e;font-size:13px;font-weight:700;">🏦 Havale / EFT Banka Bilgileri</p>
+        <pre style="margin:0;color:#78350f;font-size:13px;font-family:monospace;white-space:pre-wrap;">${bankInfo}</pre>
+      </div>` : ""}
+    </div>` : "";
+
   const addressHtml = formatAddressHtml((order as any).shipping_address);
 
   // İPTAL e-postası: siparişin GERÇEK durumuna göre açıklama (eskiden şablonda sabit
@@ -403,7 +425,8 @@ export async function sendOrderNotification(
     order_items_html: buildOrderItemsHtml(orderItems),
     shipping_address: addressHtml,
     tracking_html: trackingHtml,
-    bank_info_html: bankInfoHtml,
+    // Ödeme bekleyen havalede banka bilgisi en üstteki "ödemeni bekliyoruz" kutusunda (aşağıda) — şablonda tekrarlanmasın
+    bank_info_html: havalePending ? "" : bankInfoHtml,
     cancel_info_html: cancelInfoHtml,
     store_name: storeName,
     store_email: storeEmail,
@@ -450,9 +473,17 @@ export async function sendOrderNotification(
       <p style="font-size:15px;color:#374151;line-height:1.6;margin:0 0 8px">Merhaba ${customerName}, ${intro}</p>
       <p style="font-size:14px;color:#6b7280;margin:0 0 16px">Sipariş No: <b>${shortId}</b> · Toplam: <b style="color:#166534">₺${Number(order.total_amount).toFixed(2)}</b></p>
       ${buildOrderItemsHtml(orderItems)}
-      ${bankInfoHtml}
+      ${havalePending ? "" : bankInfoHtml}
       ${addrBlock}
       ${trackingHtml}`;
+  }
+
+  // Ödeme bekleyen havale: şablon (panelden düzenlenmiş olsa da) ilk başlığı "ödemeni bekliyoruz" olur, hemen altına
+  // adımlar + ödeme kutusu; "hazırlanmaya başlanacaktır" gibi ödeme yapılmış izlenimi veren cümle çıkar; konu değişir.
+  if (havalePending) {
+    const r = applyHavalePending(subject, bodyHtml, havaleTopHtml, shortId);
+    subject = r.subject;
+    bodyHtml = r.bodyHtml;
   }
 
   // Havale sipariş onayında banka bilgisi GARANTİ: şablon {{bank_info_html}}

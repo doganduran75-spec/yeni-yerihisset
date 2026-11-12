@@ -1887,6 +1887,27 @@ export default {
           ok(!/Kod yazmana gerek yok/.test(cc) && /tarihine kadar yapacağın alışverişlerde geçerli/.test(cc) && /noDup/.test(nt) && /kargoya uygun şekilde paketleyip/.test(am) && !/Talebimi görüntüle/.test(am) && /\$\{how\}<\/p>\s*<div[^>]*dashed/.test(am) && /order_delivered" && \(afterSaleHere\(order\) \|\| [^\n]*mailRedirectActive\(\)/.test(nt),
             "E-posta metinleri: kod satırı yok, çift ₺ yok, iade kodu metni nazik, denemede teslim kutusu görünür", "metin düzeltmelerinden biri geri gelmiş");
         }
+        // Ödeme bekleyen havale (2026-11-12): sipariş e-postası "başarıyla oluşturuldu" demiyor; başlık + konu "ödemeni
+        // bekliyoruz", selamlamadan sonra adımlar + ödeme kutusu (son ödeme zamanı + banka), banka bilgisi tek kez
+        {
+          let hv = null;
+          try { hv = await import(new URL("../../src/lib/havale-email.ts", import.meta.url)); } catch { /* eski Node */ }
+          if (hv) {
+            const tpl = `<h2 style="x">Siparişiniz başarıyla oluşturuldu!</h2><p>Merhaba <strong>Ad</strong>,</p><p>Siparişinizi aldık ve en kısa sürede hazırlanmaya başlanacaktır.</p><div>Özet</div>`;
+            const top = `<div id="ODEME">${hv.orderStepsHtml(["Sipariş oluşturuldu", "Ödeme bekleniyor", "Hazırlanıyor", "Kargoda"], 1)}Havale / EFT Banka Bilgileri</div>`;
+            const r = hv.applyHavalePending("Siparişiniz Alındı! 🎉", tpl, top, "YH1");
+            const b = r.bodyHtml, at = (s) => b.indexOf(s);
+            const noHead = hv.applyHavalePending("", "<p>Merhaba</p>", top, "YH1").bodyHtml;
+            ok(/ödemeni bekliyoruz/.test(r.subject) && !/🎉/.test(r.subject) && !/başarıyla|hazırlanmaya başlan/.test(b) && /<h2 style="x">Siparişin oluşturuldu — ödemeni bekliyoruz<\/h2>/.test(b)
+              && at("Merhaba") < at('id="ODEME"') && at('id="ODEME"') < at("Özet") && b.split("ODEME").length === 2 && /●[\s\S]*Ödeme bekleniyor/.test(b)
+              && noHead.startsWith("<h2") && noHead.includes('id="ODEME"'),
+              "Havale sipariş e-postası: “ödemeni bekliyoruz” başlık + konu, “başarıyla / hazırlanacak” yok, ödeme kutusu selamlamadan sonra bir kez", b.slice(0, 300));
+          }
+          const nt = (await import("node:fs")).readFileSync(new URL("../../src/lib/notifications.ts", import.meta.url), "utf8");
+          ok(/havalePending\s*=\s*trigger === "order_placed" && isBankTransfer && [^\n]*payment_status !== "paid"/.test(nt) && /bank_info_html: havalePending \? "" : bankInfoHtml/.test(nt)
+            && /Son ödeme zamanı/.test(nt) && /BANK_TRANSFER_HOURS = 24/.test(nt),
+            "Havale e-postası yalnız ödenmemiş havalede değişiyor; son ödeme zamanı (24 saat) yazıyor; banka bilgisi şablonda tekrarlanmıyor", "notifications.ts havale bloğu eksik");
+        }
         const r = await order([MAIN(1)]);
         const id = r.json?.orderId;
         if (!id) return add("fail", "E-posta denemesi için sipariş oluşturulamadı", why(r));
