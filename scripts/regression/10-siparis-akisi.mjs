@@ -1959,6 +1959,11 @@ export default {
           ok(/havalePending\s*=\s*trigger === "order_placed" && isBankTransfer && [^\n]*payment_status !== "paid"/.test(nt) && /bank_info_html: havalePending \? "" : bankInfoHtml/.test(nt)
             && /Son ödeme zamanı/.test(nt) && /BANK_TRANSFER_HOURS = 24/.test(nt),
             "Havale e-postası yalnız ödenmemiş havalede değişiyor; son ödeme zamanı (24 saat) yazıyor; banka bilgisi şablonda tekrarlanmıyor", "notifications.ts havale bloğu eksik");
+          // Sözleşme satırı sade (2026-11-12): e-postada tek küçük satır bağlantı (yasal iletim), Siparişlerim › Detaylar'da da
+          const acc = (await import("node:fs")).readFileSync(new URL("../../src/app/account/page.tsx", import.meta.url), "utf8");
+          ok(/mesafeli-satis#on-bilgilendirme[^\n]*Ön Bilgilendirme Formu<\/a> ·/.test(nt) && !/Siparişinle birlikte kabul ettiğin/.test(nt)
+            && /Sözleşmeler<\/p>/.test(acc) && /Onayladığınız an/.test(acc),
+            "Sipariş e-postasında sözleşmeler tek satır bağlantı; Siparişlerim › Detaylar'da sözleşme bağlantıları + onay anı", "sözleşme satırı / Detaylar bağlantıları eksik");
         }
         const r = await order([MAIN(1)]);
         const id = r.json?.orderId;

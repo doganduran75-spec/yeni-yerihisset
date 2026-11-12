@@ -507,12 +507,13 @@ export async function sendOrderNotification(
   // Mesafeli Sözleşmeler Yönetmeliği: sözleşme + ön bilgilendirme tüketiciye kalıcı veri saklayıcısıyla (e-posta)
   // iletilmeli → site siparişinin onay e-postasına sözleşme bağlantıları (docs/HUKUKI-METINLER-NOTLAR.md C4)
   if (trigger === "order_placed" && (order.channel || "site") === "site" && !order.import_source) {
+    // Sadeleştirildi (kullanıcı 2026-11-12): uzun paragraf yerine tek küçük satır — yasal iletim (kalıcı veri
+    // saklayıcısı = e-posta) için bağlantılar kalır; aynı bağlantılar Hesabım › Siparişlerim › Detaylar'da da var
     bodyHtml += `
-    <p style="margin:18px 0 0;font-size:12px;color:#64748b;line-height:1.6">Siparişinle birlikte kabul ettiğin
-      <a href="${storeUrl}/mesafeli-satis#on-bilgilendirme" style="color:#4d7c0f">Ön Bilgilendirme Formu</a> ve
-      <a href="${storeUrl}/mesafeli-satis" style="color:#4d7c0f">Mesafeli Satış Sözleşmesi</a> bu bağlantılarda;
-      sipariş bilgilerin (ürün, fiyat, adres) yukarıda. Cayma hakkın: teslimden itibaren 14 gün —
-      <a href="${storeUrl}/iade-degisim" style="color:#4d7c0f">İade ve değişim</a>.</p>`;
+    <p style="margin:18px 0 0;font-size:11px;color:#94a3b8;line-height:1.6;text-align:center">
+      <a href="${storeUrl}/mesafeli-satis#on-bilgilendirme" style="color:#94a3b8">Ön Bilgilendirme Formu</a> ·
+      <a href="${storeUrl}/mesafeli-satis" style="color:#94a3b8">Mesafeli Satış Sözleşmesi</a> ·
+      <a href="${storeUrl}/iade-degisim" style="color:#94a3b8">İade ve değişim</a></p>`;
   }
   // Kampanya e-postası izni yoksa sipariş onayında kısa davet (izin, açılan sayfadaki düğmeyle verilir)
   if (uid && trigger === "order_placed" && profile && profile.marketing_consent === false) {

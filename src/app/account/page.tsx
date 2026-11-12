@@ -1004,6 +1004,20 @@ function AccountPageInner() {
                                    <div className="flex justify-between"><span className="text-slate-500">Kargo</span><span className="font-bold text-slate-800">{shipping > 0 ? `₺${shipping.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}` : "Ücretsiz"}</span></div>
                                    <div className="flex justify-between pt-1.5 border-t border-slate-200"><span className="font-black text-slate-900">Toplam</span><span className="font-black text-olive-600">₺{Number(order.total_amount).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span></div>
                                  </div>
+                                 {/* Sözleşmeler (2026-11-12): sipariş e-postasında tek satıra indi, burada da bağlantılar + onay anı */}
+                                 {(order.channel || "site") === "site" && (
+                                   <div className="sm:col-span-2 text-xs text-slate-500 leading-relaxed">
+                                     <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-1.5">Sözleşmeler</p>
+                                     <p>
+                                       <Link href="/mesafeli-satis#on-bilgilendirme" target="_blank" className="font-bold text-olive-600 underline">Ön Bilgilendirme Formu</Link>{" · "}
+                                       <Link href="/mesafeli-satis" target="_blank" className="font-bold text-olive-600 underline">Mesafeli Satış Sözleşmesi</Link>{" · "}
+                                       <Link href="/iade-degisim" target="_blank" className="font-bold text-olive-600 underline">İade ve değişim</Link>
+                                     </p>
+                                     {order.terms_accepted_at && (
+                                       <p className="text-slate-400 mt-1">Onayladığınız an: {new Date(order.terms_accepted_at).toLocaleString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p>
+                                     )}
+                                   </div>
+                                 )}
                                </div>
                              );
                            })()}
