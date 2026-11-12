@@ -30,6 +30,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { suggestEmail } from "@/lib/email-typo";
 import { cn } from "@/lib/utils";
 import { trackBeginCheckout, trackPurchase } from "@/lib/analytics";
 import { GeoSelect } from "@/components/ui/geo-select";
@@ -96,7 +97,6 @@ export default function CheckoutPage() {
   });
   const [identityNumber] = useState(""); // TC kimlik sorulmaz (KVKK C6); iyzico sabit değer alır
   const [emailExists, setEmailExists] = useState(false); // misafir e-postası şifreli bir üyeye ait → giriş gerekir
-  const [emailKnown, setEmailKnown] = useState(false);   // şifresi belirlenmemiş hesap (eski müşteri / önceki misafir) → devam
   // Site içi uyarılar (tarayıcı alert'i yerine)
   const [stockProblems, setStockProblems] = useState<{ id: string; title: string; variant: string | null; qty: number; live: number }[] | null>(null);
   const [orderError, setOrderError] = useState<string | null>(null);
@@ -269,6 +269,8 @@ export default function CheckoutPage() {
     setLoading(false);
   }
 
+  const emailSuggestion = isGuest ? suggestEmail(personalInfo.email) : null;
+
   // Misafir e-postası zaten üye mi? (alandan çıkınca hızlı kontrol; hız sınırlı)
   async function checkGuestEmail() {
     const email = personalInfo.email.trim().toLowerCase();
@@ -279,8 +281,8 @@ export default function CheckoutPage() {
         body: JSON.stringify({ email }),
       });
       const d = await res.json();
-      if (d.exists === true) { setEmailExists(true); setEmailKnown(false); setErrors((p) => ({ ...p, email: true })); }
-      else if (d.exists === false) { setEmailExists(false); setEmailKnown(!!d.known); }
+      if (d.exists === true) { setEmailExists(true); setErrors((p) => ({ ...p, email: true })); }
+      else if (d.exists === false) setEmailExists(false);
     } catch { /* kontrol kritik değil; sipariş anında zaten yapılır */ }
   }
 
@@ -792,7 +794,7 @@ export default function CheckoutPage() {
                         <Input
                           value={personalInfo.email}
                           disabled={!isGuest}
-                          onChange={isGuest ? (e) => { setPersonalInfo({ ...personalInfo, email: e.target.value }); clearErr("email"); setEmailExists(false); setEmailKnown(false); } : undefined}
+                          onChange={isGuest ? (e) => { setPersonalInfo({ ...personalInfo, email: e.target.value }); clearErr("email"); setEmailExists(false); } : undefined}
                           onBlur={isGuest ? checkGuestEmail : undefined}
                           placeholder={isGuest ? "ornek@eposta.com" : undefined}
                           type="email"
@@ -811,20 +813,17 @@ export default function CheckoutPage() {
                           </Link>
                         </div>
                       )}
-                      {isGuest && !emailExists && emailKnown && (
-                        <div className="rounded-2xl border border-olive-200 bg-olive-50 p-4 space-y-1.5">
-                          <p className="text-sm font-black text-olive-800">Tekrar hoş geldin! 👋</p>
-                          <p className="text-xs text-olive-800/90 leading-relaxed">
-                            Bu e-postayla daha önce alışveriş yapmışsın; siparişin hesabına eklenecek, giriş yapmadan devam edebilirsin.
-                            Sipariş geçmişini ve adreslerini görmek istersen şifreni bir kez belirleyebilirsin:{" "}
-                            <Link href="/login?forgot=1&redirect=/checkout" onClick={() => { try { sessionStorage.setItem("yh_prefill_email", personalInfo.email.trim()); } catch { /* yoksa elle yazar */ } }} className="font-bold underline">Şifremi belirle</Link>.
-                          </p>
-                        </div>
+                      {/* Yazım önerisi (2026-11-12): yanlış e-posta sipariş / fatura / hesap bağlantısını yabancıya gönderir */}
+                      {isGuest && emailSuggestion && (
+                        <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 leading-relaxed">
+                          <b className="break-all">{emailSuggestion}</b> mı demek istediniz?{" "}
+                          <button type="button" className="font-bold underline" onClick={() => { setPersonalInfo({ ...personalInfo, email: emailSuggestion }); setEmailExists(false); clearErr("email"); }}>Evet, düzelt</button>
+                        </p>
                       )}
-                      {isGuest && !emailExists && !emailKnown && (
+                      {isGuest && !emailExists && (
                         <p className="text-[10px] text-slate-400 font-medium px-1 leading-relaxed">
                           Üyeliğin var mı? <Link href="/login?redirect=/checkout" className="text-olive-600 font-bold">Giriş yap</Link> — kayıtlı adreslerinle daha hızlı.
-                          <br />Siparişinle birlikte bu e-postaya bir YeriHisset hesabı açılır; şifreni sonra e-postadaki bağlantıdan belirleyip siparişini takip edebilirsin.
+                          <br />Siparişin bu e-postadaki YeriHisset hesabına eklenir (yoksa açılır); şifreni sonra e-postadaki bağlantıdan belirleyip siparişini takip edebilirsin.
                         </p>
                       )}
                     </div>

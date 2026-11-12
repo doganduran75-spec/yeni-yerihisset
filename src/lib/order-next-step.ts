@@ -53,7 +53,7 @@ export type OrderLike = {
   created_at?: string | null;
   fit_status?: string | null;      // trial · ok · exchange · return
   delivered_at?: string | null;
-  open_case?: { kind: string; status: string; return_method?: string | null; label_sent_at?: string | null; iban?: string | null; iban_name?: string | null } | null;
+  open_case?: { kind: string; status: string; return_method?: string | null; label_sent_at?: string | null; iban?: string | null; iban_name?: string | null; iban_name_mismatch?: boolean | null } | null;
 };
 
 export const TRIAL_DAYS = 14;
@@ -189,7 +189,7 @@ function coreNextStep(o: OrderLike): NextStep {
   if (o.status === "cancelled") {
     // Müşteri iptali (2026-11-12): ücret iadesi işi — IBAN / kart bilgisi talepte (order_cases kind 'cancel')
     const cc = o.open_case?.kind === "cancel" ? o.open_case : null;
-    const toIban = cc?.iban ? `${cc.iban}${cc.iban_name ? ` (${cc.iban_name})` : ""}` : "";
+    const toIban = cc?.iban ? `${cc.iban}${cc.iban_name ? ` (${cc.iban_name})` : ""}${cc.iban_name_mismatch ? " — DİKKAT: IBAN sahibi siparişteki adla uyuşmuyor, göndermeden önce doğrula" : ""}` : "";
     if (cc?.status === "check_transfer") {
       return { stage: "Müşteri iptal etti — ödediğini söylüyor", hint: `Havale onaylanmamıştı. Hesaba ₺${Number(o.total_amount || 0).toFixed(2)} geldiyse IBAN'a iade et: ${toIban}`,
         actions: [{ key: "cancel_transfer_refunded", label: "Havale gelmişti — iadeyi gönderdim", kind: "primary" }, { key: "cancel_transfer_none", label: "Havale gelmemiş", kind: "danger" }], needsAction: true };

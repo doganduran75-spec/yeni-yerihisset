@@ -5,6 +5,7 @@
 // eski siteden aktarılan müşteri) sipariş o hesaba bağlanır: siparişi veren kişi
 // hesabın içini göremez (giriş için şifre belirlemek gerekir), yalnız kendi siparişinin
 // sonucunu görür. Sipariş her zaman bir user_id'ye bağlanır (orphan olmaz).
+// Mevcut hesapta profil değiştirilmez ve kampanya izni verilmez (created:false) — e-posta doğrulanmadı.
 
 import type { createAdminClient } from "@/lib/supabase-admin";
 
@@ -24,7 +25,7 @@ export async function resolveGuest(
   supabase: AdminClient,
   g: GuestInput,
   opts: { attachPasswordless?: boolean } = {}
-): Promise<{ ok: true; userId: string; email: string; address: GuestAddress } | { ok: false; error: string; code: number }> {
+): Promise<{ ok: true; userId: string; email: string; address: GuestAddress; created: boolean } | { ok: false; error: string; code: number }> {
   const email = (g.email || "").trim().toLowerCase();
   const first = (g.firstName || "").trim();
   const last = (g.lastName || "").trim();
@@ -49,13 +50,9 @@ export async function resolveGuest(
     if (state !== "passwordless") {
       return { ok: false, error: "Bu e-posta zaten kayıtlı. Lütfen giriş yapıp devam edin (şifreni unuttuysan sıfırlayabilirsin).", code: 409 };
     }
-    // Profilde eksik olanları tamamla (var olan bilgilerin üstüne yazma)
-    const fill: Record<string, string> = {};
-    if (!existing.first_name) fill.first_name = first;
-    if (!existing.last_name) fill.last_name = last;
-    if (!existing.phone) fill.phone = phone;
-    if (Object.keys(fill).length) await (supabase as any).from("profiles").update(fill).eq("id", existing.id);
-    return { ok: true, userId: existing.id, email, address };
+    // Mevcut hesabın profiline DOKUNULMAZ (2026-11-12): e-postayı yazan kişi hesabın sahibi olmayabilir (doğrulanmadı) —
+    // ad / telefon yalnız siparişin adres kaydında kalır. (Eskiden boş alanlar siparişi verenin bilgisiyle dolduruluyordu.)
+    return { ok: true, userId: existing.id, email, address, created: false };
   }
 
   // Şifresiz kullanıcı oluştur
@@ -77,5 +74,5 @@ export async function resolveGuest(
     { onConflict: "id" }
   );
 
-  return { ok: true, userId, email, address };
+  return { ok: true, userId, email, address, created: true };
 }

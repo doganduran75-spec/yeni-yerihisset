@@ -60,6 +60,7 @@ function Inner() {
   const [retItems, setRetItems] = useState<Set<string>>(new Set());
   const [method, setMethod] = useState("surat");
   const [iban, setIban] = useState("");
+  const [ibanName, setIbanName] = useState("");
   const [notifyVariant, setNotifyVariant] = useState<string | null>(null);
   const [reason, setReason] = useState("");
   const [note, setNote] = useState("");
@@ -289,12 +290,13 @@ function Inner() {
             <div className="space-y-1">
               <p className="text-sm font-bold text-slate-700">İadenin yatırılacağı IBAN</p>
               <input value={iban} onChange={(e) => setIban(e.target.value.toUpperCase())} placeholder="TR00 0000 0000 0000 0000 0000 00" className="w-full h-11 rounded-xl border border-slate-200 px-3 text-sm font-mono" />
+              <input value={ibanName} onChange={(e) => setIbanName(e.target.value)} placeholder="Hesap sahibinin adı soyadı" autoComplete="name" className="w-full h-11 rounded-xl border border-slate-200 px-3 text-sm" />
               <p className="text-xs text-slate-400">Havaleyle ödediğin için ödemeni bu hesaba iade edeceğiz. Hesap senin adına olmalı.</p>
             </div>
           )}
           <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder="Eklemek istediğin bir not (opsiyonel)" className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" />
           {err && <p className="text-sm text-red-600">{err}</p>}
-          <button disabled={busy || retItems.size === 0} onClick={() => post({ action: "return", items: [...retItems], reason, note, method, iban, notify_variant_id: notifyVariant }, "İade talebini aldık. Kargo kodunu kısa süre içinde e-postayla göndereceğiz; ürün bize ulaşınca ödemeni iade ediyoruz.")}
+          <button disabled={busy || retItems.size === 0} onClick={() => post({ action: "return", items: [...retItems], reason, note, method, iban, ibanName, notify_variant_id: notifyVariant }, "İade talebini aldık. Kargo kodunu kısa süre içinde e-postayla göndereceğiz; ürün bize ulaşınca ödemeni iade ediyoruz.")}
             className="w-full h-12 rounded-xl bg-slate-800 text-white font-bold text-sm disabled:opacity-50">İade talebini gönder</button>
         </div>
       )}

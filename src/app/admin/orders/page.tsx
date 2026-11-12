@@ -2868,6 +2868,7 @@ function CaseBox({ order, kase, canSendLabel, canShipAlt, onDone }: {
       {kase.return_method && <p><span className="text-muted-foreground">Kargo:</span> {RETURN_METHOD_SHOW[kase.return_method] ?? kase.return_method}{kase.return_code ? <> · kod <code className="font-mono">{kase.return_code}</code></> : null}</p>}
       {kase.alt_tracking && <p><span className="text-muted-foreground">Alternatif takip:</span> <code className="font-mono">{kase.alt_tracking}</code></p>}
       {kase.iban && <p><span className="text-muted-foreground">IBAN (havale iadesi):</span> <code className="font-mono select-all">{kase.iban}</code>{kase.iban_name ? <> · <b className="select-all">{kase.iban_name}</b></> : null}</p>}
+      {kase.iban && kase.iban_name_mismatch && <p className="font-bold text-red-700 bg-red-50 rounded px-2 py-1">IBAN sahibi siparişteki adla uyuşmuyor — iadeyi göndermeden önce müşteriyle doğrula.</p>}
       {kase.customer_note && <p className="whitespace-pre-wrap"><span className="text-muted-foreground">Müşteri notu:</span> {kase.customer_note}</p>}
 
       {canShipAlt && (

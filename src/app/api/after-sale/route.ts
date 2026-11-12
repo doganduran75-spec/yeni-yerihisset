@@ -3,6 +3,8 @@ import { createAdminClient } from "@/lib/supabase-admin";
 import { getAuthUserFromRequest } from "@/lib/auth-from-request";
 import { rateLimited, clientIp, TOO_MANY } from "@/lib/rate-limit";
 import { loadAfterSale, verifyAfterSaleToken, exchangeOptions, validIban } from "@/lib/after-sale";
+import { ibanNameMatches } from "@/lib/name-match";
+import { parseShip } from "@/lib/affiliate-commission";
 import { sendAdminCaseEmail, RETURN_METHOD_LABEL } from "@/lib/after-sale-mail";
 import { autoInvoiceSiteOrder } from "@/lib/parasut-invoice";
 
@@ -108,14 +110,19 @@ export async function POST(req: NextRequest) {
     const ids: string[] = (Array.isArray(body.items) ? body.items : []).filter((id: string) => itemById.has(id));
     if (!ids.length) return NextResponse.json({ error: "İade etmek istediğin ürünü seç" }, { status: 400 });
     if (!RETURN_METHOD_LABEL[body.method]) return NextResponse.json({ error: "Kargo yöntemini seç" }, { status: 400 });
-    let iban: string | null = null;
+    let iban: string | null = null, ibanName: string | null = null, ibanMismatch = false;
     if (view.paymentMethod === "bank_transfer") {
       iban = validIban(body.iban);
       if (!iban) return NextResponse.json({ error: "Geçerli bir IBAN gir (TR ile başlayan 26 karakter)" }, { status: 400 });
+      ibanName = String(body.ibanName || "").trim().replace(/\s+/g, " ").slice(0, 80);
+      if (ibanName.length < 3) return NextResponse.json({ error: "IBAN sahibinin adını ve soyadını yaz" }, { status: 400 });
+      // IBAN sahibi siparişteki adla uyuşmuyorsa işaretle (yanlış kişiye giden e-postayla iade yönlendirme riski)
+      const { data: os } = await sb.from("orders").select("shipping_address").eq("id", orderId).maybeSingle();
+      ibanMismatch = !ibanNameMatches(ibanName, parseShip(os?.shipping_address)?.name ?? "");
     }
     const { error } = await sb.from("order_cases").insert({
       order_id: orderId, kind: "return", status: "requested", reason: String(body.reason || "").slice(0, 40) || null,
-      customer_note: note, items: ids.map((id) => ({ order_item_id: id })), return_method: body.method, iban,
+      customer_note: note, items: ids.map((id) => ({ order_item_id: id })), return_method: body.method, iban, iban_name: ibanName, iban_name_mismatch: ibanMismatch,
     });
     if (error) return NextResponse.json({ error: "Talebin zaten alınmış olabilir" }, { status: 409 });
     await sb.from("orders").update({ fit_status: "return", fit_answered_at: now }).eq("id", orderId);
@@ -130,8 +137,9 @@ export async function POST(req: NextRequest) {
       ...ids.map((id) => escapeLine(label(id))),
       `Kargo: <b>${RETURN_METHOD_LABEL[body.method]}</b> → iade kodunu al (Basit Kargo ile gönderildiyse siparişte “Basit Kargo'dan al”), kodu siparişe gir`,
       ...(note ? [`Not: ${escapeLine(note)}`] : []),
+      ...(ibanMismatch ? [`<b style="color:#b91c1c">Dikkat: IBAN sahibi (${escapeLine(ibanName || "")}) siparişteki adla uyuşmuyor — iadeyi göndermeden önce kontrol et.</b>`] : []),
     ]).catch(() => {});
-    return NextResponse.json({ ok: true, fitStatus: "return" });
+    return NextResponse.json({ ok: true, fitStatus: "return", ibanMismatch });
   }
 
   // ── Değişim sonrası: hangisi oldu? (alternatif teslim edildi) ──

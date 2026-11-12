@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { sendCreditLoadedEmail } from "@/lib/affiliate-mail";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { getAuthUserFromRequest } from "@/lib/auth-from-request";
-import { commissionOwner, type CommissionAffiliate } from "@/lib/affiliate-commission";
+import { commissionOwner, selfOrderSuspect, parseShip, type CommissionAffiliate, type AffIdentity } from "@/lib/affiliate-commission";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -36,16 +36,18 @@ type Row = {
   matrah: number;
   rate: number;
   commission: number;
+  suspect?: string | null; // "kendi siparişi olabilir" nedeni (src/lib/affiliate-commission.ts › selfOrderSuspect)
+  label?: string;
 };
 
-async function computeRows(supabase: any, period: string) {
+async function computeRows(supabase: any, period: string, include: Set<string> = new Set()) {
   const bounds = periodBounds(period);
   if (!bounds) return { error: "Geçersiz dönem (YYYY-MM)" as string };
 
   // Aday siparişler: dönemde tamamlanmış, ödenmemiş, tam iade değil
   const { data: orders } = await supabase
     .from("orders")
-    .select("id, user_id, total_amount, coupon_discount, coupon_id, affiliate_id, refund_status, refunded_amount, completed_at")
+    .select("id, order_number, user_id, total_amount, coupon_discount, coupon_id, affiliate_id, refund_status, refunded_amount, completed_at, shipping_address")
     .gte("completed_at", bounds.start)
     .lt("completed_at", bounds.end)
     .is("commission_run_id", null);
@@ -84,7 +86,28 @@ async function computeRows(supabase: any, period: string) {
     for (const a of (affs as any[]) || []) affById[a.id] = { user_id: a.user_id ?? null, status: a.status, commission_rate: Number(a.commission_rate) };
   }
 
+  // Ortakların kimliği (telefon / kayıtlı adresler / ad) — "kendi siparişi olabilir" kontrolü için
+  const affUsers = [...new Set(Object.values(affById).map((a) => a.user_id).filter(Boolean))] as string[];
+  const identity: Record<string, AffIdentity> = {};
+  if (affUsers.length) {
+    const [{ data: profs }, { data: addrs }] = await Promise.all([
+      supabase.from("profiles").select("id, first_name, last_name, phone").in("id", affUsers),
+      supabase.from("user_addresses").select("user_id, first_name, last_name, phone, address_detail, district, city").in("user_id", affUsers),
+    ]);
+    for (const p of (profs as any[]) || []) {
+      identity[p.id] = { phones: [p.phone].filter(Boolean), addresses: [], names: [`${p.first_name ?? ""} ${p.last_name ?? ""}`.trim()].filter(Boolean) };
+    }
+    for (const a of (addrs as any[]) || []) {
+      const id = (identity[a.user_id] ??= { phones: [], addresses: [], names: [] });
+      if (a.phone) id.phones.push(a.phone);
+      id.addresses.push({ address: a.address_detail, district: a.district, city: a.city });
+      const n = `${a.first_name ?? ""} ${a.last_name ?? ""}`.trim();
+      if (n) id.names.push(n);
+    }
+  }
+
   const rows: Row[] = [];
+  const suspects: Row[] = [];
   for (const o of list) {
     // Kimin komisyonu? (src/lib/affiliate-commission.ts — pano "Hakediş işlenecek" de aynı kural): atıfsız, pasif ortak,
     // ortağın KENDİ siparişi (kendi kuponuyla da — uçtan uca test 2026-11-11) → komisyon yok
@@ -98,9 +121,15 @@ async function computeRows(supabase: any, period: string) {
     if (matrah <= 0) continue;
     const commission = round2((matrah * rate) / 100);
     if (commission <= 0) continue;
-    rows.push({ affiliateId, orderId: o.id, matrah, rate, commission });
+    const label = o.order_number ? `YH${o.order_number}` : String(o.id).slice(0, 8).toUpperCase();
+    const affUser = affById[affiliateId].user_id;
+    const suspect = affUser ? selfOrderSuspect(parseShip(o.shipping_address), identity[affUser]) : null;
+    const r: Row = { affiliateId, orderId: o.id, matrah, rate, commission, suspect, label };
+    // Şüpheli sipariş: yönetici önizlemede "dahil et" demedikçe komisyon yazılmaz
+    if (suspect && !include.has(o.id)) suspects.push(r);
+    else rows.push(r);
   }
-  return { rows };
+  return { rows, suspects };
 }
 
 export async function POST(req: NextRequest) {
@@ -111,13 +140,16 @@ export async function POST(req: NextRequest) {
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
   if ((profile as any)?.role !== "admin") return NextResponse.json({ error: "Yetkisiz" }, { status: 403 });
 
-  const body = await req.json() as { period?: string; mode?: "preview" | "commit" };
+  const body = await req.json() as { period?: string; mode?: "preview" | "commit"; include?: string[] };
   const period = body.period || "";
   const mode = body.mode || "preview";
+  // Önizlemede "kendi siparişi olabilir" işaretlenip yönetici "yine de dahil et" dediği siparişler
+  const include = new Set((Array.isArray(body.include) ? body.include : []).map(String));
 
-  const res = await computeRows(supabase, period);
+  const res = await computeRows(supabase, period, include);
   if ("error" in res) return NextResponse.json({ error: res.error }, { status: 400 });
   const rows = res.rows;
+  const suspects = res.suspects ?? [];
 
   // Affiliate başına grupla (özet)
   const byAff: Record<string, { affiliate_id: string; order_count: number; total_commission: number; orders: Row[] }> = {};
@@ -128,7 +160,7 @@ export async function POST(req: NextRequest) {
     g.orders.push(r);
   }
   // Affiliate isim/kod
-  const affIds = Object.keys(byAff);
+  const affIds = [...new Set([...Object.keys(byAff), ...suspects.map((x) => x.affiliateId)])];
   const affInfo: Record<string, any> = {};
   if (affIds.length) {
     const { data: affs } = await supabase
@@ -147,12 +179,19 @@ export async function POST(req: NextRequest) {
   }));
   const grandTotal = round2(summary.reduce((s, g) => s + g.total_commission, 0));
 
+  const suspectList = suspects.map((x) => ({
+    order_id: x.orderId, label: x.label, reason: x.suspect, commission: x.commission,
+    code: affInfo[x.affiliateId]?.code ?? null,
+    name: `${affInfo[x.affiliateId]?.profiles?.first_name ?? ""} ${affInfo[x.affiliateId]?.profiles?.last_name ?? ""}`.trim(),
+  }));
+  const includedSuspects = rows.filter((r) => r.suspect).map((r) => r.orderId);
+
   if (mode === "preview") {
-    return NextResponse.json({ ok: true, period, mode, summary, grandTotal, orderCount: rows.length });
+    return NextResponse.json({ ok: true, period, mode, summary, grandTotal, orderCount: rows.length, suspects: suspectList, includedSuspects });
   }
 
   // ── COMMIT ────────────────────────────────────────────────────────────────
-  if (!rows.length) {
+  if (!rows.length && !suspects.length) {
     return NextResponse.json({ ok: true, period, mode, committed: 0, grandTotal: 0, message: "İşlenecek hakediş yok." });
   }
 
@@ -165,6 +204,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Dönem kaydı oluşturulamadı", detail: runErr?.message }, { status: 500 });
   }
   const runId = (run as any).id;
+
+  // "Kendi siparişi olabilir" ve dahil edilmeyen siparişler: komisyonsuz işlendi (bir daha listelenmez) + siparişe not
+  for (const x of suspects) {
+    const { data: upd } = await supabase.from("orders").update({ commission_run_id: runId }).eq("id", x.orderId).is("commission_run_id", null).select("id");
+    if ((upd as any[])?.length) {
+      await supabase.from("order_events").insert({ order_id: x.orderId, type: "note",
+        note: `Satış ortaklığı: kendi siparişi olabilir (${x.suspect}) — ${period} hakedişinde komisyon yazılmadı (₺${x.commission.toFixed(2)})` });
+    }
+  }
 
   // Sipariş başına konversiyon + siparişi run'a bağla (idempotent guard). Bakiyeye YALNIZ gerçekten yazılan
   // konversiyonlar eklenir: aynı dönem iki kez (ör. çift tıklama) işlenirse ikinci tur kredi yazmaz.

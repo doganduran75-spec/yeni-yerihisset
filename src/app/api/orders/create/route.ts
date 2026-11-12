@@ -66,6 +66,7 @@ export async function POST(req: NextRequest) {
 
   // Kullanıcı + teslimat adresi: ÜYE ise kayıtlı adres; MİSAFİR ise girilen
   // bilgiden şifresiz üye oluşturulur (sipariş orphan olmaz).
+  let guestCreated = false; // misafir için YENİ açılan hesap mı (mevcut şifresiz hesaba kampanya izni verilmez)
   let userId: string;
   let address: any;
   if (authUser) {
@@ -79,6 +80,7 @@ export async function POST(req: NextRequest) {
     const g = await resolveGuest(supabase, guest || {});
     if (!g.ok) return NextResponse.json({ error: g.error }, { status: g.code });
     userId = g.userId;
+    guestCreated = g.created;
     address = g.address;
   }
 
@@ -278,7 +280,9 @@ export async function POST(req: NextRequest) {
   await recordTermsAcceptance(supabase, order.id, req);
 
   // Kampanya e-postası izni (ödeme sayfasındaki kutu işaretliyse) — src/lib/marketing-consent.ts
-  if (body?.marketingConsent === true) {
+  // Giriş yapmadan verilen siparişte yalnız YENİ açılan hesaba yazılır: e-posta doğrulanmadığından mevcut (şifresiz)
+  // hesabın sahibi adına izin verilmez / verdiği "istemiyorum" kararı ezilmez (2026-11-12)
+  if (body?.marketingConsent === true && (authUser || guestCreated)) {
     await setMarketingConsent(userId, true, "checkout").catch((e) => console.error("[marketing-consent]", e?.message || e));
   }
 

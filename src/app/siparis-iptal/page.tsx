@@ -29,7 +29,7 @@ function Inner() {
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [done, setDone] = useState<{ outcome: string; refunded: number; amount: number; iban: string | null } | null>(null);
+  const [done, setDone] = useState<{ outcome: string; refunded: number; amount: number; iban: string | null; ibanMismatch?: boolean } | null>(null);
   const [paidClaim, setPaidClaim] = useState<"" | "no" | "yes">(""); // havale, ödeme onaylanmamış: müşteriye sorulur
   const [iban, setIban] = useState("");
   const [ibanName, setIbanName] = useState("");
@@ -64,7 +64,7 @@ function Inner() {
     const d = await res.json().catch(() => ({}));
     setBusy(false);
     if (!res.ok) { setErr(d.error || "İptal yapılamadı."); return; }
-    setDone({ outcome: d.outcome, refunded: Number(d.refunded || 0), amount: Number(d.amount || 0), iban: d.iban || null });
+    setDone({ outcome: d.outcome, refunded: Number(d.refunded || 0), amount: Number(d.amount || 0), iban: d.iban || null, ibanMismatch: !!d.ibanMismatch });
   }
 
   if (loadErr) return <Shell><div className="text-center space-y-3"><AlertCircle className="mx-auto text-amber-500" size={40} /><p className="font-bold text-slate-800">{loadErr}</p>
@@ -85,6 +85,9 @@ function Inner() {
             : <>Senden bir ödeme alınmadığı için iade gerekmiyor.</>}
           {" "}Bilgisini e-postayla da gönderdik.
         </p>
+        {done.ibanMismatch && (
+          <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-3 leading-relaxed">Hesap sahibinin adı siparişteki adla aynı görünmüyor. Güvenliğin için iadeyi göndermeden önce ekibimiz kontrol edecek; gerekirse seninle iletişime geçeriz.</p>
+        )}
         <Link href="/magaza" className="inline-block mt-2 text-olive-600 font-bold underline">Mağazaya dön</Link>
       </div>
     </Shell>

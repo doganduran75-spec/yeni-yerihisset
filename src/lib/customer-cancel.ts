@@ -11,10 +11,12 @@ import { iyzicoRefund } from "@/lib/iyzico-refund";
 import { restoreOrderCredit } from "@/lib/store-credit";
 import { kickMarketplaceSync } from "@/lib/marketplace/sync";
 import { validIban } from "@/lib/after-sale";
+import { ibanNameMatches } from "@/lib/name-match";
+import { parseShip } from "@/lib/affiliate-commission";
 import { customerCancelCheck, CUSTOMER_CANCEL_REASONS, type CancelOutcome } from "@/lib/customer-cancel-rule";
 export { cancelToken, verifyCancelToken, cancelUrl } from "@/lib/customer-cancel-link";
 
-export const CANCEL_COLS = "id, order_number, user_id, channel, import_source, status, payment_status, payment_method, iyzico_payment_id, shipment_status, kargonomi_shipment_id, kargonomi_tracking_code, cargo_tracking_number, total_amount, refunded_amount, created_at";
+export const CANCEL_COLS = "id, order_number, user_id, channel, import_source, status, payment_status, payment_method, iyzico_payment_id, shipment_status, kargonomi_shipment_id, kargonomi_tracking_code, cargo_tracking_number, total_amount, refunded_amount, created_at, shipping_address";
 
 export const orderLabelOf = (o: any) => (o.order_number ? `YH${o.order_number}` : String(o.id).slice(0, 8).toUpperCase());
 const money = (n: number) => `₺${n.toFixed(2)}`;
@@ -40,6 +42,9 @@ export async function performCustomerCancel(sb: any, order: any, opts: Opts) {
     ibanName = String(opts.ibanName || "").trim().replace(/\s+/g, " ").slice(0, 80);
     if (ibanName.length < 3) return { error: "IBAN sahibinin adını ve soyadını yaz." };
   }
+  // IBAN sahibi siparişteki adla uyuşmuyor mu? (yanlış kişiye giden e-postayla iadeyi yönlendirme riski — işaretlenir)
+  const orderName = parseShip(order.shipping_address)?.name ?? "";
+  const ibanMismatch = needIban ? !ibanNameMatches(ibanName, orderName) : false;
 
   const via = opts.via === "email" ? "e-postadaki bağlantı" : "Hesabım";
   const base = `Müşteri siparişi kendisi iptal etti (${via})${reason ? ` — neden: ${reason}` : ""}`;
@@ -80,7 +85,7 @@ export async function performCustomerCancel(sb: any, order: any, opts: Opts) {
   if (caseStatus) {
     // Açık talep (değişim / iade) olamaz: kargolanmamış siparişte yok; yine de varsa kapat
     await sb.from("order_cases").update({ closed_at: new Date().toISOString(), status: "iptal_ile_kapandi" }).eq("order_id", order.id).is("closed_at", null);
-    await sb.from("order_cases").insert({ order_id: order.id, kind: "cancel", status: caseStatus, reason, iban, iban_name: ibanName });
+    await sb.from("order_cases").insert({ order_id: order.id, kind: "cancel", status: caseStatus, reason, iban, iban_name: ibanName, iban_name_mismatch: ibanMismatch });
   }
   await restoreOrderCredit(sb, order.id).catch(() => {});
   kickMarketplaceSync(500);
@@ -99,6 +104,7 @@ export async function performCustomerCancel(sb: any, order: any, opts: Opts) {
       `Müşteri <b>${label}</b> siparişini kendisi iptal etti; stok geri eklendi, kargo etiketi alınamaz.`,
       reason ? `Neden: <b>${reason}</b>` : "Neden belirtmedi.",
       adminLine[outcome],
+      ...(ibanMismatch ? [`<b style="color:#b91c1c">Dikkat: IBAN sahibi (${ibanName}) siparişteki adla (${orderName}) uyuşmuyor — iadeyi göndermeden önce kontrol et.</b>`] : []),
     ])).catch(() => {});
-  return { ok: true as const, outcome, refunded, amount: remaining, label, iban: iban ? maskIban(iban) : null };
+  return { ok: true as const, outcome, refunded, amount: remaining, label, iban: iban ? maskIban(iban) : null, ibanMismatch };
 }

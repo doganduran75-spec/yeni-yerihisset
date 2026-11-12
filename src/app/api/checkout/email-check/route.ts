@@ -22,6 +22,7 @@ export async function POST(req: NextRequest) {
   const supabase = createAdminClient();
   const { data: state } = await (supabase as any).rpc("account_password_state", { p_email: e });
   if (state === "password") return NextResponse.json({ exists: true });
-  if (state === "passwordless") return NextResponse.json({ exists: false, known: true });
+  // Şifresiz hesap (eski müşteri / önceki misafir) yeni e-postadan AYIRT EDİLMEZ (2026-11-12): bu servis "bu kişi
+  // daha önce müşterimiz miydi?" sorusunu yanıtlamasın. Sipariş yine o hesaba bağlanır (src/lib/guest-checkout.ts).
   return NextResponse.json({ exists: false });
 }

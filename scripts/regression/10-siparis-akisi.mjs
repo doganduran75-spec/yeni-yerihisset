@@ -104,7 +104,7 @@ export default {
         const id = c.json?.id;
         if (!id) throw new Error(`test üyesi oluşturulamadı (${kind}): HTTP ${c.status}`);
         sql(`INSERT INTO public.profiles (id, email, first_name, last_name, phone${admin ? ", role" : ""})
-             VALUES (${lit(id)}, ${lit(email)}, 'Regresyon', ${lit(kind)}, '5550000000'${admin ? ", 'admin'" : ""})
+             VALUES (${lit(id)}, ${lit(email)}, 'Regresyon', ${lit(kind)}, ${lit(`555${String(Math.floor(Math.random() * 1e7)).padStart(7, "0")}`)}${admin ? ", 'admin'" : ""})
              ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, first_name = EXCLUDED.first_name, last_name = EXCLUDED.last_name${admin ? ", role = 'admin'" : ""}`);
         const s = await auth("token?grant_type=password", { method: "POST", body: { email, password } });
         if (!s.json?.access_token) throw new Error(`test üyesi giriş yapamadı (${kind}): HTTP ${s.status}`);
@@ -128,7 +128,7 @@ export default {
       F.partner = await mkUser("ortak2", false);
       sql(`UPDATE public.profiles SET email_verified = true WHERE id = ${lit(F.partner.id)}`);
       F.partnerAddr = insert("user_addresses", {
-        user_id: F.partner.id, address_name: "Ev", first_name: "Regresyon", last_name: "Ortak", phone: "5550000000",
+        user_id: F.partner.id, address_name: "Ev", first_name: "Regresyon", last_name: "Ortak", phone: "5550000001",
         address_detail: "Moda Caddesi No 14 Daire 5", district: "Kadıköy", city: "İstanbul",
       });
       F.ship = row("SELECT fee, free_over FROM public.shipping_methods WHERE is_active ORDER BY is_default DESC, sort_order LIMIT 1"); // = src/lib/shipping.ts
@@ -348,13 +348,27 @@ export default {
         ].filter(Boolean);
         ok(!sBad.length, "Sipariş sonucu sayfası verisi (havale bekliyor, banka bilgisi, aktivasyon)", sBad.join("; "));
         const e1 = await api("/api/checkout/email-check", { headers: H, body: { email: guest.email } });
-        ok(e1.json?.exists === false && e1.json?.known === true, "Misafir e-postası tekrar siparişe açık (şifresiz hesap)", `${JSON.stringify(e1.json)} — misafir hesabı şifreli görünüyor; ikinci siparişte "giriş yapın" denir`);
+        ok(e1.json?.exists === false && e1.json?.known === undefined, "Misafir e-postası tekrar siparişe açık (şifresiz hesap) ve “eski müşteri” bilgisi dışarı verilmiyor", `${JSON.stringify(e1.json)} — şifreli görünüyor ya da known döndü`);
         const r1b = await api("/api/orders/create", { headers: H, body });
         ok(r1b.status === 200, "Aynı misafir ikinci siparişi verebiliyor", why(r1b));
         const e2 = await api("/api/checkout/email-check", { headers: H, body: { email: F.member.email } });
         ok(e2.json?.exists === true, "Üye e-postasıyla misafir siparişinde giriş isteniyor", JSON.stringify(e2.json));
         const r2 = await api("/api/orders/create", { headers: H, body: { ...body, guest: { ...guest, email: F.member.email } } });
         ok(r2.status === 409, "Şifreli üyenin e-postasıyla misafir siparişi reddediliyor", why(r2));
+        // 2026-11-12: e-posta doğrulanmadığından misafir siparişi MEVCUT hesabın profilini doldurmaz ve kampanya iznini
+        // vermez (sahibinin "istemiyorum" kararı ezilmez); yalnız yeni açılan hesaba izin yazılır
+        {
+          const gid = one(`SELECT id FROM public.profiles WHERE email = ${lit(guest.email)}`);
+          sql(`UPDATE public.profiles SET phone = NULL, marketing_consent = false, marketing_consent_at = now() WHERE id = ${lit(gid)}`);
+          const r3 = await api("/api/orders/create", { headers: H, body: { ...body, marketingConsent: true, guest: { ...guest, firstName: "Başka", lastName: "Kişi", phone: "5559998877" } } });
+          const pr = row(`SELECT first_name, phone, marketing_consent AS mc FROM public.profiles WHERE id = ${lit(gid)}`) || {};
+          const ne = `rgt-misafir-yeni-${RUN}@${DOMAIN}`;
+          const r4 = await api("/api/orders/create", { headers: H, body: { ...body, marketingConsent: true, guest: { ...guest, email: ne } } });
+          const nmc = one(`SELECT marketing_consent FROM public.profiles WHERE email = ${lit(ne)}`);
+          ok(r3.status === 200 && pr.first_name === "Ayşe" && pr.phone === null && pr.mc === false && r4.status === 200 && nmc === "t",
+            "Misafir siparişi mevcut hesabın profiline ve kampanya kararına dokunmuyor; yeni açılan hesapta kampanya izni yazılıyor",
+            `${why(r3)} · profil ${JSON.stringify(pr)} · yeni hesap ${why(r4)} izin ${nmc}`);
+        }
       });
 
       await part("Yetki (üye / yönetici)", async () => {
@@ -642,12 +656,15 @@ export default {
         const B = (await order([MAIN(1)], { couponCode: cAff })).json?.orderId;
         const C = (await pOrder([MAIN(1)], { couponCode: cAff })).json?.orderId;
         const D = (await order([MAIN(1)], { affiliateCode: aff.code })).json?.orderId;
-        if (!A || !B || !C || !D) return add("fail", "Satış ortaklığı test siparişleri oluşturulamadı", `A ${A} B ${B} C ${C} D ${D}`);
+        // E: ortağın linki, başka hesaptan ama teslimat telefonu ORTAĞINKİ → "kendi siparişi olabilir" (2026-11-12)
+        const E = (await order([MAIN(1)], { affiliateCode: aff.code })).json?.orderId;
+        if (!A || !B || !C || !D || !E) return add("fail", "Satış ortaklığı test siparişleri oluşturulamadı", `A ${A} B ${B} C ${C} D ${D} E ${E}`);
+        sql(`UPDATE public.orders SET shipping_address = jsonb_set(shipping_address::jsonb, '{phone}', '"5550000001"')::text WHERE id = ${lit(E)}`);
         ok(ord(A).affiliate_id === aff.id && eq(ord(B).coupon_discount, 100), "Link siparişi ortağa yazıldı; ortak kuponu %10 indirim yaptı", `A ${ord(A).affiliate_id}, B indirim ${ord(B).coupon_discount}`);
         // Ödendi + teslim + faturalandı → tamamlandı; tamamlanma tarihi test dönemine
         const done = (id, extra = "") => sql(`UPDATE public.orders SET status = 'processing', payment_status = 'paid', shipment_status = 'delivered', invoice_status = 'invoiced',
           completed_at = '2001-01-15T10:00:00Z'${extra} WHERE id = ${lit(id)}`);
-        [A, B, C].forEach((id) => done(id));
+        [A, B, C, E].forEach((id) => done(id));
         done(D, ", refund_status = 'full', refunded_amount = total_amount");
 
         // 4) Hakediş: üye çalıştıramaz; önizleme yazmaz; A = 1000 × %10 = 100, B = (1000 − 100) × %10 = 90
@@ -656,6 +673,9 @@ export default {
         ok(pm.status === 403, "Üye hakediş hesabı çalıştıramıyor", why(pm));
         const bal = () => Number(one(`SELECT credit_balance FROM public.affiliate_profiles WHERE id = ${lit(aff.id)}`));
         const pv = await pay(F.admin.token, "preview");
+        const sus = (pv.json?.suspects || []).find((x) => x.order_id === E);
+        ok(!!sus && /telefon/.test(sus.reason || "") && eq(sus.commission, 100),
+          "Hakediş: ortağın linkiyle başka e-postadan ama ortağın telefonuyla verilen sipariş “kendi siparişi olabilir” — ayrı listede, komisyona girmiyor", JSON.stringify(pv.json?.suspects || []));
         ok(pv.status === 200 && eq(pv.json?.grandTotal, 190) && pv.json?.orderCount === 2 && eq(bal(), 0),
           "Hakediş önizlemesi: link + kupon satışı 190 TL; kendi siparişi ve tam iade sayılmadı; önizleme bakiye yazmadı",
           `${why(pv)} → toplam ${pv.json?.grandTotal}, sipariş ${pv.json?.orderCount}, bakiye ${bal()}`);
@@ -663,8 +683,11 @@ export default {
         ok(c1.status === 200 && c1.json?.committed === 2 && eq(bal(), 190)
           && num(`SELECT count(*) FROM public.affiliate_conversions WHERE affiliate_id = ${lit(aff.id)} AND status = 'paid'`) === 2
           && num(`SELECT count(*) FROM public.store_credit_ledger WHERE affiliate_id = ${lit(aff.id)} AND type = 'earning' AND amount = 190 AND balance_after = 190`) === 1
-          && num(`SELECT count(*) FROM public.orders WHERE id IN (${lit(A)}, ${lit(B)}) AND commission_run_id IS NOT NULL`) === 2,
-          "Hakediş hesaba işlendi: 190 TL YeriHisset Kredisi, hareket kaydı, siparişler döneme bağlandı", `${why(c1)} → işlenen ${c1.json?.committed}, bakiye ${bal()}`);
+          && num(`SELECT count(*) FROM public.orders WHERE id IN (${lit(A)}, ${lit(B)}) AND commission_run_id IS NOT NULL`) === 2
+          && num(`SELECT count(*) FROM public.orders WHERE id = ${lit(E)} AND commission_run_id IS NOT NULL`) === 1
+          && num(`SELECT count(*) FROM public.affiliate_conversions WHERE order_id = ${lit(E)}`) === 0
+          && num(`SELECT count(*) FROM public.order_events WHERE order_id = ${lit(E)} AND note LIKE 'Satış ortaklığı: kendi siparişi olabilir%'`) === 1,
+          "Hakediş hesaba işlendi: 190 TL YeriHisset Kredisi, hareket kaydı, siparişler döneme bağlandı; “kendi siparişi olabilir” komisyonsuz kapandı (siparişe not)", `${why(c1)} → işlenen ${c1.json?.committed}, bakiye ${bal()}`);
         const c2 = await pay(F.admin.token, "commit");
         ok(c2.status === 200 && !c2.json?.committed && eq(bal(), 190), "Aynı dönem ikinci kez işlenince çift kredi yazılmıyor", `${why(c2)} → bakiye ${bal()}`);
         // Sipariş ekranı komisyonu ödenmiş siparişte "… hakedişinde ödendi" notu için bu alanları okur (sorgu bozulursa sipariş listesi açılmaz)
@@ -881,6 +904,28 @@ export default {
         ok(/termsAccepted: termsOk/.test(lg) && /\/uyelik-sozlesmesi/.test(lg) && /\(isteğe bağlı\)/.test(lg) && /Aydınlatma Metni/.test(lg) && !/kabul etmiş sayılırsınız/.test(lg)
           && /"uyelik-sozlesmesi": \{/.test(sp),
           "Üyelik formu: zorunlu sözleşme kutusu, isteğe bağlı kampanya kutusu, Aydınlatma Metni bilgisi; “giriş yaparak kabul etmiş sayılırsınız” yok; Üyelik Sözleşmesi sayfası var", "form ya da sayfa eksik");
+      });
+
+      // MİSAFİR SİPARİŞİ RİSKLERİ (2026-11-12): IBAN sahibi ↔ sipariş sahibi, e-posta yazım önerisi, ortağın kendi siparişi
+      await part("Misafir siparişi riskleri (kurallar)", async () => {
+        const L = async (f) => { try { return await import(new URL(`../../src/lib/${f}`, import.meta.url)); } catch { return null; } };
+        const nm = await L("name-match.ts"), et = await L("email-typo.ts"), ac = await L("affiliate-commission.ts");
+        if (nm) ok(nm.ibanNameMatches("AYŞE DENEME", "Ayşe Deneme") && nm.ibanNameMatches("Ayse Nur Deneme", "Ayşe Deneme") && !nm.ibanNameMatches("Mehmet Yılmaz", "Ayşe Deneme")
+          && !nm.ibanNameMatches("Ayşe Yılmaz", "Ayşe Deneme"), "IBAN sahibi kontrolü: aynı kişi (Türkçe karakter / ikinci ad farkı) eşleşiyor, başka ad-soyad eşleşmiyor");
+        if (et) ok(et.suggestEmail("ali@gmial.com") === "ali@gmail.com" && et.suggestEmail("ali@hotmail.con") === "ali@hotmail.com" && et.suggestEmail("ali@outlok.com") === "ali@outlook.com"
+          && et.suggestEmail("ali@gmail.com") === null && et.suggestEmail("ali@ymail.com") === null && et.suggestEmail("ali@firma.com.tr") === null,
+          "E-posta yazım önerisi: gmial / .con / outlok düzeltiliyor; doğru ve kurumsal adreslere öneri yok");
+        if (ac) {
+          const id = { phones: ["0555 111 22 33"], addresses: [{ address: "Moda Caddesi No 12 Daire 3", district: "Kadıköy", city: "İstanbul" }], names: ["Ali Veli"] };
+          ok(/telefon/.test(ac.selfOrderSuspect({ phone: "5551112233", name: "X Y" }, id) || "") && /adres/.test(ac.selfOrderSuspect({ address: "moda caddesi no 12 daire 3", district: "KADIKÖY", city: "istanbul" }, id) || "")
+            && /ad/.test(ac.selfOrderSuspect({ name: "ALİ VELİ" }, id) || "") && ac.selfOrderSuspect({ phone: "5559999999", name: "Ayşe Deneme", address: "Bağdat Caddesi 5", district: "Maltepe", city: "İstanbul" }, id) === null,
+            "Ortağın kendi siparişi olabilir: telefon / adres / alıcı adı eşleşmesi yakalanıyor, başka müşteri yakalanmıyor");
+        }
+        const fs = await import("node:fs");
+        const ck = fs.readFileSync(new URL("../../src/app/checkout/page.tsx", import.meta.url), "utf8");
+        const gc = fs.readFileSync(new URL("../../src/lib/guest-checkout.ts", import.meta.url), "utf8");
+        ok(/suggestEmail\(personalInfo\.email\)/.test(ck) && /mı demek istediniz/.test(ck) && !/emailKnown/.test(ck) && !/profiles"\)\.update\(fill\)/.test(gc),
+          "Ödeme sayfası e-posta önerisi var; “eski müşteri” kutusu ve misafirin profil doldurması kalktı", "e-posta önerisi / profil doldurma");
       });
 
       await part("Kampanya e-postası izni", async () => {
@@ -2040,7 +2085,7 @@ export default {
         }
         const IBAN = "TR190006200000000006295000";
         const tokOf = (id) => `${id}.${createHmac("sha256", `order-cancel:${process.env.SUPABASE_SERVICE_ROLE_KEY || ""}`).update(id).digest("base64url").slice(0, 32)}`;
-        const caseOf = (id) => row(`SELECT kind, status, iban, iban_name, closed_at IS NOT NULL AS closed FROM public.order_cases WHERE order_id = ${lit(id)} AND kind = 'cancel' ORDER BY created_at DESC LIMIT 1`);
+        const caseOf = (id) => row(`SELECT kind, status, iban, iban_name, iban_name_mismatch AS mm, closed_at IS NOT NULL AS closed FROM public.order_cases WHERE order_id = ${lit(id)} AND kind = 'cancel' ORDER BY created_at DESC LIMIT 1`);
         const s0 = stock();
         // 1) Havale, ödeme yapmadım → anında iptal (e-postadaki bağlantıyla)
         const r = await order([MAIN(1)]);
@@ -2072,8 +2117,9 @@ export default {
           const mem = await api("/api/admin/orders/case", { token: F.member.token, body: { orderId: id3, op: "cancel_transfer", result: "none" } });
           const adm = await api("/api/admin/orders/case", { token: F.admin.token, body: { orderId: id3, op: "cancel_transfer", result: "none" } });
           ok(noIban.status === 400 && ord(id3).status === "cancelled" && p3.json?.outcome === "transfer_check" && c3?.status === "check_transfer" && c3?.iban === IBAN && c3?.iban_name === "Deneme Kişi"
-            && /IBAN/.test(ord(id3).cancel_customer_note || "") && mem.status === 403 && adm.status === 200 && caseOf(id3)?.closed === true && stock() === s0,
-            "“Ödeme yaptım” (havale onaylanmamış) → IBAN zorunlu; iptal + stok geri + “havale geldiyse iade et” işi (IBAN + ad), yönetici “havale gelmemiş” deyince kapanıyor",
+            && /IBAN/.test(ord(id3).cancel_customer_note || "") && mem.status === 403 && adm.status === 200 && caseOf(id3)?.closed === true && stock() === s0
+            && c3?.mm === true && p3.json?.ibanMismatch === true,
+            "“Ödeme yaptım” (havale onaylanmamış) → IBAN zorunlu; iptal + stok geri + “havale geldiyse iade et” işi (IBAN + ad), yönetici “havale gelmemiş” deyince kapanıyor; IBAN sahibi siparişteki adla uyuşmayınca işaretli",
             `IBAN'sız ${noIban.status} · ${p3.json?.outcome} · iş ${JSON.stringify(c3)} · üye ${mem.status} / yönetici ${adm.status}`);
         }
 
@@ -2083,10 +2129,10 @@ export default {
         if (id2) {
           sql(`UPDATE public.orders SET payment_status = 'paid', status = 'processing' WHERE id = ${lit(id2)}`);
           const g2 = await api(`/api/order-cancel?id=${id2}`, { method: "GET", token: F.member.token });
-          const p2 = await api("/api/order-cancel", { token: F.member.token, body: { id: id2, confirm: true, iban: IBAN, ibanName: "Deneme Kişi" } });
+          const p2 = await api("/api/order-cancel", { token: F.member.token, body: { id: id2, confirm: true, iban: IBAN, ibanName: "REGRESYON üye" } });
           const o2 = ord(id2), c2 = caseOf(id2);
           ok(g2.json?.mode === "bank_refund" && p2.json?.outcome === "bank_refund_pending" && o2.status === "cancelled" && o2.payment_status === "paid" && o2.shipment_status === "cancelled"
-            && c2?.status === "refund_pending" && c2?.iban === IBAN && stock() === s0,
+            && c2?.status === "refund_pending" && c2?.iban === IBAN && c2?.mm === false && stock() === s0,
             "Havaleyle ödenmiş sipariş → IBAN ile iptal: stok geri, kargo İptal (etiket alınamaz), ödeme “Ödendi” kalır + “Ücret iadesi yap” işi",
             `${g2.json?.mode} · ${why(p2)} ${p2.json?.outcome} · ${o2?.status}/${o2?.payment_status}/${o2?.shipment_status} · iş ${JSON.stringify(c2)}`);
           const rf = await api("/api/admin/orders/action", { token: F.admin.token, body: { action: "refund", orderId: id2, amount: Number(o2.total_amount), method: "bank_transfer", confirmed: true } });

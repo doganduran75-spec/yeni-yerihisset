@@ -47,3 +47,38 @@ export function periodLabel(period: string | null | undefined): string {
 export function currentPeriodStart(now = new Date()): string {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
 }
+
+// ── KENDİ SİPARİŞİ OLABİLİR (kullanıcı 2026-11-12) ─────────────────────────────────────────────────────────────
+// Ortak kendi linkiyle / kuponuyla alışveriş yapıp BAŞKA bir e-posta yazarsa (misafir ya da ikinci hesap) sipariş
+// "başka müşteri" görünür. Teslimat telefonu, adresi ya da alıcı adı ortağın profil / kayıtlı adresleriyle aynıysa
+// sipariş şüpheli sayılır: hakedişte varsayılan olarak komisyon yazılmaz, yönetici isterse dahil eder.
+export type AffIdentity = { name?: string | null; phones: string[]; addresses: { address?: string | null; district?: string | null; city?: string | null }[]; names: string[] };
+export type ShipAddr = { name?: string | null; phone?: string | null; address?: string | null; district?: string | null; city?: string | null };
+
+const trNorm = (s: unknown) => String(s ?? "").toLocaleLowerCase("tr-TR")
+  .replace(/ı/g, "i").replace(/ş/g, "s").replace(/ğ/g, "g").replace(/ü/g, "u").replace(/ö/g, "o").replace(/ç/g, "c")
+  .replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
+const phoneNorm = (s: unknown) => String(s ?? "").replace(/\D/g, "").slice(-10);
+const addrKey = (a: { address?: string | null; district?: string | null; city?: string | null }) => {
+  const k = trNorm(`${a.address ?? ""} ${a.district ?? ""} ${a.city ?? ""}`).replace(/\s/g, "");
+  return k.length >= 12 ? k : ""; // çok kısa adres eşleşmesi anlamsız
+};
+
+/** Sipariş ortağın kendisine ait olabilir mi? → nedeni (telefon / adres / ad) ya da null */
+export function selfOrderSuspect(ship: ShipAddr | null | undefined, aff: AffIdentity | null | undefined): string | null {
+  if (!ship || !aff) return null;
+  const p = phoneNorm(ship.phone);
+  if (p.length === 10 && aff.phones.map(phoneNorm).includes(p)) return "telefon ortağınkiyle aynı";
+  const ak = addrKey(ship);
+  if (ak && aff.addresses.map(addrKey).includes(ak)) return "teslimat adresi ortağınkiyle aynı";
+  const n = trNorm(ship.name);
+  if (n.includes(" ") && aff.names.map(trNorm).includes(n)) return "alıcı adı ortağınkiyle aynı";
+  return null;
+}
+
+/** orders.shipping_address (JSON metin ya da nesne) → ShipAddr */
+export function parseShip(v: unknown): ShipAddr | null {
+  if (!v) return null;
+  if (typeof v === "object") return v as ShipAddr;
+  try { return JSON.parse(String(v)); } catch { return null; }
+}

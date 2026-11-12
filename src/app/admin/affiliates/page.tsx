@@ -59,6 +59,8 @@ export default function AdminAffiliatesPage() {
   const [payoutBusy, setPayoutBusy] = useState(false);
   const [payoutPreview, setPayoutPreview] = useState<any | null>(null);
   const [payoutMsg, setPayoutMsg] = useState<string | null>(null);
+  // "Kendi siparişi olabilir" (ortağın telefonu / adresi / adı) — yönetici işaretlerse komisyon yine yazılır
+  const [includeSuspects, setIncludeSuspects] = useState<Set<string>>(new Set());
 
   async function runPayout(mode: "preview" | "commit") {
     setPayoutBusy(true);
@@ -72,7 +74,7 @@ export default function AdminAffiliatesPage() {
           "Content-Type": "application/json",
           ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
         },
-        body: JSON.stringify({ period, mode }),
+        body: JSON.stringify({ period, mode, include: [...includeSuspects] }),
       });
       const data = await res.json();
       if (!res.ok || !data.ok) {
@@ -81,10 +83,12 @@ export default function AdminAffiliatesPage() {
       }
       if (mode === "preview") {
         setPayoutPreview(data);
-        if (!data.summary?.length) setPayoutMsg("Bu dönemde işlenecek hakediş bulunamadı.");
+        setIncludeSuspects(new Set(data.includedSuspects || []));
+        if (!data.summary?.length && !data.suspects?.length) setPayoutMsg("Bu dönemde işlenecek hakediş bulunamadı.");
       } else {
         setPayoutMsg(`✓ ${data.committed} sipariş işlendi, toplam ₺${Number(data.grandTotal).toLocaleString("tr-TR", { minimumFractionDigits: 2 })} hesaplara aktarıldı${data.emailed ? `; ${data.emailed} ortağa e-posta gönderildi` : ""}.`);
         setPayoutPreview(null);
+        setIncludeSuspects(new Set());
         fetchData();
       }
     } catch {
@@ -444,7 +448,7 @@ export default function AdminAffiliatesPage() {
                 <Button onClick={() => runPayout("preview")} disabled={payoutBusy || !period} variant="outline" className="font-bold h-10">
                   {payoutBusy ? "Hesaplanıyor…" : "Hesapla (Önizleme)"}
                 </Button>
-                {payoutPreview?.summary?.length > 0 && (
+                {(payoutPreview?.summary?.length > 0 || payoutPreview?.suspects?.length > 0) && (
                   <Button
                     onClick={() => {
                       if (confirm(`${payoutPreview.period} dönemi için toplam ₺${Number(payoutPreview.grandTotal).toLocaleString("tr-TR", { minimumFractionDigits: 2 })} affiliate hesaplarına işlenecek. Onaylıyor musunuz?`)) runPayout("commit");
@@ -464,6 +468,30 @@ export default function AdminAffiliatesPage() {
               )}
             </CardContent>
           </Card>
+
+          {payoutPreview?.suspects?.length > 0 && (
+            <Card className="border-none shadow-sm border-l-4 border-l-amber-400">
+              <CardContent className="p-5 space-y-2">
+                <h4 className="font-bold text-slate-800">Kendi siparişi olabilir — komisyon yazılmayacak</h4>
+                <p className="text-xs text-muted-foreground">Teslimat telefonu, adresi ya da alıcı adı ortağınkiyle aynı (ortak kendi linkiyle başka e-postayla almış olabilir). Gerçek müşteriyse işaretle, önizlemeyi yenile; “Hesaba İşle”de işaretsizler komisyonsuz kapanır.</p>
+                <div className="divide-y">
+                  {payoutPreview.suspects.map((x: any) => (
+                    <label key={x.order_id} className="flex items-center gap-3 py-2 cursor-pointer">
+                      <input type="checkbox" className="h-4 w-4 accent-green-600" checked={includeSuspects.has(x.order_id)}
+                        onChange={(e) => setIncludeSuspects((prev) => { const n = new Set(prev); if (e.target.checked) n.add(x.order_id); else n.delete(x.order_id); return n; })} />
+                      <span className="min-w-0 flex-1">
+                        <span className="font-bold text-slate-900">{x.label}</span> <span className="text-xs text-muted-foreground">· {x.name || x.code} ({x.code}) · {x.reason}</span>
+                      </span>
+                      <span className="text-sm font-bold text-slate-500 shrink-0">₺{Number(x.commission).toLocaleString("tr-TR", { minimumFractionDigits: 2 })}</span>
+                    </label>
+                  ))}
+                </div>
+                {includeSuspects.size > 0 && (
+                  <Button size="sm" variant="outline" onClick={() => runPayout("preview")} disabled={payoutBusy} className="font-bold">İşaretlileri dahil edip önizlemeyi yenile</Button>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {payoutPreview?.summary?.length > 0 && (
             <Card className="border-none shadow-sm">

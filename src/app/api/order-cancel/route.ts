@@ -59,5 +59,5 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json({ error: res.error }, { status: 400 });
   }
-  return NextResponse.json({ ok: true, outcome: res.outcome, refunded: res.refunded, amount: res.amount, label: res.label, iban: res.iban });
+  return NextResponse.json({ ok: true, outcome: res.outcome, refunded: res.refunded, amount: res.amount, label: res.label, iban: res.iban, ibanMismatch: !!res.ibanMismatch });
 }
