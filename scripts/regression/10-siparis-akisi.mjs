@@ -2002,6 +2002,58 @@ export default {
         ok(y.status < 300 && ord(id).shipment_status === "preparing", "Ödeme alındı + Hazırlanıyor birlikte yapılabiliyor", `HTTP ${y.status} → ${ord(id).shipment_status}`);
       });
 
+      // MÜŞTERİ SİPARİŞ İPTALİ (2026-11-12): kargoya hazırlanmamış siparişi müşteri kendisi iptal eder (Hesabım / e-postadaki
+      // imzalı bağlantı). Ödenmemiş → anında; kartla ödenmiş → anında + iyzico iadesi; havaleyle ödenmiş / etiketli → olmaz
+      await part("Müşteri sipariş iptali (kargoya hazırlanmadan)", async () => {
+        let rule = null;
+        try { rule = await import(new URL("../../src/lib/customer-cancel-rule.ts", import.meta.url)); } catch { /* eski Node */ }
+        if (rule) {
+          const c = rule.customerCancelCheck, b = { channel: "site", status: "pending", payment_status: "pending", payment_method: "bank_transfer", shipment_status: "waiting" };
+          ok(c(b).ok && c(b).mode === "instant" && c({ ...b, payment_status: "paid", payment_method: "iyzico", iyzico_payment_id: "1" }).mode === "card_refund"
+            && !c({ ...b, payment_status: "paid" }).ok && !c({ ...b, kargonomi_tracking_code: "X" }).ok && !c({ ...b, shipment_status: "shipped" }).ok
+            && !c({ ...b, channel: "trendyol" }).ok && !c({ ...b, import_source: "woo" }).ok && !c({ ...b, status: "cancelled" }).ok,
+            "İptal kuralı: ödenmemiş anında, kartla ödenmiş iadeyle; havaleyle ödenmiş / kargo etiketli / kargolanmış / pazaryeri / aktarılan / iptal olmaz");
+        }
+        const s0 = stock();
+        const r = await order([MAIN(1)]);
+        const id = r.json?.orderId;
+        if (!id) return add("fail", "İptal senaryosu için sipariş oluşturulamadı", why(r));
+        const tok = `${id}.${createHmac("sha256", `order-cancel:${process.env.SUPABASE_SERVICE_ROLE_KEY || ""}`).update(id).digest("base64url").slice(0, 32)}`;
+        const gMine = await api(`/api/order-cancel?id=${id}`, { method: "GET", token: F.member.token });
+        const gOther = await api(`/api/order-cancel?id=${id}`, { method: "GET", token: F.partner.token });
+        const gBad = await api(`/api/order-cancel?r=${id}.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`, { method: "GET" });
+        ok(gMine.json?.canCancel === true && gMine.json?.mode === "instant" && gOther.status === 404 && gBad.status === 400,
+          "İptal sayfası: kendi siparişi açılıyor (ödenmemiş → anında), başkasının siparişi ve bozuk bağlantı açılmıyor", `${why(gMine)} / başkası ${gOther.status} / bozuk ${gBad.status}`);
+        const noConfirm = await api("/api/order-cancel", { body: { r: tok } });
+        const p = await api("/api/order-cancel", { body: { r: tok, confirm: true, reason: "Fikrimi değiştirdim" } });
+        const o = ord(id);
+        const ev = num(`SELECT count(*) FROM public.order_events WHERE order_id = ${lit(id)} AND note LIKE 'Müşteri siparişi kendisi iptal etti (e-postadaki bağlantı) — neden: Fikrimi değiştirdim%'`);
+        ok(noConfirm.status === 400 && p.status === 200 && o.status === "cancelled" && o.cancel_reason === "customer" && stock() === s0 && ev === 1,
+          "E-postadaki bağlantıyla iptal: onaysız olmuyor; onaylayınca sipariş iptal, stok geri, neden “Müşteri istedi”, müşterinin seçtiği neden notlarda",
+          `${why(p)} · durum ${o?.status}, neden ${o?.cancel_reason}, stok ${s0}→${stock()}, not ${ev}`);
+        const again = await api("/api/order-cancel", { body: { r: tok, confirm: true } });
+        ok(again.status === 400, "İptal edilmiş sipariş ikinci kez iptal edilemiyor", why(again));
+        // Havaleyle ödenmiş ve kargo etiketi alınmış sipariş müşteri tarafından iptal edilemez
+        const r2 = await order([MAIN(1)]);
+        const id2 = r2.json?.orderId;
+        if (id2) {
+          sql(`UPDATE public.orders SET payment_status = 'paid', status = 'processing' WHERE id = ${lit(id2)}`);
+          const g2 = await api(`/api/order-cancel?id=${id2}`, { method: "GET", token: F.member.token });
+          const p2 = await api("/api/order-cancel", { token: F.member.token, body: { id: id2, confirm: true } });
+          sql(`UPDATE public.orders SET payment_status = 'pending', status = 'pending', kargonomi_tracking_code = 'RGT-ETIKET' WHERE id = ${lit(id2)}`);
+          const g3 = await api(`/api/order-cancel?id=${id2}`, { method: "GET", token: F.member.token });
+          ok(g2.json?.canCancel === false && p2.status === 400 && ord(id2).status !== "cancelled" && g3.json?.canCancel === false,
+            "Havaleyle ödenmiş ya da kargo etiketi alınmış sipariş müşteri tarafından iptal edilemiyor (neden yazıyor)", `${g2.json?.why} / ${why(p2)} / etiketli ${g3.json?.canCancel}`);
+          sql(`UPDATE public.orders SET kargonomi_tracking_code = NULL WHERE id = ${lit(id2)}`);
+        }
+        // Hesabım düğmesi + e-postadaki bağlantı (yalnız iptal edilebilir siparişte)
+        const fs = await import("node:fs");
+        const acc = fs.readFileSync(new URL("../../src/app/account/page.tsx", import.meta.url), "utf8");
+        const nt = fs.readFileSync(new URL("../../src/lib/notifications.ts", import.meta.url), "utf8");
+        ok(/customerCancelCheck\(order\)\.ok[\s\S]{0,200}\/siparis-iptal\?siparis=/.test(acc) && /order_placed", "order_paid"\]\.includes\(trigger\) && customerCancelCheck\(order\)\.ok/.test(nt) && /cancelUrl\(order\.id\)/.test(nt),
+          "Siparişlerim'de “Siparişi iptal et” düğmesi ve sipariş e-postasında iptal bağlantısı (iptal edilebilir siparişte)", "düğme ya da e-posta bağlantısı eksik");
+      });
+
       await part("Sipariş silme ve süresi dolan sipariş", async () => {
         if (O.del) {
           const s0 = stock();

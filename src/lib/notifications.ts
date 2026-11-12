@@ -5,6 +5,8 @@ import { fitBoxHtml } from "./after-sale";
 import { afterSaleHere } from "./order-next-step";
 import { cancelReason } from "./cancel-reasons";
 import { applyHavalePending, orderStepsHtml } from "./havale-email";
+import { customerCancelCheck } from "./customer-cancel-rule";
+import { cancelUrl } from "./customer-cancel-link";
 import { createAdminClient } from "./supabase-admin";
 import { buildSmtpConfig } from "./smtp-config";
 
@@ -329,7 +331,7 @@ export async function sendOrderNotification(
   // 1. Sipariş + ilişkileri EMBED'SİZ getir (self-host PostgREST embed kırılgan)
   const { data: order, error: orderError } = await (supabase
     .from("orders")
-    .select("id, order_number, total_amount, status, created_at, shipping_address, payment_method, user_id, channel, payment_status, refunded_amount, refund_method, credit_used, auto_expired, import_source, kargonomi_shipment_id, kargonomi_tracking_code, delivered_at, cancel_reason, cancel_customer_note")
+    .select("id, order_number, total_amount, status, created_at, shipping_address, payment_method, user_id, channel, payment_status, refunded_amount, refund_method, credit_used, auto_expired, import_source, kargonomi_shipment_id, kargonomi_tracking_code, delivered_at, cancel_reason, cancel_customer_note, iyzico_payment_id, shipment_status, cargo_tracking_number")
     .eq("id", context.orderId)
     .maybeSingle() as any) as { data: any; error: any };
 
@@ -514,6 +516,12 @@ export async function sendOrderNotification(
       <a href="${storeUrl}/mesafeli-satis#on-bilgilendirme" style="color:#94a3b8">Ön Bilgilendirme Formu</a> ·
       <a href="${storeUrl}/mesafeli-satis" style="color:#94a3b8">Mesafeli Satış Sözleşmesi</a> ·
       <a href="${storeUrl}/iade-degisim" style="color:#94a3b8">İade ve değişim</a></p>`;
+  }
+  // Vazgeçti mi? (2026-11-12) — kargoya hazırlanmamış siparişte e-postadan tek tıkla iptal sayfası (mesaj / e-posta yok)
+  if (["order_placed", "order_paid"].includes(trigger) && customerCancelCheck(order).ok) {
+    bodyHtml += `
+    <p style="margin:16px 0 0;font-size:12px;color:#94a3b8;line-height:1.6;text-align:center">Vazgeçtin mi? Siparişin kargoya hazırlanmadan
+      <a href="${cancelUrl(order.id)}" style="color:#64748b;text-decoration:underline">buradan iptal edebilirsin</a>.</p>`;
   }
   // Kampanya e-postası izni yoksa sipariş onayında kısa davet (izin, açılan sayfadaki düğmeyle verilir)
   if (uid && trigger === "order_placed" && profile && profile.marketing_consent === false) {

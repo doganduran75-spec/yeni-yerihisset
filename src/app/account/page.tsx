@@ -34,6 +34,7 @@ import {
   Send,
   RotateCcw,
   CheckCircle2,
+  XCircle,
 } from "lucide-react";
 import { useCartStore } from "@/store/useCartStore";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -50,6 +51,7 @@ import { siteAlert, siteConfirm } from "@/components/ui/site-dialog";
 import { trAuthError } from "@/lib/auth-errors";
 import VerifyEmailNotice from "@/components/VerifyEmailNotice";
 import MarketingConsentToggle from "@/components/account/MarketingConsentToggle";
+import { customerCancelCheck } from "@/lib/customer-cancel-rule";
 import { isValidTckn, taxIdLabel } from "@/lib/tax-id";
 
 type TabType = "orders" | "addresses" | "profile" | "security" | "affiliate" | "coupons" | "messages";
@@ -926,6 +928,13 @@ function AccountPageInner() {
                                     <RotateCcw size={14} /> İade / Değişim
                                   </Button>
                                 )
+                              )}
+                              {/* Müşteri kendi siparişini iptal eder (kargoya hazırlanmadan; src/lib/customer-cancel-rule.ts) */}
+                              {customerCancelCheck(order).ok && (
+                                <Link href={`/siparis-iptal?siparis=${order.id}`}
+                                  className="inline-flex items-center gap-1.5 h-9 px-3 rounded-xl border border-red-200 text-red-600 hover:bg-red-50 font-bold text-xs">
+                                  <XCircle size={14} /> Siparişi iptal et
+                                </Link>
                               )}
                               <Button
                                 variant="ghost" size="sm"
