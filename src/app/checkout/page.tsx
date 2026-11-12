@@ -70,6 +70,9 @@ export default function CheckoutPage() {
   // Kampanya e-postası izni (ödeme sayfasındaki kutu) — üye zaten izinliyse kutu gösterilmez
   const [marketingOptIn, setMarketingOptIn] = useState(false);
   const [marketingAlready, setMarketingAlready] = useState(false);
+  // Sözleşme onayı (zorunlu kutu; sunucu da ister ve kaydeder — src/lib/terms-acceptance.ts)
+  const [termsOk, setTermsOk] = useState(false);
+  const [termsError, setTermsError] = useState(false);
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!session) return;
@@ -350,6 +353,13 @@ export default function CheckoutPage() {
       }
       return;
     }
+    // Sözleşme kutusu işaretlenmeden sipariş yok: kutu kırmızı çerçeve + uyarı, görünen kutuya kaydır
+    if (!termsOk) {
+      setTermsError(true);
+      const box = Array.from(document.querySelectorAll<HTMLElement>("[data-terms-box]")).find((el) => el.offsetParent !== null);
+      box?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
 
     setPlacing(true);
 
@@ -417,6 +427,7 @@ export default function CheckoutPage() {
           creditApply: creditApplied,
           adContext: getAdContext(), // reklam kaynağı + (onay varsa) Meta Conversions API
           marketingConsent: marketingOptIn || undefined,
+          termsAccepted: termsOk,
         }),
       });
 
@@ -478,6 +489,7 @@ export default function CheckoutPage() {
         creditApply: creditApplied,
         adContext: getAdContext(), // reklam kaynağı + (onay varsa) Meta Conversions API
         marketingConsent: marketingOptIn || undefined,
+        termsAccepted: termsOk,
       }),
     });
 
@@ -656,13 +668,30 @@ export default function CheckoutPage() {
                       <span className="text-[11px] font-black text-olive-500 uppercase tracking-widest">Ödenecek tutar</span>
                       <span className="text-2xl font-black text-olive-700">₺{finalTotal.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
                     </div>
-                    {/* Kampanya e-postası izni (ticari ileti) — işaretsiz gelir; zaten izinliyse gösterilmez */}
-                    {!marketingAlready && (
-                      <label className="flex items-start gap-2.5 px-2 text-xs text-slate-600 cursor-pointer select-none">
-                        <input type="checkbox" checked={marketingOptIn} onChange={(e) => setMarketingOptIn(e.target.checked)} className="mt-0.5 h-4 w-4 shrink-0 accent-olive-600" />
-                        <span>Kampanya ve indirimlerden e-posta ile haberdar olmak istiyorum.</span>
+                    {/* ONAYLAR (2026-11-12): sözleşme kutusu ZORUNLU (işaretlenmeden sipariş yok, sunucu da ister ve onayı
+                        sürümüyle kaydeder); kampanya e-postası İSTEĞE BAĞLI, işaretsiz gelir, zaten izinliyse gösterilmez */}
+                    <div data-terms-box className={cn("rounded-2xl border-2 px-3.5 py-3 space-y-3 transition-colors",
+                      termsError && !termsOk ? "border-red-400 bg-red-50" : "border-slate-200 bg-white")}>
+                      <label className="flex items-start gap-2.5 text-[13px] text-slate-700 leading-relaxed cursor-pointer select-none">
+                        <input type="checkbox" checked={termsOk} aria-required="true" aria-invalid={termsError && !termsOk}
+                          onChange={(e) => { setTermsOk(e.target.checked); if (e.target.checked) setTermsError(false); }}
+                          className="mt-0.5 h-5 w-5 shrink-0 accent-olive-600" />
+                        <span>
+                          <Link href="/mesafeli-satis#on-bilgilendirme" target="_blank" className="font-bold text-olive-600 underline">Ön Bilgilendirme Formu</Link>’nu ve{" "}
+                          <Link href="/mesafeli-satis" target="_blank" className="font-bold text-olive-600 underline">Mesafeli Satış Sözleşmesi</Link>’ni okudum, onaylıyorum.
+                          <span className="text-red-500 font-bold"> *</span>
+                        </span>
                       </label>
-                    )}
+                      {termsError && !termsOk && (
+                        <p role="alert" className="text-xs font-bold text-red-600 pl-7 -mt-1">Siparişi tamamlamak için bu kutuyu işaretleyin.</p>
+                      )}
+                      {!marketingAlready && (
+                        <label className="flex items-start gap-2.5 text-[13px] text-slate-600 leading-relaxed cursor-pointer select-none">
+                          <input type="checkbox" checked={marketingOptIn} onChange={(e) => setMarketingOptIn(e.target.checked)} className="mt-0.5 h-5 w-5 shrink-0 accent-olive-600" />
+                          <span>Kampanya ve indirimlerden e-posta ile haberdar olmak istiyorum. <span className="text-slate-400">(isteğe bağlı)</span></span>
+                        </label>
+                      )}
+                    </div>
                     <Button
                       onClick={handlePlaceOrder}
                       disabled={placing}
@@ -671,7 +700,7 @@ export default function CheckoutPage() {
                       {placing ? (paymentMethod === "credit_card" ? "Ödemeye yönlendiriliyor…" : "Sipariş işleniyor…") : <>SİPARİŞİ TAMAMLA <ArrowRight size={24} className="ml-2 group-hover:translate-x-3 transition-transform duration-500" /></>}
                     </Button>
                     <p className="text-[11px] text-slate-500 font-medium leading-relaxed text-center px-2 -mt-1">
-                      “Siparişi Tamamla” butonuna basarak <Link href="/mesafeli-satis#on-bilgilendirme" target="_blank" className="font-bold text-olive-600 underline">Ön Bilgilendirme Formu</Link>’nu ve <Link href="/mesafeli-satis" target="_blank" className="font-bold text-olive-600 underline">Mesafeli Satış Sözleşmesi</Link>’ni okuduğunuzu, ödeme yükümlülüğü altına girdiğinizi kabul edersiniz. Kişisel verileriniz <Link href="/kvkk" target="_blank" className="font-bold text-olive-600 underline">Aydınlatma Metni</Link> kapsamında işlenir.
+                      “Siparişi Tamamla” butonuna bastığınızda ödeme yükümlülüğü altına girersiniz. Kişisel verileriniz <Link href="/kvkk" target="_blank" className="font-bold text-olive-600 underline">Aydınlatma Metni</Link> kapsamında işlenir.
                     </p>
   </>);
 

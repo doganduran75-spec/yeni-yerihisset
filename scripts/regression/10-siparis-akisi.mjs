@@ -20,6 +20,8 @@ export default {
     // Sitede kapalı ürünün numarası sipariş edilemez (order-pricing). Test ürünü mağazada görünmesin diye
     // pasif; yalnız sipariş isteği süresince açılır.
     const api = async (path, opts) => {
+      // Ödeme sayfası sözleşme onayını gönderir (2026-11-12); onaysız deneyen senaryo termsAccepted'ı kendisi yazar
+      if (path === "/api/orders/create" && opts?.body && !("termsAccepted" in opts.body)) opts = { ...opts, body: { ...opts.body, termsAccepted: true } };
       if (path !== "/api/orders/create" || !F.prod) return rawApi(path, opts);
       sql(`UPDATE public.products SET is_active = true WHERE id = ${lit(F.prod)}`);
       try { return await rawApi(path, opts); }
@@ -318,6 +320,23 @@ export default {
         O.guest = r.json?.orderId;
         if (!O.guest) return add("fail", "Misafir siparişi oluşturulamadı", why(r));
         ok(r.json?.isGuest === true, "Misafir olarak işaretlendi", JSON.stringify(r.json).slice(0, 120));
+        // Sözleşme onayı (2026-11-12, MIG 20261180): kutu işaretsizse sipariş oluşmaz; onaylı siparişe an + IP + tarayıcı +
+        // metnin sürümü yazılır, sürümün tam metni legal_text_versions'ta
+        {
+          const nG = () => num(`SELECT count(*) FROM public.orders o JOIN auth.users u ON u.id = o.user_id WHERE u.email = ${lit(guest.email)}`);
+          const n0 = nG();
+          const nt = await api("/api/orders/create", { headers: H, body: { ...body, termsAccepted: false } });
+          const t = row(`SELECT o.terms_accepted_at IS NOT NULL AS at, o.terms_ip IS NOT NULL AS ip, v.slug, length(v.body) > 200 AS body
+            FROM public.orders o LEFT JOIN public.legal_text_versions v ON v.hash = o.terms_version WHERE o.id = ${lit(O.guest)}`) || {};
+          ok(nt.status === 400 && nt.json?.terms === true && nG() === n0 && t.at && t.ip && t.slug === "mesafeli-satis" && t.body,
+            "Sözleşme onayı: işaretsizse sipariş oluşmuyor; onaylı siparişe onay anı, IP ve onaylanan metnin sürümü (tam metniyle) kaydediliyor",
+            `${why(nt)} · sipariş sayısı ${n0}→${nG()} · kayıt ${JSON.stringify(t)}`);
+          const ck = (await import("node:fs")).readFileSync(new URL("../../src/app/checkout/page.tsx", import.meta.url), "utf8");
+          const iy = (await import("node:fs")).readFileSync(new URL("../../src/app/api/checkout/iyzico/initialize/route.ts", import.meta.url), "utf8");
+          ok((ck.match(/termsAccepted: termsOk/g) || []).length === 2 && /data-terms-box/.test(ck) && /okudum, onaylıyorum/.test(ck) && /\(isteğe bağlı\)/.test(ck)
+            && /if \(!termsAccepted\(body\)\)/.test(iy) && /recordTermsAcceptance\(supabase, order\.id, req\)/.test(iy),
+            "Ödeme sayfası: zorunlu sözleşme kutusu (havale + kart), kampanya kutusu isteğe bağlı; kart ödemesinde de onay isteniyor ve kaydediliyor", "kutu ya da kart akışı kontrolü eksik");
+        }
         const s = await api(`/api/orders/summary?id=${O.guest}`, { method: "GET", headers: H });
         const sj = s.json || {};
         const sBad = [
@@ -1157,7 +1176,7 @@ export default {
         ok(c2.status < 300 && sendQty() === expect, "Trendyol'da açınca gerçek stok gidiyor", `HTTP ${c2.status}, gönderilecek ${sendQty()}`);
         // Ürünün tamamı sitede kapalı (test ürünü zaten pasif) → açık numarası da eski sepetten satılmaz
         const n1 = memberOrders();
-        const r3 = await rawApi("/api/orders/create", { token: F.member.token, body: { items: [MAIN(1)], shippingAddressId: F.addr, billingSameAsShipping: true, paymentMethod: "bank_transfer" } });
+        const r3 = await rawApi("/api/orders/create", { token: F.member.token, body: { items: [MAIN(1)], shippingAddressId: F.addr, billingSameAsShipping: true, paymentMethod: "bank_transfer", termsAccepted: true } });
         ok(r3.status === 400 && memberOrders() === n1, "Sitede kapalı ürünün numarası sipariş edilemiyor (eski sepet)", why(r3));
         // Amazon fiyatı kuyruğa giriyor (geri alınan işlem: gerçek kuyruğa / pazaryerine bir şey gitmez)
         const key = `RGT-AZ-${RUN}`.toUpperCase();

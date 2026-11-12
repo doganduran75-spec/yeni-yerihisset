@@ -12,6 +12,7 @@ import { botVerdict, botResponse } from "@/lib/bot-guard";
 import { resolveShipping } from "@/lib/shipping";
 import { readAdContext } from "@/lib/meta-capi";
 import { setMarketingConsent } from "@/lib/marketing-consent";
+import { termsAccepted, recordTermsAcceptance, TERMS_REQUIRED_ERROR } from "@/lib/terms-acceptance";
 
 type CartItem = {
   product_id: string;
@@ -70,6 +71,8 @@ export async function POST(req: NextRequest) {
   if (!items?.length) {
     return NextResponse.json({ error: "Eksik bilgi" }, { status: 400 });
   }
+  // Sözleşme onayı zorunlu (ödeme sayfasındaki kutu) — src/lib/terms-acceptance.ts
+  if (!termsAccepted(body)) return NextResponse.json({ error: TERMS_REQUIRED_ERROR, terms: true }, { status: 400 });
   // TC Kimlik No checkout'ta SORULMAZ ve SAKLANMAZ: iyzico'ya bireysel müşteri varsayılanı 11111111111
   // gider (fatura da bu numarayla kesilebilir). Kurumsal faturada vergi no kullanılır.
   const tcknInput = (identityNumber || "").replace(/\D/g, "");
@@ -294,6 +297,9 @@ export async function POST(req: NextRequest) {
       { status: 409 }
     );
   }
+
+  // Sözleşme onayının kaydı: an + IP + tarayıcı + metnin sürümü (ispat)
+  await recordTermsAcceptance(supabase, order.id, req);
 
   // Kampanya e-postası izni (ödeme sayfasındaki kutu işaretliyse) — src/lib/marketing-consent.ts
   if (body?.marketingConsent === true) {
