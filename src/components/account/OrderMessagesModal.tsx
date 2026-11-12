@@ -29,9 +29,18 @@ export default function OrderMessagesModal({
         .from("messages").select("*").eq("order_id", orderId).order("created_at", { ascending: true });
       setMessages((data as any[]) || []);
       setLoading(false);
-      // Admin mesajlarını okundu işaretle
-      await (supabase as any).from("messages")
-        .update({ is_read: true }).eq("order_id", orderId).eq("sender_role", "admin").eq("is_read", false);
+      // Yönetici mesajlarını okundu işaretle — sunucu üzerinden (müşterinin tabloyu güncelleme izni yok; doğrudan
+      // güncelleme sessizce hiçbir satırı değiştirmiyordu → rozet yenilemeden sonra da "1" kalıyordu, 2026-11-12)
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) {
+          await fetch("/api/messages/read", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+            body: JSON.stringify({ orderId }),
+          });
+        }
+      } catch { /* rozet bir sonraki açılışta düzelir */ }
       onRead?.();
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps

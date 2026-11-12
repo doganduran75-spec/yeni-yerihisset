@@ -824,6 +824,22 @@ export default {
           const m2 = await api("/api/messages/notify", { token: F.member.token, body: { orderId: O.guest, senderRole: "admin" } });
           ok(m1.status === 403 && m2.status === 403, "Üye başkasının siparişi için mesaj e-postası tetikleyemiyor", `${why(m1)} / ${why(m2)}`);
         }
+        // Mesaj okundu (2026-11-12): Hesabım › Mesaj rozeti okuyunca kalkar — istemci tabloyu güncelleyemediği için sunucu
+        // (/api/messages/read) işaretler; yalnız kendi siparişindeki yönetici mesajı, başkasınınki değişmez
+        if (O.paid) {
+          const own = one(`INSERT INTO public.messages (order_id, user_id, sender_role, content) VALUES (${lit(O.paid)}, ${lit(F.member.id)}, 'admin', 'REGRESYON-TEST okundu') RETURNING id`);
+          const other = O.guest ? one(`INSERT INTO public.messages (order_id, user_id, sender_role, content) SELECT id, coalesce(user_id, ${lit(F.admin.id)}), 'admin', 'REGRESYON-TEST okundu' FROM public.orders WHERE id = ${lit(O.guest)} RETURNING id`) : null;
+          const rd = (id) => one(`SELECT is_read FROM public.messages WHERE id = ${lit(id)}`) === "t";
+          const direct = await rest(`messages?id=eq.${own}`, { token: F.member.token, method: "PATCH", headers: { Prefer: "return=representation" }, body: { content: "değişti" } });
+          const r0 = O.guest ? await api("/api/messages/read", { token: F.member.token, body: { orderId: O.guest } }) : null;
+          const r1 = await api("/api/messages/read", { token: F.member.token, body: { orderId: O.paid } });
+          const anonR = await api("/api/messages/read", { body: { orderId: O.paid } });
+          ok(r1.status === 200 && rd(own) && (!other || (!rd(other) && r0?.json?.read === 0)) && anonR.status === 401
+            && one(`SELECT content FROM public.messages WHERE id = ${lit(own)}`) === "REGRESYON-TEST okundu",
+            "Mesaj rozeti: müşteri açınca yönetici mesajı okundu olur (sunucu); başkasının siparişi / girişsiz değişmez; müşteri mesaj içeriğini değiştiremez",
+            `${why(r1)} okundu ${rd(own)}, başkası ${other ? rd(other) : "-"}, girişsiz ${anonR.status}, doğrudan ${direct?.status}`);
+          sql(`DELETE FROM public.messages WHERE content = 'REGRESYON-TEST okundu'`);
+        }
       });
 
       await part("Kampanya e-postası izni", async () => {
