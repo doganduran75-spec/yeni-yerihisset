@@ -8,7 +8,8 @@ import { customerCancelCheck, CUSTOMER_CANCEL_REASONS } from "@/lib/customer-can
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 // MÜŞTERİ SİPARİŞ İPTALİ (2026-11-12): /siparis-iptal sayfası. Kimlik: e-postadaki imzalı r=… ya da oturum + kendi
-// siparişi (Hesabım). GET → iptal edilebilir mi + özet; POST { confirm: true, reason? } → iptal (src/lib/customer-cancel.ts)
+// siparişi (Hesabım). GET → iptal edilebilir mi + özet; POST { confirm: true, reason?, paidClaim?, iban?, ibanName? } → iptal
+// (src/lib/customer-cancel.ts)
 async function loadOrder(req: NextRequest, r: string | null, id: string | null) {
   const sb = createAdminClient() as any;
   let orderId = r ? verifyCancelToken(r) : null;
@@ -47,7 +48,7 @@ export async function POST(req: NextRequest) {
   const x: any = await loadOrder(req, body.r ? String(body.r) : null, body.id ? String(body.id) : null);
   if (x.error) return NextResponse.json({ error: x.error }, { status: x.status });
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "127.0.0.1";
-  const res: any = await performCustomerCancel(x.sb, x.order, { reason: body.reason, ip, via: x.via });
+  const res: any = await performCustomerCancel(x.sb, x.order, { reason: body.reason, ip, via: x.via, paidClaim: body.paidClaim === true, iban: body.iban, ibanName: body.ibanName });
   if (res.error) {
     if (res.notifyAdmin) {
       import("@/lib/after-sale-mail").then(({ sendAdminCaseEmail }) =>
@@ -58,5 +59,5 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json({ error: res.error }, { status: 400 });
   }
-  return NextResponse.json({ ok: true, refunded: res.refunded, label: res.label });
+  return NextResponse.json({ ok: true, outcome: res.outcome, refunded: res.refunded, amount: res.amount, label: res.label, iban: res.iban });
 }

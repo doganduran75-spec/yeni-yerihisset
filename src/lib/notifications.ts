@@ -304,6 +304,11 @@ function buildCancelInfoHtml(order: any, storeUrl: string): string {
       lines.push(`<b>${money(refunded)}</b> tutarındaki ödemen iade edildi.`);
     }
   }
+  // Ücret iadesi bekleyen iptal (müşteri iptali: havaleyle ödenmiş / kart iadesi otomatik yapılamamış — 2026-11-12)
+  const paidLeft = ["paid", "partial_refund"].includes(order.payment_status) ? Math.round((Number(order.total_amount || 0) - refunded) * 100) / 100 : 0;
+  if (paidLeft > 0) {
+    lines.push(`<b>${money(paidLeft)}</b> tutarındaki ödemenin iadesini en kısa sürede ${order.payment_method === "bank_transfer" ? "bildirdiğin IBAN'a" : "kartına"} yapacağız.`);
+  }
   if (credit > 0) {
     tone = "green";
     lines.push(`Siparişte kullandığın <b>${money(credit)}</b> YeriHisset Kredisi hesabına geri yüklendi.`);

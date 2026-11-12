@@ -1005,6 +1005,12 @@ Siparişte “Paraşüt — yeniden dene” ile tekrar dene.`, tone: "danger" })
       case "alt_delivered":
         if (await siteConfirm({ title: "Alternatif teslim edildi mi?", message: "Müşteriye “hangisi oldu?” e-postası gider.", confirmText: "Teslim edildi" })) await caseOp(o, { op: "alt_delivered" });
         return;
+      case "cancel_transfer_refunded":
+        if (await siteConfirm({ title: "İade gönderildi mi?", message: "Müşterinin havalesi hesaba gelmişti ve tutarı müşterinin IBAN'ına geri gönderdin. İş kapanır (sipariş zaten iptal; ciroya girmez).", confirmText: "İadeyi gönderdim" })) await caseOp(o, { op: "cancel_transfer", result: "refunded" });
+        return;
+      case "cancel_transfer_none":
+        if (await siteConfirm({ title: "Havale gelmemiş mi?", message: "Müşterinin söylediği havale hesaba ulaşmadı: iş kapanır, iade gerekmez. (Sonra gelirse IBAN siparişin notlarında.)", confirmText: "Havale gelmemiş", tone: "danger" })) await caseOp(o, { op: "cancel_transfer", result: "none" });
+        return;
       case "close_case":
         if (await siteConfirm({ title: "Talep kapatılsın mı?", message: "Müşteri vazgeçtiyse kapat; sipariş “müşteri deniyor” durumuna döner.", confirmText: "Kapat", tone: "danger" })) await caseOp(o, { op: "close" });
         return;
@@ -1570,7 +1576,7 @@ ${courierQueue.slice(0, 20).map((o) => orderLabel(o)).join(", ")}${courierQueue.
                               options={shipmentOptions(order)} current={sStatus} onSelect={(v) => selectShipment(order, v)} />
                             {openCaseOf(order) && (
                               <span className={`text-[10px] font-bold rounded px-1.5 py-0.5 w-fit ${openCaseOf(order).kind === "return" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}>
-                                {openCaseOf(order).kind === "return" ? (openCaseOf(order).status === "requested" ? "İade talebi" : "İade bekleniyor") : "Değişimde"}
+                                {openCaseOf(order).kind === "cancel" ? "İptal — iade bekliyor" : openCaseOf(order).kind === "return" ? (openCaseOf(order).status === "requested" ? "İade talebi" : "İade bekleniyor") : "Değişimde"}
                               </span>
                             )}
                             {!openCaseOf(order) && ["in_transit", "arrived", "accepted"].includes(order.mp_claim_state || "") && (
@@ -2816,6 +2822,7 @@ const RETURN_METHOD_SHOW: Record<string, string> = { ...RETURN_METHODS, self: "M
 const CASE_STATUS: Record<string, string> = {
   requested: "Talep alındı", waiting_stock: "Stok bekleniyor", alt_shipped: "Alternatif kargoda", alt_delivered: "Müşteri deniyor",
   keep_chosen: "Müşteri seçti", label_sent: "Kargo kodu gönderildi",
+  refund_pending: "Ücret iadesi bekliyor", check_transfer: "Havale kontrol edilecek",
 };
 function CaseBox({ order, kase, canSendLabel, canShipAlt, onDone }: {
   order: Order; kase: any; canSendLabel: boolean; canShipAlt: boolean; onDone: () => void;
@@ -2846,7 +2853,7 @@ function CaseBox({ order, kase, canSendLabel, canShipAlt, onDone }: {
   return (
     <div className="rounded-lg border border-purple-200 bg-white p-3 space-y-2 text-xs">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="font-bold text-purple-800">{kase.kind === "exchange" ? "Değişim talebi" : "İade talebi"}</span>
+        <span className="font-bold text-purple-800">{kase.kind === "exchange" ? "Değişim talebi" : kase.kind === "cancel" ? "Müşteri iptali" : "İade talebi"}</span>
         <span className="rounded-full bg-purple-50 text-purple-700 px-2 py-0.5">{CASE_STATUS[kase.status] ?? kase.status}</span>
         <span className="text-muted-foreground ml-auto">{new Date(kase.created_at).toLocaleString("tr-TR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
       </div>
@@ -2860,7 +2867,7 @@ function CaseBox({ order, kase, canSendLabel, canShipAlt, onDone }: {
       {kase.keep_item_id && <p><span className="text-muted-foreground">Tuttuğu:</span> <b>{label(kase.keep_item_id)}</b> — diğeri geri gelecek</p>}
       {kase.return_method && <p><span className="text-muted-foreground">Kargo:</span> {RETURN_METHOD_SHOW[kase.return_method] ?? kase.return_method}{kase.return_code ? <> · kod <code className="font-mono">{kase.return_code}</code></> : null}</p>}
       {kase.alt_tracking && <p><span className="text-muted-foreground">Alternatif takip:</span> <code className="font-mono">{kase.alt_tracking}</code></p>}
-      {kase.iban && <p><span className="text-muted-foreground">IBAN (havale iadesi):</span> <code className="font-mono select-all">{kase.iban}</code></p>}
+      {kase.iban && <p><span className="text-muted-foreground">IBAN (havale iadesi):</span> <code className="font-mono select-all">{kase.iban}</code>{kase.iban_name ? <> · <b className="select-all">{kase.iban_name}</b></> : null}</p>}
       {kase.customer_note && <p className="whitespace-pre-wrap"><span className="text-muted-foreground">Müşteri notu:</span> {kase.customer_note}</p>}
 
       {canShipAlt && (

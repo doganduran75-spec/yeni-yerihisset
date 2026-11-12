@@ -18,6 +18,7 @@ import { autoInvoiceSiteOrder } from "@/lib/parasut-invoice";
 //   admin_return  : "İade gelecek" — müşteri telefonla bildirdi; iade talebi açılır (müşteriye e-posta GİTMEZ).
 //                   mode "self" (müşteri kendisi gönderiyor) → doğrudan "iade yolda"; "code" → kod gönderilecek
 //   in_transit    : iade talebinde kod gerekmiyor → "iade yolda" (sessiz)
+//   cancel_transfer: müşteri iptali, "ödeme yaptım" (havale onaylanmamıştı) → result refunded (iade gönderildi) | none
 export async function POST(req: NextRequest) {
   const user = await getAuthUserFromRequest(req);
   if (!user) return NextResponse.json({ error: "Yetkisiz" }, { status: 401 });
@@ -115,10 +116,20 @@ export async function POST(req: NextRequest) {
       await note("İade: kod gerekmiyor (müşteri kendisi gönderiyor) — iade yolda");
       return NextResponse.json({ ok: true });
 
+    case "cancel_transfer": {
+      // Müşteri iptali: "ödeme yaptım" dedi ama havale onaylanmamıştı (src/lib/customer-cancel.ts)
+      if (!c || c.kind !== "cancel" || c.status !== "check_transfer") return NextResponse.json({ error: "Bekleyen havale kontrolü yok" }, { status: 400 });
+      const refunded = body.result === "refunded";
+      await sb.from("order_cases").update({ closed_at: now, updated_at: now, status: refunded ? "transfer_refunded" : "no_transfer" }).eq("id", c.id);
+      await note(refunded ? `Müşteri iptali: havale gelmişti — tutar müşterinin IBAN'ına iade edildi (${c.iban}${c.iban_name ? `, ${c.iban_name}` : ""})`
+        : `Müşteri iptali: söylenen havale hesaba gelmemiş — iade gerekmedi (IBAN: ${c.iban}${c.iban_name ? `, ${c.iban_name}` : ""})`);
+      return NextResponse.json({ ok: true });
+    }
+
     case "close":
       if (!c) return NextResponse.json({ error: "Açık talep yok" }, { status: 400 });
       await sb.from("order_cases").update({ closed_at: now, updated_at: now, status: c.status + ":kapatildi" }).eq("id", c.id);
-      await sb.from("orders").update({ fit_status: "trial" }).eq("id", orderId);
+      if (c.kind !== "cancel") await sb.from("orders").update({ fit_status: "trial" }).eq("id", orderId);
       await note(`${c.kind === "exchange" ? "Değişim" : "İade"} talebi kapatıldı (yönetici)`);
       return NextResponse.json({ ok: true });
   }

@@ -29,7 +29,10 @@ function Inner() {
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [done, setDone] = useState<{ refunded: number } | null>(null);
+  const [done, setDone] = useState<{ outcome: string; refunded: number; amount: number; iban: string | null } | null>(null);
+  const [paidClaim, setPaidClaim] = useState<"" | "no" | "yes">(""); // havale, ödeme onaylanmamış: müşteriye sorulur
+  const [iban, setIban] = useState("");
+  const [ibanName, setIbanName] = useState("");
 
   const auth = async (): Promise<Record<string, string>> => {
     if (r) return {};
@@ -48,16 +51,20 @@ function Inner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [r, id]);
 
+  const needIban = v?.mode === "bank_refund" || (v?.mode === "bank_ask" && paidClaim === "yes");
+  const ready = v?.mode !== "bank_ask" || paidClaim !== "";
+
   async function cancel() {
     setBusy(true); setErr(null);
     const res = await fetch("/api/order-cancel", {
       method: "POST", headers: { "Content-Type": "application/json", ...(await auth()) },
-      body: JSON.stringify({ r: r || undefined, id: r ? undefined : id, reason: reason || undefined, confirm: true }),
+      body: JSON.stringify({ r: r || undefined, id: r ? undefined : id, reason: reason || undefined, confirm: true,
+        paidClaim: paidClaim === "yes", iban: needIban ? iban : undefined, ibanName: needIban ? ibanName : undefined }),
     });
     const d = await res.json().catch(() => ({}));
     setBusy(false);
     if (!res.ok) { setErr(d.error || "İptal yapılamadı."); return; }
-    setDone({ refunded: Number(d.refunded || 0) });
+    setDone({ outcome: d.outcome, refunded: Number(d.refunded || 0), amount: Number(d.amount || 0), iban: d.iban || null });
   }
 
   if (loadErr) return <Shell><div className="text-center space-y-3"><AlertCircle className="mx-auto text-amber-500" size={40} /><p className="font-bold text-slate-800">{loadErr}</p>
@@ -71,8 +78,10 @@ function Inner() {
         <h1 className="text-xl font-black text-slate-900">Siparişin iptal edildi</h1>
         <p className="text-sm text-slate-600 leading-relaxed">
           <b>{v.label}</b> numaralı siparişini iptal ettik.{" "}
-          {done.refunded > 0
-            ? <>Kartından çekilen <b>{money(done.refunded)}</b> iade edildi; bankana göre hesabına yansıması birkaç iş günü sürebilir.</>
+          {done.outcome === "card_refunded" ? <>Kartından çekilen <b>{money(done.refunded)}</b> iade edildi; bankana göre kartına yansıması birkaç iş günü sürebilir.</>
+            : done.outcome === "card_refund_pending" ? <><b>{money(done.amount)}</b> tutarındaki kart iaden ekibimiz tarafından en kısa sürede yapılacak.</>
+            : done.outcome === "bank_refund_pending" ? <><b>{money(done.amount)}</b> tutarını en kısa sürede IBAN'ına ({done.iban}) göndereceğiz.</>
+            : done.outcome === "transfer_check" ? <>Havalen hesabımıza ulaştıysa <b>{money(done.amount)}</b> tutarını IBAN'ına ({done.iban}) iade edeceğiz.</>
             : <>Senden bir ödeme alınmadığı için iade gerekmiyor.</>}
           {" "}Bilgisini e-postayla da gönderdik.
         </p>
@@ -98,10 +107,29 @@ function Inner() {
       ) : (
         <div className="space-y-4">
           <p className="text-sm text-slate-700 leading-relaxed">
-            {v.mode === "card_refund"
-              ? <>Siparişin henüz kargoya hazırlanmadı. İptal edersen kartından çekilen <b>{money(v.total)}</b> kendiliğinden iade edilir.</>
+            {v.mode === "card_refund" ? <>Siparişin henüz kargoya hazırlanmadı. İptal edersen kartından çekilen <b>{money(v.total)}</b> kendiliğinden iade edilir.</>
+              : v.mode === "bank_refund" ? <>Siparişin henüz kargoya hazırlanmadı. Havale ödemen alınmıştı: iptal edersen <b>{money(v.total)}</b> tutarını aşağıya yazacağın IBAN'a iade ederiz.</>
+              : v.mode === "bank_ask" ? <>Siparişin henüz kargoya hazırlanmadı. Havale / EFT ödemesini yaptın mı?</>
               : <>Siparişin henüz kargoya hazırlanmadı ve ödemen alınmadı; iptal edersen senden bir ödeme alınmaz.</>}
           </p>
+          {v.mode === "bank_ask" && (
+            <div className="space-y-2">
+              {([["no", "Ödeme yapmadım, iptal edilsin"], ["yes", "Ödemeyi yaptım, iptal edilip iade edilsin"]] as const).map(([k, t]) => (
+                <label key={k} className={`flex gap-3 rounded-xl border p-3 cursor-pointer text-sm font-bold ${paidClaim === k ? "border-olive-500 bg-olive-50 text-slate-900" : "border-slate-200 text-slate-700"}`}>
+                  <input type="radio" name="paid" checked={paidClaim === k} onChange={() => setPaidClaim(k)} className="accent-olive-600" />{t}
+                </label>
+              ))}
+            </div>
+          )}
+          {needIban && (
+            <div className="space-y-2 rounded-2xl border border-slate-200 p-3">
+              <p className="text-sm font-bold text-slate-700">İadenin yatırılacağı hesap</p>
+              <input value={iban} onChange={(e) => setIban(e.target.value.toUpperCase())} placeholder="TR00 0000 0000 0000 0000 0000 00" inputMode="text" autoComplete="off"
+                className="w-full h-11 rounded-xl border border-slate-200 px-3 text-sm font-mono" />
+              <input value={ibanName} onChange={(e) => setIbanName(e.target.value)} placeholder="Hesap sahibinin adı soyadı" autoComplete="name"
+                className="w-full h-11 rounded-xl border border-slate-200 px-3 text-sm" />
+            </div>
+          )}
           <label className="block">
             <span className="text-xs font-bold text-slate-500">Neden iptal ediyorsun? (isteğe bağlı)</span>
             <select value={reason} onChange={(e) => setReason(e.target.value)} className="mt-1 w-full h-11 rounded-xl border border-slate-200 px-3 text-sm bg-white">
@@ -113,7 +141,7 @@ function Inner() {
             <p className="text-xs text-slate-500 leading-relaxed">İpucu: yalnız numarayı değiştirmek istiyorsan iptal etmeden Siparişlerim’deki <b>Mesaj</b> düğmesinden yazabilirsin; siparişini düzeltelim.</p>
           )}
           {err && <p role="alert" className="text-sm font-bold text-red-600">{err}</p>}
-          <button onClick={cancel} disabled={busy}
+          <button onClick={cancel} disabled={busy || !ready}
             className="w-full h-12 rounded-2xl bg-red-600 hover:bg-red-700 text-white font-black text-sm uppercase tracking-widest disabled:opacity-50 flex items-center justify-center gap-2">
             {busy ? <Loader2 size={18} className="animate-spin" /> : null} Siparişi iptal et
           </button>

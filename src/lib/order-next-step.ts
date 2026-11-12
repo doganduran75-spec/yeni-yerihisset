@@ -18,7 +18,9 @@ export type NextActionKey =
   // "Paket hazır" akışı (src/app/api/admin/orders/ship-flow)
   | "packed" | "picked_up" | "mp_picking" | "hb_package" | "mp_return"
   // Trendyol iade talebi: onayla + işle (src/lib/marketplace/trendyol-claims.ts)
-  | "mp_claim";
+  | "mp_claim"
+  // Müşteri iptali, "ödeme yaptım" ama havale onaylanmamıştı (src/lib/customer-cancel.ts)
+  | "cancel_transfer_refunded" | "cancel_transfer_none";
 
 export type NextAction = { key: NextActionKey; label: string; kind: "primary" | "danger" };
 
@@ -51,7 +53,7 @@ export type OrderLike = {
   created_at?: string | null;
   fit_status?: string | null;      // trial · ok · exchange · return
   delivered_at?: string | null;
-  open_case?: { kind: string; status: string; return_method?: string | null; label_sent_at?: string | null } | null;
+  open_case?: { kind: string; status: string; return_method?: string | null; label_sent_at?: string | null; iban?: string | null; iban_name?: string | null } | null;
 };
 
 export const TRIAL_DAYS = 14;
@@ -185,7 +187,16 @@ function coreNextStep(o: OrderLike): NextStep {
 
   // ── Site ──
   if (o.status === "cancelled") {
-    if (paid && remaining > 0) return { stage: "İptal edildi", hint: "Ücret iadesi kaydı eksik.", actions: [{ key: "refund", label: "Ücret iadesi yap", kind: "danger" }], needsAction: true };
+    // Müşteri iptali (2026-11-12): ücret iadesi işi — IBAN / kart bilgisi talepte (order_cases kind 'cancel')
+    const cc = o.open_case?.kind === "cancel" ? o.open_case : null;
+    const toIban = cc?.iban ? `${cc.iban}${cc.iban_name ? ` (${cc.iban_name})` : ""}` : "";
+    if (cc?.status === "check_transfer") {
+      return { stage: "Müşteri iptal etti — ödediğini söylüyor", hint: `Havale onaylanmamıştı. Hesaba ₺${Number(o.total_amount || 0).toFixed(2)} geldiyse IBAN'a iade et: ${toIban}`,
+        actions: [{ key: "cancel_transfer_refunded", label: "Havale gelmişti — iadeyi gönderdim", kind: "primary" }, { key: "cancel_transfer_none", label: "Havale gelmemiş", kind: "danger" }], needsAction: true };
+    }
+    if (paid && remaining > 0) return { stage: cc ? "Müşteri iptal etti — ücret iadesi" : "İptal edildi",
+      hint: cc ? (toIban ? `₺${remaining.toFixed(2)} iadeyi IBAN'a gönder: ${toIban} — sonra “Ücret iadesi yap” → Havale.` : "Kart iadesi otomatik yapılamadı: “Ücret iadesi yap” → iyzico (yeniden dener) ya da iyzico panelinden yapıp işaretle.") : "Ücret iadesi kaydı eksik.",
+      actions: [{ key: "refund", label: "Ücret iadesi yap", kind: "danger" }], needsAction: true };
     if (inv === "invoiced") return { stage: "İptal edildi", hint: "Fatura kesilmişti: iade faturası kes.", actions: returnInvoiceActs, needsAction: true };
     return { stage: "İptal edildi", actions: [], needsAction: false };
   }

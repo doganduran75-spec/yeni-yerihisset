@@ -61,6 +61,11 @@ export async function POST(req: NextRequest) {
     if (error) return error.message;
     // Tam iade → siparişte kullanılan YeriHisset Kredisi cüzdana döner
     if (data?.full) await restoreOrderCredit(sb, orderId!).catch(() => {});
+    // Müşteri iptalinin ücret iadesi işi (order_cases kind 'cancel', src/lib/customer-cancel.ts) tam iadeyle kapanır
+    if (data?.full) {
+      const done = new Date().toISOString();
+      await sb.from("order_cases").update({ status: "refunded", closed_at: done, updated_at: done }).eq("order_id", orderId).eq("kind", "cancel").is("closed_at", null);
+    }
     return null;
   }
 
