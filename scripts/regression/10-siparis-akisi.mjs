@@ -861,6 +861,28 @@ export default {
         }
       });
 
+      // ÜYELİK SÖZLEŞMESİ (2026-11-12, MIG 20261182): üyelik formunda zorunlu sözleşme kutusu (sunucu da ister),
+      // onay anı + IP + metnin sürümü üyeye yazılır; kampanya kutusu isteğe bağlı; eski "giriş yaparak kabul" yazısı yok
+      await part("Üyelik Sözleşmesi onayı", async () => {
+        const H = { "x-forwarded-for": F.ip };
+        const e1 = `rgt-uyelik1-${RUN}@${DOMAIN}`, e2 = `rgt-uyelik2-${RUN}@${DOMAIN}`;
+        const reg = (email, extra) => api("/api/auth/register", { headers: H, body: { email, password: "Deneme123!", firstName: "Ayşe", lastName: "Deneme", _hp: "", _t: 6000, ...extra } });
+        const n1 = await reg(e1, {});
+        const users = (e) => num(`SELECT count(*) FROM auth.users WHERE email = ${lit(e)}`);
+        const y = await reg(e2, { termsAccepted: true, marketingConsent: true });
+        const p = row(`SELECT p.terms_accepted_at IS NOT NULL AS at, p.terms_ip IS NOT NULL AS ip, p.marketing_consent AS mc, v.slug
+          FROM public.profiles p LEFT JOIN public.legal_text_versions v ON v.hash = p.terms_version WHERE p.email = ${lit(e2)}`) || {};
+        ok(n1.status === 400 && n1.json?.terms === true && users(e1) === 0 && y.status === 200 && p.at && p.ip && p.slug === "uyelik-sozlesmesi" && p.mc === true,
+          "Üyelik: sözleşme onaysız üyelik açılmıyor; onaylıda onay anı + IP + Üyelik Sözleşmesi sürümü kaydediliyor; kampanya kutusu işaretliyse izin veriliyor",
+          `onaysız ${why(n1)} (kullanıcı ${users(e1)}) · onaylı ${why(y)} · ${JSON.stringify(p)}`);
+        const fs = await import("node:fs");
+        const lg = fs.readFileSync(new URL("../../src/app/login/page.tsx", import.meta.url), "utf8");
+        const sp = fs.readFileSync(new URL("../../src/config/static-pages.ts", import.meta.url), "utf8");
+        ok(/termsAccepted: termsOk/.test(lg) && /\/uyelik-sozlesmesi/.test(lg) && /\(isteğe bağlı\)/.test(lg) && /Aydınlatma Metni/.test(lg) && !/kabul etmiş sayılırsınız/.test(lg)
+          && /"uyelik-sozlesmesi": \{/.test(sp),
+          "Üyelik formu: zorunlu sözleşme kutusu, isteğe bağlı kampanya kutusu, Aydınlatma Metni bilgisi; “giriş yaparak kabul etmiş sayılırsınız” yok; Üyelik Sözleşmesi sayfası var", "form ya da sayfa eksik");
+      });
+
       await part("Kampanya e-postası izni", async () => {
         const mc = (uid) => row(`SELECT marketing_consent AS c, marketing_consent_source AS s FROM public.profiles WHERE id = ${lit(uid)}`) || {};
         const logs = (uid) => num(`SELECT count(*) FROM public.marketing_consent_log WHERE user_id = ${lit(uid)}`);

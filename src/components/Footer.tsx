@@ -98,6 +98,7 @@ export default function Footer() {
            <Link href="/cerez-politikasi" className="hover:text-slate-900 transition-colors">Çerez Politikası</Link>
            <CookiePreferencesLink className="hover:text-slate-900 transition-colors uppercase italic font-black tracking-widest">Çerez Tercihleri</CookiePreferencesLink>
            <Link href="/mesafeli-satis" className="hover:text-slate-900 transition-colors">Mesafeli Satış</Link>
+           <Link href="/uyelik-sozlesmesi" className="hover:text-slate-900 transition-colors">Üyelik Sözleşmesi</Link>
            <Link href="/iade-degisim" className="hover:text-slate-900 transition-colors">İade & Değişim</Link>
         </div>
       </div>

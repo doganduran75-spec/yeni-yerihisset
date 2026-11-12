@@ -43,6 +43,10 @@ function LoginForm() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  // Üyelik onayları (2026-11-12): sözleşme ZORUNLU (sunucu da ister + kaydeder), kampanya İSTEĞE BAĞLI (işaretsiz)
+  const [termsOk, setTermsOk] = useState(false);
+  const [termsError, setTermsError] = useState(false);
+  const [marketingOk, setMarketingOk] = useState(false);
   // Kayıt sonrası e-posta doğrulama kutusu
   const [pendingVerify, setPendingVerify] = useState<string | null>(null); // gönderilen e-posta
   const [verifyNote, setVerifyNote] = useState<string | null>(null);
@@ -108,6 +112,8 @@ function LoginForm() {
   const anySocial = showGoogle || showApple;
 
   async function handleSocialLogin(provider: 'google' | 'apple') {
+    // Kayıt sekmesinde Google / Apple ile üyelik de sözleşme onayı ister
+    if (!isLogin && !termsOk) { setTermsError(true); return; }
     setLoading(true);
     setError(null);
     try {
@@ -154,6 +160,7 @@ function LoginForm() {
         if (error) throw error;
         router.push(redirect);
       } else {
+        if (!termsOk) { setTermsError(true); setLoading(false); return; }
         // Üyelik sunucu tarafında (admin.createUser, anında onaylı) — GoTrue
         // confirmation e-postasına (bozuk self-host SMTP) bağımlı değil.
         const res = await fetch("/api/auth/register", {
@@ -164,6 +171,8 @@ function LoginForm() {
             password: formData.password,
             firstName: formData.firstName,
             lastName: formData.lastName,
+            termsAccepted: termsOk,
+            marketingConsent: marketingOk || undefined,
             ...bot.fields(),
           }),
         });
@@ -377,6 +386,23 @@ function LoginForm() {
               </p>
             )}
 
+            {!isLogin && !forgot && (
+              <div className={cn("rounded-2xl border-2 px-3.5 py-3 space-y-3 transition-colors", termsError && !termsOk ? "border-red-400 bg-red-50" : "border-slate-100 bg-white")}>
+                <label className="flex items-start gap-2.5 text-[13px] text-slate-700 leading-relaxed cursor-pointer select-none">
+                  <input type="checkbox" checked={termsOk} aria-required="true" aria-invalid={termsError && !termsOk}
+                    onChange={(e) => { setTermsOk(e.target.checked); if (e.target.checked) setTermsError(false); }}
+                    className="mt-0.5 h-5 w-5 shrink-0 accent-olive-600" />
+                  <span><Link href="/uyelik-sozlesmesi" target="_blank" className="font-bold text-olive-600 underline">Üyelik Sözleşmesi</Link>’ni okudum, kabul ediyorum.<span className="text-red-500 font-bold"> *</span></span>
+                </label>
+                {termsError && !termsOk && <p role="alert" className="text-xs font-bold text-red-600 pl-7 -mt-1">Üye olmak için bu kutuyu işaretleyin.</p>}
+                <label className="flex items-start gap-2.5 text-[13px] text-slate-600 leading-relaxed cursor-pointer select-none">
+                  <input type="checkbox" checked={marketingOk} onChange={(e) => setMarketingOk(e.target.checked)} className="mt-0.5 h-5 w-5 shrink-0 accent-olive-600" />
+                  <span>Kampanya ve indirimlerden e-posta ile haberdar olmak istiyorum. <span className="text-slate-400">(isteğe bağlı)</span></span>
+                </label>
+                <p className="text-xs text-slate-500 leading-relaxed">Kişisel verilerinizin işlenmesine ilişkin ayrıntılara <Link href="/kvkk" target="_blank" className="font-bold text-olive-600 underline">Aydınlatma Metni</Link>’nden ulaşabilirsiniz.</p>
+              </div>
+            )}
+
             {error && (
               <div className="bg-red-50 border-l-4 border-red-500 p-4 flex gap-3 animate-in shake">
                  <AlertCircle className="text-red-500 shrink-0" size={18} />
@@ -445,11 +471,6 @@ function LoginForm() {
             </div>
             )}
 
-            <div className="pt-4 text-center">
-               <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest leading-relaxed">
-                  Giriş yaparak Kullanım Koşulları ve <br/> Gizlilik Politikası'nı kabul etmiş sayılırsınız.
-               </p>
-            </div>
           </form>
           )}
         </CardContent>

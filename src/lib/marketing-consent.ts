@@ -7,7 +7,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase-admin";
 
-export type ConsentSource = "account" | "checkout" | "email_link" | "admin";
+export type ConsentSource = "account" | "checkout" | "email_link" | "admin" | "signup";
 
 const key = () => `marketing-consent:${process.env.SUPABASE_SERVICE_ROLE_KEY || ""}`;
 const sig = (userId: string) => createHmac("sha256", key()).update(userId).digest("base64url").slice(0, 32);

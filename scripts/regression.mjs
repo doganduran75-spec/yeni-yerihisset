@@ -193,6 +193,7 @@ async function main() {
     ["20261179 Bülten hoş geldin e-postası şablonu", "SELECT EXISTS(SELECT 1 FROM public.email_templates WHERE trigger = 'newsletter_welcome')"],
     ["20261180 Sözleşme onayı kaydı (sipariş + metin sürümleri)", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'terms_version') AND to_regclass('public.legal_text_versions') IS NOT NULL"],
     ["20261181 Müşteri iptali — ücret iadesi bekleyen (iptal talebi + IBAN adı)", "SELECT to_regprocedure('public.order_cancel_refund_pending(uuid, text)') IS NOT NULL AND EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'order_cases' AND column_name = 'iban_name') AND pg_get_constraintdef((SELECT oid FROM pg_constraint WHERE conname = 'order_cases_kind_check')) LIKE '%cancel%'"],
+    ["20261182 Üyelik Sözleşmesi onayı kaydı (profiles.terms_*)", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'terms_version')"],
     ["20261177 Topluluk katmanları: Meraklı / Tutkun / Guru (seviye 4) + iş ortağı satışıyla Guru", "SELECT (SELECT count(*) FROM public.roles WHERE (slug = 'musteri' AND name = 'Barefoot Meraklısı') OR (slug = 'mudavim' AND name = 'Barefoot Tutkunu') OR (slug = 'guru' AND level = 4)) = 3 AND pg_get_functiondef('public.refresh_member_auto_tags(uuid[])'::regprocedure) LIKE '%guru_added%' AND (SELECT count(*) FROM public.people_tiers()) = 7"],
     ["20261176 Paraşüt süresiz oturum + son kopma nedeni", "SELECT count(*) = 4 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'parasut_auth' AND column_name IN ('offline', 'offline_denied', 'last_drop_error', 'last_drop_at')"],
     ["20261175 Paraşüt kanal ayarı: attipas (attipas.com.tr siparişleri)", "SELECT EXISTS(SELECT 1 FROM public.parasut_channel_settings WHERE channel = 'attipas')"],
@@ -269,7 +270,7 @@ async function main() {
     ["/barefoot-nedir", "Barefoot nedir (ana rehber)", "Zero drop"], ["/magaza", "Mağaza başlığı (H1)", "Barefoot Ayakkabı Mağazası"],
     ["/magaza/yetiskin", "Yetişkin mağazası", "Yetişkin Barefoot Ayakkabı"], ["/magaza/ilkadim", "0–4 Yaş İlkadım mağazası", "0–4 Yaş İlkadım"], ["/sepet", "Sepet"], ["/checkout", "Ödeme"], ["/siparis-tamam", "Sipariş sonucu"],
     ["/login", "Giriş"], ["/account", "Hesabım"], ["/sifre-belirle", "Şifre belirle"], ["/kampanya-izni", "Kampanya izni"], ["/deneme-sonucu", "Satış sonrası (oldu mu?)"], ["/iletisim", "İletişim", "Kromozom"], ["/hakkimizda", "Hakkımızda", "Sana sözümüz"],
-    ["/iade-degisim", "İade-değişim", "İade"], ["/mesafeli-satis", "Mesafeli satış + ön bilgilendirme", "on-bilgilendirme"], ["/kvkk", "KVKK", "Kromozom"], ["/gizlilik", "Gizlilik"],
+    ["/iade-degisim", "İade-değişim", "İade"], ["/mesafeli-satis", "Mesafeli satış + ön bilgilendirme", "on-bilgilendirme"], ["/uyelik-sozlesmesi", "Üyelik Sözleşmesi", "Üyelik"], ["/kvkk", "KVKK", "Kromozom"], ["/gizlilik", "Gizlilik"],
     ["/cerez-politikasi", "Çerez politikası (tercih değiştirme)", "Çerez tercihlerini değiştir"], ["/admin", "Admin (kabuk)"], ["/admin/system", "Admin sistem (kabuk)"], ["/sitemap.xml", "Site haritası"], ["/robots.txt", "robots.txt"],
   ];
   for (const [path, name, mustContain] of pages) {
@@ -280,7 +281,7 @@ async function main() {
     add(r.ms > 3000 ? "warn" : "ok", name, r.ms > 3000 ? `yavaş açılıyor: ${r.ms} ms (${path})` : "");
   }
   // Hukuki metinler canlıda taslak kalmamalı (docs/HUKUKI-METINLER-NOTLAR.md); künyede boş alan olmamalı
-  for (const path of ["/kvkk", "/gizlilik", "/cerez-politikasi", "/mesafeli-satis", "/iade-degisim", "/hakkimizda", "/iletisim"]) {
+  for (const path of ["/kvkk", "/gizlilik", "/cerez-politikasi", "/mesafeli-satis", "/uyelik-sozlesmesi", "/iade-degisim", "/hakkimizda", "/iletisim"]) {
     const r = await get(path);
     if (r.status !== 200) continue;
     // Panelden düzenlenen metinlerde yer tutucu doldurulmamış kalmasın ({{unvan}} vb.)

@@ -3,7 +3,7 @@
 // bu metni geri yükler. Metinlerde yer tutucular kullanılır → künye bir yerden değişince her sayfada güncellenir
 // (src/lib/static-pages.ts › fillPlaceholders).
 
-export type StaticPageSlug = "kvkk" | "gizlilik" | "cerez-politikasi" | "mesafeli-satis" | "iade-degisim" | "hakkimizda" | "hakkimizda-bilgi" | "barefoot-nedir";
+export type StaticPageSlug = "kvkk" | "gizlilik" | "cerez-politikasi" | "mesafeli-satis" | "uyelik-sozlesmesi" | "iade-degisim" | "hakkimizda" | "hakkimizda-bilgi" | "barefoot-nedir";
 
 export const PLACEHOLDERS: { key: string; label: string }[] = [
   { key: "marka", label: "Marka adı (YeriHisset)" },
@@ -137,6 +137,55 @@ export const STATIC_PAGES: Record<StaticPageSlug, { title: string; intro: string
 <p>Teslimden itibaren 14 gün içinde gerekçesiz cayabilirsiniz. Bildirim: Hesabım › Siparişlerim, sipariş e-postasındaki bağlantı veya {{eposta}}. İade kargosu, bildirdiğimiz firmayla ücretsizdir; ödemeniz 14 gün içinde iade edilir.</p>
 <h3>Şikâyet</h3>
 <p>{{eposta}} · Tüketici Hakem Heyeti / Tüketici Mahkemesi.</p>`,
+  },
+
+  // ÜYELİK SÖZLEŞMESİ (2026-11-12): üyelik formundaki zorunlu kutu bu metne onay alır (onay anı + metnin sürümü
+  // profiles.terms_* — src/lib/terms-acceptance.ts). TASLAK — avukat onayından sonra Ayarlar › Sayfalar'da "Taslak" kalkar.
+  "uyelik-sozlesmesi": {
+    title: "Üyelik Sözleşmesi",
+    intro: "Bu sözleşme, {{marka}} sitesine üye olurken kabul ettiğiniz kullanım koşullarını düzenler. Siparişleriniz ayrıca Mesafeli Satış Sözleşmesi'ne tabidir.",
+    draftDefault: true,
+    body: `<h2>1. Taraflar</h2>
+<p>Bu sözleşme, aşağıda bilgileri yer alan satıcı ile siteye üye olan kişi ("Üye") arasında, üyelik formundaki onay kutusunun işaretlenmesiyle elektronik ortamda kurulur.</p>
+<p><b>Satıcı:</b></p>
+{{satici_bilgileri}}
+<h2>2. Konu</h2>
+<p>Sözleşmenin konusu; Üye'nin siteden yararlanmasına, hesabını kullanmasına ve üyelikle sunulan hizmetlere (sipariş takibi, adres defteri, kuponlar, {{marka}} Kredisi, stok bildirimi, mesajlaşma) ilişkin hak ve yükümlülüklerdir.</p>
+<h2>3. Üyelik</h2>
+<ul>
+<li>Üye olmak için 18 yaşını doldurmuş ve ehliyetli olmak gerekir.</li>
+<li>Üye, üyelik ve sipariş sırasında verdiği bilgilerin doğru ve güncel olduğunu kabul eder; değişiklikleri hesabından günceller.</li>
+<li>Şifrenin güvenliğinden Üye sorumludur. Hesabın başkası tarafından kullanıldığını fark ederse bize hemen bildirir.</li>
+<li>Her kişi tek hesap kullanır; hesap başkasına devredilemez.</li>
+</ul>
+<h2>4. Üye'nin yükümlülükleri</h2>
+<ul>
+<li>Siteyi hukuka ve bu sözleşmeye uygun kullanmak; sitenin işleyişini bozacak, güvenliğini tehlikeye atacak girişimlerde bulunmamak.</li>
+<li>Ürün yorumlarında ve mesajlarda başkalarının haklarını ihlal eden, yanıltıcı, hakaret içeren ya da reklam amaçlı içerik paylaşmamak.</li>
+<li>Kupon, kredi ve kampanyaları amacına uygun kullanmak; bunları birden çok hesap açarak ya da başka yollarla kötüye kullanmamak.</li>
+</ul>
+<h2>5. Satıcı'nın hak ve yükümlülükleri</h2>
+<ul>
+<li>Satıcı, siteyi ve üyelik hizmetlerini özenle sunar; hizmetlerin kapsamını, görünümünü ve işleyişini önceden bildirmeksizin geliştirebilir veya değiştirebilir.</li>
+<li>Bu sözleşmeye aykırı kullanım, sahte bilgi veya kötüye kullanım hâlinde Satıcı hesabı askıya alabilir ya da kapatabilir; kötüye kullanımla elde edilen kupon ve krediler geri alınabilir.</li>
+<li>Yorumlar yayımlanmadan önce incelenebilir; kurallara uymayan içerik yayımlanmayabilir veya kaldırılabilir.</li>
+</ul>
+<h2>6. Siparişler, kuponlar ve {{marka}} Kredisi</h2>
+<ul>
+<li>Her sipariş, sipariş sırasında ayrıca onaylanan <a href="/mesafeli-satis">Mesafeli Satış Sözleşmesi ve Ön Bilgilendirme Formu</a>'na tabidir. Cayma, iade ve değişim hakları bu metinlerde ve <a href="/iade-degisim">İade ve Değişim</a> sayfasında yer alır.</li>
+<li>Kupon ve {{marka}} Kredisi'nin kullanım koşulları (geçerlilik süresi, alt limit, kapsam) kupon ya da kredi tanımlanırken belirtilir. Kupon ve kredi nakde çevrilemez, başkasına devredilemez.</li>
+<li>Satış ortaklığı (affiliate) programına katılım ayrı koşullara tabidir.</li>
+</ul>
+<h2>7. Kişisel veriler ve iletişim</h2>
+<p>Kişisel verileriniz <a href="/kvkk">KVKK Aydınlatma Metni</a> ve <a href="/gizlilik">Gizlilik Politikası</a>'nda açıklandığı şekilde işlenir. Sipariş, kargo ve hesap bilgilendirmeleri üyeliğin gereği olarak gönderilir. Kampanya e-postaları yalnız ayrıca izin verirseniz gönderilir; bu izni dilediğiniz an Hesabım'dan ya da her e-postadaki "abonelikten çık" bağlantısıyla geri alabilirsiniz.</p>
+<h2>8. Fikri mülkiyet</h2>
+<p>Sitedeki metin, görsel, logo, tasarım ve yazılımların hakları Satıcı'ya veya lisans verenlerine aittir; izin alınmadan kopyalanamaz, çoğaltılamaz ve ticari amaçla kullanılamaz.</p>
+<h2>9. Sözleşmenin değiştirilmesi</h2>
+<p>Satıcı bu sözleşmeyi güncelleyebilir. Güncel metin bu sayfada yayımlanır; esaslı değişiklikler Üye'ye e-postayla bildirilir. Değişiklikten sonra siteyi kullanmaya devam etmeyen Üye üyeliğini sonlandırabilir.</p>
+<h2>10. Üyeliğin sona ermesi</h2>
+<p>Üye, dilediği zaman {{eposta}} adresine yazarak üyeliğini sonlandırabilir. Üyelik sona erse de yasal saklama süresi bulunan kayıtlar (sipariş, fatura) bu süre boyunca saklanır; kullanılmamış kupon ve krediler üyelikle birlikte sona erer.</p>
+<h2>11. Uyuşmazlıklar ve yürürlük</h2>
+<p>Bu sözleşmeden doğan uyuşmazlıklarda Türk hukuku uygulanır; tüketici işlemlerinde parasal sınırlar dahilinde Tüketici Hakem Heyetleri, aşan durumlarda Tüketici Mahkemeleri yetkilidir. Sözleşme, Üye'nin üyelik formundaki onay kutusunu işaretleyerek üye olmasıyla yürürlüğe girer.</p>`,
   },
 
   "iade-degisim": {

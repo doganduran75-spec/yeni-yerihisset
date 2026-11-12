@@ -3,6 +3,8 @@ import { createAdminClient } from "@/lib/supabase-admin";
 import { rateLimited, clientIp, TOO_MANY } from "@/lib/rate-limit";
 import { botVerdict, botResponse } from "@/lib/bot-guard";
 import { issueEmailVerification } from "@/lib/email-verify";
+import { recordSignupTerms, SIGNUP_TERMS_REQUIRED_ERROR } from "@/lib/terms-acceptance";
+import { setMarketingConsent } from "@/lib/marketing-consent";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -24,6 +26,8 @@ export async function POST(req: NextRequest) {
   const blocked = botResponse("register", botVerdict(body, { texts: [firstName, lastName], gibberish: "invalid", minMs: 2500 }), clientIp(req));
   if (blocked) return blocked;
 
+  // Üyelik Sözleşmesi onayı zorunlu (formdaki kutu; 2026-11-12) — kayıt aşağıda: recordSignupTerms
+  if (body.termsAccepted !== true) return NextResponse.json({ error: SIGNUP_TERMS_REQUIRED_ERROR, terms: true }, { status: 400 });
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
     return NextResponse.json({ error: "Geçerli bir e-posta girin." }, { status: 400 });
   }
@@ -53,6 +57,12 @@ export async function POST(req: NextRequest) {
     { id: created.user.id, email, first_name: firstName || null, last_name: lastName || null, email_verified: false } as any,
     { onConflict: "id" }
   );
+
+  // Üyelik Sözleşmesi onayı (an + IP + tarayıcı + metnin sürümü) ve isteğe bağlı kampanya izni (işaretsiz kutu)
+  await recordSignupTerms(supabase, created.user.id, req);
+  if (body.marketingConsent === true) {
+    await setMarketingConsent(created.user.id, true, "signup").catch((e) => console.error("[marketing-consent]", e?.message || e));
+  }
 
   // Onay e-postası gönder (app SMTP + kendi token) — bloklamaz
   const mail = await issueEmailVerification(created.user.id, email, [firstName, lastName].filter(Boolean).join(" "));
