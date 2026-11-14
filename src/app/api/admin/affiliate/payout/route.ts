@@ -70,8 +70,11 @@ async function computeRows(supabase: any, period: string, include: Set<string> =
   const orderIds = list.map((o) => o.id);
   const itemsByOrder: Record<string, number> = {};
   const { data: items } = await supabase
-    .from("order_items").select("order_id, unit_price, quantity").in("order_id", orderIds);
+    .from("order_items").select("order_id, unit_price, quantity, exchange_of").in("order_id", orderIds);
   for (const it of (items as any[]) || []) {
+    // Değişimde gönderilen alternatif numara (exchange_of) aynı fiyatla eklenir ama müşteri ödemez → matraha girmez
+    // (eskiden değişim siparişinin komisyonu iki çift üzerinden hesaplanıyordu — 2026-11-14)
+    if (it.exchange_of) continue;
     itemsByOrder[it.order_id] = (itemsByOrder[it.order_id] || 0) + Number(it.unit_price) * Number(it.quantity);
   }
 

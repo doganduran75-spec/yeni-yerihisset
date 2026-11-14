@@ -951,6 +951,11 @@ export default {
         const pg = (await import("node:fs")).readFileSync(new URL("../../src/app/admin/orders/page.tsx", import.meta.url), "utf8");
         ok(/returnRefundSuggestion\(items as any, selOf\(ret\)\)/.test(pg) && /exchangeReturnDefaults\(items as any, kase\.keep_item_id\)/.test(pg),
           "“İade al” ekranı değişim çiftini tanıyor (öneri + varsayılan seçim)", "İade al ekranı eski hesapla");
+        // Değişim siparişinde ücretsiz çift: hakediş matrahına girmez; sonradan iade faturasında "satış faturasında yok" hatası vermez
+        const po = (await import("node:fs")).readFileSync(new URL("../../src/app/api/admin/affiliate/payout/route.ts", import.meta.url), "utf8");
+        const pi = (await import("node:fs")).readFileSync(new URL("../../src/lib/parasut-invoice.ts", import.meta.url), "utf8");
+        ok(/if \(it\.exchange_of\) continue;/.test(po) && /q > 0 && !exPid\.has\(pid\)/.test(pi) && /returned_qty, unit_price, exchange_of/.test(pi),
+          "Değişim siparişi: komisyon tek çift üzerinden; tutulan çift sonradan iade edilince iade faturası ücretsiz çifti aramıyor", "hakediş matrahı / iade faturası değişim çiftini sayıyor");
       });
 
       await part("Kampanya e-postası izni", async () => {

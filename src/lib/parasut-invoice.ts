@@ -31,7 +31,7 @@ const ORDER_COLS = `id, order_number, external_order_number, channel, status, sh
   total_amount, shipping_cost, coupon_discount, credit_used, extra_fee, import_source, billing_address, shipping_address, customer_name, customer_email, customer_phone,
   cargo_provider, kargonomi_provider, shipping_method, parasut_invoice_id, parasut_status, parasut_job_id, parasut_e_doc_id, parasut_e_doc_type,
   parasut_paid, parasut_diff_ok, refunded_amount, profiles(email, first_name, last_name, phone),
-  order_items(id, quantity, returned_qty, unit_price, product_id, variant_id, variant_name, title, sku, barcode, products(title, parasut_product_id), product_variants(parasut_product_id))`;
+  order_items(id, quantity, returned_qty, unit_price, exchange_of, product_id, variant_id, variant_name, title, sku, barcode, products(title, parasut_product_id), product_variants(parasut_product_id))`;
 
 async function loadOrder(sb: Sb, id: string) {
   const { data, error } = await (sb as any).from("orders").select(ORDER_COLS).eq("id", id).maybeSingle();
@@ -325,7 +325,16 @@ export async function refundInvoiceOrder(sb: Sb, orderId: string) {
     // İade gelen adet (Paraşüt ürünü başına)
     const want = new Map<string, number>();
     const errs: string[] = [];
-    for (const i of (o.order_items as any[]) || []) {
+    // Değişim çifti (asıl + exchange_of ile bağlı alternatif): değişimde ücretsiz giden çift satış faturasına hiç girmedi
+    // (fatura değişim bitince, geri gelen düşülerek kesilir) → o çiftin geri gelişi iade faturasında aranmaz (2026-11-14)
+    const allItems = (o.order_items as any[]) || [];
+    const exPid = new Set<string>();
+    for (const i of allItems) {
+      if (!(i.exchange_of || allItems.some((x) => x.exchange_of === i.id))) continue;
+      const p = i.product_variants?.parasut_product_id || i.products?.parasut_product_id;
+      if (p) exPid.add(String(p));
+    }
+    for (const i of allItems) {
       const q = Number(i.returned_qty || 0);
       if (q <= 0) continue;
       const pid = i.product_variants?.parasut_product_id || i.products?.parasut_product_id;
@@ -352,7 +361,7 @@ export async function refundInvoiceOrder(sb: Sb, orderId: string) {
         ...(wh ? { warehouse: { data: { id: String(wh), type: "warehouses" } } } : {}),
       } });
     }
-    for (const [pid, q] of want) if (q > 0) errs.push(`İade gelen ${q} adet (Paraşüt ürün ${pid}) satış faturasında yok.`);
+    for (const [pid, q] of want) if (q > 0 && !exPid.has(pid)) errs.push(`İade gelen ${q} adet (Paraşüt ürün ${pid}) satış faturasında yok.`);
     if (errs.length || !lines.length) throw new ParasutError(422, (errs.length ? errs : ["İade edilecek kalem bulunamadı."]).join("\n"));
 
     const j = await createRefundBill(sb, { no, contactId: String(contactId), categoryId: categoryId ? String(categoryId) : null, invoiceId: String(o.parasut_invoice_id), lines, orderId });
