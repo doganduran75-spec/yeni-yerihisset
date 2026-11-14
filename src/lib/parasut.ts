@@ -87,6 +87,18 @@ async function saveTokens(sb: Sb, t: Tokens, extra: Record<string, unknown> = {}
 
 const b64url = (b: Buffer) => b.toString("base64url");
 
+/** Süresiz (offline) oturum mu? Kesin işaret yenileme anahtarının türü (JWT typ "Offline"); yedekler: scope'ta
+ *  offline_access ya da refresh_expires_in = 0. (2026-11-14: eski denetimdeki düzenli ifade bozuk yazılmıştı — kelime
+ *  sınırı yerine görünmez karakter — hiç eşleşmiyor, süresiz oturum alınsa da panel "Normal oturum" diyordu.) */
+export function isOfflineToken(t: { scope?: string | null; refresh_token?: string | null; refresh_expires_in?: number | string | null }): boolean {
+  if (String(t.scope || "").split(/\s+/).includes("offline_access")) return true;
+  try {
+    const part = String(t.refresh_token || "").split(".")[1];
+    if (part && String(JSON.parse(Buffer.from(part, "base64url").toString("utf8"))?.typ || "").toLowerCase() === "offline") return true;
+  } catch { /* JWT değil */ }
+  return t.refresh_expires_in != null && t.refresh_expires_in !== "" && Number(t.refresh_expires_in) === 0;
+}
+
 /** Yeni altyapı: Paraşüt giriş + onay adresini üret (PKCE). origin = panelin açıldığı adres (dönüş oraya). */
 export async function startAuthorize(sb: Sb, origin: string) {
   const c = await parasutConfig(sb);
@@ -126,7 +138,7 @@ export async function connectWithOidc(sb: Sb, code: string, state: string) {
   }
   if (!t.refresh_token) throw new ParasutError(502, "Paraşüt yenileme anahtarı (refresh_token) vermedi — DevHub başvurusunu kontrol et.");
   await saveTokens(sb, t, { issuer: "id", connected_at: new Date().toISOString(), user_email: null,
-    offline: /offline_access/.test(String(t.scope || "")),
+    offline: isOfflineToken(t),
     // Son kopmanın nedeni yeniden bağlanınca kaybolmasın (panelde "Son kopma")
     ...(a.last_error ? { last_drop_error: a.last_error, last_drop_at: a.last_error_at || new Date().toISOString() } : {}),
     pending_state: null, pending_verifier: null, pending_redirect: null, pending_at: null });
@@ -288,7 +300,7 @@ export async function connectionStatus(sb: Sb) {
     connected, connectedAt: a?.connected_at ?? null, userEmail: a?.user_email ?? null,
     // Yeni altyapı mı (id.parasut.com)? Eski bağlantı 10 Aralık 2026'da kapanır → "yeniden bağlan" gerekir
     newAuth: connected && a?.issuer === "id", refreshExpiresAt: a?.refresh_expires_at ?? null, lastError: a?.last_error ?? null,
-    offline: !!a?.offline, lastDropError: a?.last_drop_error ?? null, lastDropAt: a?.last_drop_at ?? null,
+    offline: !!a?.offline || (a?.issuer === "id" && isOfflineToken({ refresh_token: a?.refresh_token })), lastDropError: a?.last_drop_error ?? null, lastDropAt: a?.last_drop_at ?? null,
     authorizeUrl: c.clientId ? authorizeUrl(c.clientId) : null,
   };
 }

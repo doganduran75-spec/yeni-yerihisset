@@ -619,6 +619,17 @@ async function main() {
   dupKeys.length
     ? add("warn", "Aynı pazaryeri kodu birden çok varyantta", dupKeys.map((r) => `${r[0]} ${r[1]}: ${r[3]}`).join(" · ").slice(0, 600) + " → fazla olanın barkod / SKU'sunu sil ya da düzelt")
     : add("ok", "Pazaryeri kodları tekil");
+  // Kaynak kodda görünmez kontrol karakteri yok (2026-11-14: bir betik "\\b" kelime sınırını geri-silme karakterine
+  // çevirmişti → Paraşüt süresiz oturum denetimi hiç eşleşmiyordu)
+  {
+    const bad = [];
+    const walk = (d) => { for (const e of readdirSync(d, { withFileTypes: true })) {
+      const f = `${d}/${e.name}`;
+      if (e.isDirectory()) walk(f); else if (/\.(ts|tsx|mjs|js|sql|sh)$/.test(e.name)) { try { if (/[\x07\x08\x0b\x0c]/.test(readFileSync(f, "utf8"))) bad.push(f.replace(/^.*?\/(src|scripts|supabase)\//, "$1/")); } catch { /* okunamadı */ } }
+    } };
+    for (const d of ["src", "scripts", "supabase/migrations"]) { try { walk(new URL(`../${d}`, import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1")); } catch { /* yok */ } }
+    bad.length ? add("fail", "Kaynak kodda görünmez kontrol karakteri", bad.slice(0, 5).join(", ")) : add("ok", "Kaynak kodda görünmez kontrol karakteri yok");
+  }
   // E-posta kilidinin bilerek durdurduğu gönderim hata sayılmaz (2026-11-14'ten önce "failed" yazılıyordu)
   const qFailed = num("SELECT count(*) FROM public.email_queue WHERE status='failed' AND created_at > now() - interval '7 days' AND coalesce(error_message, '') NOT LIKE 'E-posta kilidi%'");
   qFailed ? add("warn", "Gönderilemeyen e-posta (son 7 gün)", `${qFailed}`) : add("ok", "E-posta kuyruğunda hata yok");

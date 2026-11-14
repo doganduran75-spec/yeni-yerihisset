@@ -3,7 +3,7 @@
 import { orderLabel } from "@/lib/order-label";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { orderNextStep, isReturnInvoiceDue, type NextStep } from "@/lib/order-next-step";
+import { orderNextStep, isReturnInvoiceDue, isRefundDue, type NextStep } from "@/lib/order-next-step";
 import { Card } from "@/components/ui/card";
 import { supabase } from "@/lib/supabase";
 import DashboardSummary from "@/components/admin/DashboardSummary";
@@ -159,6 +159,8 @@ export default function AdminDashboard() {
   // TEK EKRAN PANO (≈1600×830): üstte sistem şeridi, ortada satış + kişiler + bugünün işleri,
   // altta bekleyen işlerim (mesaj / yorum / talep / sonuçsuz arama sayıları "Bugünün işleri"nde). Liste uzunlukları ekrana sığacak kadar; "Tümü" ile devamı.
   const returnInvoiceDue = openOrders.filter((o) => o.step && isReturnInvoiceDue(o.step)).length;
+  // Ücret iadesi yapılacak (iade geldi / müşteri iptali / iptal — para henüz iade edilmedi): ayrı satır (kullanıcı 2026-11-14)
+  const refundDue = openOrders.filter((o) => o.step && isRefundDue(o.step)).length;
   // Süren değişimdeki siparişin işi "Süren değişim" satırında (iki yerde sayılmasın)
   const exchangeTodo = openOrders.filter((o: any) => (o.order_cases || []).some((c: any) => !c.closed_at && c.kind === "exchange")).length;
   const CH: Record<string, string> = { trendyol: "TY", hepsiburada: "HB", amazon: "AZ", attipas: "AT" };
@@ -184,7 +186,7 @@ export default function AdminDashboard() {
           <div className="px-2 text-sm">
             {[
               // İade faturası bekleyenler ayrı satırda (aşağıda), burada sayılmaz (kullanıcı 2026-11-03)
-              { n: openOrders.length - returnInvoiceDue - exchangeTodo, label: "Bekleyen sipariş işi", href: "/admin/orders?todo=1" },
+              { n: openOrders.length - returnInvoiceDue - exchangeTodo - refundDue, label: "Bekleyen sipariş işi", href: "/admin/orders?todo=1" },
               { n: msgCount, label: "Cevapsız müşteri mesajı", href: "/admin/messages" },
               { n: reviewCount, label: "Onay bekleyen yorum", href: "/admin/reviews" },
               { n: feedbackCount, label: "Talep", href: "/admin/feedback" },
@@ -193,6 +195,7 @@ export default function AdminDashboard() {
               { n: manualStockCount, label: "Stok geldi — elden haber verilecek", href: "/admin/crm/stock-notifications?tab=manual" },
               // Yoldaki iadeler (kullanıcı 2026-10-28: iş olarak burada takip; ürün gelince siparişte "İade geldi")
               { n: returnsOpen, label: "Yolda olan iade", href: "/admin/orders?iade=return_in_transit" },
+              { n: refundDue, label: "Ücret iadesi yapılacak", href: "/admin/orders?iade=refund_due" },
               { n: returnInvoiceDue, label: "İade faturası kesilecek", href: "/admin/orders?iade=return_invoice_due" },
               // Değişim talebinden sonuçlanana kadar (kullanıcı 2026-11-07: süreç bitince fatura kesilecek; işi burada izlenir)
               { n: exchangeOpen, label: "Süren değişim", href: "/admin/orders?iade=exchange_open" },

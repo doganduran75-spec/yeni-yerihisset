@@ -962,6 +962,10 @@ export default {
             const later = nx.orderNextStep({ ...base, order_items: [ex[0], { ...ex[1], returned_qty: 1 }] });
             ok(!done.actions.some((x) => x.key === "refund") && later.actions.some((x) => x.key === "refund"),
               "Değişim bitince ücret iadesi işi açılmıyor; tutulan çift de iade gelince “Ücret iadesi yap” açılıyor", `${done.stage} / ${later.stage}`);
+            // Pano: "Ücret iadesi yapılacak" ayrı satır (Bekleyen sipariş işinden düşülür) — kullanıcı 2026-11-14
+            const dash = (await import("node:fs")).readFileSync(new URL("../../src/app/admin/page.tsx", import.meta.url), "utf8");
+            ok(nx.isRefundDue(later) && !nx.isRefundDue(done) && /label: "Ücret iadesi yapılacak", href: "\/admin\/orders\?iade=refund_due"/.test(dash) && /- refundDue, label: "Bekleyen sipariş işi"/.test(dash),
+              "Pano: “Ücret iadesi yapılacak” ayrı satırda (sipariş listesinde aynı filtre), bekleyen sipariş işinde ikinci kez sayılmıyor", "pano satırı eksik");
           }
         }
         // Değişim siparişinde ücretsiz çift: hakediş matrahına girmez; sonradan iade faturasında "satış faturasında yok" hatası vermez

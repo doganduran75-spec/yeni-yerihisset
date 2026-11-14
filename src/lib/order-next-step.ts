@@ -92,6 +92,11 @@ const SHIPPED = ["shipped", "delivered", "undelivered", "returned"];
 
 // Sırada yalnız iade faturası kesmek var (Trendyol iadesi işlendi / iade geldi + ücret iade edildi / faturalı iptal).
 // Panoda ayrı "İade faturası kesilecek" satırında sayılır, "Bekleyen sipariş işi"nde sayılmaz (kullanıcı 2026-11-03).
+/** Ücret iadesi yapılacak (iade geldi / iptal edildi, para henüz iade edilmedi) — panoda ayrı satır (kullanıcı 2026-11-14) */
+export function isRefundDue(s: NextStep) {
+  return s.needsAction && s.actions.some((a) => a.key === "refund");
+}
+
 export function isReturnInvoiceDue(s: NextStep) {
   return s.needsAction && s.actions.length > 0 && s.actions.every((a) => a.key === "return_invoice" || a.key === "return_invoice_parasut");
 }

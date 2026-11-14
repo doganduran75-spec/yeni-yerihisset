@@ -2,7 +2,7 @@
 
 import { orderLabel } from "@/lib/order-label";
 import { useEffect, useState, useCallback } from "react";
-import { orderNextStep, isReturnInvoiceDue, type NextActionKey, UNINVOICED_SINCE, INVOICE_DAYS, caseReasonLabel } from "@/lib/order-next-step";
+import { orderNextStep, isReturnInvoiceDue, isRefundDue, type NextActionKey, UNINVOICED_SINCE, INVOICE_DAYS, caseReasonLabel } from "@/lib/order-next-step";
 import { returnRefundSuggestion, exchangeReturnDefaults } from "@/lib/exchange-return";
 import { commissionPeriod, periodLabel } from "@/lib/affiliate-commission";
 import { useSearchParams, useRouter } from "next/navigation";
@@ -1270,6 +1270,7 @@ Siparişte “Paraşüt — yeniden dene” ile tekrar dene.`, tone: "danger" })
         if (fRet === "any_refund" && !refundedPay) return false;
         if (fRet === "uninvoiced_shipped" && !isUninvoicedShipped(o)) return false;
         if (fRet === "return_invoice_due" && !isReturnInvoiceDue(nx(o))) return false;
+        if (fRet === "refund_due" && !isRefundDue(nx(o))) return false; // panodaki "Ücret iadesi yapılacak"
         if (fRet === "exchange_open" && openCaseOf(o)?.kind !== "exchange") return false; // panodaki "Süren değişim"
       }
       if (fMethod !== "all" && (o.payment_method || "credit_card") !== fMethod) return false;
@@ -1418,6 +1419,7 @@ Siparişte “Paraşüt — yeniden dene” ile tekrar dene.`, tone: "danger" })
                 <option value="refunded_no_return_invoice">Ücret iade edildi, iade faturası eksik</option>
                 <option value="cancelled_unrefunded">İptal, ücret iade edilmedi</option>
                 <option value="any_refund">Ücret iadesi olanlar</option>
+                <option value="refund_due">Ücret iadesi yapılacak</option>
                 <option value="return_invoice_due">İade faturası kesilecek</option>
                 <option value="exchange_open">Süren değişim</option>
                 <option value="uninvoiced_shipped">Kargolanmış, faturası kesilmemiş</option>
