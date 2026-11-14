@@ -981,6 +981,9 @@ export default {
               && /mode === "refund" \? String\(refundSuggest\)/.test(ordersPg) && !/"Bekleyen İşlerim", openOrders\.length/.test(dash),
               "Kısmi iade (kargo teslim edildi): pano ve sipariş listesi ürün satırlarından görüp “Ücret iadesi yapılacak” sayıyor; öneri iade gelen ürünün bedeli; panodaki “Bekleyen İşlerim” listesi kalktı",
               `${part2.stage} · embed HTTP ${emb.status}`);
+            ok(/sStatus !== "returned" && paidReturnedUnits\(order\.order_items \?\? \(order as any\)\.ret_items \?\? null\) > 0/.test(ordersPg) && />Kısmi iade geldi<\/span>/.test(ordersPg)
+              && nx.paidReturnedUnits(part2.order_items ?? [{ id: "x", quantity: 1, returned_qty: 1 }, { id: "y", quantity: 1, returned_qty: 0 }]) === 1,
+              "Sipariş listesinde kısmi iade rozeti (kargo “Teslim edildi”de kalsa da “Kısmi iade geldi” görünür)", "rozet eksik");
           }
         }
         // Değişim siparişinde ücretsiz çift: hakediş matrahına girmez; sonradan iade faturasında "satış faturasında yok" hatası vermez

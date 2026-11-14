@@ -2,7 +2,7 @@
 
 import { orderLabel } from "@/lib/order-label";
 import { useEffect, useState, useCallback } from "react";
-import { orderNextStep, isReturnInvoiceDue, isRefundDue, isGeneralOrderTodo, isUninvoicedShipped, type NextActionKey, UNINVOICED_SINCE, INVOICE_DAYS, caseReasonLabel } from "@/lib/order-next-step";
+import { orderNextStep, isReturnInvoiceDue, isRefundDue, isGeneralOrderTodo, isUninvoicedShipped, paidReturnedUnits, type NextActionKey, UNINVOICED_SINCE, INVOICE_DAYS, caseReasonLabel } from "@/lib/order-next-step";
 import { returnRefundSuggestion, exchangeReturnDefaults } from "@/lib/exchange-return";
 import { commissionPeriod, periodLabel } from "@/lib/affiliate-commission";
 import { useSearchParams, useRouter } from "next/navigation";
@@ -1593,6 +1593,10 @@ ${courierQueue.slice(0, 20).map((o) => orderLabel(o)).join(", ")}${courierQueue.
                               <span className="text-[10px] font-bold rounded px-1.5 py-0.5 w-fit bg-red-50 text-red-700">
                                 {order.mp_claim_state === "in_transit" ? "İade bekleniyor" : "İade geldi — onayla"}
                               </span>
+                            )}
+                            {/* Kısmi iade: kargo durumu "Teslim edildi"de kalır, iade ürün satırındadır → listede de görünsün (YH24721, 2026-11-14) */}
+                            {!openCaseOf(order) && sStatus !== "returned" && paidReturnedUnits(order.order_items ?? (order as any).ret_items ?? null) > 0 && (
+                              <span className="text-[10px] font-bold rounded px-1.5 py-0.5 w-fit bg-amber-50 text-amber-700">Kısmi iade geldi</span>
                             )}
                             {(order.kargonomi_tracking_code || order.cargo_tracking_number) && (
                               <span className="text-[10px] font-mono text-purple-600 flex items-center gap-1">
