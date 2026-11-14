@@ -143,7 +143,7 @@ bildirimi düşmez). Tek iz: sipariş numaraları birkaç numara atlar.
 | Ödeme alınmadan sevkiyat başlamıyor | Ödemesi bekleyen site siparişi Hazırlanıyor / Kargoda yapılamaz (veritabanı kuralı); Ödeme alındı + Hazırlanıyor birlikte yapılabilir |
 | Kategori sayfa metni | Yönetici tanıtım + SSS kaydeder, üye değiştiremez, sayfada ve FAQPage yapısal verisinde görünür. Duman: ana rehber, mağaza H1, eski yazı yönlendirmesi, beslemede renk / yaş grubu |
 | Kampanya e-postası kuralı | İzinsiz üyeye kuyruktaki kampanya gitmiyor (skipped); bülten aboneliği izin; abonelikten çık bağlantısı (kişi) çalışıyor. Duman: Google Analytics onaysız yüklenmiyor; profillerde TC kimlik yok |
-| Stok bildirimi | Bot kaydı reddedilir; misafir kaydı + Kişiler; çift kayıt olmaz; üye kaydı; üye "stok geldi" gönderemez; gönderilemeyen bildirim "bekliyor" kalır |
+| Stok bildirimi | Bot kaydı reddedilir; misafir kaydı + Kişiler; çift kayıt olmaz; üye kaydı; üye "stok geldi" gönderemez; gönderilemeyen bildirim "bekliyor" kalır; Bildirim Talepleri listesinde uzun ürün adı kesilmez, iki satıra iner (sağdaki sütunlar içeriği kadar) |
 | Silme ve süre dolumu | "Siparişi sil" (stok geri, kupon sayısı düzelir); 24 saat ödenmeyen havale siparişi iptal olur, stok geri |
 
 Raporlar: `/opt/yerihisset-app/.regression-report/`

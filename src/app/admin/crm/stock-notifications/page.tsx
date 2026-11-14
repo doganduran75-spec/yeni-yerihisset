@@ -537,17 +537,17 @@ export default function StockNotificationsPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Ürün / Numara</TableHead>
-                  <TableHead>İletişim</TableHead>
-                  <TableHead>Tarih</TableHead>
-                  <TableHead>Durum</TableHead>
-                  <TableHead className="text-right">İşlem</TableHead>
+                  <TableHead className="w-px">İletişim</TableHead>
+                  <TableHead className="w-px">Tarih</TableHead>
+                  <TableHead className="w-px">Durum</TableHead>
+                  <TableHead className="w-px text-right">İşlem</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {shown.map((n) => (
                   <TableRow key={n.id}>
-                    <TableCell className="max-w-[240px]">
-                      <div className="font-medium text-sm truncate" title={n.product_title}>{n.product_title}</div>
+                    <TableCell className="min-w-[260px] whitespace-normal">
+                      <div className="font-medium text-sm leading-snug line-clamp-2 break-words" title={n.product_title}>{n.product_title}</div>
                       <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                         {n.variant_value && (
                           <span className="text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-100 rounded px-1.5 py-0.5">
@@ -575,7 +575,7 @@ export default function StockNotificationsPage() {
                         </div>
                       )}
                     </TableCell>
-                    <TableCell className="text-sm">
+                    <TableCell className="w-px text-sm pr-4">
                       <div>{contactDisplay(n)}</div>
                       {(() => {
                         const wa = waLink(n.phone || n.contact_phone);
@@ -601,13 +601,13 @@ export default function StockNotificationsPage() {
                         );
                       })()}
                     </TableCell>
-                    <TableCell className="text-xs text-slate-500">
+                    <TableCell className="w-px text-xs text-slate-500 pr-4">
                       {new Date(n.created_at).toLocaleDateString("tr-TR", {
                         day: "2-digit", month: "short", year: "numeric",
                         hour: "2-digit", minute: "2-digit",
                       })}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="w-px pr-4">
                       {n.status === "pending" ? (
                         // Bekliyor: stok yok (henüz yapılacak bir şey yok) · Stok geldi: e-postasızsa ELDEN haber ver
                         n.ready ? (
@@ -625,7 +625,7 @@ export default function StockNotificationsPage() {
                         </Badge>
                       )}
                     </TableCell>
-                    <TableCell className="text-right whitespace-nowrap">
+                    <TableCell className="w-px text-right whitespace-nowrap">
                       {n.status === "pending" && n.ready && n.has_email && (n.stock ?? 0) > 0 && (
                         <Button size="sm" variant="ghost" className="h-8 px-2 mr-1 text-blue-600" disabled={marking === n.id}
                           onClick={() => resendEmail(n)} title="Stok geldi e-postasını şimdi gönder">

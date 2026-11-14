@@ -1163,6 +1163,12 @@ export default {
         ok(ins.status < 300, "Yönetici üye adına stok bildirimi ekleyebiliyor", `HTTP ${ins.status} ${ins.text?.slice?.(0, 120) ?? ""}`);
         const own = await rest(`stock_notifications?user_id=eq.${F.member.id}&product_id=eq.${F.prod}&select=id`, { token: F.member.token });
         ok(Array.isArray(own.json) && own.json.length >= 1, "Üye kendi stok bildirimini görüyor", `HTTP ${own.status}`);
+        // Liste görünümü (2026-11-14): uzun ürün adı kesilmez, iki satıra iner; sağdaki sütunlar içeriği kadar daralır
+        {
+          const pg = (await import("node:fs")).readFileSync(new URL("../../src/app/admin/crm/stock-notifications/page.tsx", import.meta.url), "utf8");
+          ok(/min-w-\[260px\] whitespace-normal/.test(pg) && /line-clamp-2 break-words" title=\{n\.product_title\}/.test(pg) && (pg.match(/<TableHead className="w-px/g) || []).length === 4,
+            "Bildirim Talepleri listesi: ürün adı iki satıra iner, sağdaki sütunlar daralır", "sütun düzeni değişmiş");
+        }
       });
 
       await part("Stok talebi 'Model · Numara' (modelin her rengi) + stok geldi → Manuel bildirim", async () => {
