@@ -67,7 +67,14 @@ ready() {
 # ── --reboot ─────────────────────────────────────────────────────────────────
 if [ "${1:-}" = "--reboot" ]; then
   echo "YeriHisset — yeniden başlatma"; line
-  if [ ! -f /var/run/reboot-required ]; then line; echo "SONUÇ: ✓ TAMAM — yeniden başlatma gerekmiyor, bir şey yapılmadı."; exit 0; fi
+  if [ ! -f /var/run/reboot-required ]; then
+    # Yeniden başlatma gerekmese de açılış hazırlığını (açılış beklemesi dahil) kur — bir sonraki açılış için
+    ready true; R=$?
+    printf '%s\n' "${READY_MSG[@]}"; line
+    [ $R -eq 0 ] && echo "SONUÇ: ✓ TAMAM — yeniden başlatma gerekmiyor; açılış hazırlığı denetlendi / kuruldu." \
+      || echo "SONUÇ: ✗ HATA — açılış hazırlığında eksik var (yukarıdaki ✗ satırları); çıktıyı Claude'a gönder."
+    exit 0
+  fi
   if [ -f /run/yerihisset-deploying ] && [ $(( $(date +%s) - $(cat /run/yerihisset-deploying 2>/dev/null || echo 0) )) -lt 1200 ]; then
     fail "şu an dağıtım (deploy) sürüyor; bitince tekrar çalıştır."
   fi
