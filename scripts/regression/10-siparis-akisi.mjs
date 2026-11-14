@@ -579,9 +579,14 @@ export default {
         const bban = "0006100519786457841326";
         let rem = 0; for (const d of bban + "292700") rem = (rem * 10 + Number(d)) % 97;
         const iban = `TR${String(98 - rem).padStart(2, "0")}${bban}`;
-        const rt = await cust(C, { action: "return", items: [itC.id], method: "ups", iban, reason: "Beğenmedim" });
+        // 2026-11-12: havale iadesinde IBAN sahibinin adı da istenir; siparişteki adla uyuşmazsa talep işaretlenir
+        const noName = await cust(C, { action: "return", items: [itC.id], method: "ups", iban, reason: "Beğenmedim" });
+        ok(noName.status === 400 && !caseOf(C), "Havale iadesinde IBAN sahibinin adı zorunlu", why(noName));
+        const rt = await cust(C, { action: "return", items: [itC.id], method: "ups", iban, ibanName: "Regresyon Uye", reason: "Beğenmedim" });
         const cC = caseOf(C);
-        ok(rt.status === 200 && cC?.kind === "return" && cC?.return_method === "ups" && cC?.iban === iban, "İade talebi (UPS + IBAN) kaydedildi", `${why(rt)} ${JSON.stringify(cC || {}).slice(0, 120)}`);
+        const mmC = one(`SELECT iban_name_mismatch FROM public.order_cases WHERE id = ${lit(cC?.id)}`);
+        ok(rt.status === 200 && cC?.kind === "return" && cC?.return_method === "ups" && cC?.iban === iban && mmC === "f",
+          "İade talebi (UPS + IBAN + hesap sahibi) kaydedildi; sipariş sahibiyle aynı ad işaretlenmedi", `${why(rt)} ${JSON.stringify(cC || {}).slice(0, 120)} uyuşmazlık ${mmC}`);
         const view = await api(`/api/after-sale?r=${encodeURIComponent(asTok(C))}`, { method: "GET" });
         ok(!String(view.text).includes(bban), "IBAN müşteri sayfasında açık görünmüyor", "IBAN tam hâliyle dönüyor");
         const lc = await adminCase(C, { op: "send_label", method: "aras", code: "RGT456" });
@@ -754,9 +759,10 @@ export default {
         sql(`UPDATE public.orders SET fit_status = 'ok', fit_answered_at = now() WHERE id = ${lit(t1)}`);
         ok(!before && done(t1), "Faturası kesilmiş ama müşterinin denediği sipariş tamamlanmış sayılmıyor; “oldu” deyince tamamlanıyor (hakediş)", `önce ${before}, sonra ${done(t1)}`);
         // Değişim talebi açıkken tamamlanmaz; talep kapanınca tamamlanır
-        const t2 = mk({ fit_status: "exchange", delivered_at: new Date().toISOString() });
+        // Gerçek akıştaki sıra (src/app/api/after-sale): müşteri denerken talep açılır, sonra sipariş "değişim"e geçer
+        const t2 = mk({ fit_status: "trial", delivered_at: new Date().toISOString() });
         const cs = insert("order_cases", { order_id: t2, kind: "exchange", status: "requested" });
-        sql(`UPDATE public.orders SET updated_at = now() WHERE id = ${lit(t2)}`);
+        sql(`UPDATE public.orders SET fit_status = 'exchange', updated_at = now() WHERE id = ${lit(t2)}`);
         const open = done(t2);
         sql(`UPDATE public.order_cases SET closed_at = now() WHERE id = ${lit(cs)}`);
         ok(!open && done(t2), "Açık değişim talebi varken sipariş tamamlanmıyor; değişim kapanınca tamamlanıyor", `açıkken ${open}, kapanınca ${done(t2)}`);
