@@ -101,10 +101,25 @@ export function isReturnInvoiceDue(s: NextStep) {
   return s.needsAction && s.actions.length > 0 && s.actions.every((a) => a.key === "return_invoice" || a.key === "return_invoice_parasut");
 }
 
-// Panodaki "Bekleyen sipariş işi" = kendi satırı olan işler HARİÇ (ücret iadesi / iade faturası / süren değişim).
+/** Kargolanmış, satış faturası kesilmemiş — panodaki "Faturası kesilmemiş" satırı (panodaki sayım sorgusuyla AYNI koşul) */
+export function isUninvoicedShipped(o: any) {
+  return o?.status !== "cancelled" && ["paid", "partial_refund"].includes(o?.payment_status)
+    && ["shipped", "delivered"].includes(o?.shipment_status) && (o?.invoice_status || "pending") === "pending"
+    && (((o?.channel || "site") === "site" && !o?.import_source) || String(o?.created_at || "") >= UNINVOICED_SINCE); // eski siteden aktarılan yeni siparişler dahil
+}
+
+// Sırada yalnız satış faturası var (yanındaki "İade gelecek / İade al / müşteri adına talep" isteğe bağlı düğmeler iş değil)
+const INVOICE_KEYS: string[] = ["invoice_parasut", "invoice"];
+const SIDE_KEYS: string[] = ["return_expected", "return", "case_link"];
+export function isInvoiceOnlyStep(s: NextStep) {
+  return s.needsAction && s.actions.some((a) => INVOICE_KEYS.includes(a.key)) && s.actions.every((a) => INVOICE_KEYS.includes(a.key) || SIDE_KEYS.includes(a.key));
+}
+
+// Panodaki "Bekleyen sipariş işi" = kendi satırı olan işler HARİÇ (ücret iadesi / iade faturası / süren değişim /
+// kargolanmış siparişin faturası — o "Faturası kesilmemiş" satırında; 2026-11-14 YH24765 iki satırda birden sayılıyordu).
 // Pano sayısı ve sipariş listesindeki ?todo=diger aynı kuralı kullanır: tıklayınca yalnız o işler açılır (kullanıcı 2026-11-14).
-export function isGeneralOrderTodo(s: NextStep, hasOpenExchange: boolean) {
-  return s.needsAction && !isRefundDue(s) && !isReturnInvoiceDue(s) && !hasOpenExchange;
+export function isGeneralOrderTodo(s: NextStep, hasOpenExchange: boolean, uninvoicedShipped = false) {
+  return s.needsAction && !isRefundDue(s) && !isReturnInvoiceDue(s) && !hasOpenExchange && !(uninvoicedShipped && isInvoiceOnlyStep(s));
 }
 
 export function isMarketplaceOrder(o: OrderLike) {

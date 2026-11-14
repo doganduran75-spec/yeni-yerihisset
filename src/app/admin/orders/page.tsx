@@ -2,7 +2,7 @@
 
 import { orderLabel } from "@/lib/order-label";
 import { useEffect, useState, useCallback } from "react";
-import { orderNextStep, isReturnInvoiceDue, isRefundDue, isGeneralOrderTodo, type NextActionKey, UNINVOICED_SINCE, INVOICE_DAYS, caseReasonLabel } from "@/lib/order-next-step";
+import { orderNextStep, isReturnInvoiceDue, isRefundDue, isGeneralOrderTodo, isUninvoicedShipped, type NextActionKey, UNINVOICED_SINCE, INVOICE_DAYS, caseReasonLabel } from "@/lib/order-next-step";
 import { returnRefundSuggestion, exchangeReturnDefaults } from "@/lib/exchange-return";
 import { commissionPeriod, periodLabel } from "@/lib/affiliate-commission";
 import { useSearchParams, useRouter } from "next/navigation";
@@ -90,9 +90,6 @@ async function shipFlowApi(body: Record<string, unknown>) {
 // Sıradaki adım + açık satış sonrası talep (order_cases — src/lib/after-sale.ts)
 const openCaseOf = (o: any) => ((o?.order_cases as any[]) || []).find((c) => !c.closed_at) ?? null;
 // Kargolanmış, faturası kesilmemiş (panodaki "Faturası kesilmemiş" ile aynı kural)
-const isUninvoicedShipped = (o: any) => o?.status !== "cancelled" && ["paid", "partial_refund"].includes(o?.payment_status)
-  && ["shipped", "delivered"].includes(o?.shipment_status) && (o?.invoice_status || "pending") === "pending"
-  && (((o?.channel || "site") === "site" && !o?.import_source) || String(o?.created_at || "") >= UNINVOICED_SINCE); // eski siteden aktarılan yeni siparişler dahil
 // Kısmi iade yalnız ürün satırlarından görünür: liste ret_items (hafif) okur, ayrıntı tam order_items (2026-11-14)
 const nx = (o: any) => orderNextStep({ ...o, order_items: o.order_items ?? o.ret_items ?? null, open_case: openCaseOf(o) });
 // Süren değişim panoda kendi satırında ("Bekleyen sipariş işi"nde sayılmaz)
@@ -1282,7 +1279,7 @@ Siparişte “Paraşüt — yeniden dene” ile tekrar dene.`, tone: "danger" })
       }
       if (fMethod !== "all" && (o.payment_method || "credit_card") !== fMethod) return false;
       if (fTodo === "all" && !nx(o).needsAction) return false;
-      if (fTodo === "other" && !isGeneralOrderTodo(nx(o), hasOpenExchange(o))) return false;
+      if (fTodo === "other" && !isGeneralOrderTodo(nx(o), hasOpenExchange(o), isUninvoicedShipped(o))) return false;
       if (fChannel !== "all" && (o.channel || "site") !== fChannel) return false;
       if (!needle) return true;
       const hay = trNorm([
@@ -1394,7 +1391,7 @@ Siparişte “Paraşüt — yeniden dene” ile tekrar dene.`, tone: "danger" })
                 title="Sıradaki adımı sende olan siparişler (ödeme onayı, kargoya verme, iade, fatura…)"
               >
                 {fTodo === "other" ? "Bekleyen sipariş işi" : "Bekleyen işlerim"} ({fTodo === "other"
-                  ? orders.filter((o) => isGeneralOrderTodo(nx(o), hasOpenExchange(o))).length
+                  ? orders.filter((o) => isGeneralOrderTodo(nx(o), hasOpenExchange(o), isUninvoicedShipped(o))).length
                   : orders.filter((o) => nx(o).needsAction).length})
               </button>
               <div className="relative flex-1 min-w-[220px]">

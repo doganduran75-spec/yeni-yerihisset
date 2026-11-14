@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { orderNextStep, isReturnInvoiceDue, isRefundDue, isGeneralOrderTodo, type NextStep } from "@/lib/order-next-step";
+import { orderNextStep, isReturnInvoiceDue, isRefundDue, isGeneralOrderTodo, isUninvoicedShipped, type NextStep } from "@/lib/order-next-step";
 import { Card } from "@/components/ui/card";
 import { supabase } from "@/lib/supabase";
 import DashboardSummary from "@/components/admin/DashboardSummary";
@@ -167,7 +167,7 @@ export default function AdminDashboard() {
   // Süren değişimdeki siparişin işi "Süren değişim" satırında (iki yerde sayılmasın)
   const hasOpenExchange = (o: any) => (o.order_cases || []).some((c: any) => !c.closed_at && c.kind === "exchange");
   // Kalan genel işler — listede ?todo=diger aynı kuralla süzer (tıklayınca yalnız bunlar açılır; bir sipariş iki satırda sayılmaz)
-  const generalTodo = openOrders.filter((o) => o.step && isGeneralOrderTodo(o.step, hasOpenExchange(o))).length;
+  const generalTodo = openOrders.filter((o) => o.step && isGeneralOrderTodo(o.step, hasOpenExchange(o), isUninvoicedShipped(o))).length;
 
   return (
     <div className="space-y-3">

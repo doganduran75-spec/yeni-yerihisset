@@ -1695,7 +1695,7 @@ export default {
         const fs = await import("node:fs");
         const dash = fs.readFileSync(new URL("../../src/app/admin/page.tsx", import.meta.url), "utf8");
         const list = fs.readFileSync(new URL("../../src/app/admin/orders/page.tsx", import.meta.url), "utf8");
-        ok(/label: "Süren değişim", href: "\/admin\/orders\?iade=exchange_open"/.test(dash) && /isGeneralOrderTodo\(o\.step, hasOpenExchange\(o\)\)/.test(dash)
+        ok(/label: "Süren değişim", href: "\/admin\/orders\?iade=exchange_open"/.test(dash) && /isGeneralOrderTodo\(o\.step, hasOpenExchange\(o\), isUninvoicedShipped\(o\)\)/.test(dash)
           && /fRet === "exchange_open"/.test(list) && /value="exchange_open"/.test(list),
           "Panoda “Süren değişim” satırı (açık değişim talepleri), sipariş listesinde aynı filtre; bekleyen sipariş işinde iki kez sayılmıyor");
         // 2026-11-14: panoda "Bekleyen sipariş işi" 1 diyordu, tıklayınca liste 4 açıyordu (ücret iadesi işleri de geliyordu) →
@@ -1707,8 +1707,24 @@ export default {
           ok(g.isGeneralOrderTodo(st(["mark_paid"]), false) && !g.isGeneralOrderTodo(st(["refund"]), false) && !g.isGeneralOrderTodo(st(["return_invoice"]), false)
             && !g.isGeneralOrderTodo(st(["send_label"]), true) && !g.isGeneralOrderTodo(st(["mark_paid"], false), false),
             "“Bekleyen sipariş işi” kuralı: ücret iadesi / iade faturası / süren değişim / işi olmayan sayılmaz");
+          // AYNI SİPARİŞTE İKİ İŞ (kullanıcı 2026-11-14: "olabilirse her iki satırda da görünmeli"): her satır kendi işini
+          // bağımsız sayar; "Bekleyen sipariş işi" yalnız başka satırı olmayan işler (aynı iş iki kez sayılmaz)
+          const D = new Date().toISOString();
+          const del = { channel: "site", import_source: null, status: "processing", payment_status: "paid", shipment_status: "delivered", invoice_status: "pending",
+            fit_status: "ok", total_amount: 6998, refunded_amount: 0, created_at: D, delivered_at: D };
+          // (1) Kargolanmış, faturası kesilmemiş, sırada yalnız fatura (YH24765) → yalnız "Faturası kesilmemiş"
+          const inv1 = g.orderNextStep({ ...del, order_items: [{ id: "a", quantity: 1, returned_qty: 0 }] });
+          // (2) Kısmi iade geldi + kalan ürünün faturası kesilmemiş → "Ücret iadesi yapılacak" VE "Faturası kesilmemiş"
+          const two = g.orderNextStep({ ...del, order_items: [{ id: "a", quantity: 1, returned_qty: 1 }, { id: "b", quantity: 1, returned_qty: 0 }] });
+          // (3) Ödeme bekleyen (kargolanmamış) → yalnız "Bekleyen sipariş işi"
+          const pay = g.orderNextStep({ ...del, payment_status: "pending", shipment_status: "waiting", fit_status: null });
+          ok(g.isUninvoicedShipped(del) && g.isInvoiceOnlyStep(inv1) && !g.isGeneralOrderTodo(inv1, false, true)
+            && g.isRefundDue(two) && g.isUninvoicedShipped(del) && !g.isGeneralOrderTodo(two, false, true)
+            && g.isGeneralOrderTodo(pay, false, g.isUninvoicedShipped({ ...del, shipment_status: "waiting" })),
+            "Aynı siparişte iki iş: kısmi iade + fatura → hem “Ücret iadesi yapılacak” hem “Faturası kesilmemiş”; yalnız fatura işi → yalnız “Faturası kesilmemiş” (“Bekleyen sipariş işi”nde ikinci kez yok)",
+            `${inv1.stage} / ${two.stage} / ${pay.stage}`);
         }
-        ok(/label: "Bekleyen sipariş işi", href: "\/admin\/orders\?todo=diger"/.test(dash) && /fTodo === "other" && !isGeneralOrderTodo\(nx\(o\), hasOpenExchange\(o\)\)/.test(list)
+        ok(/label: "Bekleyen sipariş işi", href: "\/admin\/orders\?todo=diger"/.test(dash) && /fTodo === "other" && !isGeneralOrderTodo\(nx\(o\), hasOpenExchange\(o\), isUninvoicedShipped\(o\)\)/.test(list)
           && /v === "diger" \? "other"/.test(list),
           "Panodan “Bekleyen sipariş işi”ne tıklayınca liste yalnız o işleri açıyor (pano sayısıyla aynı kural)", "pano bağlantısı / liste süzgeci eksik");
         // Satırın saydığı: açık değişim talebi (kapanan sayılmaz) — geri alınan işlemle
