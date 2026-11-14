@@ -3,6 +3,7 @@
 import { orderLabel } from "@/lib/order-label";
 import { useEffect, useState, useCallback } from "react";
 import { orderNextStep, isReturnInvoiceDue, type NextActionKey, UNINVOICED_SINCE, INVOICE_DAYS, caseReasonLabel } from "@/lib/order-next-step";
+import { returnRefundSuggestion, exchangeReturnDefaults } from "@/lib/exchange-return";
 import { commissionPeriod, periodLabel } from "@/lib/affiliate-commission";
 import { useSearchParams, useRouter } from "next/navigation";
 import AdminOpsTabs from "@/components/admin/AdminOpsTabs";
@@ -2608,13 +2609,19 @@ function OrderActionDialog({ mode, order, onClose, onDone }: {
   const [err, setErr] = useState<string | null>(null);
 
   const items = (order.order_items ?? []).map((i) => ({ ...i, left: Number(i.quantity) - Number(i.returned_qty || 0) }));
+  // Değişim (2026-11-14): müşterinin tutmadığı çift varsayılan seçili; ücretsiz giden fazla çift geri gelince ücret iadesi yok
+  const kase = openCaseOf(order);
+  const exDefaults = mode === "return" && kase?.kind === "exchange" ? exchangeReturnDefaults(items as any, kase.keep_item_id) : null;
   const [ret, setRet] = useState<Record<string, { on: boolean; qty: number; restock: boolean }>>(() =>
-    Object.fromEntries(items.filter((i) => i.left > 0).map((i) => [i.id, { on: true, qty: i.left, restock: true }])));
-  const [withRefund, setWithRefund] = useState(paidNow);
+    Object.fromEntries(items.filter((i) => i.left > 0).map((i) => [i.id, { on: exDefaults ? exDefaults.has(i.id) : true, qty: i.left, restock: true }])));
+  const selOf = (r: typeof ret) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, v.on ? v.qty : 0]));
+  const [withRefund, setWithRefund] = useState(() => paidNow && returnRefundSuggestion(items as any, selOf(Object.fromEntries(items.filter((i) => i.left > 0)
+    .map((i) => [i.id, { on: exDefaults ? exDefaults.has(i.id) : true, qty: i.left, restock: true }])))).amount > 0);
   // Faturası kesilmiş siparişte para iade ediliyorsa iade faturası da kesilmeli (iadenin son adımı; kesilmezse bekleyen işlerde kalır)
   const invoiced = order.invoice_status === "invoiced";
   const [returnInvoiced, setReturnInvoiced] = useState(false);
-  const retSum = Math.min(remaining, Math.round(items.reduce((a, i) => a + (ret[i.id]?.on ? Number(i.unit_price) * (ret[i.id]?.qty || 0) : 0), 0) * 100) / 100);
+  const retPlan = returnRefundSuggestion(items as any, selOf(ret));
+  const retSum = Math.min(remaining, retPlan.amount);
   const [retAmount, setRetAmount] = useState<string | null>(null);
 
   // Para iadesi bu işlemde yapılıyor mu? (iptal/ücret iadesi: ödeme alınmışsa; iade al: işaretliyse)
@@ -2768,6 +2775,9 @@ function OrderActionDialog({ mode, order, onClose, onDone }: {
                   );
                 })}
                 <p className="text-[11px] text-muted-foreground">Kusurlu ürünü stoğa ekleme. Tüm ürünler gelirse kargo “İade geldi” olur; bir kısmıysa kargo değişmez, sipariş geçmişine not düşer.</p>
+                {retPlan.freeUnits > 0 && (
+                  <p className="text-[11px] font-semibold text-olive-700 bg-olive-50 rounded px-2 py-1">Değişimde fazladan (ücretsiz) gönderilen {retPlan.freeUnits} çift geri geliyor — müşteri bunun ücretini ödemedi, ücret iadesi {retSum > 0 ? `yalnız ₺${retSum.toFixed(2)}` : "yok"}.</p>
+                )}
               </div>
               {paidNow && (
                 <div className="rounded-lg border p-3 space-y-2">

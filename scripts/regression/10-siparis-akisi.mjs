@@ -934,6 +934,25 @@ export default {
           "Ödeme sayfası e-posta önerisi var; “eski müşteri” kutusu ve misafirin profil doldurması kalktı", "e-posta önerisi / profil doldurma");
       });
 
+      // DEĞİŞİMDE GERİ GELEN ÇİFT (2026-11-14): müşteri tek çift ödedi, değişimde iki çift gitti; tutmadığı çift geri
+      // gelince "İade al" ekranı ücret iadesi önermez (eskiden o çiftin fiyatını öneriyor, kutu işaretli geliyordu)
+      await part("Değişim iadesi: ücretsiz çift geri gelince ücret iadesi yok", async () => {
+        let m = null;
+        try { m = await import(new URL("../../src/lib/exchange-return.ts", import.meta.url)); } catch { /* eski Node */ }
+        if (m) {
+          const o = { id: "o", quantity: 1, returned_qty: 0, unit_price: 3499 }, a = { id: "a", quantity: 1, returned_qty: 0, unit_price: 3499, exchange_of: "o" };
+          const x = { id: "x", quantity: 1, returned_qty: 0, unit_price: 500 };
+          const S = m.returnRefundSuggestion;
+          ok(S([o, a], { o: 1 }).amount === 0 && S([o, a], { a: 1 }).amount === 0 && S([o, a], { o: 1, a: 1 }).amount === 3499
+            && S([{ ...o, returned_qty: 1 }, a], { a: 1 }).amount === 3499 && S([o, a, x], { a: 1, x: 1 }).amount === 500 && S([x], { x: 1 }).amount === 500
+            && [...m.exchangeReturnDefaults([o, a, x], "a")].join() === "o" && m.exchangeReturnDefaults([o, a], null) === null,
+            "Değişim iadesi: tutulmayan (ücretsiz) çift geri gelince iade 0; iki çift gelirse bir çiftin bedeli; varsayılan seçili yalnız tutulmayan çift");
+        }
+        const pg = (await import("node:fs")).readFileSync(new URL("../../src/app/admin/orders/page.tsx", import.meta.url), "utf8");
+        ok(/returnRefundSuggestion\(items as any, selOf\(ret\)\)/.test(pg) && /exchangeReturnDefaults\(items as any, kase\.keep_item_id\)/.test(pg),
+          "“İade al” ekranı değişim çiftini tanıyor (öneri + varsayılan seçim)", "İade al ekranı eski hesapla");
+      });
+
       await part("Kampanya e-postası izni", async () => {
         const mc = (uid) => row(`SELECT marketing_consent AS c, marketing_consent_source AS s FROM public.profiles WHERE id = ${lit(uid)}`) || {};
         const logs = (uid) => num(`SELECT count(*) FROM public.marketing_consent_log WHERE user_id = ${lit(uid)}`);
