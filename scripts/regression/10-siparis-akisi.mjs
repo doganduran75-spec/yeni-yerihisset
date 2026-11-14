@@ -975,6 +975,40 @@ export default {
           "Değişim siparişi: komisyon tek çift üzerinden; tutulan çift sonradan iade edilince iade faturası ücretsiz çifti aramıyor", "hakediş matrahı / iade faturası değişim çiftini sayıyor");
       });
 
+      // TRENDYOL MÜŞTERİ SORULARI (2026-11-14, MIG 20261184): sorular 5 dk'da bir çekilir, Mesajlar › Trendyol soruları'nda
+      // cevaplanır. Testte Trendyol'a GERÇEK cevap gitmez: yalnız gönderim öncesi kurallar (kısa / uyarı / durum) denenir.
+      await part("Trendyol müşteri soruları (soru-cevap)", async () => {
+        let m = null;
+        try { m = await import(new URL("../../src/lib/marketplace/qna-rules.ts", import.meta.url)); } catch { /* eski Node */ }
+        if (m) {
+          const a = m.answerProblems("Kısa"), b = m.answerProblems("Merhaba, bu model kalıbı dar; bir numara büyük almanızı öneririz."),
+            c = m.answerProblems("Bize 0532 123 45 67 numarasından ya da www.yerihisset.com adresinden ulaşın"), d = m.answerProblems("x".repeat(2001));
+          ok(a.errors.length > 0 && !b.errors.length && !b.warnings.length && c.warnings.length >= 2 && !c.errors.length && d.errors.length > 0,
+            "Soru-cevap kuralı: 10–2000 karakter; telefon / site adresi uyarısı (pazaryeri reddeder); normal cevapta uyarı yok");
+        }
+        const ext = `RGT${RUN.toUpperCase()}Q`;
+        const qid = insert("marketplace_questions", { channel: "trendyol", external_id: ext, status: "WAITING_FOR_ANSWER", question: "REGRESYON-TEST 38 numara kalıbı nasıl?", product_name: "REGRESYON-TEST Ayakkabı", asked_at: new Date().toISOString() });
+        const A = (body, token = F.admin.token) => api("/api/admin/marketplace-questions", { token, body });
+        const mem = await A({ op: "answer", id: qid, text: "Merhaba, kalıp standarttır." }, F.member.token);
+        const short = await A({ op: "answer", id: qid, text: "Kısa" });
+        const warn = await A({ op: "answer", id: qid, text: "Bize 0532 123 45 67 numarasından ulaşabilirsiniz, yardımcı oluruz." });
+        sql(`UPDATE public.marketplace_questions SET status = 'ANSWERED' WHERE id = ${lit(qid)}`);
+        const done = await A({ op: "answer", id: qid, text: "Merhaba, kalıp standarttır, kendi numaranızı alabilirsiniz." });
+        const tg = num(`SELECT count(*) FROM public.telegram_outbox WHERE topic = 'customer_message' AND ref_id = ${lit(qid)}`);
+        ok(mem.status === 403 && short.status === 400 && warn.status === 409 && (warn.json?.warnings || []).length > 0 && done.status === 400
+          && one(`SELECT answer IS NULL FROM public.marketplace_questions WHERE id = ${lit(qid)}`) === "t" && tg === 1,
+          "Trendyol sorusu: üye cevaplayamaz; kısa cevap reddedilir; telefonlu cevapta uyarı (onaysız gitmez); cevaplanmış soruya ikinci cevap yok; yeni soru Telegram “Müşteri mesajı”na düşer",
+          `üye ${mem.status} · kısa ${short.status} · uyarı ${warn.status} · cevaplı ${done.status} · telegram ${tg}`);
+        sql(`DELETE FROM public.telegram_outbox WHERE ref_id = ${lit(qid)}; DELETE FROM public.marketplace_questions WHERE id = ${lit(qid)};`);
+        const fs = await import("node:fs");
+        const cron = fs.readFileSync(new URL("../../src/app/api/cron/marketplace-sync/route.ts", import.meta.url), "utf8");
+        const dash = fs.readFileSync(new URL("../../src/app/admin/page.tsx", import.meta.url), "utf8");
+        const msg = fs.readFileSync(new URL("../../src/app/admin/messages/page.tsx", import.meta.url), "utf8");
+        ok(/getMinutes\(\) % 5 === 1\)[\s\S]{0,80}syncTrendyolQuestions\(supabase\)/.test(cron) && /label: "Cevapsız Trendyol sorusu", href: "\/admin\/messages\?kanal=trendyol"/.test(dash)
+          && /<MarketplaceQuestions \/>/.test(msg),
+          "Sorular 5 dk'da bir çekiliyor; panoda “Cevapsız Trendyol sorusu”; Mesajlar'da “Trendyol soruları” sekmesi", "cron / pano / sekme eksik");
+      });
+
       await part("Kampanya e-postası izni", async () => {
         const mc = (uid) => row(`SELECT marketing_consent AS c, marketing_consent_source AS s FROM public.profiles WHERE id = ${lit(uid)}`) || {};
         const logs = (uid) => num(`SELECT count(*) FROM public.marketing_consent_log WHERE user_id = ${lit(uid)}`);

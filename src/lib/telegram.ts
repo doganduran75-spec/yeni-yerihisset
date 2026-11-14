@@ -164,7 +164,7 @@ async function composeRefMessage(sb: SB, topic: string, id: string): Promise<{ t
       }
     }
     const text = [
-      `${c.kind === "exchange" ? "🔁 <b>Değişim talebi</b>" : "↩️ <b>İade talebi</b>"}`,
+      `${c.kind === "exchange" ? "🔁 <b>Değişim talebi</b>" : c.kind === "cancel" ? "❌ <b>Müşteri iptali — ücret iadesi</b>" : "↩️ <b>İade talebi</b>"}`,
       `<b>${esc(o.no)}</b> — ${esc(o.name)}`,
       ...lines,
       ...(c.reason ? [`Sebep: ${esc(caseReasonLabel(c.reason))}`] : []),
@@ -177,7 +177,20 @@ async function composeRefMessage(sb: SB, topic: string, id: string): Promise<{ t
   }
   if (topic === "customer_message") {
     const { data: m } = await sb.from("messages").select("id, order_id, content, sender_role").eq("id", id).maybeSingle();
-    if (!m || m.sender_role !== "user" || !m.order_id) return null;
+    // Pazaryeri müşteri sorusu (Trendyol; marketplace_questions, MIG 20261184) aynı konuda bildirilir
+    if (!m) {
+      const { data: q } = await sb.from("marketplace_questions").select("id, channel, question, product_name, user_name, external_id").eq("id", id).maybeSingle();
+      if (!q) return null;
+      const text = [
+        `❓ <b>${q.channel === "trendyol" ? "Trendyol" : "Hepsiburada"} müşteri sorusu</b>`,
+        `${esc(q.product_name || "Ürün")}${q.user_name ? ` — ${esc(q.user_name)}` : ""}`,
+        `<i>${esc(String(q.question || "").slice(0, 600))}</i>`,
+        "",
+        `<a href="${STORE_URL()}/admin/messages?kanal=trendyol">Soruyu cevapla</a>`,
+      ].join("\n");
+      return { text, settled: true, test: /^RGT/.test(String(q.external_id || "")) };
+    }
+    if (m.sender_role !== "user" || !m.order_id) return null;
     const o = await orderIdentity(sb, m.order_id);
     if (!o) return null;
     const text = [

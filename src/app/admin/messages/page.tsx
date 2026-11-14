@@ -11,6 +11,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import MarketplaceQuestions from "@/components/admin/MarketplaceQuestions";
 
 type Message = {
   id: string; user_id: string; order_id: string; content: string;
@@ -46,6 +47,13 @@ function MessagesInner() {
   const [orderCtx, setOrderCtx] = useState<{ total: number; orderCount: number; lines: { title: string; size: string | null; sku: string | null; qty: number }[] } | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Sekme: site sipariş mesajları | Trendyol soruları (?kanal=trendyol — panodaki "Cevapsız pazaryeri sorusu")
+  const [tab, setTab] = useState<"site" | "trendyol">(searchParams.get("kanal") === "trendyol" ? "trendyol" : "site");
+  const [tyWaiting, setTyWaiting] = useState(0);
+  useEffect(() => {
+    (supabase as any).from("marketplace_questions").select("id", { count: "exact", head: true }).eq("status", "WAITING_FOR_ANSWER")
+      .then(({ count }: any) => setTyWaiting(count ?? 0));
+  }, [tab]);
 
   useEffect(() => { fetchThreads(); }, []);
 
@@ -187,8 +195,27 @@ function MessagesInner() {
   );
   const selected = threads.find((t) => t.order_id === selectedId);
 
+  const tabs = (
+    <div className="flex gap-2">
+      {([["site", "Sipariş mesajları", 0], ["trendyol", "Trendyol soruları", tyWaiting]] as const).map(([k, l, n]) => (
+        <button key={k} onClick={() => { setTab(k); router.replace(k === "trendyol" ? "/admin/messages?kanal=trendyol" : "/admin/messages", { scroll: false }); }}
+          className={cn("h-9 px-4 rounded-xl text-sm font-bold border flex items-center gap-2", tab === k ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-600")}>
+          {l}{n > 0 && <span className="bg-amber-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full">{n}</span>}
+        </button>
+      ))}
+    </div>
+  );
+  if (tab === "trendyol") return (
+    <div className="space-y-3">
+      {tabs}
+      <div className="h-[calc(100vh-190px)]"><MarketplaceQuestions /></div>
+    </div>
+  );
+
   return (
-    <div className="h-[calc(100vh-140px)] flex gap-6">
+    <div className="space-y-3">
+    {tabs}
+    <div className="h-[calc(100vh-190px)] flex gap-6">
       {/* Sipariş konuşmaları listesi */}
       <Card className="w-80 flex flex-col border-none shadow-sm overflow-hidden bg-white rounded-3xl shrink-0">
         <div className="p-4 border-b space-y-4">
@@ -338,6 +365,7 @@ function MessagesInner() {
           </div>
         )}
       </Card>
+    </div>
     </div>
   );
 }

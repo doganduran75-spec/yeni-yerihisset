@@ -128,6 +128,24 @@ export async function approveClaimItems(c: TrendyolConfig, claimId: string, clai
     { claimLineItemIdList: claimItemIds, params: {} });
 }
 
+/** Müşteri soruları (ürün soru-cevap). startDate / endDate ms, en çok 2 hafta; sayfa 0'dan, en çok 50.
+ *  Belge: https://developers.trendyol.com/v2.0/docs/getting-customer-questions */
+export async function getQuestions(c: TrendyolConfig, params: Record<string, string>): Promise<any> {
+  const q = new URLSearchParams({ supplierId: c.sellerId, ...params }).toString();
+  return call(c, "GET", `/integration/qna/sellers/${encodeURIComponent(c.sellerId)}/questions/filter?${q}`);
+}
+
+/** Tek soru (ayrıntıda productMainId = model kodu) */
+export async function getQuestion(c: TrendyolConfig, id: string): Promise<any> {
+  return call(c, "GET", `/integration/qna/sellers/${encodeURIComponent(c.sellerId)}/questions/${encodeURIComponent(id)}?supplierId=${encodeURIComponent(c.sellerId)}`);
+}
+
+/** Soruyu cevapla (10–2000 karakter; yalnız WAITING_FOR_ANSWER). Cevap Trendyol incelemesinden sonra yayınlanır.
+ *  Belge: https://developers.trendyol.com/v2.0/docs/answering-customer-questions */
+export async function answerQuestion(c: TrendyolConfig, id: string, text: string): Promise<any> {
+  return call(c, "POST", `/integration/qna/sellers/${encodeURIComponent(c.sellerId)}/questions/${encodeURIComponent(id)}/answers`, { text });
+}
+
 /** Bağlantı testi: ürün listesinin ilk sayfası. Trendyol'daki toplam ürün sayısını döner. */
 export async function testConnection(c: TrendyolConfig): Promise<{ totalProducts: number | null; services: { name: string; ok: boolean; detail: string }[] }> {
   // Product v2 (eski /products ucu 2026-10'da kapatılıyor — "brownout 426")

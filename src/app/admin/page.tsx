@@ -31,6 +31,7 @@ export default function AdminDashboard() {
   const [openOrders, setOpenOrders] = useState<OpenOrder[]>([]);
   const [manualStockCount, setManualStockCount] = useState(0);
   const [msgCount, setMsgCount] = useState(0);         // cevapsız müşteri mesajı (sipariş konuşması)
+  const [qnaCount, setQnaCount] = useState(0);         // cevap bekleyen Trendyol müşteri sorusu (MIG 20261184)
   const [reviewCount, setReviewCount] = useState(0);   // onay bekleyen yorum
   const [feedbackCount, setFeedbackCount] = useState(0); // bekleyen talep (Talep & Geri Bildirim)
   const [returnsOpen, setReturnsOpen] = useState(0); // yoldaki iadeler (kod gönderildi / müşteri gönderiyor) — iş: gelince "İade geldi"
@@ -90,6 +91,8 @@ export default function AdminDashboard() {
       const lastPerOrder = new Map<string, any>();
       for (const msg of (allMessages as any[]) || []) if (!lastPerOrder.has(msg.order_id)) lastPerOrder.set(msg.order_id, msg);
       setMsgCount([...lastPerOrder.values()].filter((m) => m.sender_role === 'user').length);
+      const { count: qn } = await (supabase as any).from("marketplace_questions").select("id", { count: "exact", head: true }).eq("status", "WAITING_FOR_ANSWER");
+      setQnaCount(qn ?? 0);
 
       // Onay bekleyen yorumlar · bekleyen talepler · bakılmamış sonuçsuz aramalar (yalnız sayı; liste kendi sayfasında)
       const [rv, fb, nrs, rt] = await Promise.all([
@@ -188,6 +191,7 @@ export default function AdminDashboard() {
               // İade faturası bekleyenler ayrı satırda (aşağıda), burada sayılmaz (kullanıcı 2026-11-03)
               { n: openOrders.length - returnInvoiceDue - exchangeTodo - refundDue, label: "Bekleyen sipariş işi", href: "/admin/orders?todo=1" },
               { n: msgCount, label: "Cevapsız müşteri mesajı", href: "/admin/messages" },
+              { n: qnaCount, label: "Cevapsız Trendyol sorusu", href: "/admin/messages?kanal=trendyol" },
               { n: reviewCount, label: "Onay bekleyen yorum", href: "/admin/reviews" },
               { n: feedbackCount, label: "Talep", href: "/admin/feedback" },
               { n: searchCount, label: "Sonuçsuz arama", href: "/admin/feedback#aramalar" },

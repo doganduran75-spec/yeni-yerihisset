@@ -14,6 +14,7 @@ import { pollMarketplaceInvoices } from "@/lib/marketplace-invoice";
 import { processGmcQueue } from "@/lib/gmc-sync";
 import { processReviewRequests, processWinback } from "@/lib/review-winback";
 import { processTrialReminders } from "@/lib/trial-reminder";
+import { syncTrendyolQuestions } from "@/lib/marketplace/trendyol-qna";
 import { processTelegramOutbox } from "@/lib/telegram";
 
 // Pazaryeri SİPARİŞLERİ (önce: yeni siparişleri al, iptallerde stoğu geri ekle) +
@@ -67,6 +68,11 @@ async function run(req: NextRequest) {
   // 6) Google Merchant API: değişen ürünler (besleme günlük tam eşitlemeyi sürdürür)
   const google = await processGmcQueue(supabase).catch((e: any) => ({ products: 0, sent: 0, deleted: 0, failed: 0, skipped: "", errors: [e?.message || String(e)] }));
   if (google.errors.length) console.error("[cron/gmc]", google.errors.slice(0, 5).join(" | "));
+  // 6a) Trendyol müşteri soruları (5 dk'da bir; Trendyol bildirim göndermez) → Mesajlar › Trendyol soruları
+  if (new Date().getMinutes() % 5 === 1) {
+    const qna = await syncTrendyolQuestions(supabase).catch((e: any) => ({ errors: [e?.message || String(e)] }));
+    if (qna.errors.length) console.error("[cron/trendyol-qna]", qna.errors.join(" | "));
+  }
   // 6b) Telegram bildirimleri (yeni sipariş: mesaj + entegrasyonlar bitince güncelleme; src/lib/telegram.ts)
   const telegram = await processTelegramOutbox(supabase).catch((e: any) => ({ sent: 0, updated: 0, skipped: 0, errors: [e?.message || String(e)] }));
   if (telegram.errors.length) console.error("[cron/telegram]", telegram.errors.slice(0, 3).join(" | "));
