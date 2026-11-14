@@ -1,6 +1,5 @@
 "use client";
 
-import { orderLabel } from "@/lib/order-label";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { orderNextStep, isReturnInvoiceDue, isRefundDue, type NextStep } from "@/lib/order-next-step";
@@ -9,7 +8,7 @@ import { supabase } from "@/lib/supabase";
 import DashboardSummary from "@/components/admin/DashboardSummary";
 import SystemStatusStrip from "@/components/admin/SystemStatusStrip";
 import { fetchNoResultSearches } from "@/components/admin/NoResultSearches";
-import { Loader2, ArrowRight, Clock, PackageOpen } from "lucide-react";
+import { Loader2, Clock } from "lucide-react";
 import { UNINVOICED_SINCE, INVOICE_DAYS } from "@/lib/order-next-step";
 import { commissionOwner, commissionPeriod, currentPeriodStart, periodLabel, type CommissionAffiliate } from "@/lib/affiliate-commission";
 
@@ -68,12 +67,13 @@ export default function AdminDashboard() {
         .from('orders')
         // Sipariş listesiyle AYNI alanlar (*): sıradaki adım kuralı packed_at, mp_picking_at vb. okur — eksik alan panoda
         // farklı sayı veriyordu (2026-11-04: paket hazır sipariş panoda "Paket hazır" bekliyor görünüyordu)
-        .select('*, profiles (first_name, last_name), order_cases (kind, status, return_method, label_sent_at, closed_at)')
+        // ret_items: kısmi iade (kargo "Teslim edildi"de kalır) yalnız ürün satırlarından görünür — 2026-11-14
+        .select('*, profiles (first_name, last_name), order_cases (kind, status, return_method, label_sent_at, closed_at), ret_items:order_items(id, quantity, returned_qty, exchange_of)')
         .eq('is_closed', false)
         .order('created_at', { ascending: false })
         .limit(1000);
       const todo = ((openData as any[]) || [])
-        .map((o) => ({ ...o, step: orderNextStep({ ...o, open_case: (o.order_cases || []).find((c: any) => !c.closed_at) ?? null }) }))
+        .map((o) => ({ ...o, step: orderNextStep({ ...o, order_items: o.ret_items ?? null, open_case: (o.order_cases || []).find((c: any) => !c.closed_at) ?? null }) }))
         .filter((o) => o.step.needsAction);
       setOpenOrders(todo as OpenOrder[]);
 
@@ -166,16 +166,6 @@ export default function AdminDashboard() {
   const refundDue = openOrders.filter((o) => o.step && isRefundDue(o.step)).length;
   // Süren değişimdeki siparişin işi "Süren değişim" satırında (iki yerde sayılmasın)
   const exchangeTodo = openOrders.filter((o: any) => (o.order_cases || []).some((c: any) => !c.closed_at && c.kind === "exchange")).length;
-  const CH: Record<string, string> = { trendyol: "TY", hepsiburada: "HB", amazon: "AZ", attipas: "AT" };
-  const head = (icon: React.ReactNode, title: string, n: number, href: string, tone: string) => (
-    <div className="flex items-center justify-between px-4 pt-3 pb-1">
-      <p className="flex items-center gap-2 font-semibold text-sm">
-        {icon} {title}
-        {n > 0 && <span className={`${tone} text-white text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center`}>{n}</span>}
-      </p>
-      <Link href={href} className="text-xs text-muted-foreground hover:text-slate-800 flex items-center gap-1">Tümü <ArrowRight size={12} /></Link>
-    </div>
-  );
 
   return (
     <div className="space-y-3">
@@ -218,32 +208,6 @@ export default function AdminDashboard() {
         </Card>
       </DashboardSummary>
 
-      {/* 3) BEKLEYEN İŞLERİM — mesaj / yorum / talep sayıları yukarıda "Bugünün işleri"nde */}
-      <Card className="shadow-sm border-l-4 border-l-amber-500 gap-0 py-0 pb-2">
-        {head(<Clock size={16} className="text-amber-500" />, "Bekleyen İşlerim", openOrders.length, "/admin/orders?todo=1", "bg-amber-500")}
-        {openOrders.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-6 text-center flex flex-col items-center gap-1"><PackageOpen size={24} className="text-slate-300" /> Bekleyen işin yok. 🎉</p>
-        ) : (
-          <div className="divide-y px-2">
-            {openOrders.slice(0, 7).map((o) => (
-              <Link key={o.id} href={`/admin/orders?id=${o.id}`} className="flex items-center gap-3 py-1.5 px-2 hover:bg-amber-50/50 rounded-lg transition-colors group">
-                <span className="font-mono text-xs font-bold text-blue-600 w-24 shrink-0 truncate">{orderLabel(o)}</span>
-                <span className="text-sm font-medium w-48 shrink-0 truncate">
-                  {o.channel && o.channel !== "site" && <span className="mr-1 text-[9px] font-black uppercase px-1 py-0.5 rounded bg-orange-100 text-orange-700">{CH[o.channel] ?? o.channel.slice(0, 2).toUpperCase()}</span>}
-                  {(o.profiles ? `${o.profiles.first_name ?? ""} ${o.profiles.last_name ?? ""}`.trim() : "") || o.customer_name || "—"}
-                </span>
-                <span className="flex-1 min-w-0 truncate text-xs font-bold text-amber-800" title={o.step?.hint}>
-                  {o.step?.stage}{(() => { const a = o.step?.actions?.find((x: any) => x.key !== "invoice_parasut" && x.key !== "return_invoice_parasut") ?? o.step?.actions?.[0]; return a ? ` → ${a.label}` : ""; })()}
-                  {o.step?.hint && <span className="font-normal text-slate-500"> · {o.step.hint}</span>}
-                </span>
-                <span className="text-sm text-slate-500 w-16 text-right shrink-0">₺{Number(o.total_amount).toFixed(0)}</span>
-                <span className="text-[10px] text-slate-400 w-16 text-right shrink-0 hidden md:block">{new Date(o.created_at).toLocaleDateString("tr-TR")}</span>
-              </Link>
-            ))}
-            {openOrders.length > 7 && <Link href="/admin/orders?todo=1" className="block text-center text-xs text-muted-foreground hover:text-slate-800 py-1.5">+{openOrders.length - 7} iş daha</Link>}
-          </div>
-        )}
-      </Card>
     </div>
   );
 }

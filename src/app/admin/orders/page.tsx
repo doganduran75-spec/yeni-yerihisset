@@ -93,7 +93,8 @@ const openCaseOf = (o: any) => ((o?.order_cases as any[]) || []).find((c) => !c.
 const isUninvoicedShipped = (o: any) => o?.status !== "cancelled" && ["paid", "partial_refund"].includes(o?.payment_status)
   && ["shipped", "delivered"].includes(o?.shipment_status) && (o?.invoice_status || "pending") === "pending"
   && (((o?.channel || "site") === "site" && !o?.import_source) || String(o?.created_at || "") >= UNINVOICED_SINCE); // eski siteden aktarılan yeni siparişler dahil
-const nx = (o: any) => orderNextStep({ ...o, open_case: openCaseOf(o) });
+// Kısmi iade yalnız ürün satırlarından görünür: liste ret_items (hafif) okur, ayrıntı tam order_items (2026-11-14)
+const nx = (o: any) => orderNextStep({ ...o, order_items: o.order_items ?? o.ret_items ?? null, open_case: openCaseOf(o) });
 
 // Siparişin geldiği reklam/kampanya (orders.attribution.source — src/lib/ad-context.ts)
 function adSourceLabel(o: { attribution?: { source?: Record<string, unknown> } | null }): string | null {
@@ -388,7 +389,7 @@ export default function OrdersPage() {
       for (let from = 0; ; from += 1000) {
         const { data, error } = await supabase
           .from("orders")
-          .select(`*, profiles(first_name, last_name, email, phone, email_verified), affiliate_profiles(code), affiliate_conversions(commission_amount, affiliate_profiles(code)), order_cases(*)`)
+          .select(`*, profiles(first_name, last_name, email, phone, email_verified), affiliate_profiles(code), affiliate_conversions(commission_amount, affiliate_profiles(code)), order_cases(*), ret_items:order_items(id, quantity, returned_qty, exchange_of)`)
           .order("created_at", { ascending: false })
           .range(from, from + 999);
         if (error) {
@@ -847,7 +848,7 @@ export default function OrdersPage() {
   // Tek siparişi (talepleriyle) yeniden oku → liste + detay güncellenir
   async function refreshOrder(id: string) {
     const { data } = await (supabase as any).from("orders")
-      .select(`*, profiles(first_name, last_name, email, phone, email_verified), affiliate_profiles(code), affiliate_conversions(commission_amount, affiliate_profiles(code)), order_cases(*)`)
+      .select(`*, profiles(first_name, last_name, email, phone, email_verified), affiliate_profiles(code), affiliate_conversions(commission_amount, affiliate_profiles(code)), order_cases(*), ret_items:order_items(id, quantity, returned_qty, exchange_of)`)
       .eq("id", id).maybeSingle();
     if (!data) return;
     setOrders((prev) => prev.map((x) => (x.id === id ? { ...x, ...data } : x)));
@@ -859,7 +860,7 @@ export default function OrdersPage() {
   // (ör. "Yolda olan iade"de iadesi işlenen sipariş listeden düşer; kullanıcı 2026-11-01)
   async function syncOrder(id: string) {
     const { data } = await (supabase as any).from("orders")
-      .select(`*, profiles(first_name, last_name, email, phone, email_verified), affiliate_profiles(code), affiliate_conversions(commission_amount, affiliate_profiles(code)), order_cases(*)`)
+      .select(`*, profiles(first_name, last_name, email, phone, email_verified), affiliate_profiles(code), affiliate_conversions(commission_amount, affiliate_profiles(code)), order_cases(*), ret_items:order_items(id, quantity, returned_qty, exchange_of)`)
       .eq("id", id).maybeSingle();
     if (data) setOrders((prev) => prev.map((x) => (x.id === id ? { ...x, ...data } : x)));
   }
@@ -2606,7 +2607,17 @@ function OrderActionDialog({ mode, order, onClose, onDone }: {
   // İptal nedeni (zorunlu) + müşteriye not — iptal e-postasında görünür (src/lib/cancel-reasons.ts, 2026-11-06)
   const [reason, setReason] = useState("");
   const [customerNote, setCustomerNote] = useState("");
-  const [amount, setAmount] = useState(mode === "refund" ? String(remaining) : "");
+  // "Ücret iadesi yap" önerisi (2026-11-14): kısmi iadede yalnız geri gelen (ücretli) ürünlerin bedeli − önce iade edilen;
+  // her şey geldiyse / iade yoksa (iptal) kalan tutar (kargo dahil). Değişimde ücretsiz çift geri gelişi bedel doğurmaz.
+  const refundSuggest = (() => {
+    const its = ((order.order_items ?? []) as any[]);
+    const back = its.some((i) => Number(i.returned_qty || 0) > 0);
+    const allBack = order.shipment_status === "returned" || (its.length > 0 && its.every((i) => Number(i.returned_qty || 0) >= Number(i.quantity)));
+    if (!back || allBack) return remaining;
+    const v = returnRefundSuggestion(its.map((i) => ({ ...i, returned_qty: 0 })), Object.fromEntries(its.map((i) => [i.id, Number(i.returned_qty || 0)]))).amount;
+    return Math.max(0, Math.min(remaining, Math.round((v - refunded) * 100) / 100));
+  })();
+  const [amount, setAmount] = useState(mode === "refund" ? String(refundSuggest) : "");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 

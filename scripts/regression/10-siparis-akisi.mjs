@@ -966,6 +966,17 @@ export default {
             const dash = (await import("node:fs")).readFileSync(new URL("../../src/app/admin/page.tsx", import.meta.url), "utf8");
             ok(nx.isRefundDue(later) && !nx.isRefundDue(done) && /label: "Ücret iadesi yapılacak", href: "\/admin\/orders\?iade=refund_due"/.test(dash) && /- refundDue, label: "Bekleyen sipariş işi"/.test(dash),
               "Pano: “Ücret iadesi yapılacak” ayrı satırda (sipariş listesinde aynı filtre), bekleyen sipariş işinde ikinci kez sayılmıyor", "pano satırı eksik");
+            // KISMİ İADE (2026-11-14, YH24721): iki farklı ürünün biri iade geldi, kargo "Teslim edildi"de kaldı → pano ve liste
+            // ürün satırlarını (ret_items) okuyup "Ücret iadesi yapılacak" saymalı; öneri yalnız iade gelen ürünün bedeli
+            const part2 = nx.orderNextStep({ ...base, total_amount: 6998, order_items: [{ id: "x", quantity: 1, returned_qty: 1 }, { id: "y", quantity: 1, returned_qty: 0 }] });
+            const ordersPg = (await import("node:fs")).readFileSync(new URL("../../src/app/admin/orders/page.tsx", import.meta.url), "utf8");
+            const emb = await rest("orders?select=id,ret_items:order_items(id,quantity,returned_qty,exchange_of)&limit=1", { token: F.admin.token });
+            ok(nx.isRefundDue(part2) && emb.status === 200
+              && /ret_items:order_items\(id, quantity, returned_qty, exchange_of\)/.test(dash) && /order_items: o\.ret_items \?\? null/.test(dash)
+              && (ordersPg.match(/ret_items:order_items\(id, quantity, returned_qty, exchange_of\)/g) || []).length === 3 && /order_items: o\.order_items \?\? o\.ret_items \?\? null/.test(ordersPg)
+              && /mode === "refund" \? String\(refundSuggest\)/.test(ordersPg) && !/"Bekleyen İşlerim", openOrders\.length/.test(dash),
+              "Kısmi iade (kargo teslim edildi): pano ve sipariş listesi ürün satırlarından görüp “Ücret iadesi yapılacak” sayıyor; öneri iade gelen ürünün bedeli; panodaki “Bekleyen İşlerim” listesi kalktı",
+              `${part2.stage} · embed HTTP ${emb.status}`);
           }
         }
         // Değişim siparişinde ücretsiz çift: hakediş matrahına girmez; sonradan iade faturasında "satış faturasında yok" hatası vermez
