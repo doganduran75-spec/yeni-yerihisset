@@ -951,6 +951,19 @@ export default {
         const pg = (await import("node:fs")).readFileSync(new URL("../../src/app/admin/orders/page.tsx", import.meta.url), "utf8");
         ok(/returnRefundSuggestion\(items as any, selOf\(ret\)\)/.test(pg) && /exchangeReturnDefaults\(items as any, kase\.keep_item_id\)/.test(pg),
           "“İade al” ekranı değişim çiftini tanıyor (öneri + varsayılan seçim)", "İade al ekranı eski hesapla");
+        // Sıradaki adım: değişim bitince (ücretsiz çift geri geldi) "Ücret iadesi yap" işi açılmaz; tutulan çift de gelirse açılır
+        {
+          let nx = null;
+          try { nx = await import(new URL("../../src/lib/order-next-step.ts", import.meta.url)); } catch { /* eski Node */ }
+          if (nx) {
+            const base = { channel: "site", status: "processing", payment_status: "paid", shipment_status: "delivered", invoice_status: "invoiced", total_amount: 3499, refunded_amount: 0, fit_status: "ok", created_at: new Date().toISOString() };
+            const ex = [{ id: "o", quantity: 1, returned_qty: 1 }, { id: "a", quantity: 1, returned_qty: 0, exchange_of: "o" }];
+            const done = nx.orderNextStep({ ...base, order_items: ex });
+            const later = nx.orderNextStep({ ...base, order_items: [ex[0], { ...ex[1], returned_qty: 1 }] });
+            ok(!done.actions.some((x) => x.key === "refund") && later.actions.some((x) => x.key === "refund"),
+              "Değişim bitince ücret iadesi işi açılmıyor; tutulan çift de iade gelince “Ücret iadesi yap” açılıyor", `${done.stage} / ${later.stage}`);
+          }
+        }
         // Değişim siparişinde ücretsiz çift: hakediş matrahına girmez; sonradan iade faturasında "satış faturasında yok" hatası vermez
         const po = (await import("node:fs")).readFileSync(new URL("../../src/app/api/admin/affiliate/payout/route.ts", import.meta.url), "utf8");
         const pi = (await import("node:fs")).readFileSync(new URL("../../src/lib/parasut-invoice.ts", import.meta.url), "utf8");

@@ -49,7 +49,7 @@ export type OrderLike = {
   mp_claim_state?: string | null;          // Trendyol iade talebi: in_transit / arrived / accepted / disputed / done
   mp_claim_note?: string | null;           // "1 × ürün (beden) — sebep"
   shipped_at?: string | null;              // kargoya verildiği an (fatura 7 gün takibi)
-  order_items?: { quantity: number; returned_qty?: number | null }[] | null;
+  order_items?: { id?: string; quantity: number; returned_qty?: number | null; exchange_of?: string | null }[] | null;
   created_at?: string | null;
   fit_status?: string | null;      // trial · ok · exchange · return
   delivered_at?: string | null;
@@ -100,6 +100,24 @@ export function isMarketplaceOrder(o: OrderLike) {
   return (o.channel || "site") !== "site" && !o.import_source;
 }
 
+/** Geri gelen ÜCRETLİ adet: değişim çiftinde (asıl + exchange_of ile bağlı alternatif) ücretsiz giden adet kadar geri gelen
+ *  düşülür. Kalemlerde id / exchange_of yoksa (liste sorgusu) her kalem kendi başına sayılır. */
+export function paidReturnedUnits(items: OrderLike["order_items"]): number {
+  if (!items?.length) return 0;
+  const ids = new Set(items.map((i) => i.id).filter(Boolean));
+  const groups = new Map<string, { returned: number; free: number }>();
+  items.forEach((i, k) => {
+    const root = i.exchange_of && ids.has(i.exchange_of) ? i.exchange_of : (i.id || `#${k}`);
+    const g = groups.get(root) || { returned: 0, free: 0 };
+    g.returned += Number(i.returned_qty || 0);
+    if (i.exchange_of && ids.has(i.exchange_of)) g.free += Number(i.quantity || 0);
+    groups.set(root, g);
+  });
+  let n = 0;
+  for (const g of groups.values()) n += Math.max(0, g.returned - g.free);
+  return n;
+}
+
 export function orderNextStep(o: OrderLike): NextStep {
   const r = coreNextStep(o);
   // Eski siteden (WooCommerce) aktarılan siparişler: kargolanmışsa ya da 30 günden eskiyse geçmiş kayıttır →
@@ -128,7 +146,8 @@ function coreNextStep(o: OrderLike): NextStep {
   const paid = pay === "paid" || pay === "partial_refund";
   const remaining = Math.round((Number(o.total_amount || 0) - Number(o.refunded_amount || 0)) * 100) / 100;
   const items = o.order_items ?? null;
-  const someReturned = ship === "returned" || !!items?.some((i) => Number(i.returned_qty || 0) > 0);
+  // Değişimde ücretsiz giden çiftin geri gelişi "iade" sayılmaz (ücret iadesi / iade faturası doğurmaz — 2026-11-14)
+  const someReturned = ship === "returned" || paidReturnedUnits(items) > 0;
   const allReturned = ship === "returned" || (!!items?.length && items.every((i) => Number(i.returned_qty || 0) >= Number(i.quantity)));
   const invoiceAction: NextAction = { key: "invoice", label: "Fatura kesildi", kind: "primary" };
   // Paraşüt açıksa ilk düğme (kapalıysa sipariş ekranı gizler)
