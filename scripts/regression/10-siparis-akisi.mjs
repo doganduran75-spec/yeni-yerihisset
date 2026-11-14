@@ -897,6 +897,18 @@ export default {
       // ÜYELİK SÖZLEŞMESİ (2026-11-12, MIG 20261182): üyelik formunda zorunlu sözleşme kutusu (sunucu da ister),
       // onay anı + IP + metnin sürümü üyeye yazılır; kampanya kutusu isteğe bağlı; eski "giriş yaparak kabul" yazısı yok
       await part("Üyelik Sözleşmesi onayı", async () => {
+        // Metin (2026-11-14): benzer sitelerle kıyaslanıp eklenen maddeler — tüketici haklarını sınırlamayan dengeli dil
+        {
+          const sp = (await import("node:fs")).readFileSync(new URL("../../src/config/static-pages.ts", import.meta.url), "utf8");
+          const u0 = sp.indexOf('"uyelik-sozlesmesi": {'), u = sp.slice(u0, sp.indexOf("`,", u0));
+          const need = ["Üyelik ücretsizdir", "18 yaşını", "Hesabımı Kapat", "<h2>11. Bildirimler</h2>", "<h2>12. Mücbir sebep</h2>",
+            "193. maddesi", "ispat ve başvuru haklarını sınırlamaz", "Tüketici Hakem Heyeti", "geçersiz sayılması diğer hükümlerini etkilemez",
+            "ticari elektronik ileti", "/cerez-politikasi", "baş harfiyle"];
+          const miss = need.filter((x) => !u.includes(x));
+          ok(!miss.length && !/kesin delil/i.test(u),
+            "Üyelik Sözleşmesi metni: ücretsiz üyelik, 18 yaş, hesap kapatma yolu, bildirim, mücbir sebep, delil (tüketici hakkını sınırlamadan), hakem heyeti, bölünebilirlik, ticari ileti izni ayrı, çerez, yorum adı",
+            `eksik: ${miss.join(", ")}`);
+        }
         const H = { "x-forwarded-for": F.ip };
         const e1 = `rgt-uyelik1-${RUN}@${DOMAIN}`, e2 = `rgt-uyelik2-${RUN}@${DOMAIN}`;
         const reg = (email, extra) => api("/api/auth/register", { headers: H, body: { email, password: "Deneme123!", firstName: "Ayşe", lastName: "Deneme", _hp: "", _t: 6000, ...extra } });

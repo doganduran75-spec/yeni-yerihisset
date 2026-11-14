@@ -153,39 +153,48 @@ export const STATIC_PAGES: Record<StaticPageSlug, { title: string; intro: string
 <p>Sözleşmenin konusu; Üye'nin siteden yararlanmasına, hesabını kullanmasına ve üyelikle sunulan hizmetlere (sipariş takibi, adres defteri, kuponlar, {{marka}} Kredisi, stok bildirimi, mesajlaşma) ilişkin hak ve yükümlülüklerdir.</p>
 <h2>3. Üyelik</h2>
 <ul>
+<li>Üyelik ücretsizdir. Üye olmadan da sipariş verilebilir; üyelik sipariş takibi, adres defteri, kupon ve kredi gibi kolaylıklar sağlar.</li>
 <li>Üye olmak için 18 yaşını doldurmuş ve ehliyetli olmak gerekir.</li>
-<li>Üye, üyelik ve sipariş sırasında verdiği bilgilerin doğru ve güncel olduğunu kabul eder; değişiklikleri hesabından günceller.</li>
-<li>Şifrenin güvenliğinden Üye sorumludur. Hesabın başkası tarafından kullanıldığını fark ederse bize hemen bildirir.</li>
+<li>Üye, üyelik ve sipariş sırasında verdiği bilgilerin doğru ve güncel olduğunu kabul eder; değişiklikleri hesabından günceller. Gerçeğe aykırı bilgiden doğan sorumluluk Üye'ye aittir.</li>
+<li>Şifrenin güvenliğinden Üye sorumludur; şifresini başkalarıyla paylaşmaz. Hesabın başkası tarafından kullanıldığını fark ederse şifresini değiştirir ve bize hemen bildirir.</li>
 <li>Her kişi tek hesap kullanır; hesap başkasına devredilemez.</li>
 </ul>
 <h2>4. Üye'nin yükümlülükleri</h2>
 <ul>
 <li>Siteyi hukuka ve bu sözleşmeye uygun kullanmak; sitenin işleyişini bozacak, güvenliğini tehlikeye atacak girişimlerde bulunmamak.</li>
-<li>Ürün yorumlarında ve mesajlarda başkalarının haklarını ihlal eden, yanıltıcı, hakaret içeren ya da reklam amaçlı içerik paylaşmamak.</li>
+<li>Ürün yorumlarında ve mesajlarda başkalarının haklarını ihlal eden, yanıltıcı, hakaret içeren ya da reklam amaçlı içerik paylaşmamak. Yorumlar sitede adınız ve soyadınızın baş harfiyle (ör. "Ayşe K.") yayımlanır.</li>
+<li>Siteye otomatik araçlarla (bot, tarayıcı yazılım vb.) toplu erişmemek, içerik ve fiyat bilgilerini izinsiz toplamamak.</li>
 <li>Kupon, kredi ve kampanyaları amacına uygun kullanmak; bunları birden çok hesap açarak ya da başka yollarla kötüye kullanmamak.</li>
 </ul>
 <h2>5. Satıcı'nın hak ve yükümlülükleri</h2>
 <ul>
-<li>Satıcı, siteyi ve üyelik hizmetlerini özenle sunar; hizmetlerin kapsamını, görünümünü ve işleyişini önceden bildirmeksizin geliştirebilir veya değiştirebilir.</li>
-<li>Bu sözleşmeye aykırı kullanım, sahte bilgi veya kötüye kullanım hâlinde Satıcı hesabı askıya alabilir ya da kapatabilir; kötüye kullanımla elde edilen kupon ve krediler geri alınabilir.</li>
+<li>Satıcı, siteyi ve üyelik hizmetlerini özenle sunar; hizmetlerin kapsamını, görünümünü ve işleyişini geliştirebilir veya değiştirebilir. Bakım, güncelleme ya da teknik arıza nedeniyle site geçici olarak erişilemez olabilir; Satıcı kesintiyi en kısa sürede gidermeye çalışır. Verilmiş siparişlerden doğan haklar bu değişikliklerden etkilenmez.</li>
+<li>Bu sözleşmeye aykırı kullanım, sahte bilgi veya kötüye kullanım hâlinde Satıcı hesabı askıya alabilir ya da kapatabilir; kötüye kullanımla elde edilen kupon ve krediler geri alınabilir. Kapatma, verilmiş siparişlerden doğan hakları ortadan kaldırmaz.</li>
 <li>Yorumlar yayımlanmadan önce incelenebilir; kurallara uymayan içerik yayımlanmayabilir veya kaldırılabilir.</li>
 </ul>
 <h2>6. Siparişler, kuponlar ve {{marka}} Kredisi</h2>
 <ul>
 <li>Her sipariş, sipariş sırasında ayrıca onaylanan <a href="/mesafeli-satis">Mesafeli Satış Sözleşmesi ve Ön Bilgilendirme Formu</a>'na tabidir. Cayma, iade ve değişim hakları bu metinlerde ve <a href="/iade-degisim">İade ve Değişim</a> sayfasında yer alır.</li>
 <li>Kupon ve {{marka}} Kredisi'nin kullanım koşulları (geçerlilik süresi, alt limit, kapsam) kupon ya da kredi tanımlanırken belirtilir. Kupon ve kredi nakde çevrilemez, başkasına devredilemez.</li>
-<li>Satış ortaklığı (affiliate) programına katılım ayrı koşullara tabidir.</li>
+<li>Üyelik seviyeleri (ör. Barefoot Meraklısı, Tutkunu, Gurusu) ve seviyelere özel fırsatlar sitede açıklanan koşullarla verilir; Satıcı bu koşulları ileriye dönük olarak değiştirebilir, kazanılmış ve kullanılmış haklar korunur.</li>
+<li>Satış ortaklığı programına katılım ayrı koşullara tabidir.</li>
 </ul>
 <h2>7. Kişisel veriler ve iletişim</h2>
-<p>Kişisel verileriniz <a href="/kvkk">KVKK Aydınlatma Metni</a> ve <a href="/gizlilik">Gizlilik Politikası</a>'nda açıklandığı şekilde işlenir. Sipariş, kargo ve hesap bilgilendirmeleri üyeliğin gereği olarak gönderilir. Kampanya e-postaları yalnız ayrıca izin verirseniz gönderilir; bu izni dilediğiniz an Hesabım'dan ya da her e-postadaki "abonelikten çık" bağlantısıyla geri alabilirsiniz.</p>
+<p>Kişisel verileriniz <a href="/kvkk">KVKK Aydınlatma Metni</a> ve <a href="/gizlilik">Gizlilik Politikası</a>'nda açıklandığı şekilde işlenir. Sipariş, kargo ve hesap bilgilendirmeleri üyeliğin gereği olarak gönderilir. Kampanya e-postaları (ticari elektronik ileti) yalnız ayrıca izin verirseniz gönderilir; üyelik bu izne bağlı değildir. İzninizi dilediğiniz an Hesabım'dan ya da her e-postadaki "abonelikten çık" bağlantısıyla geri alabilirsiniz. Sitede kullanılan çerezler <a href="/cerez-politikasi">Çerez Politikası</a>'nda açıklanır.</p>
 <h2>8. Fikri mülkiyet</h2>
 <p>Sitedeki metin, görsel, logo, tasarım ve yazılımların hakları Satıcı'ya veya lisans verenlerine aittir; izin alınmadan kopyalanamaz, çoğaltılamaz ve ticari amaçla kullanılamaz.</p>
 <h2>9. Sözleşmenin değiştirilmesi</h2>
 <p>Satıcı bu sözleşmeyi güncelleyebilir. Güncel metin bu sayfada yayımlanır; esaslı değişiklikler Üye'ye e-postayla bildirilir. Değişiklikten sonra siteyi kullanmaya devam etmeyen Üye üyeliğini sonlandırabilir.</p>
 <h2>10. Üyeliğin sona ermesi</h2>
-<p>Üye, dilediği zaman {{eposta}} adresine yazarak üyeliğini sonlandırabilir. Üyelik sona erse de yasal saklama süresi bulunan kayıtlar (sipariş, fatura) bu süre boyunca saklanır; kullanılmamış kupon ve krediler üyelikle birlikte sona erer.</p>
-<h2>11. Uyuşmazlıklar ve yürürlük</h2>
-<p>Bu sözleşmeden doğan uyuşmazlıklarda Türk hukuku uygulanır; tüketici işlemlerinde parasal sınırlar dahilinde Tüketici Hakem Heyetleri, aşan durumlarda Tüketici Mahkemeleri yetkilidir. Sözleşme, Üye'nin üyelik formundaki onay kutusunu işaretleyerek üye olmasıyla yürürlüğe girer.</p>`,
+<p>Üye, dilediği zaman Hesabım › Profil Bilgilerim › "Hesabımı Kapat" ile ya da {{eposta}} adresine yazarak üyeliğini sonlandırabilir. Hesap kapatılınca ad, telefon, adres ve e-posta bilgileri silinir ya da anonimleştirilir; yasal saklama süresi bulunan kayıtlar (sipariş, fatura) bu süre boyunca saklanır. Kullanılmamış kupon ve krediler üyelikle birlikte sona erer; kapatmadan önce kullanmanızı öneririz. Devam eden siparişlerden doğan haklar (teslimat, cayma, iade) üyelik sona erse de geçerlidir.</p>
+<h2>11. Bildirimler</h2>
+<p>Üye'ye yapılacak bildirimler üyelikte verdiği e-posta adresine gönderilir; Üye bu adresi güncel tutar. Üye'nin Satıcı'ya bildirimleri için bu sözleşmenin başındaki iletişim bilgileri geçerlidir.</p>
+<h2>12. Mücbir sebep</h2>
+<p>Doğal afet, salgın, savaş, grev, altyapı veya iletişim kesintisi gibi tarafların kontrolü dışındaki olaylar süresince tarafların yükümlülükleri askıya alınır. Bu durum Üye'nin kanundan doğan tüketici haklarını ortadan kaldırmaz.</p>
+<h2>13. Kayıtlar ve delil</h2>
+<p>Uyuşmazlıklarda Satıcı'nın elektronik kayıtları (sipariş, onay ve e-posta kayıtları gibi) 6100 sayılı Hukuk Muhakemeleri Kanunu'nun 193. maddesi çerçevesinde delil olarak kullanılabilir. Bu hüküm, Üye'nin kanundan doğan ispat ve başvuru haklarını sınırlamaz.</p>
+<h2>14. Uyuşmazlıklar ve yürürlük</h2>
+<p>Bu sözleşmeden doğan uyuşmazlıklarda Türk hukuku uygulanır. Tüketici işlemlerinde, Ticaret Bakanlığı'nca her yıl belirlenen parasal sınırlar dahilinde Üye'nin yerleşim yerindeki veya işlemin yapıldığı yerdeki Tüketici Hakem Heyeti, bu sınırları aşan durumlarda Tüketici Mahkemesi yetkilidir. Sözleşmenin bir hükmünün geçersiz sayılması diğer hükümlerini etkilemez. Sözleşme, Üye'nin üyelik formundaki onay kutusunu işaretleyerek üye olmasıyla elektronik ortamda yürürlüğe girer ve üyelik süresince geçerlidir; onaylanan metin, onay anıyla birlikte Satıcı tarafından saklanır.</p>`,
   },
 
   "iade-degisim": {
