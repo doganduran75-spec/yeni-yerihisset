@@ -115,6 +115,14 @@ export default function TelegramCard() {
 
       <div className="rounded-lg border divide-y">
         <p className="px-3 py-2 text-xs font-bold text-slate-600 bg-slate-50">Konular — hangi bildirimler gelsin</p>
+        {/* Yönetici izleme kapatılamaz (src/lib/telegram.ts scanAdminRoles; kullanıcı 2026-11-14) */}
+        <label className="flex items-start gap-2 px-3 py-2 text-sm">
+          <input type="checkbox" className="mt-1" checked disabled readOnly />
+          <span className="flex-1">
+            <b>Güvenlik: yeni yönetici</b><span className="ml-2 text-[10px] font-bold uppercase text-red-600">her zaman açık</span>
+            <span className="block text-xs text-muted-foreground">Bir hesaba yönetici yetkisi verilirse (ya da kaldırılırsa) bir dakika içinde bildirilir. Yeni yönetici beklenmiyor — gelirse açık / ele geçirilmiş hesap olabilir.</span>
+          </span>
+        </label>
         {(st?.topicList || []).map((t: any) => (
           <label key={t.key} className={`flex items-start gap-2 px-3 py-2 text-sm ${t.ready ? "" : "opacity-60"}`}>
             <input type="checkbox" className="mt-1" disabled={!t.ready || !!busy} checked={t.ready && !!topics[t.key]}

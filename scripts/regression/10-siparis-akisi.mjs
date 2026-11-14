@@ -52,6 +52,7 @@ export default {
           IF to_regclass('public.contacts') IS NOT NULL THEN DELETE FROM public.contacts WHERE email ILIKE '%@${DOMAIN}'; END IF;
         END $$;
         DELETE FROM public.profiles WHERE email ILIKE '%@${DOMAIN}';
+        DELETE FROM public.telegram_state WHERE key IN (SELECT 'admin_watch_test:' || id FROM auth.users WHERE email ILIKE '%@${DOMAIN}');
         DELETE FROM auth.users WHERE email ILIKE '%@${DOMAIN}';
         DELETE FROM public.affiliate_profiles WHERE code LIKE 'RGT%';
         DELETE FROM public.affiliate_payout_runs WHERE period = '2001-01'; -- uçtan uca satış ortaklığı testinin dönemi
@@ -103,6 +104,9 @@ export default {
         const c = await auth("admin/users", { method: "POST", service: true, body: { email, password, email_confirm: true, user_metadata: { first_name: "Regresyon", last_name: kind } } });
         const id = c.json?.id;
         if (!id) throw new Error(`test üyesi oluşturulamadı (${kind}): HTTP ${c.status}`);
+        // Yönetici izleme (src/lib/telegram.ts scanAdminRoles): test yöneticisi Telegram'a "yeni yönetici" diye düşmesin —
+        // işaret, rol verilmeden ÖNCE yazılır (yalnız veritabanından yazılabilir)
+        if (admin) sql(`INSERT INTO public.telegram_state (key, value) VALUES (${lit(`admin_watch_test:${id}`)}, 'regresyon') ON CONFLICT (key) DO NOTHING`);
         sql(`INSERT INTO public.profiles (id, email, first_name, last_name, phone${admin ? ", role" : ""})
              VALUES (${lit(id)}, ${lit(email)}, 'Regresyon', ${lit(kind)}, ${lit(`555${String(Math.floor(Math.random() * 1e7)).padStart(7, "0")}`)}${admin ? ", 'admin'" : ""})
              ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, first_name = EXCLUDED.first_name, last_name = EXCLUDED.last_name${admin ? ", role = 'admin'" : ""}`);
@@ -1018,6 +1022,22 @@ export default {
         ok(/getMinutes\(\) % 5 === 1\)[\s\S]{0,80}syncTrendyolQuestions\(supabase\)/.test(cron) && /label: "Cevapsız Trendyol sorusu", href: "\/admin\/messages\?kanal=trendyol"/.test(dash)
           && /<MarketplaceQuestions \/>/.test(msg),
           "Sorular 5 dk'da bir çekiliyor; panoda “Cevapsız Trendyol sorusu”; Mesajlar'da “Trendyol soruları” sekmesi", "cron / pano / sekme eksik");
+      });
+
+      // YÖNETİCİ İZLEME (2026-11-14): yeni yönetici beklenmiyor → bir hesaba yönetici yetkisi verilirse dakikalık işleyici
+      // Telegram'a "YENİ YÖNETİCİ" gönderir (konu seçiminden bağımsız, kapatılamaz). Testin yöneticisi işaretle hariç.
+      await part("Güvenlik: yönetici izleme (Telegram)", async () => {
+        const fs = await import("node:fs");
+        const tg = fs.readFileSync(new URL("../../src/lib/telegram.ts", import.meta.url), "utf8");
+        const card = fs.readFileSync(new URL("../../src/components/admin/settings/TelegramCard.tsx", import.meta.url), "utf8");
+        const sum = fs.readFileSync(new URL("../../src/app/api/admin/dashboard-summary/route.ts", import.meta.url), "utf8");
+        const mark = one(`SELECT count(*) FROM public.telegram_state WHERE key = ${lit(`admin_watch_test:${F.admin.id}`)}`);
+        ok(/\n  try \{ out\.sent \+= await scanAdminRoles\(sb, cfg\); \}/.test(tg) && /\.eq\("role", "admin"\)/.test(tg) && /YENİ YÖNETİCİ/.test(tg)
+          && /if \(sent\) await setState\(sb, "admin_ids", cur\)/.test(tg) && /Güvenlik: yeni yönetici/.test(card) && mark === "1",
+          "Yeni yönetici → Telegram uyarısı (her zaman açık, konu seçimine bağlı değil; gönderilemezse sonraki dakika yeniden); test yöneticisi işaretli",
+          `test işareti ${mark}`);
+        ok(/affiliate: "Satış Ortağı"/.test(sum) && /yonetici: "Yönetici"/.test(sum),
+          "Panodaki Kişiler kartında “Affiliate” yerine “Satış Ortağı”");
       });
 
       await part("Kampanya e-postası izni", async () => {

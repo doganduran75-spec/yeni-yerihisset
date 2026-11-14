@@ -122,11 +122,11 @@ export async function GET(req: NextRequest) {
     sales,
     members,
     roles: roleRows,
-    // Her kişi YALNIZ BİR grupta: Yönetici › Guru › Affiliate › Tutkun › Meraklı › Üye › Kişi (people_tiers; topluluk katmanları 2026-11-11)
+    // Her kişi YALNIZ BİR grupta: Yönetici › Guru › Satış Ortağı › Tutkun › Meraklı › Üye › Kişi (people_tiers; topluluk katmanları 2026-11-11)
     tiers: await (async () => {
       const { data, error } = await (supabase as any).rpc("people_tiers");
       if (error) return null; // migration uygulanmadıysa eski görünüm
-      const NAME: Record<string, string> = { yonetici: "Yönetici", guru: "Barefoot Gurusu", affiliate: "Affiliate", mudavim: "Barefoot Tutkunu", musteri: "Barefoot Meraklısı", uye: "Üye", kisi: "Kişi" };
+      const NAME: Record<string, string> = { yonetici: "Yönetici", guru: "Barefoot Gurusu", affiliate: "Satış Ortağı", mudavim: "Barefoot Tutkunu", musteri: "Barefoot Meraklısı", uye: "Üye", kisi: "Kişi" };
       return ((data as any[]) || []).map((t) => ({ slug: t.tier, name: NAME[t.tier] || t.tier, total: Number(t.total) || 0, new30: Number(t.new30) || 0 }));
     })(),
   });

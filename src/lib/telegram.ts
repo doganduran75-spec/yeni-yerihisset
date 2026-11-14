@@ -243,6 +243,44 @@ export async function notifyServerAlert(sb: SB, subject: string, problems: { key
   try { return await sendDirect(sb, cfg, "server_alert", text); } catch (e: any) { console.error("[telegram/server_alert]", e?.message || e); return false; }
 }
 
+// ─── Güvenlik: yönetici hesapları (kullanıcı 2026-11-14) ───────────────────
+// Yeni yönetici eklenmesi beklenmiyor: bir hesaba yönetici yetkisi verilirse (açık / ele geçirilmiş hesap olabilir)
+// bir dakika içinde Telegram'a düşer. Konu seçiminden bağımsız HER ZAMAN açık (Telegram kuruluysa) — kapatılamaz.
+// İlk çalışmada mevcut yöneticiler kaydedilir ve bilgi mesajı gider. Gönderilemezse kayıt güncellenmez → sonraki dakika yeniden.
+const ADMIN_TEST_KEY = "admin_watch_test:";
+export async function scanAdminRoles(sb: SB, cfg: TelegramConfig): Promise<number> {
+  const { data, error } = await sb.from("profiles").select("id, first_name, last_name, email").eq("role", "admin");
+  if (error) throw new Error(error.message);
+  // Regresyon testinin geçici yöneticisi: test, hesabı oluşturmadan ÖNCE telegram_state'e "admin_watch_test:<id>" yazar
+  // (yalnız veritabanından / service_role ile yazılabilir — dışarıdan yetki alan biri bu işareti koyamaz)
+  const { data: ign } = await sb.from("telegram_state").select("key").like("key", `${ADMIN_TEST_KEY}%`);
+  const skip = new Set(((ign as any[]) || []).map((k) => String(k.key).slice(ADMIN_TEST_KEY.length)));
+  const rows = ((data as any[]) || []).filter((r) => !skip.has(String(r.id))).sort((a, b) => String(a.id).localeCompare(String(b.id)));
+  const ids = rows.map((r) => String(r.id));
+  const cur = ids.join(",");
+  const prevRaw = await getState(sb, "admin_ids");
+  if (prevRaw === cur) return 0;
+  const prev = prevRaw === null ? null : prevRaw.split(",").filter(Boolean);
+  const who = (r: any) => `${esc([r.first_name, r.last_name].filter(Boolean).join(" ") || "(adsız)")} — ${esc(r.email || "e-posta yok")}`;
+  const link = `<a href="${STORE_URL()}/admin/members">Üyeleri aç</a>`;
+  let text: string;
+  if (!prev) {
+    text = ["🛡️ <b>Yönetici izleme açık</b>", `Şu an ${rows.length} yönetici var:`, ...rows.map((r) => `• ${who(r)}`), "",
+      "Bir hesaba yönetici yetkisi verilirse buraya hemen bildirilir."].join("\n");
+  } else {
+    const added = rows.filter((r) => !prev.includes(String(r.id)));
+    const removed = prev.filter((id) => !ids.includes(id)).length;
+    text = added.length
+      ? [`🚨 <b>YENİ YÖNETİCİ — ${added.length} hesaba yönetici yetkisi verildi</b>`, ...added.map((r) => `• ${who(r)}`), "",
+          `Toplam yönetici: ${prev.length} → ${rows.length}`,
+          "Sen vermediysen bu bir saldırı olabilir: yetkiyi hemen kaldır ve hesabı incele.", link].join("\n")
+      : [`ℹ️ <b>Yönetici yetkisi kaldırıldı</b>`, `${removed} hesap artık yönetici değil. Toplam yönetici: ${prev.length} → ${rows.length}`].join("\n");
+  }
+  const sent = await sendDirect(sb, cfg, "security_alert", text);
+  if (sent) await setState(sb, "admin_ids", cur);
+  return sent ? 1 : 0;
+}
+
 // ─── Entegrasyon hataları (dakikalık tarama) ────────────────────────────────
 const ORDER_ERRORS: [string, string][] = [
   ["parasut_error", "Paraşüt faturası"], ["mp_invoice_error", "Pazaryerine fatura yükleme"],
@@ -572,7 +610,8 @@ export async function processTelegramOutbox(sb: SB = createAdminClient()): Promi
     }
   }
 
-  // 3) Dönemsel: entegrasyon hataları (her çalışmada) + günlük özet (seçilen saatte, günde bir)
+  // 3) Dönemsel: yönetici izleme (her zaman) + entegrasyon hataları (her çalışmada) + günlük özet (seçilen saatte, günde bir)
+  try { out.sent += await scanAdminRoles(sb, cfg); } catch (e: any) { out.errors.push(`yönetici izleme: ${e?.message || e}`); }
   if (on(cfg, "integration_error")) {
     try { out.sent += await scanIntegrationErrors(sb, cfg); } catch (e: any) { out.errors.push(`entegrasyon hatası taraması: ${e?.message || e}`); }
   } else await sb.from("telegram_state").delete().eq("key", "integration_error_since"); // tekrar açılınca eski hatalar gelmesin
