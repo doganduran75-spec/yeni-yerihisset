@@ -663,6 +663,14 @@ async function main() {
       ? add("ok", "Bakım sayfası Caddy'de tanımlı")
       : add("warn", "Bakım sayfası Caddy'de tanımlı değil", "deploy sırasında ziyaretçi hata görür → docs/BAKIM-SAYFASI.md");
   }
+  // Açılışta site, arka uç (veritabanı / REST / giriş) hazır olunca başlar; o zamana kadar bakım sayfası (2026-11-14)
+  let boot = null;
+  try { boot = readFileSync("/etc/systemd/system/pm2-root.service.d/wait-backend.conf", "utf8"); } catch { /* kurulu değil / yerel */ }
+  if (caddy !== null) {
+    boot && /wait-for-backend\.sh/.test(boot)
+      ? add("ok", "Açılışta site veritabanı hazır olunca başlıyor (o zamana kadar bakım sayfası)")
+      : add("warn", "Açılışta site veritabanını beklemiyor", "yeniden başlatmada site veritabanından önce açılıp yarım çalışabilir → bash scripts/server-update.sh --reboot kurar");
+  }
   liveOnly(!!process.env.IYZICO_API_KEY, "iyzico anahtarı yok", "kartla ödeme kapalı");
   liveOnly(S.card_payment_enabled === true, "Kart ödemesi kapalı", "Ayarlar › Ödeme › Kredi / Banka Kartı'nı aç");
   // Ödeme sayfası kart seçeneğini tarayıcıdan okur → sütun dışarıya açık olmalı (yalnız bu sütun)

@@ -40,6 +40,23 @@ ready() {
     else READY_MSG+=("$($fix && echo ✗ || echo •) Site (pm2) açılışta başlama kurulu değil$($fix || echo ' — --reboot kurar')"); $fix && okk=false; fi
     $fix && { pm2 save >>"$LOG" 2>&1 && READY_MSG+=("✓ Çalışan site süreçleri kaydedildi (pm2 save)") || { READY_MSG+=("✗ pm2 save başarısız"); okk=false; }; }
   else READY_MSG+=("✗ pm2 bulunamadı"); okk=false; fi
+  # Açılışta site, arka uç (veritabanı / REST / giriş) hazır olunca başlasın; o zamana kadar bakım sayfası (2026-11-14)
+  # pm2-root servisine systemd ek dosyası: scripts/wait-for-backend.sh önce çalışır. Yalnız denetim şu an "hazır"
+  # diyorsa kurulur (yanlış ayarda her açılışta 10 dk beklemesin).
+  local DROPIN=/etc/systemd/system/pm2-root.service.d/wait-backend.conf
+  if [ -f "$DROPIN" ] && grep -q "wait-for-backend.sh" "$DROPIN"; then READY_MSG+=("✓ Açılışta site, veritabanı hazır olunca başlıyor (o zamana kadar bakım sayfası)")
+  elif $fix; then
+    if bash "$APP_DIR/scripts/wait-for-backend.sh" --check >>"$LOG" 2>&1; then
+      mkdir -p "$(dirname "$DROPIN")"
+      printf '%s\n' "# scripts/server-update.sh kurdu — site, arka uç hazır olunca başlar (scripts/wait-for-backend.sh)" \
+        "[Unit]" "After=docker.service network-online.target" "Wants=docker.service network-online.target" \
+        "[Service]" "ExecStartPre=/bin/bash $APP_DIR/scripts/wait-for-backend.sh" "TimeoutStartSec=900" >"$DROPIN"
+      systemctl daemon-reload
+      READY_MSG+=("✓ Açılışta site, veritabanı hazır olunca başlayacak şekilde ayarlandı (o zamana kadar bakım sayfası)")
+    else
+      READY_MSG+=("• Açılış beklemesi kurulmadı: arka uç denetimi şu an cevap vermiyor ($(bash "$APP_DIR/scripts/wait-for-backend.sh" --check 2>&1 | tail -1)) — Claude'a ilet")
+    fi
+  else READY_MSG+=("• Açılışta site veritabanını beklemiyor — --reboot kurar"); fi
   if systemctl list-unit-files caddy.service >/dev/null 2>&1 && systemctl list-unit-files caddy.service | grep -q caddy; then
     if [ "$(systemctl is-enabled caddy 2>/dev/null)" = enabled ]; then READY_MSG+=("✓ Caddy (https) açılışta başlıyor")
     else READY_MSG+=("✗ Caddy açılışta başlamıyor"); okk=false; fi

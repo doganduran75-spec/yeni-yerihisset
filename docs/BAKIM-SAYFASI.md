@@ -61,3 +61,16 @@ pm2 start yerihisset
 ```
 
 Regresyon paketi (Ayarlar ve ortam) bu ayarın Caddy'de olup olmadığını kontrol eder.
+
+
+## Sunucu yeniden başlarken (2026-11-14)
+
+Yeniden başlatmada site (pm2) birkaç saniyede açılır, veritabanı ve Supabase servisleri 30–90 saniye sürebilir. Bu
+arada site açık görünüp ürün / giriş / ödeme çalışmasın diye site, **arka uç hazır olana kadar başlatılmaz**:
+pm2'nin açılış servisine (`pm2-root`) ek dosya `/etc/systemd/system/pm2-root.service.d/wait-backend.conf` önce
+`scripts/wait-for-backend.sh`'i çalıştırır (veritabanı + REST + giriş servisi cevap verene kadar bekler, en fazla
+10 dk). Bu sürede ziyaretçi yukarıdaki bakım sayfasını görür; site açıldığında her işlev hazırdır.
+
+- Kurulum: `bash scripts/server-update.sh --reboot` kendiliğinden kurar (önce denetimin "hazır" dediğini kontrol eder).
+- Şu an hazır mı: `bash scripts/wait-for-backend.sh --check`
+- Açılış kaydı: `/var/log/yerihisset-boot.log` (kaç saniye beklendi / zaman aşımı)
