@@ -84,11 +84,14 @@ async function run(req: NextRequest) {
       sent++;
     } catch (err: any) {
       const attempts = (item.attempts ?? 0) + 1;
-      const giveUp = attempts >= MAX_ATTEMPTS || isEmailLockedError(err); // kilitliyse tekrar deneme
+      const locked = isEmailLockedError(err); // kilitliyse tekrar deneme
+      const giveUp = attempts >= MAX_ATTEMPTS || locked;
+      // E-posta kilidinin (canlı öncesi) bilerek durdurduğu gönderim hata değil → "skipped" (sebep error_message'da);
+      // regresyon / pano "gönderilemeyen e-posta" saymaz (2026-11-14)
       await (supabase as any).from("email_queue")
-        .update({ status: giveUp ? "failed" : "pending", attempts, last_attempt_at: new Date().toISOString(), error_message: err?.message || "hata" })
+        .update({ status: locked ? "skipped" : giveUp ? "failed" : "pending", attempts, last_attempt_at: new Date().toISOString(), error_message: err?.message || "hata" })
         .eq("id", item.id);
-      if (giveUp) failed++; else retried++;
+      if (locked) { /* kilit: sayılmaz */ } else if (giveUp) failed++; else retried++;
     }
     if (i < items.length - 1) await delay(THROTTLE_MS);
   }

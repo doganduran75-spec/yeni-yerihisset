@@ -619,8 +619,14 @@ async function main() {
   dupKeys.length
     ? add("warn", "Aynı pazaryeri kodu birden çok varyantta", dupKeys.map((r) => `${r[0]} ${r[1]}: ${r[3]}`).join(" · ").slice(0, 600) + " → fazla olanın barkod / SKU'sunu sil ya da düzelt")
     : add("ok", "Pazaryeri kodları tekil");
-  const qFailed = num("SELECT count(*) FROM public.email_queue WHERE status='failed' AND created_at > now() - interval '7 days'");
+  // E-posta kilidinin bilerek durdurduğu gönderim hata sayılmaz (2026-11-14'ten önce "failed" yazılıyordu)
+  const qFailed = num("SELECT count(*) FROM public.email_queue WHERE status='failed' AND created_at > now() - interval '7 days' AND coalesce(error_message, '') NOT LIKE 'E-posta kilidi%'");
   qFailed ? add("warn", "Gönderilemeyen e-posta (son 7 gün)", `${qFailed}`) : add("ok", "E-posta kuyruğunda hata yok");
+  {
+    let src = "";
+    try { src = readFileSync(new URL("../src/app/api/cron/process-email-queue/route.ts", import.meta.url), "utf8"); } catch { /* yok */ }
+    /status: locked \? "skipped"/.test(src) ? add("ok", "E-posta kilidinin durdurduğu e-posta “atlandı” sayılıyor (hata değil)") : add("fail", "E-posta kilidi kuyrukta hata olarak yazılıyor", "process-email-queue");
+  }
 
   // 6) Ayarlar ve ortam
   });
