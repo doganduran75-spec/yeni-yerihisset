@@ -243,6 +243,12 @@ function coreNextStep(o: OrderLike): NextStep {
     }
     // Paket hazır → kurye bekleniyor (müşteriye e-posta "Kurye aldı"da gider; listede toplu düğme)
     if (o.packed_at) {
+      // Fatura sevkiyatta (C2, 2026-11-14): paket hazır anında kendiliğinden kesilir; kesilmediyse (Paraşüt kapalı / hata)
+      // burada iş olarak görünür. Eski siteden aktarılan sipariş hariç (eski akış).
+      if (!o.import_source && inv === "pending") {
+        return { stage: "Paket hazır — fatura kesilecek", hint: "Fatura paket hazır anında kendiliğinden kesilir; kesilmediyse (Paraşüt kapalı / hata) kes ya da Paraşüt'te kesip “Fatura kesildi” de. PDF “Kargoya verildi” e-postasının ekinde gider.",
+          actions: [...invoiceActs, { key: "picked_up", label: "Kurye aldı", kind: "primary" }, { key: "cancel", label: "Siparişi iptal et + para iadesi", kind: "danger" }], needsAction: true };
+      }
       // Entegrasyonla gelen kod: kurye alınca kargo firmasının durumu siparişi kendiliğinden Kargoda yapar (saatlik sorgu)
       const auto = !!o.kargonomi_tracking_code;
       // Entegrasyonda yöneticiden iş yok (kullanıcı 2026-11-04): "Kurye aldı" düğmesi yalnız 2 gün geçip kargo firması

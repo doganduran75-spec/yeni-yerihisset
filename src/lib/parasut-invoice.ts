@@ -433,8 +433,9 @@ async function createRefundBill(sb: Sb, x: { no: string; contactId: string; cate
   throw new ParasutError(422, `Paraşüt iade faturasını kabul etmedi (${tried.length} biçim denendi; ayrıntı siparişin notlarında). Son hata: ${tried[tried.length - 1]?.replace(/^[a-z-]+: /, "") || "?"}`);
 }
 
-/** YeriHisset siparişinde karar netleşince (müşteri "oldu" / "oldu say" / değişimde tutulmayan geri geldi) faturayı
- *  kendiliğinden kes. Paraşüt kapalıysa ya da sipariş uygun değilse sessizce geçer; hata siparişe yazılır (parasut_error)
+/** YeriHisset siparişinde faturayı kendiliğinden kes: "Paket hazır" anında (2026-11-14, C2 — fatura sevkiyatta).
+ *  Eski çağrılar (müşteri "oldu" / "oldu say" / değişim tamam) yedek olarak kalır: fatura paketlemede kesilemediyse
+ *  (Paraşüt kapalı / hata) ya da C2'den önce paketlenmiş siparişte o anda keser; kesilmişse hiçbir şey yapmaz. Paraşüt kapalıysa ya da sipariş uygun değilse sessizce geçer; hata siparişe yazılır (parasut_error)
  *  ve sipariş ekranında "Paraşüt — yeniden dene" görünür. Hata fırlatmaz (çağıran beklemek zorunda değil). */
 export async function autoInvoiceSiteOrder(sb: Sb, orderId: string, why: string): Promise<{ status: string; error?: string }> {
   try {
@@ -497,8 +498,10 @@ export async function checkInvoice(sb: Sb, orderId: string) {
   await save(sb, orderId, { parasut_pdf_path: path, parasut_status: "done", parasut_error: null, parasut_invoiced_at: new Date().toISOString(), invoice_status: "invoiced" });
   // Trendyol / Hepsiburada siparişi: faturayı pazaryerine de yükle (olmazsa hata siparişe yazılır, "Trendyol'a yükle" ile yeniden)
   if (o.channel === "trendyol" || o.channel === "hepsiburada") await pushInvoiceToMarketplace(sb, orderId).catch(() => {});
-  // Site siparişi: PDF müşteriye bizden (bir kez)
-  if ((o.channel || "site") === "site") await sendInvoiceEmail(sb, orderId).catch(() => {});
+  // Site siparişi: PDF müşteriye bizden (bir kez). Henüz kargoya verilmediyse ayrı e-posta GİTMEZ — "Kargoya verildi"
+  // e-postasının ekinde gider (src/lib/notifications.ts; gece paketlenen siparişe gece e-posta gitmesin, tek e-posta)
+  if ((o.channel || "site") === "site" && ["shipped", "delivered", "undelivered", "returned"].includes(o.shipment_status || ""))
+    await sendInvoiceEmail(sb, orderId).catch(() => {});
   return { status: "done", invoiceNo };
 }
 

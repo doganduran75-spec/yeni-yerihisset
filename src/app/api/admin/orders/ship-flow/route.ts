@@ -2,7 +2,9 @@
 // "PAKET HAZIR" AKIŞI (kullanıcı kararları 2026-10-24). Yalnız yönetici.
 //   POST { op: "packed", orderId }      → paket hazır (packed_at). Trendyol / Hepsiburada: Paraşüt faturası hemen kesilir;
 //                                         bitince (cron) pazaryerine yüklenir, Trendyol paketi "İşleme al" yapılır.
-//                                         Site: yalnız "Kargo bekliyor" — müşteriye e-posta GİTMEZ (gece paketlenebilir).
+//                                         Site: "Kargo bekliyor" + fatura da bu anda kesilir (kullanıcı 2026-11-14, C2: fatura
+//                                         sevkiyatta; eskiden müşteri "oldu" deyince). Müşteriye e-posta GİTMEZ (gece
+//                                         paketlenebilir) — fatura PDF'i "Kargoya verildi" e-postasının ekinde gider.
 //   POST { op: "picked_up", ids }       → kurye aldı (site): Kargoda + kargo e-postası (takip numarasıyla) o an.
 //   POST { op: "mp_picking", orderId }  → Trendyol "İşleme al" yeniden dene.
 //   POST { op: "hb_package", orderId }  → Hepsiburada paketlemeyi yeniden dene.
@@ -10,7 +12,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { getAuthUserFromRequest } from "@/lib/auth-from-request";
-import { invoiceOrder } from "@/lib/parasut-invoice";
+import { invoiceOrder, autoInvoiceSiteOrder } from "@/lib/parasut-invoice";
 import { parasutConfig } from "@/lib/parasut";
 import { trendyolPicking } from "@/lib/marketplace-invoice";
 import { hbPackageOrder } from "@/lib/marketplace/hb-package";
@@ -61,6 +63,8 @@ export async function POST(req: NextRequest) {
         catch (e: any) { invoice = { status: "error", error: String(e?.message || e) }; }
       } else invoice = { status: "off" };
     }
+    // Site siparişi (bu sistemde açılan): fatura paket hazır anında (Paraşüt kapalı / hata → sipariş ekranında "kes / yeniden dene")
+    if (site && !o.import_source) invoice = await autoInvoiceSiteOrder(sb, orderId, "paket hazır");
     return NextResponse.json({ ok: true, packed_at: o.packed_at || now, invoice, hbPackage });
   }
 

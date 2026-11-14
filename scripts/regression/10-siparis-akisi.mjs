@@ -1918,6 +1918,23 @@ export default {
         const p = await flow(F.admin.token, { op: "packed", orderId: id });
         const o1 = ord(id);
         ok(p.status === 200 && !!o1.packed_at && o1.shipment_status === "preparing", "Paket hazır: kargo bekliyor, sipariş henüz 'Kargoda' değil (e-posta gitmez)", `${why(p)} → ${o1.shipment_status}, packed_at ${o1.packed_at}`);
+        // FATURA SEVKİYATTA (C2, 2026-11-14): site siparişinin faturası "Paket hazır" anında kesilir (test siparişinde Paraşüt'e
+        // gidilmez → "test"); kesilmediyse sıradaki adım "Paket hazır — fatura kesilecek"; PDF "Kargoya verildi" e-postasının ekinde
+        ok(p.json?.invoice?.status === "test", "Site siparişinde fatura “Paket hazır” anında kesiliyor (test siparişi Paraşüt'e gitmez)", JSON.stringify(p.json?.invoice || null));
+        {
+          let nx = null;
+          try { nx = await import(new URL("../../src/lib/order-next-step.ts", import.meta.url)); } catch { /* eski Node */ }
+          if (nx) {
+            const st = nx.orderNextStep({ channel: "site", payment_status: "paid", status: "processing", shipment_status: "preparing", invoice_status: "pending", total_amount: 100, cargo_tracking_number: "ELLE1", packed_at: new Date().toISOString() });
+            ok(st.needsAction && st.actions.some((a) => a.key === "invoice") && st.actions.some((a) => a.key === "picked_up"), "Paket hazır ama fatura kesilmemiş: “fatura kesilecek” işi + Kurye aldı", st.stage);
+          }
+          const fs = await import("node:fs");
+          const nt = fs.readFileSync(new URL("../../src/lib/notifications.ts", import.meta.url), "utf8");
+          const pi = fs.readFileSync(new URL("../../src/lib/parasut-invoice.ts", import.meta.url), "utf8");
+          ok(/trigger === "order_shipped"[^\n]*parasut_pdf_path && !order\.invoice_emailed_at/.test(nt) && /\.\.\.\(attachments\.length \? \{ attachments \} : \{\}\)/.test(nt)
+            && /=== "site" && \["shipped", "delivered", "undelivered", "returned"\]\.includes\(o\.shipment_status/.test(pi),
+            "Fatura PDF'i “Kargoya verildi” e-postasının ekinde; kargodan önce ayrı fatura e-postası gitmiyor", "kargo e-postası eki / fatura e-postası kuralı");
+        }
         const k = await flow(F.admin.token, { op: "picked_up", ids: [id] });
         ok(k.status === 200 && (k.json?.shipped || []).includes(id) && ord(id).shipment_status === "shipped", "Kurye aldı: sipariş kargoda", `${why(k)} → ${ord(id).shipment_status}`);
         ok(one(`SELECT shipped_at IS NOT NULL FROM public.orders WHERE id = ${lit(id)}`) === "t", "Kargoya verilme anı kaydedildi (fatura 7 gün takibi)", "shipped_at boş");

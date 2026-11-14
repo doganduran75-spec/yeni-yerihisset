@@ -336,7 +336,7 @@ export async function sendOrderNotification(
   // 1. Sipariş + ilişkileri EMBED'SİZ getir (self-host PostgREST embed kırılgan)
   const { data: order, error: orderError } = await (supabase
     .from("orders")
-    .select("id, order_number, total_amount, status, created_at, shipping_address, payment_method, user_id, channel, payment_status, refunded_amount, refund_method, credit_used, auto_expired, import_source, kargonomi_shipment_id, kargonomi_tracking_code, delivered_at, cancel_reason, cancel_customer_note, iyzico_payment_id, shipment_status, cargo_tracking_number")
+    .select("id, order_number, total_amount, status, created_at, shipping_address, payment_method, user_id, channel, payment_status, refunded_amount, refund_method, credit_used, auto_expired, import_source, kargonomi_shipment_id, kargonomi_tracking_code, delivered_at, cancel_reason, cancel_customer_note, iyzico_payment_id, shipment_status, cargo_tracking_number, parasut_pdf_path, parasut_invoice_no, invoice_emailed_at")
     .eq("id", context.orderId)
     .maybeSingle() as any) as { data: any; error: any };
 
@@ -578,6 +578,20 @@ export async function sendOrderNotification(
     return { channel: "email", status: "failed", error: "SMTP ayarları yapılandırılmamış" };
   }
 
+  // Fatura sevkiyatta kesilir (C2, 2026-11-14): PDF hazırsa ve müşteriye henüz gitmediyse "Kargoya verildi" e-postasının
+  // ekinde gider (ayrı fatura e-postası yok). Hazır değilse PDF gelince ayrı e-posta gider (parasut-invoice › checkInvoice).
+  const attachments: { filename: string; content: Buffer; contentType: string }[] = [];
+  if (trigger === "order_shipped" && (order.channel || "site") === "site" && !order.import_source && order.parasut_pdf_path && !order.invoice_emailed_at) {
+    try {
+      const { data: file } = await (supabase as any).storage.from("invoices").download(order.parasut_pdf_path);
+      if (file) {
+        attachments.push({ filename: `${order.parasut_invoice_no || shortId}.pdf`, content: Buffer.from(await file.arrayBuffer()), contentType: "application/pdf" });
+        bodyHtml += `
+    <p style="margin:16px 0 0;font-size:14px;color:#374151;line-height:1.6">🧾 Faturan${order.parasut_invoice_no ? ` (<b>${escapeHtml(order.parasut_invoice_no)}</b>)` : ""} bu e-postanın ekinde.</p>`;
+      }
+    } catch { /* PDF okunamazsa e-posta faturasız gider; fatura sonra ayrı gönderilebilir */ }
+  }
+
   try {
     const transporter = createMailTransport(smtpConfig);
     await transporter.sendMail({
@@ -586,7 +600,12 @@ export async function sendOrderNotification(
       subject,
       html: buildEmailDocument(bodyHtml, storeName),
       text: htmlToText(bodyHtml),
+      ...(attachments.length ? { attachments } : {}),
     });
+    if (attachments.length && !mailRedirectActive()) {
+      await (supabase as any).from("orders").update({ invoice_emailed_at: new Date().toISOString() }).eq("id", order.id);
+      await (supabase as any).from("order_events").insert({ order_id: order.id, type: "note", note: "Fatura “Kargoya verildi” e-postasının ekinde gönderildi" });
+    }
 
     await logNotification(supabase, { ...context, trigger, channel: "email", status: "sent", recipient: customerEmail });
     return { channel: "email", status: "sent" };
