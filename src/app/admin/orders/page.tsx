@@ -2,7 +2,7 @@
 
 import { orderLabel } from "@/lib/order-label";
 import { useEffect, useState, useCallback } from "react";
-import { orderNextStep, isReturnInvoiceDue, isRefundDue, type NextActionKey, UNINVOICED_SINCE, INVOICE_DAYS, caseReasonLabel } from "@/lib/order-next-step";
+import { orderNextStep, isReturnInvoiceDue, isRefundDue, isGeneralOrderTodo, type NextActionKey, UNINVOICED_SINCE, INVOICE_DAYS, caseReasonLabel } from "@/lib/order-next-step";
 import { returnRefundSuggestion, exchangeReturnDefaults } from "@/lib/exchange-return";
 import { commissionPeriod, periodLabel } from "@/lib/affiliate-commission";
 import { useSearchParams, useRouter } from "next/navigation";
@@ -95,6 +95,8 @@ const isUninvoicedShipped = (o: any) => o?.status !== "cancelled" && ["paid", "p
   && (((o?.channel || "site") === "site" && !o?.import_source) || String(o?.created_at || "") >= UNINVOICED_SINCE); // eski siteden aktarılan yeni siparişler dahil
 // Kısmi iade yalnız ürün satırlarından görünür: liste ret_items (hafif) okur, ayrıntı tam order_items (2026-11-14)
 const nx = (o: any) => orderNextStep({ ...o, order_items: o.order_items ?? o.ret_items ?? null, open_case: openCaseOf(o) });
+// Süren değişim panoda kendi satırında ("Bekleyen sipariş işi"nde sayılmaz)
+const hasOpenExchange = (o: any) => (o.order_cases || []).some((c: any) => !c.closed_at && c.kind === "exchange");
 
 // Siparişin geldiği reklam/kampanya (orders.attribution.source — src/lib/ad-context.ts)
 function adSourceLabel(o: { attribution?: { source?: Record<string, unknown> } | null }): string | null {
@@ -343,12 +345,16 @@ export default function OrdersPage() {
   const [fInv, setFInv] = useState("all");
   const [fRet, setFRet] = useState(() => searchParams.get("iade") || "all"); // iade/iptal hazır filtreleri (panodan ?iade=return_expected)
   const [showAbandoned, setShowAbandoned] = useState(false); // yarım kalan kart denemelerini göster
-  const [fTodo, setFTodo] = useState(() => searchParams.get("todo") === "1"); // "Bekleyen işlerim" (order-next-step); panodan ?todo=1
+  // "Bekleyen işlerim" (order-next-step): "all" = tüm işler (düğme); "other" = panodaki "Bekleyen sipariş işi" satırı
+  // (?todo=diger — ücret iadesi / iade faturası / süren değişim kendi satırlarında, burada yok; kullanıcı 2026-11-14)
+  const todoParam = (v: string | null): "" | "all" | "other" => (v === "diger" ? "other" : v === "1" ? "all" : "");
+  const [fTodo, setFTodo] = useState<"" | "all" | "other">(() => todoParam(searchParams.get("todo")));
   // Panodan gelen hazır filtre (?iade=…, ?todo=1): sayfa açıkken ya da ilk çizimde parametre geç gelirse de uygula
   useEffect(() => {
     const iade = searchParams.get("iade");
     if (iade) { setFRet(iade); setListPage(0); }
-    if (searchParams.get("todo") === "1") setFTodo(true);
+    const td = todoParam(searchParams.get("todo"));
+    if (td) { setFTodo(td); setListPage(0); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
   const [fMethod, setFMethod] = useState("all");
@@ -1275,7 +1281,8 @@ Siparişte “Paraşüt — yeniden dene” ile tekrar dene.`, tone: "danger" })
         if (fRet === "exchange_open" && openCaseOf(o)?.kind !== "exchange") return false; // panodaki "Süren değişim"
       }
       if (fMethod !== "all" && (o.payment_method || "credit_card") !== fMethod) return false;
-      if (fTodo && !nx(o).needsAction) return false;
+      if (fTodo === "all" && !nx(o).needsAction) return false;
+      if (fTodo === "other" && !isGeneralOrderTodo(nx(o), hasOpenExchange(o))) return false;
       if (fChannel !== "all" && (o.channel || "site") !== fChannel) return false;
       if (!needle) return true;
       const hay = trNorm([
@@ -1382,11 +1389,13 @@ Siparişte “Paraşüt — yeniden dene” ile tekrar dene.`, tone: "danger" })
             {/* Arama + süzgeçler */}
             <div className="flex flex-wrap items-center gap-2 mb-4">
               <button
-                onClick={() => { setFTodo((v) => !v); setListPage(0); }}
+                onClick={() => { setFTodo((v) => (v ? "" : "all")); setListPage(0); }}
                 className={`h-9 px-3 rounded-lg border text-sm font-bold transition ${fTodo ? "bg-olive-600 text-white border-olive-600" : "bg-background text-slate-700 hover:bg-slate-50"}`}
                 title="Sıradaki adımı sende olan siparişler (ödeme onayı, kargoya verme, iade, fatura…)"
               >
-                Bekleyen işlerim ({orders.filter((o) => nx(o).needsAction).length})
+                {fTodo === "other" ? "Bekleyen sipariş işi" : "Bekleyen işlerim"} ({fTodo === "other"
+                  ? orders.filter((o) => isGeneralOrderTodo(nx(o), hasOpenExchange(o))).length
+                  : orders.filter((o) => nx(o).needsAction).length})
               </button>
               <div className="relative flex-1 min-w-[220px]">
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -1441,7 +1450,7 @@ Siparişte “Paraşüt — yeniden dene” ile tekrar dene.`, tone: "danger" })
               </select>
               {filtersActive && (
                 <button
-                  onClick={() => { setQ(""); setFPay("all"); setFShip("all"); setFInv("all"); setFMethod("all"); setFChannel("all"); setFRet("all"); setListPage(0); }}
+                  onClick={() => { setFTodo(""); setQ(""); setFPay("all"); setFShip("all"); setFInv("all"); setFMethod("all"); setFChannel("all"); setFRet("all"); setListPage(0); }}
                   className="h-9 px-3 rounded-lg text-xs font-bold text-muted-foreground hover:text-foreground"
                 >
                   Temizle

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { orderNextStep, isReturnInvoiceDue, isRefundDue, type NextStep } from "@/lib/order-next-step";
+import { orderNextStep, isReturnInvoiceDue, isRefundDue, isGeneralOrderTodo, type NextStep } from "@/lib/order-next-step";
 import { Card } from "@/components/ui/card";
 import { supabase } from "@/lib/supabase";
 import DashboardSummary from "@/components/admin/DashboardSummary";
@@ -165,7 +165,9 @@ export default function AdminDashboard() {
   // Ücret iadesi yapılacak (iade geldi / müşteri iptali / iptal — para henüz iade edilmedi): ayrı satır (kullanıcı 2026-11-14)
   const refundDue = openOrders.filter((o) => o.step && isRefundDue(o.step)).length;
   // Süren değişimdeki siparişin işi "Süren değişim" satırında (iki yerde sayılmasın)
-  const exchangeTodo = openOrders.filter((o: any) => (o.order_cases || []).some((c: any) => !c.closed_at && c.kind === "exchange")).length;
+  const hasOpenExchange = (o: any) => (o.order_cases || []).some((c: any) => !c.closed_at && c.kind === "exchange");
+  // Kalan genel işler — listede ?todo=diger aynı kuralla süzer (tıklayınca yalnız bunlar açılır; bir sipariş iki satırda sayılmaz)
+  const generalTodo = openOrders.filter((o) => o.step && isGeneralOrderTodo(o.step, hasOpenExchange(o))).length;
 
   return (
     <div className="space-y-3">
@@ -179,7 +181,7 @@ export default function AdminDashboard() {
           <div className="px-2 text-sm">
             {[
               // İade faturası bekleyenler ayrı satırda (aşağıda), burada sayılmaz (kullanıcı 2026-11-03)
-              { n: openOrders.length - returnInvoiceDue - exchangeTodo - refundDue, label: "Bekleyen sipariş işi", href: "/admin/orders?todo=1" },
+              { n: generalTodo, label: "Bekleyen sipariş işi", href: "/admin/orders?todo=diger" },
               { n: msgCount, label: "Cevapsız müşteri mesajı", href: "/admin/messages" },
               { n: qnaCount, label: "Cevapsız Trendyol sorusu", href: "/admin/messages?kanal=trendyol" },
               { n: reviewCount, label: "Onay bekleyen yorum", href: "/admin/reviews" },

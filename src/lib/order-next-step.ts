@@ -101,6 +101,12 @@ export function isReturnInvoiceDue(s: NextStep) {
   return s.needsAction && s.actions.length > 0 && s.actions.every((a) => a.key === "return_invoice" || a.key === "return_invoice_parasut");
 }
 
+// Panodaki "Bekleyen sipariş işi" = kendi satırı olan işler HARİÇ (ücret iadesi / iade faturası / süren değişim).
+// Pano sayısı ve sipariş listesindeki ?todo=diger aynı kuralı kullanır: tıklayınca yalnız o işler açılır (kullanıcı 2026-11-14).
+export function isGeneralOrderTodo(s: NextStep, hasOpenExchange: boolean) {
+  return s.needsAction && !isRefundDue(s) && !isReturnInvoiceDue(s) && !hasOpenExchange;
+}
+
 export function isMarketplaceOrder(o: OrderLike) {
   return (o.channel || "site") !== "site" && !o.import_source;
 }

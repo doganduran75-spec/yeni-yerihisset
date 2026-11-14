@@ -1675,9 +1675,22 @@ export default {
         const fs = await import("node:fs");
         const dash = fs.readFileSync(new URL("../../src/app/admin/page.tsx", import.meta.url), "utf8");
         const list = fs.readFileSync(new URL("../../src/app/admin/orders/page.tsx", import.meta.url), "utf8");
-        ok(/label: "Süren değişim", href: "\/admin\/orders\?iade=exchange_open"/.test(dash) && /openOrders\.length - returnInvoiceDue - exchangeTodo/.test(dash)
+        ok(/label: "Süren değişim", href: "\/admin\/orders\?iade=exchange_open"/.test(dash) && /isGeneralOrderTodo\(o\.step, hasOpenExchange\(o\)\)/.test(dash)
           && /fRet === "exchange_open"/.test(list) && /value="exchange_open"/.test(list),
           "Panoda “Süren değişim” satırı (açık değişim talepleri), sipariş listesinde aynı filtre; bekleyen sipariş işinde iki kez sayılmıyor");
+        // 2026-11-14: panoda "Bekleyen sipariş işi" 1 diyordu, tıklayınca liste 4 açıyordu (ücret iadesi işleri de geliyordu) →
+        // pano ve liste (?todo=diger) AYNI kural: ücret iadesi / iade faturası / süren değişim kendi satırında, burada yok
+        let g = null;
+        try { g = await import(new URL("../../src/lib/order-next-step.ts", import.meta.url)); } catch { /* eski Node */ }
+        if (g) {
+          const st = (actions, needsAction = true) => ({ stage: "x", actions: actions.map((key) => ({ key, label: key, kind: "primary" })), needsAction });
+          ok(g.isGeneralOrderTodo(st(["mark_paid"]), false) && !g.isGeneralOrderTodo(st(["refund"]), false) && !g.isGeneralOrderTodo(st(["return_invoice"]), false)
+            && !g.isGeneralOrderTodo(st(["send_label"]), true) && !g.isGeneralOrderTodo(st(["mark_paid"], false), false),
+            "“Bekleyen sipariş işi” kuralı: ücret iadesi / iade faturası / süren değişim / işi olmayan sayılmaz");
+        }
+        ok(/label: "Bekleyen sipariş işi", href: "\/admin\/orders\?todo=diger"/.test(dash) && /fTodo === "other" && !isGeneralOrderTodo\(nx\(o\), hasOpenExchange\(o\)\)/.test(list)
+          && /v === "diger" \? "other"/.test(list),
+          "Panodan “Bekleyen sipariş işi”ne tıklayınca liste yalnız o işleri açıyor (pano sayısıyla aynı kural)", "pano bağlantısı / liste süzgeci eksik");
         // Satırın saydığı: açık değişim talebi (kapanan sayılmaz) — geri alınan işlemle
         const r = await order([MAIN(1)]);
         const id = r.json?.orderId;
