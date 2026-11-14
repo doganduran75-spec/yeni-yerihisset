@@ -968,7 +968,7 @@ export default {
               "Değişim bitince ücret iadesi işi açılmıyor; tutulan çift de iade gelince “Ücret iadesi yap” açılıyor", `${done.stage} / ${later.stage}`);
             // Pano: "Ücret iadesi yapılacak" ayrı satır (Bekleyen sipariş işinden düşülür) — kullanıcı 2026-11-14
             const dash = (await import("node:fs")).readFileSync(new URL("../../src/app/admin/page.tsx", import.meta.url), "utf8");
-            ok(nx.isRefundDue(later) && !nx.isRefundDue(done) && /label: "Ücret iadesi yapılacak", href: "\/admin\/orders\?iade=refund_due"/.test(dash) && /- refundDue, label: "Bekleyen sipariş işi"/.test(dash),
+            ok(nx.isRefundDue(later) && !nx.isRefundDue(done) && /label: "Ücret iadesi yapılacak", href: "\/admin\/orders\?iade=refund_due"/.test(dash) && !nx.isGeneralOrderTodo(later, false) && /label: "Bekleyen sipariş işi", href: "\/admin\/orders\?todo=diger"/.test(dash),
               "Pano: “Ücret iadesi yapılacak” ayrı satırda (sipariş listesinde aynı filtre), bekleyen sipariş işinde ikinci kez sayılmıyor", "pano satırı eksik");
             // KISMİ İADE (2026-11-14, YH24721): iki farklı ürünün biri iade geldi, kargo "Teslim edildi"de kaldı → pano ve liste
             // ürün satırlarını (ret_items) okuyup "Ücret iadesi yapılacak" saymalı; öneri yalnız iade gelen ürünün bedeli
