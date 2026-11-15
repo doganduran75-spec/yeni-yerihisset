@@ -1254,6 +1254,25 @@ export default {
         await sleep(500);
         const n = num(`SELECT count(*) FROM public.client_errors WHERE message = ${lit(`REGRESYON-TEST ${RUN}`)}`);
         ok(n === 1, "Ödeme sayfası hatası kaydedildi (panoda 'Hata alan müşteriler')", `${n} kayıt`);
+        // SİTE HATASI İZLEME (2026-11-15, canlıya geçiş): sayfa çökmesi + sunucu hatası aynı tabloya, oradan Telegram "Site hatası"
+        const cr = await api("/api/client-error", { body: { kind: "crash", message: `REGRESYON-TEST çökme ${RUN}`, path: "/regresyon" } });
+        await sleep(500);
+        ok(cr.status === 200 && num(`SELECT count(*) FROM public.client_errors WHERE kind = 'crash' AND message = ${lit(`REGRESYON-TEST çökme ${RUN}`)}`) === 1,
+          "Sayfa çökmesi kaydediliyor (tür “crash”)", why(cr));
+        {
+          const fs = await import("node:fs");
+          const rd = (p) => fs.readFileSync(new URL(`../../${p}`, import.meta.url), "utf8");
+          const tg = rd("src/lib/telegram.ts"), ins = rd("src/instrumentation.ts"), er = rd("src/app/error.tsx"), ge = rd("src/app/global-error.tsx"), rc = rd("src/lib/report-crash.ts");
+          ok(/key: "site_error"/.test(tg) && /topics: \{ site_error: true, \.\.\./.test(tg) && /if \(on\(cfg, "site_error"\)\) \{[\s\S]{0,120}scanSiteErrors\(sb, cfg\)[\s\S]{0,160}maybeNoOrderAlarm\(sb, cfg\)/.test(tg)
+            && /!\/REGRESYON\/i\.test/.test(tg) && /isTestEmail\(p\.email\)/.test(tg),
+            "Telegram “Site hatası” konusu varsayılan açık; müşteri hataları dakikalık taranır; test kayıtları gönderilmez", "konu / tarama eksik");
+          ok(/export const onRequestError/.test(ins) && /from\("client_errors"\)\.insert/.test(ins) && /split\("\?"\)\[0\]/.test(ins) && /NEXT_\(REDIRECT\|NOT_FOUND/.test(ins),
+            "Sunucu hataları (instrumentation onRequestError) kaydediliyor; adresin sorgu kısmı atılıyor; yönlendirme / 404 sayılmıyor", "instrumentation eksik");
+          ok(/reportCrash\(error, "page"\)/.test(er) && /reportCrash\(error, "root"\)/.test(ge) && !/from "@\/lib\/supabase"/.test(rc),
+            "Hata ekranları (sayfa + kök) çökmeyi bildiriyor; bildirim Supabase istemcisine bağlı değil", "hata ekranı bildirimi eksik");
+          ok(/NO_ORDER_HOURS = 4/.test(tg) && /NO_ORDER_MIN_SESSIONS = 3/.test(tg) && /eq\("event_type", "checkout_step"\)/.test(tg) && /hour < 10 \|\| hour >= 23/.test(tg),
+            "“Sipariş gelmiyor” alarmı: gündüz, 4 saat site siparişi yok + en az 3 ziyaretçi ödeme adımında", "alarm koşulu değişmiş");
+        }
       });
 
       await part("Bugünün işleri: sonuçsuz arama → sil / talebe ekle", async () => {

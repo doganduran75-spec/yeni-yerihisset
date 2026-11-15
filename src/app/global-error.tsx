@@ -1,5 +1,8 @@
 "use client"; // Hata sınırları Client Component olmalı
 
+import { useEffect } from "react";
+import { reportCrash } from "@/lib/report-crash";
+
 /**
  * Kök layout dahil her şey çökerse bu sayfa devreye girer.
  * Kendi <html>/<body>'sini içermeli ve global CSS'e güvenmemeli —
@@ -15,6 +18,7 @@ export default function GlobalError({
   reset?: () => void;
 }) {
   const retry = () => (unstable_retry ?? reset)?.();
+  useEffect(() => { reportCrash(error, "root"); }, [error]); // pano + Telegram "Site hatası"
 
   return (
     <html lang="tr">

@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { RefreshCw, Home, WifiOff, AlertTriangle } from "lucide-react";
+import { reportCrash } from "@/lib/report-crash";
 
 export default function Error({
   error,
@@ -15,8 +16,8 @@ export default function Error({
   reset?: () => void;
 }) {
   useEffect(() => {
-    // Hata raporlama servisine loglanabilir (ör. Sentry) — şimdilik konsola
     console.error("[app/error]", error);
+    reportCrash(error, "page"); // pano + Telegram "Site hatası" (src/lib/report-crash.ts)
   }, [error]);
 
   // Supabase/ağ kaynaklı "Failed to fetch" hatalarını ayrı ele al

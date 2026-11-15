@@ -21,6 +21,7 @@ export const TELEGRAM_TOPICS = [
   { key: "after_sale_request", label: "İade / değişim talebi", desc: "Müşteri siparişinde iade ya da değişim istedi: sebep, istenen numara, not", ready: true },
   { key: "customer_message", label: "Müşteri mesajı", desc: "Müşteri sipariş ekranından mesaj yazdı", ready: true },
   { key: "integration_error", label: "Entegrasyon hatası", desc: "Paraşüt faturası, pazaryeri fatura yükleme, Trendyol işleme al, kargo (Basit Kargo / Kargonomi), pazaryeri stok, Google gönderimi hata verdi", ready: true },
+  { key: "site_error", label: "Site hatası (müşteri)", desc: "Müşterinin karşılaştığı hata dakikasında: kart / havale başlatılamadı, ödeme başarısız ya da siparişle eşleşmedi, sayfa çöktü, sunucu hatası. Ayrıca gündüz saatlerinde ziyaretçi ödeme adımına geldiği halde 4 saattir site siparişi yoksa uyarı. Varsayılan açık", ready: true },
   { key: "server_alert", label: "Sunucu / sistem uyarısı", desc: "Sunucu sağlığı uyarısı (disk, yedek, yeni IP’den SSH girişi, zamanlanmış görev durdu…) ve “giderildi”", ready: true },
   { key: "daily_summary", label: "Günlük özet (periyodik)", desc: "Her sabah seçtiğin saatte: dünkü satış (kanal kırılımı), bekleyen işler, stok talepleri, sunucu durumu", ready: true },
 ] as const;
@@ -36,7 +37,8 @@ export async function getTelegramConfig(sb: SB): Promise<TelegramConfig> {
     enabled: !!data?.telegram_enabled,
     token: String(data?.telegram_bot_token || "").trim(),
     chatId: String(data?.telegram_chat_id || "").trim(),
-    topics: (data?.telegram_topics && typeof data.telegram_topics === "object") ? data.telegram_topics : { new_order: true },
+    // site_error varsayılan AÇIK (canlıda müşteri hatası kaçmasın — kullanıcı 2026-11-15); panelde kapatılırsa false kaydedilir
+    topics: { site_error: true, ...((data?.telegram_topics && typeof data.telegram_topics === "object") ? data.telegram_topics : { new_order: true }) },
     dailyHour: Number.isInteger(data?.telegram_daily_hour) ? data.telegram_daily_hour : 9,
   };
 }
@@ -241,6 +243,95 @@ export async function notifyServerAlert(sb: SB, subject: string, problems: { key
     ? [`⚠️ <b>${esc(subject)}</b>`, "", ...problems.map((p) => `${p.status === "fail" ? "🔴" : "🟠"} <b>${esc(p.label)}</b>${fresh.includes(p.key) ? " <i>(yeni)</i>" : ""}\n   ${short(p.value, 200)}${p.hint ? `\n   → ${short(p.hint, 200)}` : ""}`), "", `<a href="${STORE_URL()}/admin">Panoyu aç</a>`].join("\n")
     : `✅ <b>Sunucu sorunları giderildi</b>\nÖnceki uyarıdaki sorunların hepsi düzeldi.`;
   try { return await sendDirect(sb, cfg, "server_alert", text); } catch (e: any) { console.error("[telegram/server_alert]", e?.message || e); return false; }
+}
+
+// ─── Site hatası (kullanıcı 2026-11-15, canlıya geçiş) ─────────────────────
+// Tek kaynak: client_errors — müşteri tarafı (ödeme başlatılamadı, sayfa çöktü: src/lib/report-crash.ts),
+// iyzico dönüşü (ödeme başarısız / eşleşmedi) ve sunucu hataları (src/instrumentation.ts onRequestError).
+// Dakikalık işleyici yeni kayıtları gruplayıp TEK mesajla yollar; imleç telegram_state 'site_error_since'.
+// Test kayıtları (REGRESYON metni, @….test üye) gönderilmez. Gönderilemezse imleç ilerlemez → sonraki dakika yeniden.
+export const SITE_ERROR_LABEL: Record<string, string> = {
+  checkout: "Ödeme başlatılamadı", payment_failed: "Kart ödemesi başarısız (banka reddi de olabilir)",
+  payment_unmatched: "Ödeme alındı ama sipariş bulunamadı", crash: "Sayfa çöktü", server: "Sunucu hatası",
+  stock: "Stok", after_sale: "İade / değişim", other: "Diğer",
+};
+async function scanSiteErrors(sb: SB, cfg: TelegramConfig): Promise<number> {
+  const since = await getState(sb, "site_error_since");
+  if (!since) { await setState(sb, "site_error_since", new Date().toISOString()); return 0; } // ilk açılışta eski hatalar yağmasın
+  const { data, error } = await sb.from("client_errors").select("created_at, kind, message, path, user_id, order_id")
+    .gt("created_at", since).order("created_at", { ascending: true }).limit(200);
+  if (error) throw new Error(error.message);
+  const rows = (data as any[]) || [];
+  if (!rows.length) return 0;
+  const last = String(rows[rows.length - 1].created_at);
+
+  const uids = [...new Set(rows.map((r) => r.user_id).filter(Boolean))];
+  const testU = new Set<string>();
+  if (uids.length) {
+    const { data: ps } = await sb.from("profiles").select("id, email").in("id", uids);
+    for (const p of (ps as any[]) || []) if (isTestEmail(p.email)) testU.add(String(p.id));
+  }
+  const oids = [...new Set(rows.map((r) => r.order_id).filter(Boolean))];
+  const ordNo = new Map<string, string>();
+  if (oids.length) {
+    const { data: os } = await sb.from("orders").select("id, order_number, user_id").in("id", oids);
+    for (const o of (os as any[]) || []) { ordNo.set(String(o.id), `YH${o.order_number}`); if (o.user_id && testU.has(String(o.user_id))) testU.add(`o:${o.id}`); }
+  }
+  const real = rows.filter((r) => !/REGRESYON/i.test(String(r.message || "")) && !(r.user_id && testU.has(String(r.user_id))) && !(r.order_id && testU.has(`o:${r.order_id}`)));
+  if (!real.length) { await setState(sb, "site_error_since", last); return 0; }
+
+  const groups = new Map<string, { kind: string; message: string; n: number; paths: Set<string>; orders: Map<string, string> }>();
+  for (const r of real) {
+    const k = `${r.kind}|${String(r.message || "").slice(0, 120)}`;
+    const g = groups.get(k) ?? { kind: String(r.kind), message: String(r.message || ""), n: 0, paths: new Set<string>(), orders: new Map<string, string>() };
+    g.n++;
+    if (r.path) g.paths.add(String(r.path));
+    if (r.order_id && ordNo.has(String(r.order_id))) g.orders.set(String(r.order_id), ordNo.get(String(r.order_id))!);
+    groups.set(k, g);
+  }
+  const list = [...groups.values()];
+  const lines = list.slice(0, 12).map((g) => {
+    const where = [...g.paths].slice(0, 3).map((p) => esc(p)).join(", ");
+    const ords = [...g.orders].slice(0, 3).map(([id, no]) => `<a href="${STORE_URL()}/admin/orders?id=${id}">${esc(no)}</a>`).join(", ");
+    return `• <b>${esc(SITE_ERROR_LABEL[g.kind] ?? g.kind)}</b>${g.n > 1 ? ` ×${g.n}` : ""}\n   ${short(g.message, 200)}${where || ords ? `\n   ${[where, ords].filter(Boolean).join(" · ")}` : ""}`;
+  });
+  const text = [`🧯 <b>Site hatası — ${real.length} kayıt</b>`, "", ...lines,
+    ...(list.length > 12 ? [`… ve ${list.length - 12} farklı hata daha`] : []),
+    "", `<a href="${STORE_URL()}/admin/system#musteri-hatalari">Sistem ekranında aç</a>`].join("\n");
+  await sendDirect(sb, cfg, "site_error", text);
+  await setState(sb, "site_error_since", last);
+  return 1;
+}
+
+// "Sipariş gelmiyor" alarmı: hata vermeden bozulan ödeme adımını yakalar. Gündüz (10:00–23:00 İstanbul) son 4 saatte
+// site siparişi yokken bu sürede en az 3 ziyaretçi ödeme adımına geldiyse (analytics_events checkout_step) uyarı;
+// 10 dk'da bir bakılır, sipariş gelene kadar en çok 4 saatte bir hatırlatır. Ziyaretçi azsa (staging) çalmaz.
+export const NO_ORDER_HOURS = 4;
+export const NO_ORDER_MIN_SESSIONS = 3;
+async function maybeNoOrderAlarm(sb: SB, cfg: TelegramConfig): Promise<number> {
+  const now = new Date();
+  if (now.getUTCMinutes() % 10 !== 0) return 0;
+  const hour = Number(new Intl.DateTimeFormat("en-GB", { hour: "2-digit", hourCycle: "h23", timeZone: "Europe/Istanbul" }).format(now));
+  if (hour < 10 || hour >= 23) return 0;
+  const winMs = NO_ORDER_HOURS * 3600_000;
+  const { data: lastO } = await sb.from("orders").select("created_at").or("channel.is.null,channel.eq.site").is("import_source", null)
+    .order("created_at", { ascending: false }).limit(1).maybeSingle();
+  const lastAt = lastO?.created_at ? new Date(lastO.created_at).getTime() : 0;
+  if (lastAt > now.getTime() - winMs) { await sb.from("telegram_state").delete().eq("key", "no_order_alert_at"); return 0; }
+  const prev = await getState(sb, "no_order_alert_at");
+  if (prev && now.getTime() - new Date(prev).getTime() < winMs) return 0;
+  const { data: ev } = await sb.from("analytics_events").select("session_id").eq("event_type", "checkout_step")
+    .gt("created_at", new Date(now.getTime() - winMs).toISOString()).limit(1000);
+  const sessions = new Set(((ev as any[]) || []).map((e) => e.session_id)).size;
+  if (sessions < NO_ORDER_MIN_SESSIONS) return 0;
+  const lastTxt = lastAt ? new Date(lastAt).toLocaleString("tr-TR", { timeZone: "Europe/Istanbul", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—";
+  const text = [`🛒 <b>${NO_ORDER_HOURS} saattir site siparişi yok</b>`,
+    `Bu sürede ${sessions} ziyaretçi ödeme adımına geldi ama sipariş oluşmadı. Ödeme adımı hata vermeden bozulmuş olabilir.`,
+    `→ Kendin dene: siteden havale ile bir sipariş ver, sonra iptal et.`,
+    `Son site siparişi: ${esc(lastTxt)}`].join("\n");
+  await sendDirect(sb, cfg, "site_error", text);
+  await setState(sb, "no_order_alert_at", now.toISOString());
+  return 1;
 }
 
 // ─── Güvenlik: yönetici hesapları (kullanıcı 2026-11-14) ───────────────────
@@ -615,6 +706,10 @@ export async function processTelegramOutbox(sb: SB = createAdminClient()): Promi
   if (on(cfg, "integration_error")) {
     try { out.sent += await scanIntegrationErrors(sb, cfg); } catch (e: any) { out.errors.push(`entegrasyon hatası taraması: ${e?.message || e}`); }
   } else await sb.from("telegram_state").delete().eq("key", "integration_error_since"); // tekrar açılınca eski hatalar gelmesin
+  if (on(cfg, "site_error")) {
+    try { out.sent += await scanSiteErrors(sb, cfg); } catch (e: any) { out.errors.push(`site hatası taraması: ${e?.message || e}`); }
+    try { out.sent += await maybeNoOrderAlarm(sb, cfg); } catch (e: any) { out.errors.push(`sipariş alarmı: ${e?.message || e}`); }
+  } else await sb.from("telegram_state").delete().eq("key", "site_error_since"); // tekrar açılınca eski hatalar gelmesin
   if (on(cfg, "daily_summary")) {
     try { out.sent += await maybeDailySummary(sb, cfg); } catch (e: any) { out.errors.push(`günlük özet: ${e?.message || e}`); }
   }

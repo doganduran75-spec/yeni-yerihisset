@@ -8,7 +8,7 @@ import { rateLimited, clientIp } from "@/lib/rate-limit";
 // Müşterinin karşılaştığı hatayı kaydet (pano › Sistem › "Hata alan müşteriler").
 // Kişisel veri YOK: tür, kısa mesaj, sayfa yolu; oturum varsa üye kimliği. Çerez onayından bağımsızdır
 // (hizmetin çalışması için gerekli hata kaydı). Kötüye kullanıma karşı IP başına sınırlı, sessiz.
-const KINDS = new Set(["checkout", "stock", "after_sale", "other"]);
+const KINDS = new Set(["checkout", "stock", "after_sale", "crash", "other"]); // crash: src/lib/report-crash.ts (sayfa çöktü)
 
 export async function POST(req: NextRequest) {
   if (rateLimited("client-error", clientIp(req), 30, 600000)) return NextResponse.json({ ok: true });

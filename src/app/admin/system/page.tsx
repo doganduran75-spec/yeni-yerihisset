@@ -14,7 +14,7 @@ import { ShieldAlert, KeyRound, UserX, Server, Plug, DatabaseBackup, Mail } from
 // SİSTEM — panodaki şeridin ayrıntısı: sunucu, entegrasyon, yedek, saldırı, yetkisiz giriş,
 // hata alan müşteriler. Veri: /api/admin/system-status (+ mevcut sağlık / yedek / senkron kartları).
 const t = (iso: string) => new Date(iso).toLocaleString("tr-TR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
-const KIND: Record<string, string> = { checkout: "Ödeme sayfası", stock: "Stok", payment_failed: "Kart ödemesi başarısız", after_sale: "Değişim / iade", other: "Diğer" };
+const KIND: Record<string, string> = { checkout: "Ödeme sayfası", stock: "Stok", payment_failed: "Kart ödemesi başarısız", payment_unmatched: "Ödeme siparişle eşleşmedi", crash: "Sayfa çöktü", server: "Sunucu hatası", after_sale: "Değişim / iade", other: "Diğer" };
 
 function Section({ id, icon, title, children }: { id: string; icon: React.ReactNode; title: string; children: React.ReactNode }) {
   return (
