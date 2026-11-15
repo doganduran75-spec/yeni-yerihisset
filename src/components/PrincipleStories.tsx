@@ -121,7 +121,7 @@ export default function PrincipleStories() {
   const fullImg = it.imageTall || it.image;
 
   return (
-    <div className={`md:hidden fixed inset-0 z-[70] flex flex-col ${full && phase === "story" ? "bg-black" : "bg-[#F4EFE6]"}`} role="dialog" aria-modal="true" aria-label="Barefoot nedir?"
+    <div className={`md:hidden fixed inset-0 z-[70] flex flex-col bg-[#F4EFE6]`} role="dialog" aria-modal="true" aria-label="Barefoot nedir?"
       style={{ fontFamily: "var(--font-jakarta), system-ui, sans-serif" }}>
       {/* Tam ekran: görsel arkada, alt yarıda okunurluk için koyu geçiş */}
       {full && phase === "story" && (
@@ -129,28 +129,34 @@ export default function PrincipleStories() {
           {fullImg && <img key={fullImg} src={fullImg} alt={it.title} draggable={false} className="absolute inset-0 w-full h-full object-cover pointer-events-none" />}
           {/* sonraki görseller önceden yüklensin (kısa sürelerde boş ekran olmasın) */}
           {items.map((x) => { const u = x.imageTall || x.image; return u && u !== fullImg ? <img key={`pre-${u}`} src={u} alt="" aria-hidden className="hidden" /> : null; })}
-          <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-black/45 to-transparent pointer-events-none" />
-          <div className="absolute inset-x-0 bottom-0 h-[55%] bg-gradient-to-t from-black/80 via-black/40 to-transparent pointer-events-none" />
+          {/* Açık krem geçiş: koyu yazı her görselde okunur (kullanıcı 2026-11-15: beyaz yazı yerine) */}
+          <div className="absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-[#F4EFE6]/95 via-[#F4EFE6]/60 to-transparent pointer-events-none" />
+          <div className="absolute inset-x-0 bottom-0 h-[55%] bg-gradient-to-t from-[#F4EFE6] via-[#F4EFE6]/85 to-transparent pointer-events-none" />
         </div>
       )}
       {/* İlerleme çubukları */}
       <div className="relative flex gap-1.5 px-3 pointer-events-none" style={{ paddingTop: "calc(env(safe-area-inset-top) + 10px)" }}>
         {items.map((x, i) => (
-          <div key={x.title} className={`h-[3px] flex-1 rounded-full overflow-hidden ${full && phase === "story" ? "bg-white/35" : "bg-black/10"}`}>
+          <div key={x.title} className={`h-[3px] flex-1 rounded-full overflow-hidden bg-black/10`}>
             <div className="h-full rounded-full" style={{ background: ORANGE, width: `${(phase === "choose" || i < idx ? 1 : i === idx ? progress : 0) * 100}%` }} />
           </div>
         ))}
       </div>
       <div className="relative flex items-center justify-between px-4 pt-3">
-        <span className={`text-[13px] font-bold ${full && phase === "story" ? "text-white" : "text-[#3F6D14]"}`}>YeriHisset · Barefoot nedir?</span>
-        <button type="button" aria-label="Kapat" onClick={() => close("x")} className={`p-1 ${full && phase === "story" ? "text-white" : "text-slate-600"}`}><X size={24} /></button>
+        {full && phase === "story" ? (
+          // Tam ekran: üstte büyük "BAREFOOT NEDİR?" (panelde "Üst yazı"); marka satırı yok (kullanıcı 2026-11-15)
+          <span className="text-[26px] leading-none font-black tracking-tight text-[#3F6D14]" style={{ fontFamily: "var(--font-epilogue), system-ui, sans-serif" }}>{P.eyebrow}</span>
+        ) : (
+          <span className="text-[13px] font-bold text-[#3F6D14]">YeriHisset · Barefoot nedir?</span>
+        )}
+        <button type="button" aria-label="Kapat" onClick={() => close("x")} className="p-1 text-slate-600"><X size={24} /></button>
       </div>
 
       {full && phase === "story" ? (
         <div className="relative flex-1 min-h-0 flex flex-col justify-end px-6 pb-5 pointer-events-none">
           <p className="text-[13px] font-bold tracking-wide" style={{ color: ORANGE }}>{idx + 1} / {items.length}</p>
-          <h2 className="mt-1 text-[32px] leading-tight font-black text-white drop-shadow" style={{ fontFamily: "var(--font-epilogue), system-ui, sans-serif" }}>{it.title}</h2>
-          <p className="mt-2 text-[17px] leading-snug text-white/90 drop-shadow">{it.text}</p>
+          <h2 className="mt-1 text-[32px] leading-tight font-black text-[#1C1C19]" style={{ fontFamily: "var(--font-epilogue), system-ui, sans-serif" }}>{it.title}</h2>
+          <p className="mt-2 text-[17px] leading-snug text-[#42493A]">{it.text}</p>
         </div>
       ) : phase === "story" ? (
         <div className="flex-1 min-h-0 flex flex-col select-none touch-manipulation"

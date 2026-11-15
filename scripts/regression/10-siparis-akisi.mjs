@@ -1103,6 +1103,7 @@ export default {
           "Ana sayfa prensip görseli panelden yüklenebiliyor (yalnız görsel, en çok 5 MB)", "yükleme düğmesi eksik");
         const ps = rd("src/components/PrincipleStories.tsx"), hcf = rd("src/config/homeContent.ts");
         ok(/storyFullscreen: false/.test(hcf) && (hcf.match(/imageTall: ""/g) || []).length === 5 && /const full = !!P\.storyFullscreen/.test(ps) && /it\.imageTall \|\| it\.image/.test(ps)
+          && /text-\[26px\][^\n]*>\{P\.eyebrow\}</.test(ps) && !/text-white drop-shadow/.test(ps) && /from-\[#F4EFE6\] via-\[#F4EFE6\]\/85/.test(ps)
           && /k === "image" \|\| k === "imageTall"/.test(hct),
           "Hikâye tam ekran seçeneği (varsayılan kapalı; dik görsel, yoksa yatay görsel kırpılır; panelden yüklenir)", "tam ekran hikâye eksik");
       });
