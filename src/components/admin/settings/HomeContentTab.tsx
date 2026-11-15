@@ -21,6 +21,7 @@ const SECTION: Record<string, string> = {
   sizeFinder: "Doğru numarayı bul (mobil)", footer: "Alt bilgi (masaüstü ana sayfa)",
 };
 const LABEL: Record<string, string> = {
+  storyFullscreen: "Hikâye tam ekran (görsel tüm ekranı kaplar, yazı üstünde)", imageTall: "Tam ekran hikâye için dik görsel (1080×1920; boşsa üstteki görsel kırpılır)",
   badge: "Rozet (masaüstü)", question: "Soru", subtitleDesktop: "Alt yazı (masaüstü)", subtitleMobile: "Alt yazı (mobil)",
   promptMobile: "Mobil soru", continueLink: "\"Ana sayfaya devam\" bağlantısı", learn: "Rehber kartı", shop: "Mağaza kartı",
   pill: "Etiket", pillMobile: "Etiket (mobil)", title: "Başlık", titleMobile: "Başlık (mobil)", body: "Açıklama", cta: "Düğme yazısı",
@@ -53,7 +54,7 @@ function Field({ k, value, onChange }: { k: string; value: any; onChange: (v: an
   }
   if (k === "icon") return null; // simge seçimi tasarımla ilgili; panelde değişmez
   // Görsel adresi: kutu + "Yükle" düğmesi + küçük önizleme (2026-11-15)
-  if (k === "image") return (<div className="space-y-1"><label className="text-xs font-medium text-slate-600">{lbl(k)}</label><ImageUploadInput value={String(value ?? "")} onChange={onChange} /></div>);
+  if (k === "image" || k === "imageTall") return (<div className="space-y-1"><label className="text-xs font-medium text-slate-600">{lbl(k)}</label><ImageUploadInput value={String(value ?? "")} onChange={onChange} /></div>);
   const long = String(value).length > 70;
   return (
     <div className="space-y-1">

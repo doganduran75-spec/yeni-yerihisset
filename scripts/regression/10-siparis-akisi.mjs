@@ -1101,6 +1101,10 @@ export default {
         const hct = rd("src/components/admin/settings/HomeContentTab.tsx"), up = rd("src/components/admin/settings/ImageUploadInput.tsx");
         ok(/if \(k === "image"\) return [^\n]*<ImageUploadInput /.test(hct) && /storage\.from\("site"\)\.upload\(/.test(up) && /\^image\\\//.test(up) && /5 \* 1024 \* 1024/.test(up),
           "Ana sayfa prensip görseli panelden yüklenebiliyor (yalnız görsel, en çok 5 MB)", "yükleme düğmesi eksik");
+        const ps = rd("src/components/PrincipleStories.tsx"), hcf = rd("src/config/homeContent.ts");
+        ok(/storyFullscreen: false/.test(hcf) && (hcf.match(/imageTall: ""/g) || []).length === 5 && /const full = !!P\.storyFullscreen/.test(ps) && /it\.imageTall \|\| it\.image/.test(ps)
+          && /k === "image" \|\| k === "imageTall"/.test(hct),
+          "Hikâye tam ekran seçeneği (varsayılan kapalı; dik görsel, yoksa yatay görsel kırpılır; panelden yüklenir)", "tam ekran hikâye eksik");
       });
 
       await part("Eski site adresleri yeni sayfalara yönleniyor (301)", async () => {

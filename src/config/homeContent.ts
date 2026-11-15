@@ -15,18 +15,20 @@ export const homeContent = {
   // Ana sayfanın üstünde kaydırılabilir kartlar (mobilde ekranın ~1/3'ü) + telefonda ilk ziyarette tam ekran
   // "hikâye" (Instagram story gibi, turuncu ilerleme çubuğu). Sağlık iddiası yok; görseller çizim/illüstrasyon.
   // image: /principles/... (sitede) ya da tam adres; seconds: hikâyede kaç saniye kalsın; show: false → gizli.
+  // imageTall: tam ekran hikâyede kullanılacak dik görsel (1080×1920); boşsa yatay görsel ekranı kaplayacak şekilde kırpılır.
   principles: {
     enabled: true,          // ana sayfadaki kaydırılabilir kartlar
     storiesEnabled: true,   // telefonda ilk ziyarette tam ekran hikâye
+    storyFullscreen: false, // hikâyede görsel tüm ekranı kaplasın, yazı üstünde (dik görsel 1080×1920: imageTall)
     eyebrow: "BAREFOOT NEDİR?",
     shopButton: "Alışverişe geç",
     replayLink: "Barefoot nedir? İzle",
     items: [
-      { title: "Geniş parmak alanı", text: "Burun kısmı geniş; parmaklar sıkışmadan doğal hâliyle yayılır.", image: "/principles/1-genis-parmak.svg", seconds: 4, show: true },
-      { title: "Sıfır topuk farkı", text: "Topuk ile parmak ucu aynı hizada; ayak düz basar.", image: "/principles/2-sifir-topuk.svg", seconds: 4, show: true },
-      { title: "Esnek taban", text: "Taban ayağınla birlikte bükülür, her adıma eşlik eder.", image: "/principles/3-esnek-taban.svg", seconds: 4, show: true },
-      { title: "İnce taban", text: "Zemini hissedersin — adı üstünde: yeri hisset.", image: "/principles/4-ince-taban.svg", seconds: 4, show: true },
-      { title: "Hafiflik", text: "Ayağında yük değil; gün boyu hafif adımlar.", image: "/principles/5-hafiflik.svg", seconds: 4, show: true },
+      { title: "Geniş parmak alanı", text: "Burun kısmı geniş; parmaklar sıkışmadan doğal hâliyle yayılır.", image: "/principles/1-genis-parmak.svg", imageTall: "", seconds: 4, show: true },
+      { title: "Sıfır topuk farkı", text: "Topuk ile parmak ucu aynı hizada; ayak düz basar.", image: "/principles/2-sifir-topuk.svg", imageTall: "", seconds: 4, show: true },
+      { title: "Esnek taban", text: "Taban ayağınla birlikte bükülür, her adıma eşlik eder.", image: "/principles/3-esnek-taban.svg", imageTall: "", seconds: 4, show: true },
+      { title: "İnce taban", text: "Zemini hissedersin — adı üstünde: yeri hisset.", image: "/principles/4-ince-taban.svg", imageTall: "", seconds: 4, show: true },
+      { title: "Hafiflik", text: "Ayağında yük değil; gün boyu hafif adımlar.", image: "/principles/5-hafiflik.svg", imageTall: "", seconds: 4, show: true },
     ],
   },
 

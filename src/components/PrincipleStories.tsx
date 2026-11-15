@@ -104,24 +104,55 @@ export default function PrincipleStories() {
 
   if (!open || items.length === 0) return null;
   const it = items[idx];
+  // TAM EKRAN (kullanıcı 2026-11-15, Ayarlar › Ana Sayfa › "Hikâye tam ekran"): görsel bütün ekranı kaplar (dik görsel
+  // imageTall, yoksa yatay görsel kırpılır), yazı görselin üstünde; çubuklar / başlık / düğme görselin üstünde.
+  const full = !!P.storyFullscreen;
+  const tap = {
+    onPointerDown: () => { downAt.current = Date.now(); setPaused(true); },
+    onPointerUp: (e: React.PointerEvent) => {
+      const held = Date.now() - downAt.current;
+      setPaused(false);
+      if (held >= HOLD_MS) return;
+      if (e.clientX / window.innerWidth < 0.3) prev(); else next();
+    },
+    onPointerCancel: () => setPaused(false),
+    onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
+  };
+  const fullImg = it.imageTall || it.image;
 
   return (
-    <div className="md:hidden fixed inset-0 z-[70] flex flex-col bg-[#F4EFE6]" role="dialog" aria-modal="true" aria-label="Barefoot nedir?"
+    <div className={`md:hidden fixed inset-0 z-[70] flex flex-col ${full && phase === "story" ? "bg-black" : "bg-[#F4EFE6]"}`} role="dialog" aria-modal="true" aria-label="Barefoot nedir?"
       style={{ fontFamily: "var(--font-jakarta), system-ui, sans-serif" }}>
+      {/* Tam ekran: görsel arkada, alt yarıda okunurluk için koyu geçiş */}
+      {full && phase === "story" && (
+        <div className="absolute inset-0 select-none touch-manipulation" {...tap}>
+          {fullImg && <img key={fullImg} src={fullImg} alt={it.title} draggable={false} className="absolute inset-0 w-full h-full object-cover pointer-events-none" />}
+          {/* sonraki görseller önceden yüklensin (kısa sürelerde boş ekran olmasın) */}
+          {items.map((x) => { const u = x.imageTall || x.image; return u && u !== fullImg ? <img key={`pre-${u}`} src={u} alt="" aria-hidden className="hidden" /> : null; })}
+          <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-black/45 to-transparent pointer-events-none" />
+          <div className="absolute inset-x-0 bottom-0 h-[55%] bg-gradient-to-t from-black/80 via-black/40 to-transparent pointer-events-none" />
+        </div>
+      )}
       {/* İlerleme çubukları */}
-      <div className="flex gap-1.5 px-3" style={{ paddingTop: "calc(env(safe-area-inset-top) + 10px)" }}>
+      <div className="relative flex gap-1.5 px-3 pointer-events-none" style={{ paddingTop: "calc(env(safe-area-inset-top) + 10px)" }}>
         {items.map((x, i) => (
-          <div key={x.title} className="h-[3px] flex-1 rounded-full overflow-hidden bg-black/10">
+          <div key={x.title} className={`h-[3px] flex-1 rounded-full overflow-hidden ${full && phase === "story" ? "bg-white/35" : "bg-black/10"}`}>
             <div className="h-full rounded-full" style={{ background: ORANGE, width: `${(phase === "choose" || i < idx ? 1 : i === idx ? progress : 0) * 100}%` }} />
           </div>
         ))}
       </div>
-      <div className="flex items-center justify-between px-4 pt-3">
-        <span className="text-[13px] font-bold text-[#3F6D14]">YeriHisset · Barefoot nedir?</span>
-        <button type="button" aria-label="Kapat" onClick={() => close("x")} className="p-1 text-slate-600"><X size={24} /></button>
+      <div className="relative flex items-center justify-between px-4 pt-3">
+        <span className={`text-[13px] font-bold ${full && phase === "story" ? "text-white" : "text-[#3F6D14]"}`}>YeriHisset · Barefoot nedir?</span>
+        <button type="button" aria-label="Kapat" onClick={() => close("x")} className={`p-1 ${full && phase === "story" ? "text-white" : "text-slate-600"}`}><X size={24} /></button>
       </div>
 
-      {phase === "story" ? (
+      {full && phase === "story" ? (
+        <div className="relative flex-1 min-h-0 flex flex-col justify-end px-6 pb-5 pointer-events-none">
+          <p className="text-[13px] font-bold tracking-wide" style={{ color: ORANGE }}>{idx + 1} / {items.length}</p>
+          <h2 className="mt-1 text-[32px] leading-tight font-black text-white drop-shadow" style={{ fontFamily: "var(--font-epilogue), system-ui, sans-serif" }}>{it.title}</h2>
+          <p className="mt-2 text-[17px] leading-snug text-white/90 drop-shadow">{it.text}</p>
+        </div>
+      ) : phase === "story" ? (
         <div className="flex-1 min-h-0 flex flex-col select-none touch-manipulation"
           onPointerDown={() => { downAt.current = Date.now(); setPaused(true); }}
           onPointerUp={(e) => {
@@ -153,7 +184,7 @@ export default function PrincipleStories() {
 
       {/* Alt menü yüksekliğinde "Alışverişe geç" */}
       {phase === "story" && (
-        <div className="px-4 pt-2 bg-[#F4EFE6]" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
+        <div className={`relative px-4 pt-2 ${full ? "" : "bg-[#F4EFE6]"}`} style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
           <button type="button" onClick={shop}
             className="w-full h-16 rounded-2xl text-white text-[17px] font-bold active:scale-[0.99] transition-transform" style={{ background: "#3F6D14" }}>
             {P.shopButton}
