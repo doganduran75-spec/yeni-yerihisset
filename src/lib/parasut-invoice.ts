@@ -15,6 +15,7 @@ import { parasutCall, parasutConfig, ParasutError } from "@/lib/parasut";
 import { pushInvoiceToMarketplace } from "@/lib/marketplace-invoice";
 import { sendInvoiceEmail } from "@/lib/invoice-mail";
 import { isTestOrder } from "@/lib/notifications";
+import { autoInvoiceHere } from "@/lib/order-next-step";
 
 type Sb = ReturnType<typeof createAdminClient>;
 const MARKETPLACES = ["trendyol", "hepsiburada", "amazon"];
@@ -439,8 +440,8 @@ async function createRefundBill(sb: Sb, x: { no: string; contactId: string; cate
  *  ve sipariş ekranında "Paraşüt — yeniden dene" görünür. Hata fırlatmaz (çağıran beklemek zorunda değil). */
 export async function autoInvoiceSiteOrder(sb: Sb, orderId: string, why: string): Promise<{ status: string; error?: string }> {
   try {
-    const { data: o } = await (sb as any).from("orders").select("channel, import_source, status, payment_status, invoice_status, parasut_status, user_id").eq("id", orderId).maybeSingle();
-    if (!o || (o.channel || "site") !== "site" || o.import_source || o.status === "cancelled") return { status: "skipped" };
+    const { data: o } = await (sb as any).from("orders").select("channel, import_source, created_at, status, payment_status, invoice_status, parasut_status, user_id").eq("id", orderId).maybeSingle();
+    if (!o || !autoInvoiceHere(o) || o.status === "cancelled") return { status: "skipped" };
     // Regresyon test siparişi (@….test üye): Paraşüt'te GERÇEK fatura kesilmesin
     if (await isTestOrder(sb, o.user_id)) return { status: "test" };
     if ((o.invoice_status || "pending") !== "pending" || o.parasut_status === "done" || !["paid", "partial_refund"].includes(o.payment_status)) return { status: "skipped" };
@@ -454,6 +455,14 @@ export async function autoInvoiceSiteOrder(sb: Sb, orderId: string, why: string)
     try { await save(sb, orderId, { parasut_status: "error", parasut_error: msg.slice(0, 500) }); } catch { /* yut */ }
     return { status: "error", error: msg };
   }
+}
+
+/** Etiket basılınca: tetikleyici (MIG 20261165) siparişi "Kargo hazırlandı" yaptıysa faturayı da kes (ship-flow "Paket hazır"
+ *  ile aynı sonuç; kullanıcı 2026-11-15). Kargo hazırlanmadıysa (kod entegrasyonun değil, ödeme yok…) hiçbir şey yapmaz. */
+export async function invoiceIfPacked(sb: Sb, orderId: string, why: string): Promise<{ status: string; error?: string }> {
+  const { data: o } = await (sb as any).from("orders").select("packed_at").eq("id", orderId).maybeSingle();
+  if (!o?.packed_at) return { status: "not_packed" };
+  return autoInvoiceSiteOrder(sb, orderId, why);
 }
 
 /** e-belge işini ve PDF'i takip et (cron + "Şimdi sorgula") */

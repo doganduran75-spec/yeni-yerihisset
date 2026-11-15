@@ -101,6 +101,13 @@ export function isReturnInvoiceDue(s: NextStep) {
   return s.needsAction && s.actions.length > 0 && s.actions.every((a) => a.key === "return_invoice" || a.key === "return_invoice_parasut");
 }
 
+/** "Paket hazır"da fatura kendiliğinden kesilir mi: bu sistemde açılan site siparişi ya da Paraşüt'e geçişten (UNINVOICED_SINCE)
+ *  sonraki eski site siparişi (kullanıcı 2026-11-15: aktarılan YH siparişi paketlenince faturasız kalıyordu). Pazaryeri hariç. */
+export function autoInvoiceHere(o: { channel?: string | null; import_source?: string | null; created_at?: string | null }) {
+  if (o.import_source) return String(o.created_at || "") >= UNINVOICED_SINCE;
+  return (o.channel || "site") === "site";
+}
+
 /** Kargolanmış, satış faturası kesilmemiş — panodaki "Faturası kesilmemiş" satırı (panodaki sayım sorgusuyla AYNI koşul) */
 export function isUninvoicedShipped(o: any) {
   return o?.status !== "cancelled" && ["paid", "partial_refund"].includes(o?.payment_status)
@@ -270,8 +277,8 @@ function coreNextStep(o: OrderLike): NextStep {
     // Paket hazır → kurye bekleniyor (müşteriye e-posta "Kurye aldı"da gider; listede toplu düğme)
     if (o.packed_at) {
       // Fatura sevkiyatta (C2, 2026-11-14): paket hazır anında kendiliğinden kesilir; kesilmediyse (Paraşüt kapalı / hata)
-      // burada iş olarak görünür. Eski siteden aktarılan sipariş hariç (eski akış).
-      if (!o.import_source && inv === "pending") {
+      // burada iş olarak görünür. Eski siteden aktarılan sipariş: Paraşüt'e geçişten sonrakiler dahil (autoInvoiceHere).
+      if (autoInvoiceHere(o) && inv === "pending") {
         return { stage: "Paket hazır — fatura kesilecek", hint: "Fatura paket hazır anında kendiliğinden kesilir; kesilmediyse (Paraşüt kapalı / hata) kes ya da Paraşüt'te kesip “Fatura kesildi” de. PDF “Kargoya verildi” e-postasının ekinde gider.",
           actions: [...invoiceActs, { key: "picked_up", label: "Kurye aldı", kind: "primary" }, { key: "cancel", label: "Siparişi iptal et + para iadesi", kind: "danger" }], needsAction: true };
       }

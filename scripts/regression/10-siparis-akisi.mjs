@@ -2190,13 +2190,35 @@ export default {
         ok(Number(ds.json?.hbDesi) >= 1 && dbad.status === 400, "Hepsiburada paket desisi ayarı okunuyor, geçersiz değer reddediliyor", `${why(ds)} / ${why(dbad)}`);
         const k2 = await flow(F.admin.token, { op: "picked_up", ids: [id] });
         ok(k2.status === 200 && !(k2.json?.shipped || []).includes(id), "Kurye aldı ikinci kez: tekrar işlenmiyor (e-posta bir kez)", why(k2));
-        // Eski siteden aktarılan sipariş (attipas kanalı) de paketlenip kuryeye verilebiliyor; paketlemede fatura denenmiyor
+        // Eski siteden aktarılan sipariş (attipas kanalı) de paketlenip kuryeye verilebiliyor. Fatura (kullanıcı 2026-11-15):
+        // Paraşüt'e geçişten (UNINVOICED_SINCE) sonraki aktarılmış siparişte paket hazır anında kesilir, öncekinde denenmez
         const r2 = await order([MAIN(1)]);
         const im = r2.json?.orderId;
         if (!im) return add("fail", "Aktarılmış sipariş testi için sipariş oluşturulamadı", why(r2));
         sql(`UPDATE public.orders SET import_source = 'woocommerce', channel = 'attipas', payment_status = 'paid', status = 'processing', shipment_status = 'preparing' WHERE id = ${lit(im)}`);
         const ip = await flow(F.admin.token, { op: "packed", orderId: im });
-        ok(ip.status === 200 && !!ord(im).packed_at && !ip.json?.invoice, "Aktarılmış sipariş 'Paket hazır' olabiliyor (fatura otomatik denenmiyor)", why(ip));
+        ok(ip.status === 200 && !!ord(im).packed_at && ip.json?.invoice?.status === "test", "Aktarılmış yeni sipariş 'Paket hazır' olabiliyor ve faturası o an kesiliyor (test siparişi Paraşüt'e gitmez)", why(ip));
+        {
+          let nx = null;
+          try { nx = await import(new URL("../../src/lib/order-next-step.ts", import.meta.url)); } catch { /* eski Node */ }
+          if (nx) {
+            const neu = nx.autoInvoiceHere({ channel: "attipas", import_source: "woocommerce", created_at: "2026-11-15T10:00:00Z" });
+            const old = nx.autoInvoiceHere({ channel: "site", import_source: "woocommerce", created_at: "2026-09-01T10:00:00Z" });
+            const mp = nx.autoInvoiceHere({ channel: "trendyol", created_at: "2026-11-15T10:00:00Z" });
+            ok(neu && !old && !mp && nx.autoInvoiceHere({ channel: "site" }), "Paket hazır faturası: site + Paraşüt sonrası aktarılan sipariş evet; eski aktarılan ve pazaryeri hayır", `${neu}/${old}/${mp}`);
+          }
+          // Basit Kargo / toplu etiket basılınca ("Kargo hazırlandı" tetikleyicisi) fatura da kesiliyor — kod sunucuda kaydedilir
+          const fs = await import("node:fs");
+          const bl = fs.readFileSync(new URL("../../src/lib/basit-label-print.ts", import.meta.url), "utf8");
+          const lr = fs.readFileSync(new URL("../../src/app/api/admin/orders/labels/route.ts", import.meta.url), "utf8");
+          ok(/op: "label_printed"/.test(bl) && !/\.update\(\{ label_printed_code/.test(bl) && /invoiceIfPacked\(sb, id, "etiket basıldı"\)/.test(lr),
+            "Etiket basılınca kargo hazırlanan site siparişinin faturası da kesiliyor", "basit-label-print / labels route");
+        }
+        const lp0 = await flow(F.member.token, { op: "label_printed", orderId: im, code: "RGT1" });
+        ok(lp0.status === 403, "Üye etiket basıldı işaretleyemiyor", why(lp0));
+        const lp = await flow(F.admin.token, { op: "label_printed", orderId: im, code: "RGT1" });
+        ok(lp.status === 200 && one(`SELECT label_printed_code FROM public.orders WHERE id = ${lit(im)}`) === "RGT1" && lp.json?.invoice?.status === "test",
+          "Etiket basıldı (Basit Kargo): kod kaydediliyor, kargo hazırsa fatura deneniyor", why(lp));
         const ik = await flow(F.admin.token, { op: "picked_up", ids: [im] });
         ok(ik.status === 200 && (ik.json?.shipped || []).includes(im) && ord(im).shipment_status === "shipped", "Aktarılmış sipariş: kurye aldı → kargoda", why(ik));
       });

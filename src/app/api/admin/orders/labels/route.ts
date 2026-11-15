@@ -3,7 +3,8 @@
 //   POST { ids: string[], mark?: true }  → etiket satırları; mark → yazdırılan kod kaydedilir (label_printed_code)
 //   POST { size: "a5" | "100x150" }       → kâğıt boyutu ayarı  ·  POST { getSize: true } → mevcut boyut
 // Etiket her seferinde siparişin GÜNCEL kargo kodundan üretilir; kodu olmayan sipariş atlanır (sebebiyle döner).
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
+import { invoiceIfPacked } from "@/lib/parasut-invoice";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { getAuthUserFromRequest } from "@/lib/auth-from-request";
 import { orderLabel } from "@/lib/order-label";
@@ -43,7 +44,7 @@ export async function POST(req: NextRequest) {
   const [{ data: st }, { data: orders, error }] = await Promise.all([
     sb.from("settings").select("store_name, address, contact_phone, label_size").limit(1).maybeSingle(),
     sb.from("orders")
-      .select("id, order_number, channel, external_order_number, created_at, shipping_address, customer_name, customer_phone, cargo_provider, cargo_tracking_number, kargonomi_tracking_code, shipping_method, status, shipment_status, order_items(quantity, sku, variant_name, size_label, title, products(title)), profiles(first_name, last_name, phone)")
+      .select("id, order_number, channel, import_source, external_order_number, created_at, shipping_address, customer_name, customer_phone, cargo_provider, cargo_tracking_number, kargonomi_tracking_code, shipping_method, status, shipment_status, order_items(quantity, sku, variant_name, size_label, title, products(title)), profiles(first_name, last_name, phone)")
       .in("id", ids),
   ]);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -83,6 +84,9 @@ export async function POST(req: NextRequest) {
   if (body.mark && labels.length) {
     const now = new Date().toISOString();
     for (const l of labels) await sb.from("orders").update({ label_printed_code: l.code, label_printed_at: now }).eq("id", l.id);
+    // Etiketle "Kargo hazırlandı" olan site siparişinin faturası (kullanıcı 2026-11-15) — yanıtı bekletmesin (Paraşüt yavaş)
+    const ids2 = labels.filter((l) => l.channel === "site" || ((orders as any[]) || []).some((x) => x.id === l.id && x.import_source)).map((l) => l.id);
+    if (ids2.length) after(async () => { for (const id of ids2) await invoiceIfPacked(sb, id, "etiket basıldı"); });
   }
 
   return NextResponse.json({

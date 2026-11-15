@@ -19,7 +19,15 @@ export async function printBasitLabel(orderId: string, code: string | null): Pro
   if (!w) return { ok: false, error: "Açılır pencere engellendi — tarayıcıda bu siteye izin ver." };
   w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Kargo etiketi</title><style>@page{margin:0}body{margin:0;display:flex;justify-content:center}img{max-width:100%;height:auto}</style></head><body><img src="${src}" alt="Kargo etiketi" onload="setTimeout(function(){window.print()},200)"></body></html>`);
   w.document.close();
-  const printedAt = new Date().toISOString();
-  if (code) await (supabase as any).from("orders").update({ label_printed_code: code, label_printed_at: printedAt }).eq("id", orderId);
+  let printedAt = new Date().toISOString();
+  // Kod sunucuda kaydedilir: "Kargo hazırlandı" olursa fatura da o an kesilir (kullanıcı 2026-11-15)
+  if (code) {
+    const m = await fetch("/api/admin/orders/ship-flow", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
+      body: JSON.stringify({ op: "label_printed", orderId, code }),
+    }).then((x) => x.json()).catch(() => null);
+    if (m?.printedAt) printedAt = m.printedAt;
+  }
   return { ok: true, printedAt };
 }

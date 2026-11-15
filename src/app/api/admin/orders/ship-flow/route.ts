@@ -5,14 +5,15 @@
 //                                         Site: "Kargo bekliyor" + fatura da bu anda kesilir (kullanıcı 2026-11-14, C2: fatura
 //                                         sevkiyatta; eskiden müşteri "oldu" deyince). Müşteriye e-posta GİTMEZ (gece
 //                                         paketlenebilir) — fatura PDF'i "Kargoya verildi" e-postasının ekinde gider.
-//   POST { op: "picked_up", ids }       → kurye aldı (site): Kargoda + kargo e-postası (takip numarasıyla) o an.
+//   POST { op: "label_printed", orderId, code } → Basit Kargo etiketi basıldı: kod kaydı + (kargo hazırlandıysa) fatura.
+//   POST { op: "picked_up", ids }     → kurye aldı (site): Kargoda + kargo e-postası (takip numarasıyla) o an.
 //   POST { op: "mp_picking", orderId }  → Trendyol "İşleme al" yeniden dene.
 //   POST { op: "hb_package", orderId }  → Hepsiburada paketlemeyi yeniden dene.
 //   POST { op: "mp_claim", orderId, restock } → Trendyol iadesini onayla + işle (src/lib/marketplace/trendyol-claims.ts).
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { getAuthUserFromRequest } from "@/lib/auth-from-request";
-import { invoiceOrder, autoInvoiceSiteOrder } from "@/lib/parasut-invoice";
+import { invoiceOrder, autoInvoiceSiteOrder, invoiceIfPacked } from "@/lib/parasut-invoice";
 import { parasutConfig } from "@/lib/parasut";
 import { trendyolPicking } from "@/lib/marketplace-invoice";
 import { hbPackageOrder } from "@/lib/marketplace/hb-package";
@@ -63,9 +64,22 @@ export async function POST(req: NextRequest) {
         catch (e: any) { invoice = { status: "error", error: String(e?.message || e) }; }
       } else invoice = { status: "off" };
     }
-    // Site siparişi (bu sistemde açılan): fatura paket hazır anında (Paraşüt kapalı / hata → sipariş ekranında "kes / yeniden dene")
-    if (site && !o.import_source) invoice = await autoInvoiceSiteOrder(sb, orderId, "paket hazır");
+    // Site siparişi (+ Paraşüt'e geçişten sonraki eski site siparişi — autoInvoiceHere): fatura paket hazır anında
+    // (Paraşüt kapalı / hata → sipariş ekranında "kes / yeniden dene")
+    if (site) invoice = await autoInvoiceSiteOrder(sb, orderId, "paket hazır");
     return NextResponse.json({ ok: true, packed_at: o.packed_at || now, invoice, hbPackage });
+  }
+  // Basit Kargo resmî etiketi basıldı (src/lib/basit-label-print.ts): kod kaydedilir → tetikleyici (MIG 20261165) siparişi
+  // "Kargo hazırlandı" yapar → fatura da o an (kullanıcı 2026-11-15: etiketle hazırlanan site siparişi faturasız kalıyordu)
+  if (body.op === "label_printed") {
+    const orderId = String(body.orderId || "");
+    const code = String(body.code || "").trim();
+    if (!orderId || !code) return NextResponse.json({ error: "Eksik bilgi" }, { status: 400 });
+    const printedAt = new Date().toISOString();
+    const { error } = await sb.from("orders").update({ label_printed_code: code, label_printed_at: printedAt }).eq("id", orderId);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    const invoice = await invoiceIfPacked(sb, orderId, "etiket basıldı");
+    return NextResponse.json({ ok: true, printedAt, invoice });
   }
 
   if (body.op === "picked_up") {
