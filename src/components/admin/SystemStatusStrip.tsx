@@ -17,7 +17,7 @@ const ICON = {
   fail: <XCircle size={18} className="text-red-600 shrink-0" />,
 };
 
-export default function SystemStatusStrip({ onData, linkTo = "/admin/system" }: { onData?: (d: SystemStatus) => void; linkTo?: string }) {
+export default function SystemStatusStrip({ onData, linkTo = "/admin/settings?tab=system" }: { onData?: (d: SystemStatus) => void; linkTo?: string }) {
   const [d, setD] = useState<SystemStatus | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [acking, setAcking] = useState<string | null>(null);

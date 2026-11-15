@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import CookiePreferencesLink from "@/components/CookiePreferencesLink";
+import { useSectionFlags } from "@/lib/section-flags-client";
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -42,6 +43,7 @@ function NewsletterForm() {
 }
 
 export default function Footer() {
+  const flags = useSectionFlags(); // Fırsatlar / Bilgi Bankası kapalıysa bağlantı yok (2026-11-15)
   return (
     <footer className="py-24 border-t bg-cream">
       <div className="container mx-auto px-4 grid grid-cols-1 md:grid-cols-4 gap-16">
@@ -66,8 +68,8 @@ export default function Footer() {
             <li><Link href="/barefoot-nedir" className="hover:text-olive-600 transition-colors uppercase">Barefoot Nedir?</Link></li>
             <li><Link href="/hakkimizda" className="hover:text-olive-600 transition-colors uppercase">Hakkımızda</Link></li>
             <li><Link href="/iletisim" className="hover:text-olive-600 transition-colors uppercase">İletişim</Link></li>
-            <li><Link href="/bilgi-bankasi" className="hover:text-olive-600 transition-colors uppercase">Bilgi Bankası</Link></li>
-            <li><Link href="/firsatlar" className="hover:text-olive-600 transition-colors uppercase">Fırsatlar</Link></li>
+            {flags.kb && <li><Link href="/bilgi-bankasi" className="hover:text-olive-600 transition-colors uppercase">Bilgi Bankası</Link></li>}
+            {flags.deals && <li><Link href="/firsatlar" className="hover:text-olive-600 transition-colors uppercase">Fırsatlar</Link></li>}
           </ul>
         </div>
         
@@ -77,7 +79,7 @@ export default function Footer() {
             <li><Link href="/account?tab=orders" className="hover:text-olive-600 transition-colors uppercase">Sipariş Takibi</Link></li>
             <li><Link href="/iade-degisim" className="hover:text-olive-600 transition-colors uppercase">İade ve Değişim</Link></li>
             <li><Link href="/iade-degisim" className="hover:text-olive-600 transition-colors uppercase">Kargo Bilgileri</Link></li>
-            <li><Link href="/bilgi-bankasi" className="hover:text-olive-600 transition-colors uppercase">Sıkça Sorulan Sorular</Link></li>
+            {flags.kb && <li><Link href="/bilgi-bankasi" className="hover:text-olive-600 transition-colors uppercase">Sıkça Sorulan Sorular</Link></li>}
           </ul>
         </div>
         

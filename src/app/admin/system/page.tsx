@@ -54,7 +54,7 @@ export default function SystemPage() {
         <h1 className="text-3xl font-bold tracking-tight">Sistem</h1>
         <p className="text-muted-foreground">Site, entegrasyonlar, yedek ve güvenlik. Yeşilse bakmana gerek yok.</p>
       </div>
-      <SystemStatusStrip onData={setD} linkTo="/admin/system" />
+      <SystemStatusStrip onData={setD} linkTo="/admin/settings?tab=system" />
 
       <Section id="sunucu" icon={<Server size={18} className="text-slate-500" />} title="Site ve sunucu">
         <ServerHealthCard />

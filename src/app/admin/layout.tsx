@@ -7,7 +7,7 @@ export const metadata: Metadata = {
 import { SidebarProvider, Sidebar, SidebarHeader, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarInset, SidebarGroupLabel, SidebarTrigger } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
-import { LayoutDashboard, Settings, Users, ExternalLink, BookOpen, Handshake, MessagesSquare, Link2, Ticket, BellRing, Send, Boxes, Inbox, BarChart3, ShieldCheck, Mail } from "lucide-react";
+import { LayoutDashboard, Settings, Users, ExternalLink, BookOpen, Handshake, MessagesSquare, Link2, Ticket, BellRing, Send, Boxes, Inbox, BarChart3 } from "lucide-react";
 import AdminGuard from "@/components/admin/AdminGuard";
 
 export default function AdminLayout({
@@ -123,17 +123,7 @@ export default function AdminLayout({
                     render={<Link href="/admin/site-content"><BookOpen size={18} className="mr-2" /> Bilgi Bankası</Link>}
                   />
                 </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    render={<Link href="/admin/system"><ShieldCheck size={18} className="mr-2" /> Sistem</Link>}
-                  />
-                </SidebarMenuItem>
-                {/* E-posta denemesi Sistem'de (CRM ile ilgisi yok — kullanıcı 2026-11-06) */}
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    render={<Link href="/admin/crm/email-test"><Mail size={18} className="mr-2" /> E-posta denemesi</Link>}
-                  />
-                </SidebarMenuItem>
+                {/* Sistem + E-posta denemesi + E-posta onayı Ayarlar'ın sekmelerinde (kullanıcı 2026-11-15) */}
                 <SidebarMenuItem>
                   <SidebarMenuButton
                     render={<Link href="/admin/settings"><Settings size={18} className="mr-2" /> Ayarlar</Link>}

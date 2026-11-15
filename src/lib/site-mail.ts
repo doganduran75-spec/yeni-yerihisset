@@ -2,12 +2,12 @@
 // Basit site e-postası: ayarlardaki SMTP + standart şablon (buildEmailDocument). Kilit / test adresi
 // kuralları mail-guard'dan gelir (@….test adreslerine asla gitmez).
 import { createAdminClient } from "./supabase-admin";
-import { createMailTransport } from "./mail-guard";
+import { createMailTransport, TEMPLATE_HEADER } from "./mail-guard";
 import { buildSmtpConfig } from "./smtp-config";
 import { buildEmailDocument, htmlToText } from "./notifications";
 
 export async function sendSiteMail(to: string, subject: string, bodyHtml: string,
-  attachments?: { filename: string; content: Buffer; contentType?: string }[]): Promise<{ status: "sent" | "failed"; error?: string }> {
+  attachments?: { filename: string; content: Buffer; contentType?: string }[], kind?: string): Promise<{ status: "sent" | "failed"; error?: string }> {
   const sb = createAdminClient() as any;
   const { data: st } = await sb.from("settings").select("*").limit(1).maybeSingle();
   const storeName = st?.store_name || "YeriHisset";
@@ -19,6 +19,7 @@ export async function sendSiteMail(to: string, subject: string, bodyHtml: string
       to, subject: `${storeName} — ${subject}`,
       html: buildEmailDocument(bodyHtml, storeName), text: htmlToText(bodyHtml),
       ...(attachments?.length ? { attachments } : {}),
+      ...(kind ? { headers: { [TEMPLATE_HEADER]: kind } } : {}), // e-posta onayı türü
     });
     return { status: "sent" };
   } catch (e: any) {

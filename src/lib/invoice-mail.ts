@@ -36,7 +36,7 @@ export async function sendInvoiceEmail(sb: Sb, orderId: string): Promise<{ statu
     <p style="font-size:15px;color:#374151;line-height:1.6;margin:0">Ayakkabılarını güzel günlerde giy. Bir sorunda bu e-postayı yanıtlaman yeterli.</p>`;
   const r = await sendSiteMail(email, `${label} faturan`, body, [
     { filename: `${o.parasut_invoice_no || label}.pdf`, content: Buffer.from(await file.arrayBuffer()), contentType: "application/pdf" },
-  ]);
+  ], "invoice");
   if (trial) return r;
   if (r.status === "sent") {
     await s.from("orders").update({ invoice_emailed_at: new Date().toISOString() }).eq("id", orderId);

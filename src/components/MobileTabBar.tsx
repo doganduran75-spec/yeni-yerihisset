@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Home, Store, Search, Gift, User, X } from "lucide-react";
 import SegmentChooser from "@/components/SegmentChooser";
+import { useSectionFlags } from "@/lib/section-flags-client";
 
 // Mobil alt sekme çubuğu (app hissi). Yalnız mobilde; masaüstünde gizli.
 // DESIGN.md yeşili (#588E28) + Plus Jakarta Sans etiketler.
@@ -18,6 +19,8 @@ const TABS = [
 
 export default function MobileTabBar() {
   const pathname = usePathname() || "/";
+  const flags = useSectionFlags(); // Fırsatlar kapalıysa sekme yok (2026-11-15)
+  const tabs = TABS.filter((t) => t.href !== "/firsatlar" || flags.deals);
   // Mağaza: hangi mağaza? Alttan açılan panel (Yetişkin / 0–4 Yaş İlkadım) — kullanıcı kararı 2026-10-18
   const [shopOpen, setShopOpen] = useState(false);
   useEffect(() => { setShopOpen(false); }, [pathname]); // eslint-disable-line react-hooks/set-state-in-effect
@@ -34,8 +37,8 @@ export default function MobileTabBar() {
       style={{ fontFamily: "var(--font-jakarta), system-ui, sans-serif", paddingBottom: "env(safe-area-inset-bottom)" }}
       aria-label="Alt menü"
     >
-      <ul className="grid grid-cols-5">
-        {TABS.map((t) => {
+      <ul className={tabs.length === 5 ? "grid grid-cols-5" : "grid grid-cols-4"}>
+        {tabs.map((t) => {
           const active = t.match(pathname);
           const Icon = t.icon;
           const inner = (

@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import { createClient } from "@supabase/supabase-js";
+import { getSectionFlags } from "@/lib/section-flags";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com";
 
@@ -34,7 +35,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     })),
   ];
   // "barefoot-ayakkabi-nedir" yazısı /barefoot-nedir ana rehberine yönlendiriliyor (next.config) → haritada yönlendirilen adres olmasın
-  const kbUrls: MetadataRoute.Sitemap = ((kb ?? []) as any[]).filter((a) => a.slug && a.slug !== "barefoot-ayakkabi-nedir").map((a) => ({
+  // Fırsatlar / Bilgi Bankası kapalıysa haritada yok (sayfa noindex — src/lib/section-flags.ts, 2026-11-15)
+  const flags = await getSectionFlags();
+  const kbUrls: MetadataRoute.Sitemap = !flags.kb ? [] : ((kb ?? []) as any[]).filter((a) => a.slug && a.slug !== "barefoot-ayakkabi-nedir").map((a) => ({
     url: `${SITE_URL}/bilgi-bankasi/${a.slug}`,
     lastModified: new Date(a.updated_at || a.created_at || Date.now()),
     changeFrequency: "monthly" as const,
@@ -79,5 +82,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...((pages ?? []) as any[]).filter((p) => p.slug !== "barefoot-nedir" && p.slug !== "hakkimizda-bilgi").map((p) => ({ url: `${SITE_URL}/${p.slug}`, lastModified: new Date(p.updated_at), changeFrequency: "yearly" as const, priority: 0.3 })),
   ];
 
-  return [...staticPages, ...listUrls, ...productUrls, ...kbUrls];
+  const shown = staticPages.filter((u) => (flags.kb || !u.url.endsWith("/bilgi-bankasi")) && (flags.deals || !u.url.endsWith("/firsatlar")));
+  return [...shown, ...listUrls, ...productUrls, ...kbUrls];
 }

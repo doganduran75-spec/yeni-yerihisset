@@ -1045,6 +1045,61 @@ export default {
       });
 
       // ESKİ WORDPRESS ADRESLERİ (2026-11-15, canlıya geçiş): Google / Instagram'daki eski bağlantılar 404'e düşmesin → 301
+      // E-POSTA ONAYI (2026-11-15, MIG 20261185): müşteriye ilk kez giden tür onaya düşer; "Gönder" = gider + tür onaylanır
+      await part("E-posta onayı: ilk kez giden e-posta türü onayıma düşer", async () => {
+        const K = `regresyon_test_${RUN}`;
+        const mk = (rcpt) => one(`INSERT INTO public.email_approvals (kind, recipient, subject, html, payload) VALUES (${lit(K)}, ${lit(rcpt)}, 'REGRESYON-TEST onay', '<p>REGRESYON-TEST</p>', ${lit(JSON.stringify({ from: "test@yerihisset.test", to: rcpt }))}::jsonb) RETURNING id`);
+        const id1 = mk("onay-a@yerihisset.test"), id2 = mk("onay-b@yerihisset.test");
+        try {
+          const g = await api("/api/admin/email-approvals", { method: "GET", token: F.admin.token });
+          ok(g.status === 200 && (g.json?.pending || []).some((r) => r.id === id1), "Onay bekleyen e-posta listede (yönetici)", why(g));
+          const pv = await api(`/api/admin/email-approvals?id=${id1}`, { method: "GET", token: F.admin.token });
+          ok(pv.status === 200 && /REGRESYON-TEST/.test(pv.json?.html || ""), "E-postanın içeriği önizlenebiliyor", why(pv));
+          const mg = await api("/api/admin/email-approvals", { method: "GET", token: F.member.token });
+          const ms = await api("/api/admin/email-approvals", { token: F.member.token, body: { op: "send", id: id1 } });
+          ok((mg.status === 401 || mg.status === 403) && (ms.status === 401 || ms.status === 403), "Üye onay listesini göremiyor / gönderemiyor", `GET ${mg.status} · POST ${ms.status}`);
+          ok(num(`SELECT count(*) FROM public.email_approvals WHERE id IN (${lit(id1)}, ${lit(id2)}) AND status = 'pending'`) === 2, "Onay bekleyen tablo dışarıya kapalı, kayıtlar duruyor", "durum değişti");
+          // Test adresine e-posta asla gitmez → "Gönder" başarısız olur ve tür ONAYLANMAZ
+          const sd = await api("/api/admin/email-approvals", { token: F.admin.token, body: { op: "send", id: id1 } });
+          ok(sd.status === 400 && one(`SELECT status FROM public.email_approvals WHERE id = ${lit(id1)}`) === "failed"
+            && num(`SELECT count(*) FROM public.email_approved_kinds WHERE kind = ${lit(K)}`) === 0,
+            "Gönderilemeyen e-postada tür onaylanmıyor (test adresine e-posta gitmez)", why(sd));
+          const ds = await api("/api/admin/email-approvals", { token: F.admin.token, body: { op: "discard", id: id2 } });
+          ok(ds.status === 200 && one(`SELECT status FROM public.email_approvals WHERE id = ${lit(id2)}`) === "discarded", "“Gönderme” → e-posta gitmez, kayıt kapanır", why(ds));
+        } finally {
+          sql(`DELETE FROM public.email_approvals WHERE kind = ${lit(K)}; DELETE FROM public.email_approved_kinds WHERE kind = ${lit(K)}; DELETE FROM public.telegram_outbox WHERE topic = 'email_approval' AND ref_id IN (${lit(id1)}, ${lit(id2)});`);
+        }
+        const fs = await import("node:fs");
+        const rd = (p) => fs.readFileSync(new URL(`../../${p}`, import.meta.url), "utf8");
+        const mgd = rd("src/lib/mail-guard.ts"), nt = rd("src/lib/notifications.ts"), dash = rd("src/app/admin/page.tsx"), tg = rd("src/lib/telegram.ts");
+        const lockAt = mgd.indexOf("if (blocked.length) throw new EmailLockedError(blocked);"), gateAt = mgd.indexOf("holdForApproval(opts, kind, customers)");
+        ok(lockAt > 0 && gateAt > lockAt && /!r && !mode\.approved && st\.approval/.test(mgd) && /filter\(\(e\) => !st\.allow\.has\(e\)\)/.test(mgd),
+          "Onay kontrolü e-posta kilidinden sonra; yönetici adresleri, deneme yönlendirmesi ve onaylı gönderim onaya düşmez", "sıra / koşul değişmiş");
+        ok(/<!--yh-tpl:\$\{trigger\}-->/.test(nt) && (nt.match(/\[TEMPLATE_HEADER\]/g) || []).length >= 9,
+          "E-postalar türünü taşıyor (başlık / şablon işareti)", "tür işareti eksik");
+        ok(!/headers: \{ \[TEMPLATE_HEADER\]: "[a-z_]+" \}, \/\/ e-posta onayı türü \(mail-guard\)\r?\n(?:[^\n]*\r?\n){0,6}\s*headers: listUnsubHeader/.test(nt),
+          "Tür başlığı abonelik başlığıyla ezilmiyor", "aynı e-postada iki headers alanı");
+        ok(/label: "Onay bekleyen e-posta", href: "\/admin\/email-onay"/.test(dash) && /key: "email_approval"/.test(tg) && /email_approval: true/.test(tg),
+          "Panoda “Onay bekleyen e-posta”; Telegram “E-posta onayı” konusu varsayılan açık", "pano / Telegram eksik");
+      });
+
+      // FIRSATLAR / BİLGİ BANKASI AÇ-KAPA (2026-11-15, MIG 20261186) + Sistem / E-posta denemesi Ayarlar'da
+      await part("Fırsatlar / Bilgi Bankası menüden kapatılabiliyor; Sistem Ayarlar'da", async () => {
+        const bad = await api("/api/admin/section-flags", { token: F.admin.token, body: { field: "role", value: true } });
+        const mb = await api("/api/admin/section-flags", { token: F.member.token, body: { field: "kb_enabled", value: true } });
+        ok(bad.status === 400 && (mb.status === 401 || mb.status === 403), "Aç-kapa ucu yalnız yönetici + yalnız iki ayar", `geçersiz ${bad.status} · üye ${mb.status}`);
+        const fs = await import("node:fs");
+        const rd = (p) => fs.readFileSync(new URL(`../../${p}`, import.meta.url), "utf8");
+        const nav = rd("src/components/Navbar.tsx"), tab = rd("src/components/MobileTabBar.tsx"), foot = rd("src/components/Footer.tsx"), sm = rd("src/app/sitemap.ts");
+        const fp = rd("src/app/firsatlar/page.tsx"), kp = rd("src/app/bilgi-bankasi/page.tsx"), lay = rd("src/app/admin/layout.tsx"), st = rd("src/app/admin/settings/page.tsx");
+        ok(/useSectionFlags\(\)/.test(nav) && /useSectionFlags\(\)/.test(tab) && /flags\.kb && <li>/.test(foot) && /flags\.deals && <li>/.test(foot)
+          && /!flags\.kb \? \[\]/.test(sm) && /flags\.deals \? \{\} : \{ robots: \{ index: false/.test(fp) && /flags\.kb \? \{\} : \{ robots: \{ index: false/.test(kp),
+          "Kapalıyken Fırsatlar / Bilgi Bankası menülerde ve site haritasında yok, sayfa noindex", "menü / harita / noindex bağlantısı eksik");
+        ok(!/href="\/admin\/system"/.test(lay) && !/href="\/admin\/crm\/email-test"/.test(lay) && /activeTab === "system"\s+&& <SystemPage \/>/.test(st)
+          && /activeTab === "email-approval" && <EmailApprovals \/>/.test(st) && /activeTab === "email-test"\s+&& <EmailTestPage \/>/.test(st),
+          "Sistem, E-posta denemesi, E-posta onayı Ayarlar sekmelerinde (sol menüde değil)", "menü taşıması eksik");
+      });
+
       await part("Eski site adresleri yeni sayfalara yönleniyor (301)", async () => {
         const loc = async (p) => { try { const r = await fetch(t.APP + p, { redirect: "manual", signal: AbortSignal.timeout(20000) }); return { status: r.status, to: r.headers.get("location") || "" }; } catch (e) { return { status: 0, to: String(e?.message || e) }; } };
         const ends = (r, want) => r.status === 301 && (r.to === want || r.to.endsWith(want));

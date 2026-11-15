@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
+import { getSectionFlags } from "@/lib/section-flags";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { ChevronLeft, BookOpen, Play } from "lucide-react";
@@ -42,6 +43,7 @@ export async function generateMetadata({
     title: data.title,
     description,
     alternates: { canonical: `${process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com"}/bilgi-bankasi/${slug}` },
+    ...((await getSectionFlags()).kb ? {} : { robots: { index: false, follow: false } }), // Bilgi Bankası kapalıyken Google'a kapalı
   };
 }
 

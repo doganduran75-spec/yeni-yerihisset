@@ -1,5 +1,5 @@
 import { randomBytes } from "crypto";
-import { createMailTransport, isTestEmail, mailRedirectActive } from "./mail-guard";
+import { createMailTransport, isTestEmail, mailRedirectActive, TEMPLATE_HEADER } from "./mail-guard";
 import { consentUrl } from "./marketing-consent";
 import { fitBoxHtml } from "./after-sale";
 import { afterSaleHere } from "./order-next-step";
@@ -596,6 +596,7 @@ export async function sendOrderNotification(
     const transporter = createMailTransport(smtpConfig);
     await transporter.sendMail({
       from: `"${settings?.smtp_from_name || storeName}" <${settings?.smtp_from_email || smtpConfig.auth.user}>`,
+      headers: { [TEMPLATE_HEADER]: trigger }, // e-posta onayı türü (mail-guard)
       to: customerEmail,
       subject,
       html: buildEmailDocument(bodyHtml, storeName),
@@ -700,7 +701,7 @@ export async function sendCouponAssignedNotification(
       subject,
       html: buildEmailDocument(bodyHtml, storeName),
       text: htmlToText(bodyHtml),
-      headers: listUnsubHeader(settings),
+      headers: { ...listUnsubHeader(settings), [TEMPLATE_HEADER]: "coupon_assigned" }, // + e-posta onayı türü (mail-guard)
     });
     return { status: "sent" };
   } catch (err: unknown) {
@@ -725,7 +726,7 @@ export async function renderEmailTemplate(
     const storeName = vars.store_name || "YeriHisset";
     return {
       subject: replaceVariables(tpl.subject, vars, false),
-      html: buildEmailDocument(replaceVariables(tpl.body_html, vars), storeName),
+      html: buildEmailDocument(replaceVariables(tpl.body_html, vars), storeName) + `<!--yh-tpl:${trigger}-->`, // e-posta onayı türü
     };
   } catch {
     return null;
@@ -811,6 +812,7 @@ export async function sendMessageNotification(
     const transporter = createMailTransport(smtpConfig);
     await transporter.sendMail({
       from: `"${settings?.smtp_from_name || storeName}" <${settings?.smtp_from_email || smtpConfig.auth.user}>`,
+      headers: { [TEMPLATE_HEADER]: "message_reply" }, // e-posta onayı türü (mail-guard)
       to, subject, html: buildEmailDocument(bodyHtml, storeName), text: htmlToText(bodyHtml),
     });
     return { status: "sent" };
@@ -885,7 +887,7 @@ export async function sendLeadMagnetWelcome(params: {
       subject: "Ücretsiz kargo kuponunuz hazır 🎁",
       html: buildEmailDocument(bodyHtml, storeName),
       text: htmlToText(bodyHtml),
-      headers: listUnsubHeader(settings),
+      headers: { ...listUnsubHeader(settings), [TEMPLATE_HEADER]: "lead_magnet_welcome" }, // + e-posta onayı türü (mail-guard)
     });
     return { status: "sent" };
   } catch (err: any) {
@@ -1119,6 +1121,7 @@ export async function sendEmailVerification(params: {
     const transporter = createMailTransport(smtpConfig);
     await transporter.sendMail({
       from: `"${settings?.smtp_from_name || storeName}" <${settings?.smtp_from_email || smtpConfig.auth.user}>`,
+      headers: { [TEMPLATE_HEADER]: "email_verification" }, // e-posta onayı türü (mail-guard)
       to: params.to,
       subject: `${storeName} — E-postanı onayla`,
       html: buildEmailDocument(bodyHtml, storeName),
@@ -1172,6 +1175,7 @@ export async function sendPasswordRecoveryEmail(params: {
     const transporter = createMailTransport(smtpConfig);
     await transporter.sendMail({
       from: `"${settings?.smtp_from_name || storeName}" <${settings?.smtp_from_email || smtpConfig.auth.user}>`,
+      headers: { [TEMPLATE_HEADER]: "password_recovery" }, // e-posta onayı türü (mail-guard)
       to: params.to,
       subject: `${storeName} — Şifre sıfırlama bağlantın`,
       html: buildEmailDocument(bodyHtml, storeName),
@@ -1245,6 +1249,7 @@ export async function sendGuestActivationEmail(params: {
     const transporter = createMailTransport(smtpConfig);
     await transporter.sendMail({
       from: `"${settings?.smtp_from_name || storeName}" <${settings?.smtp_from_email || smtpConfig.auth.user}>`,
+      headers: { [TEMPLATE_HEADER]: "guest_activation" }, // e-posta onayı türü (mail-guard)
       to: params.email,
       subject: `${storeName} — Siparişini takip et: şifreni belirle`,
       html: buildEmailDocument(bodyHtml, storeName),
@@ -1323,7 +1328,7 @@ export async function sendStockNotifySignupWelcome(params: {
       subject: `Kaydınız alındı: ${params.productTitle} stoğa girince haber vereceğiz`,
       html: buildEmailDocument(bodyHtml, storeName),
       text: htmlToText(bodyHtml),
-      headers: listUnsubHeader(settings),
+      headers: { ...listUnsubHeader(settings), [TEMPLATE_HEADER]: "stock_notify_signup" }, // + e-posta onayı türü (mail-guard)
     });
     return { status: "sent" };
   } catch (err: any) {
@@ -1382,7 +1387,7 @@ export async function sendBackInStockNotification(params: {
       subject: `Tekrar stokta: ${params.productTitle}`,
       html: buildEmailDocument(bodyHtml, storeName),
       text: htmlToText(bodyHtml),
-      headers: listUnsubHeader(settings),
+      headers: { ...listUnsubHeader(settings), [TEMPLATE_HEADER]: "back_in_stock" }, // + e-posta onayı türü (mail-guard)
     });
     return { status: "sent" };
   } catch (err: any) {

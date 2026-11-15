@@ -195,6 +195,8 @@ async function main() {
     ["20261181 Müşteri iptali — ücret iadesi bekleyen (iptal talebi + IBAN adı)", "SELECT to_regprocedure('public.order_cancel_refund_pending(uuid, text)') IS NOT NULL AND EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'order_cases' AND column_name = 'iban_name') AND pg_get_constraintdef((SELECT oid FROM pg_constraint WHERE conname = 'order_cases_kind_check')) LIKE '%cancel%'"],
     ["20261182 Üyelik Sözleşmesi onayı kaydı (profiles.terms_*)", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'terms_version')"],
     ["20261183 IBAN sahibi uyuşmazlığı işareti (order_cases)", "SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'order_cases' AND column_name = 'iban_name_mismatch')"],
+    ["20261185 E-posta onayı (ilk kez giden tür onaya düşer)", "SELECT to_regclass('public.email_approvals') IS NOT NULL AND to_regclass('public.email_approved_kinds') IS NOT NULL AND EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'settings' AND column_name = 'email_approval_enabled') AND EXISTS(SELECT 1 FROM pg_trigger WHERE tgname = 'trg_telegram_email_approval')"],
+    ["20261186 Fırsatlar / Bilgi Bankası aç-kapa", "SELECT count(*) = 2 FROM information_schema.columns WHERE table_name = 'settings' AND column_name IN ('opportunities_enabled', 'kb_enabled') AND has_column_privilege('anon', 'public.settings', column_name, 'SELECT')"],
     ["20261184 Pazaryeri müşteri soruları (Trendyol soru-cevap)", "SELECT to_regclass('public.marketplace_questions') IS NOT NULL AND EXISTS(SELECT 1 FROM pg_trigger WHERE tgname = 'trg_telegram_marketplace_question')"],
     ["20261177 Topluluk katmanları: Meraklı / Tutkun / Guru (seviye 4) + iş ortağı satışıyla Guru", "SELECT (SELECT count(*) FROM public.roles WHERE (slug = 'musteri' AND name = 'Barefoot Meraklısı') OR (slug = 'mudavim' AND name = 'Barefoot Tutkunu') OR (slug = 'guru' AND level = 4)) = 3 AND pg_get_functiondef('public.refresh_member_auto_tags(uuid[])'::regprocedure) LIKE '%guru_added%' AND (SELECT count(*) FROM public.people_tiers()) = 7"],
     ["20261176 Paraşüt süresiz oturum + son kopma nedeni", "SELECT count(*) = 4 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'parasut_auth' AND column_name IN ('offline', 'offline_denied', 'last_drop_error', 'last_drop_at')"],
@@ -449,7 +451,7 @@ async function main() {
     }
     const sm = await get("/sitemap.xml");
     const hasKb = one("SELECT EXISTS(SELECT 1 FROM public.kb_articles)") === "t";
-    sm.text.includes("/kategori/") && (!hasKb || sm.text.includes("/bilgi-bankasi/")) && sm.text.includes("/barefoot-nedir")
+    sm.text.includes("/kategori/") && (!hasKb || SETTINGS().kb_enabled === false || sm.text.includes("/bilgi-bankasi/")) && sm.text.includes("/barefoot-nedir")
       ? add("ok", "Site haritasında kategori + rehber sayfaları var") : add("fail", "Site haritası eksik", "kategori / bilgi bankası / barefoot-nedir");
     const rb = await get("/robots.txt");
     liveOnly(!/Disallow: \/\s*$/m.test(rb.text) && !/OAI-SearchBot[\s\S]{0,40}Disallow: \//.test(rb.text), "robots.txt arama ve yapay zekâ tarayıcılarına açık", "canlıda site taramaya kapalı (NEXT_PUBLIC_NOINDEX kaldırılmalı)");

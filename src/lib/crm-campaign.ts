@@ -133,5 +133,5 @@ export async function sendClaimEmail(opts: { to: string; coupon: { name: string;
 ${box}
 ${button(opts.actionUrl, opts.mode === "member" ? "Giriş yap" : "Şifre belirle")}
 <p style="font-size:12px;color:#6b7280;line-height:1.6;margin:0">Bu isteği sen yapmadıysan bu e-postayı yok sayabilirsin.</p>`;
-  return sendSiteMail(opts.to, `${couponValueText(opts.coupon)} hesabında`, body);
+  return sendSiteMail(opts.to, `${couponValueText(opts.coupon)} hesabında`, body, undefined, "crm_coupon");
 }

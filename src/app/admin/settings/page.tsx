@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/lib/supabase";
-import { Loader2, Save, Store, Globe, Mail, Server, BarChart3, Eye, EyeOff, ShoppingCart, Copy, Check, Layers, ShieldCheck, Tag, Bookmark, FolderSearch, Tags, Megaphone, Truck, CreditCard, Landmark, MessageSquare, Plug, Cookie, FileText, Home, ChevronUp, ChevronDown } from "lucide-react";
+import { Loader2, Save, Store, Globe, Mail, Server, BarChart3, Eye, EyeOff, ShoppingCart, Copy, Check, Layers, ShieldCheck, Tag, Bookmark, FolderSearch, Tags, Megaphone, Truck, CreditCard, Landmark, MessageSquare, Plug, Cookie, FileText, Home, ChevronUp, ChevronDown, Activity, MailCheck, Send } from "lucide-react";
 import VariantsTab from "@/components/admin/settings/VariantsTab";
 import RolesTab from "@/components/admin/settings/RolesTab";
 import BrandsTab from "@/components/admin/settings/BrandsTab";
@@ -24,9 +24,12 @@ import StaticPagesTab from "@/components/admin/settings/StaticPagesTab";
 import HomeContentTab from "@/components/admin/settings/HomeContentTab";
 import AdLinksCard from "@/components/admin/settings/AdLinksCard";
 import TestMailButton from "@/components/admin/TestMailButton";
+import SystemPage from "@/app/admin/system/page";
+import EmailTestPage from "@/app/admin/crm/email-test/page";
+import EmailApprovals from "@/components/admin/EmailApprovals";
 import { siteAlert } from "@/components/ui/site-dialog";
 
-type SettingsTab = "general" | "shipping" | "payment" | "variants" | "roles" | "brands" | "categories" | "kb-categories" | "member-tags" | "popup" | "email-templates" | "integrations" | "cookies" | "pages" | "home";
+type SettingsTab = "system" | "email-test" | "email-approval" | "general" | "shipping" | "payment" | "variants" | "roles" | "brands" | "categories" | "kb-categories" | "member-tags" | "popup" | "email-templates" | "integrations" | "cookies" | "pages" | "home";
 
 type Settings = {
   id: string;
@@ -237,6 +240,10 @@ function SettingsPageInner() {
     { id: "member-tags",   label: "Üye Etiketleri",          icon: <Tags size={16} /> },
     { id: "variants",      label: "Varyasyonlar",            icon: <Layers size={16} /> },
     { id: "roles",         label: "Roller",                  icon: <ShieldCheck size={16} /> },
+    // Sol menüden buraya taşındı (kullanıcı 2026-11-15): Sistem · E-posta denemesi · E-posta onayı
+    { id: "system",        label: "Sistem",                  icon: <Activity size={16} /> },
+    { id: "email-approval", label: "E-posta Onayı",          icon: <MailCheck size={16} /> },
+    { id: "email-test",    label: "E-posta Denemesi",        icon: <Send size={16} /> },
   ];
 
   return (
@@ -276,6 +283,9 @@ function SettingsPageInner() {
       {activeTab === "kb-categories" && <KBCategoriesTab />}
       {activeTab === "variants"      && <VariantsTab />}
       {activeTab === "roles"         && <RolesTab />}
+      {activeTab === "system"        && <SystemPage />}
+      {activeTab === "email-approval" && <EmailApprovals />}
+      {activeTab === "email-test"    && <EmailTestPage />}
 
       {/* Genel Ayarlar Sekmesi */}
       {activeTab === "general" && loadError && (

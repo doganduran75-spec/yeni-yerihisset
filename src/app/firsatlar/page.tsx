@@ -3,12 +3,18 @@ import FirsatlarClient from "./FirsatlarClient";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { createClient } from "@supabase/supabase-js";
+import { getSectionFlags } from "@/lib/section-flags";
 
-export const metadata: Metadata = {
-  title: "Fırsatlar & Ayrıcalıklar",
-  description: "Üyelik seviyene özel fırsatlar, kuponlar ve ödüller. Alışverişten kazan, avantajları yakala.",
-  alternates: { canonical: `${process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com"}/firsatlar` },
-};
+// Kapalıyken (Fırsatlar ekranındaki kutu) sayfa açılır ama Google'a kapalı — src/lib/section-flags.ts (2026-11-15)
+export async function generateMetadata(): Promise<Metadata> {
+  const flags = await getSectionFlags();
+  return {
+    title: "Fırsatlar & Ayrıcalıklar",
+    description: "Üyelik seviyene özel fırsatlar, kuponlar ve ödüller. Alışverişten kazan, avantajları yakala.",
+    alternates: { canonical: `${process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com"}/firsatlar` },
+    ...(flags.deals ? {} : { robots: { index: false, follow: false } }),
+  };
+}
 
 function getSupabase() {
   return createClient(

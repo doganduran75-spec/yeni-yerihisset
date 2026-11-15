@@ -19,5 +19,5 @@ export async function sendCreditLoadedEmail(p: { to: string; name: string | null
     <p style="font-size:14px;color:#374151;line-height:1.6;margin:0">Bakiyeni bir sonraki alışverişinde ödeme adımında “YeriHisset Kredisi kullan” ile harcayabilirsin.</p>
     ${mailButton(`${site}/magaza`, "Alışverişe başla")}
     <p style="font-size:12px;color:#9ca3af;text-align:center;margin:0">Kazanç geçmişini Hesabım › Satış Ortaklığı’nda görebilirsin.</p>`;
-  return sendSiteMail(p.to, "hakedişin hesabına yüklendi", body);
+  return sendSiteMail(p.to, "hakedişin hesabına yüklendi", body, undefined, "affiliate_payout");
 }

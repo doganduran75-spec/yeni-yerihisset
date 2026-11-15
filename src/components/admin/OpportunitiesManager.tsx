@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import SectionToggle from "@/components/admin/SectionToggle";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -163,9 +164,13 @@ export default function OpportunitiesPage() {
             Ortaklarınızdan gelen fırsatları yönetin. Her tıklama otomatik sayılır.
           </p>
         </div>
-        <Button onClick={openAdd} className="gap-2">
-          <Plus size={16} /> Yeni Fırsat
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Fırsatlar sayfası menülerde görünsün mü (kullanıcı 2026-11-15: içerik hazır olana kadar kapalı) */}
+          <SectionToggle field="opportunities_enabled" label="Fırsatlar sitede" />
+          <Button onClick={openAdd} className="gap-2">
+            <Plus size={16} /> Yeni Fırsat
+          </Button>
+        </div>
       </div>
 
       {/* İstatistik özeti */}

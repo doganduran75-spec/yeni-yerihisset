@@ -2,15 +2,21 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
+import { getSectionFlags } from "@/lib/section-flags";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { BookOpen, Play, ChevronRight } from "lucide-react";
 
-export const metadata: Metadata = {
-  title: "Bilgi Bankası",
-  description: "Barefoot ayakkabı, ayak sağlığı ve doğru numara seçimi üzerine rehberler ve sık sorulan sorular.",
-  alternates: { canonical: `${process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com"}/bilgi-bankasi` },
-};
+// Kapalıyken (Bilgi Bankası ekranındaki kutu) sayfa açılır ama Google'a kapalı — src/lib/section-flags.ts (2026-11-15)
+export async function generateMetadata(): Promise<Metadata> {
+  const flags = await getSectionFlags();
+  return {
+    title: "Bilgi Bankası",
+    description: "Barefoot ayakkabı, ayak sağlığı ve doğru numara seçimi üzerine rehberler ve sık sorulan sorular.",
+    alternates: { canonical: `${process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com"}/bilgi-bankasi` },
+    ...(flags.kb ? {} : { robots: { index: false, follow: false } }),
+  };
+}
 
 // Server-side Supabase (public anon key yeterli — RLS SELECT izni var)
 function getSupabase() {

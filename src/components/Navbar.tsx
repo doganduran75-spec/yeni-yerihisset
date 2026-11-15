@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { ShoppingBag, Search, User, Menu, X, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCartStore } from "@/store/useCartStore";
+import { useSectionFlags } from "@/lib/section-flags-client";
 
 interface NavbarProps {
   variant?: "default" | "minimal";
@@ -26,6 +27,9 @@ export default function Navbar({ variant = "default" }: NavbarProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const router = useRouter();
   const { items } = useCartStore();
+  // Fırsatlar / Bilgi Bankası kapalıysa menüde yok (Ayarlar: Fırsatlar ve Bilgi Bankası ekranlarındaki kutu — 2026-11-15)
+  const flags = useSectionFlags();
+  const navLinks = NAV_LINKS.filter((l) => (l.href !== "/firsatlar" || flags.deals) && (l.href !== "/bilgi-bankasi" || flags.kb));
 
   function submitSearch(e: React.FormEvent) {
     e.preventDefault();
@@ -73,7 +77,7 @@ export default function Navbar({ variant = "default" }: NavbarProps) {
           </Link>
           
           <nav className="hidden lg:flex items-center gap-8">
-            {NAV_LINKS.map((item) => (
+            {navLinks.map((item) => (
               <Link
                 key={item.label}
                 href={item.href}
@@ -152,7 +156,7 @@ export default function Navbar({ variant = "default" }: NavbarProps) {
               </form>
 
               <nav className="flex flex-col">
-                {NAV_LINKS.map((item) => (
+                {navLinks.map((item) => (
                   <Link
                     key={item.label}
                     href={item.href}

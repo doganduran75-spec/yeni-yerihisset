@@ -20,10 +20,10 @@ export default function NotFound() {
           <Home size={18} /> Ana Sayfa
         </Link>
         <Link
-          href="/firsatlar"
+          href="/magaza"
           className="inline-flex items-center gap-2 px-6 py-3 bg-secondary text-secondary-foreground rounded-xl font-bold text-sm btn-juice hover:opacity-90 transition-opacity"
         >
-          <Search size={18} /> Fırsatları Keşfet
+          <Search size={18} /> Mağazaya Git
         </Link>
       </div>
     </main>

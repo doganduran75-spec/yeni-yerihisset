@@ -11,6 +11,7 @@
 import { createAdminClient } from "@/lib/supabase-admin";
 import { caseReasonLabel } from "@/lib/order-next-step";
 import { isTestEmail } from "@/lib/mail-guard";
+import { EMAIL_KIND_LABEL } from "@/lib/email-approval";
 
 type SB = any;
 
@@ -22,6 +23,7 @@ export const TELEGRAM_TOPICS = [
   { key: "customer_message", label: "Müşteri mesajı", desc: "Müşteri sipariş ekranından mesaj yazdı", ready: true },
   { key: "integration_error", label: "Entegrasyon hatası", desc: "Paraşüt faturası, pazaryeri fatura yükleme, Trendyol işleme al, kargo (Basit Kargo / Kargonomi), pazaryeri stok, Google gönderimi hata verdi", ready: true },
   { key: "site_error", label: "Site hatası (müşteri)", desc: "Müşterinin karşılaştığı hata dakikasında: kart / havale başlatılamadı, ödeme başarısız ya da siparişle eşleşmedi, sayfa çöktü, sunucu hatası. Ayrıca gündüz saatlerinde ziyaretçi ödeme adımına geldiği halde 4 saattir site siparişi yoksa uyarı. Varsayılan açık", ready: true },
+  { key: "email_approval", label: "E-posta onayı", desc: "Müşteriye ilk kez gidecek bir e-posta türü onayını bekliyor (tür + konu). Varsayılan açık", ready: true },
   { key: "server_alert", label: "Sunucu / sistem uyarısı", desc: "Sunucu sağlığı uyarısı (disk, yedek, yeni IP’den SSH girişi, zamanlanmış görev durdu…) ve “giderildi”", ready: true },
   { key: "daily_summary", label: "Günlük özet (periyodik)", desc: "Her sabah seçtiğin saatte: dünkü satış (kanal kırılımı), bekleyen işler, stok talepleri, sunucu durumu", ready: true },
 ] as const;
@@ -38,7 +40,7 @@ export async function getTelegramConfig(sb: SB): Promise<TelegramConfig> {
     token: String(data?.telegram_bot_token || "").trim(),
     chatId: String(data?.telegram_chat_id || "").trim(),
     // site_error varsayılan AÇIK (canlıda müşteri hatası kaçmasın — kullanıcı 2026-11-15); panelde kapatılırsa false kaydedilir
-    topics: { site_error: true, ...((data?.telegram_topics && typeof data.telegram_topics === "object") ? data.telegram_topics : { new_order: true }) },
+    topics: { site_error: true, email_approval: true, ...((data?.telegram_topics && typeof data.telegram_topics === "object") ? data.telegram_topics : { new_order: true }) },
     dailyHour: Number.isInteger(data?.telegram_daily_hour) ? data.telegram_daily_hour : 9,
   };
 }
@@ -204,6 +206,23 @@ async function composeRefMessage(sb: SB, topic: string, id: string): Promise<{ t
     ].join("\n");
     return { text, settled: true, test: o.test };
   }
+  // E-posta onayı (MIG 20261185): müşteriye ilk kez gidecek tür onay bekliyor. Kişisel veri: yalnız tür + konu.
+  if (topic === "email_approval") {
+    const { data: a } = await sb.from("email_approvals").select("id, kind, subject, status, recipient").eq("id", id).maybeSingle();
+    if (!a || a.status !== "pending") return null; // bu arada onaylandı / gönderilmedi
+    const { count } = await sb.from("email_approvals").select("id", { count: "exact", head: true }).eq("status", "pending");
+    const text = [
+      "📧 <b>Onay bekleyen e-posta</b>",
+      `<b>${esc(EMAIL_KIND_LABEL[a.kind] ?? (String(a.kind).startsWith("konu:") ? "Diğer" : a.kind))}</b> — ${short(a.subject, 140)}`,
+      "Bu tür ilk kez gönderiliyor: okuyup onaylayınca gider, sonrakiler onaysız gider.",
+      ...(Number(count) > 1 ? [`Bekleyen toplam: ${count}`] : []),
+      "",
+      `<a href="${STORE_URL()}/admin/email-onay">E-postayı gör ve onayla</a>`,
+    ].join("\n");
+    // Test alıcısı (@….test) / regresyon kaydı bildirilmez
+    const test = String(a.recipient || "").split(/[,\s]+/).some((e: string) => isTestEmail(e)) || /^regresyon_test_/.test(String(a.kind));
+    return { text, settled: true, test };
+  }
   return null;
 }
 
@@ -297,7 +316,7 @@ async function scanSiteErrors(sb: SB, cfg: TelegramConfig): Promise<number> {
   });
   const text = [`🧯 <b>Site hatası — ${real.length} kayıt</b>`, "", ...lines,
     ...(list.length > 12 ? [`… ve ${list.length - 12} farklı hata daha`] : []),
-    "", `<a href="${STORE_URL()}/admin/system#musteri-hatalari">Sistem ekranında aç</a>`].join("\n");
+    "", `<a href="${STORE_URL()}/admin/settings?tab=system#musteri-hatalari">Sistem ekranında aç</a>`].join("\n");
   await sendDirect(sb, cfg, "site_error", text);
   await setState(sb, "site_error_since", last);
   return 1;

@@ -15,6 +15,7 @@ import { supabase } from "@/lib/supabase";
 import { toSlug } from "@/lib/slug";
 import { Plus, Edit, Trash2, Loader2, Video } from "lucide-react";
 import RichTextEditor from "@/components/admin/RichTextEditor";
+import SectionToggle from "@/components/admin/SectionToggle";
 
 type KBArticle = {
   id: string;
@@ -154,15 +155,19 @@ export default function KBArticlesPage() {
           </p>
         </div>
 
-        <Button
-          onClick={() => {
-            resetForm();
-            setIsDialogOpen(true);
-          }}
-          className="gap-2"
-        >
-          <Plus size={16} /> Yeni Makale Ekle
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Bilgi Bankası menülerde görünsün mü (kullanıcı 2026-11-15: görseller hazır olana kadar kapalı) */}
+          <SectionToggle field="kb_enabled" label="Bilgi Bankası sitede" />
+          <Button
+            onClick={() => {
+              resetForm();
+              setIsDialogOpen(true);
+            }}
+            className="gap-2"
+          >
+            <Plus size={16} /> Yeni Makale Ekle
+          </Button>
+        </div>
       </div>
 
       {/* ── Modal ──────────────────────────────────────────────────────────── */}

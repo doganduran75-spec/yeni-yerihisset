@@ -37,6 +37,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { useCartStore } from "@/store/useCartStore";
+import { useSectionFlags } from "@/lib/section-flags-client";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -160,6 +161,7 @@ const ACC_COLORS = {
 function AccountPageInner() {
   const router = useRouter();
   const { addItem, clearCart } = useCartStore();
+  const sectionFlags = useSectionFlags(); // Fırsatlar kapalıysa satış ortağı bağlantılarında yok (2026-11-15)
   const searchParams = useSearchParams();
 
   // Otomatik iptal olmuş (ödeme yarıda kalmış) siparişi sepete geri yükle → /sepet.
@@ -1543,7 +1545,7 @@ function AccountPageInner() {
                           {[
                             { key: "home", label: "Ana sayfa (önerilen)", path: "/" },
                             { key: "store", label: "Mağaza (tüm ürünler)", path: "/magaza" },
-                            { key: "deals", label: "Fırsatlar", path: "/firsatlar" },
+                            ...(sectionFlags.deals ? [{ key: "deals", label: "Fırsatlar", path: "/firsatlar" }] : []), // kapalıysa yok (2026-11-15)
                           ].map((l) => (
                             <div key={l.key} className="flex items-center gap-2 bg-white border rounded-xl p-2 pl-3">
                               <div className="min-w-0 flex-1">
