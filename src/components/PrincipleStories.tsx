@@ -144,6 +144,7 @@ export default function PrincipleStories() {
       </div>
       <div className="relative flex items-center justify-between px-4 pt-3">
         {full && phase === "story" ? (
+          // Kaçıncı görsel olduğu yalnız üstteki çubuklarda (yazıda "2 / 5" yok — kullanıcı 2026-11-15)
           // Tam ekran: üstte büyük "BAREFOOT NEDİR?" (panelde "Üst yazı"); marka satırı yok (kullanıcı 2026-11-15)
           <span className="text-[26px] leading-none font-black tracking-tight text-[#3F6D14]" style={{ fontFamily: "var(--font-epilogue), system-ui, sans-serif" }}>{P.eyebrow}</span>
         ) : (
@@ -154,8 +155,7 @@ export default function PrincipleStories() {
 
       {full && phase === "story" ? (
         <div className="relative flex-1 min-h-0 flex flex-col justify-end px-6 pb-5 pointer-events-none">
-          <p className="text-[13px] font-bold tracking-wide" style={{ color: ORANGE }}>{idx + 1} / {items.length}</p>
-          <h2 className="mt-1 text-[32px] leading-tight font-black text-[#1C1C19]" style={{ fontFamily: "var(--font-epilogue), system-ui, sans-serif" }}>{it.title}</h2>
+          <h2 className="text-[32px] leading-tight font-black text-[#1C1C19]" style={{ fontFamily: "var(--font-epilogue), system-ui, sans-serif" }}>{it.title}</h2>
           <p className="mt-2 text-[17px] leading-snug text-[#42493A]">{it.text}</p>
         </div>
       ) : phase === "story" ? (
@@ -174,8 +174,7 @@ export default function PrincipleStories() {
             {it.image && <img src={it.image} alt={it.title} draggable={false} className="max-h-full w-full object-contain pointer-events-none" />}
           </div>
           <div className="px-6 pb-6">
-            <p className="text-[13px] font-bold tracking-wide" style={{ color: ORANGE }}>{idx + 1} / {items.length}</p>
-            <h2 className="mt-1 text-[30px] leading-tight font-black text-[#1C1C19]" style={{ fontFamily: "var(--font-epilogue), system-ui, sans-serif" }}>{it.title}</h2>
+            <h2 className="text-[30px] leading-tight font-black text-[#1C1C19]" style={{ fontFamily: "var(--font-epilogue), system-ui, sans-serif" }}>{it.title}</h2>
             <p className="mt-2 text-[16px] leading-snug text-[#42493A]">{it.text}</p>
           </div>
         </div>
