@@ -1363,7 +1363,7 @@ export default {
           const fs = await import("node:fs");
           const rd = (p) => fs.readFileSync(new URL(`../../${p}`, import.meta.url), "utf8");
           const tg = rd("src/lib/telegram.ts"), ins = rd("src/instrumentation.ts"), er = rd("src/app/error.tsx"), ge = rd("src/app/global-error.tsx"), rc = rd("src/lib/report-crash.ts");
-          ok(/key: "site_error"/.test(tg) && /topics: \{ site_error: true, \.\.\./.test(tg) && /if \(on\(cfg, "site_error"\)\) \{[\s\S]{0,120}scanSiteErrors\(sb, cfg\)[\s\S]{0,160}maybeNoOrderAlarm\(sb, cfg\)/.test(tg)
+          ok(/key: "site_error"/.test(tg) && /topics: \{ site_error: true,[^}\n]*\.\.\./.test(tg) && /if \(on\(cfg, "site_error"\)\) \{[\s\S]{0,120}scanSiteErrors\(sb, cfg\)[\s\S]{0,160}maybeNoOrderAlarm\(sb, cfg\)/.test(tg)
             && /!\/REGRESYON\/i\.test/.test(tg) && /isTestEmail\(p\.email\)/.test(tg),
             "Telegram “Site hatası” konusu varsayılan açık; müşteri hataları dakikalık taranır; test kayıtları gönderilmez", "konu / tarama eksik");
           ok(/export const onRequestError/.test(ins) && /from\("client_errors"\)\.insert/.test(ins) && /split\("\?"\)\[0\]/.test(ins) && /NEXT_\(REDIRECT\|NOT_FOUND/.test(ins),
