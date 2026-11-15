@@ -147,9 +147,9 @@ export default function PrincipleStories() {
           // Kaçıncı görsel olduğu yalnız üstteki çubuklarda (yazıda "2 / 5" yok — kullanıcı 2026-11-15)
           // Tam ekran: üstte büyük "BAREFOOT NEDİR?" (panelde "Üst yazı"); marka satırı yok (kullanıcı 2026-11-15)
           <span className="text-[26px] leading-none font-black tracking-tight text-[#3F6D14]" style={{ fontFamily: "var(--font-epilogue), system-ui, sans-serif" }}>{P.eyebrow}</span>
-        ) : (
+        ) : phase === "story" ? (
           <span className="text-[13px] font-bold text-[#3F6D14]">YeriHisset · Barefoot nedir?</span>
-        )}
+        ) : <span />}
         <button type="button" aria-label="Kapat" onClick={() => close("x")} className="p-1 text-slate-600"><X size={24} /></button>
       </div>
 
@@ -180,8 +180,8 @@ export default function PrincipleStories() {
         </div>
       ) : (
         <div className="flex-1 min-h-0 overflow-y-auto px-5 pt-6">
-          <h2 className="text-2xl font-black text-[#1C1C19]">Kimin için bakıyorsun?</h2>
-          <p className="text-sm text-slate-500 mt-1 mb-5">Mağazanı seç; numaranı seçip stoktakileri gör.</p>
+          {/* Son ekran (kullanıcı 2026-11-15): başlık "Mağazanı seç", alt yazı ve üstteki marka satırı yok */}
+          <h2 className="text-2xl font-black text-[#1C1C19] mb-5">Mağazanı seç</h2>
           <SegmentChooser compact source="hikaye" onPick={() => close("segment")} />
           <button type="button" onClick={() => close("ana_sayfa")} className="mt-5 w-full text-center text-sm font-semibold text-slate-500 py-3">Ana sayfaya dön</button>
         </div>
