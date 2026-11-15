@@ -1044,6 +1044,36 @@ export default {
           "Trendyol soru kartında fotoğraf: önce sitedeki ürün görseli, açılmazsa sıradaki / gri kutu (kırık simge yok)", "görsel sırası eksik");
       });
 
+      // ESKİ WORDPRESS ADRESLERİ (2026-11-15, canlıya geçiş): Google / Instagram'daki eski bağlantılar 404'e düşmesin → 301
+      await part("Eski site adresleri yeni sayfalara yönleniyor (301)", async () => {
+        const loc = async (p) => { try { const r = await fetch(t.APP + p, { redirect: "manual", signal: AbortSignal.timeout(20000) }); return { status: r.status, to: r.headers.get("location") || "" }; } catch (e) { return { status: 0, to: String(e?.message || e) }; } };
+        const ends = (r, want) => r.status === 301 && (r.to === want || r.to.endsWith(want));
+        const prod = one(`SELECT slug || '|' || lower(model_code) FROM public.products WHERE is_active AND model_code ~ '^[A-Za-z]{2,}[A-Za-z0-9]*[0-9]$' AND slug IS NOT NULL ORDER BY created_at LIMIT 1`);
+        if (prod) {
+          const [pslug, code] = prod.split("|");
+          const r = await loc(`/urun/eski-urun-adi-${code}`);
+          ok(ends(r, `/products/${pslug}`), "Eski ürün adresi (/urun/…-modelkodu) aynı model koduyla yeni ürün sayfasına yönleniyor", `HTTP ${r.status} → ${r.to}`);
+        } else add("warn", "Model kodlu etkin ürün yok — eski ürün adresi yönlendirmesi denenemedi");
+        const cases = [["/urun/olmayan-urun-zz99", "/magaza"], ["/urun-kategori/cocuk", "/magaza/ilkadim"], ["/urun-etiketi/siyah", "/ara?q=siyah"],
+          ["/urun-etiketi/attipas", "/marka/attipas"], ["/hesabim", "/account"], ["/hesabim/orders", "/account"], ["/alisveris-sepeti", "/sepet"],
+          ["/mesafeli-satis-sozlesmesi", "/mesafeli-satis"], ["/teslimat-ve-iade-sartlari", "/iade-degisim"], ["/wishlist", "/favoriler"], ["/tag/barefoot", "/bilgi-bankasi"]];
+        const bad = [];
+        for (const [from, to] of cases) { const r = await loc(from); if (!ends(r, to)) bad.push(`${from} → ${r.status} ${r.to} (beklenen ${to})`); }
+        const post = await loc("/dogru-is-icin-dogru-arac");
+        if (!(post.status === 301 && /\/bilgi-bankasi(\/dogru-is-icin-dogru-arac)?$/.test(post.to))) bad.push(`eski yazı → ${post.status} ${post.to}`);
+        ok(!bad.length, "Eski kategori / etiket / sayfa / yazı adresleri karşılığına yönleniyor", bad.join(" · "));
+        const nf = await loc("/olmayan-sayfa-regresyon");
+        ok(nf.status === 404, "Bilinmeyen adres yine 404 (her şey ana sayfaya atılmıyor)", `HTTP ${nf.status}`);
+        const fs = await import("node:fs");
+        const cfg = fs.readFileSync(new URL("../../next.config.ts", import.meta.url), "utf8");
+        const lib = fs.readFileSync(new URL("../../src/lib/legacy-redirect.ts", import.meta.url), "utf8");
+        const keys = [...(lib.match(/LEGACY_PAGES[\s\S]*?\n\};/)?.[0].matchAll(/^\s+"([a-z0-9-]+)":/gm) ?? [])].map((m) => m[1]).sort().join("|");
+        const posts = [...(lib.match(/LEGACY_POSTS = \[[\s\S]*?\];/)?.[0].matchAll(/"([a-z0-9-]+)"/g) ?? [])].map((m) => m[1]).sort().join("|");
+        const cPages = (cfg.match(/const pages = "([^"]+)"/)?.[1] || "").split("|").sort().join("|");
+        const cPosts = (cfg.match(/const posts = "([^"]+)"/)?.[1] || "").split("|").sort().join("|");
+        ok(keys && keys === cPages && posts && posts === cPosts, "next.config yönlendirme listesi ile eski adres kuralları aynı", `sayfa ${cPages === keys ? "aynı" : "FARKLI"} · yazı ${cPosts === posts ? "aynı" : "FARKLI"}`);
+      });
+
       // YÖNETİCİ İZLEME (2026-11-14): yeni yönetici beklenmiyor → bir hesaba yönetici yetkisi verilirse dakikalık işleyici
       // Telegram'a "YENİ YÖNETİCİ" gönderir (konu seçiminden bağımsız, kapatılamaz). Testin yöneticisi işaretle hariç.
       await part("Güvenlik: yönetici izleme (Telegram)", async () => {

@@ -94,6 +94,20 @@ const nextConfig: NextConfig = {
     ];
   },
 
+  // ESKİ WORDPRESS ADRESLERİ (canlıya geçiş 2026-11-15): içeriden /eski-adres ucuna → orada hedef bulunup 301.
+  // Liste ve kurallar: src/lib/legacy-redirect.ts (LEGACY_PAGES / LEGACY_POSTS ile AYNI tutulmalı — regresyon karşılaştırır).
+  async rewrites() {
+    const pages = "collection|hesabim|siparis-takibi|odeme-sayfasi|alisveris-sepeti|wishlist|affiliate-home|privacy-policy|gizlilik-politikasi|mesafeli-satis-sozlesmesi|terms-and-conditions|teslimat-ve-iade-sartlari|isbirligi-yapmak-ister-misiniz|lets-keep-in-touch|barefoot-toplulugu|sikca-sorulan-sorular|attipas-instagram|attipas-bakim-rehberi|attipas-markasi-hakkinda|attipas-olcu-rehberi-2|attipas-sikca-sorulan-sorular|category|tag";
+    const posts = "neden-barefoot-ayakkabi-giymeliyiz|barefoot-ayakkabi-ozellikleri-zero-drop|cocuklarimizin-ayaklari-nasil-gelisiyor|dogru-is-icin-dogru-arac|postur-bozukluklari-ve-cozumleri|attipas-hakkinda-bilgi|barefoot-bir-ciplak-ayaklinin-ozgecmisi|blog-2-ciplak-ayakli-yurume-sebepleri|barefoot-ayakkabi-tabanlari-neden-ince|barefoot-ayakkabi-rehberi";
+    return [
+      { source: "/urun/:path*", destination: "/eski-adres/urun/:path*" },
+      { source: "/urun-kategori/:path*", destination: "/eski-adres/urun-kategori/:path*" },
+      { source: "/urun-etiketi/:path*", destination: "/eski-adres/urun-etiketi/:path*" },
+      { source: `/:page(${pages})/:rest*`, destination: "/eski-adres/:page" },
+      { source: `/:slug(${posts})`, destination: "/eski-adres/yazi/:slug" },
+    ];
+  },
+
   // ─── HTTP Güvenlik Başlıkları ────────────────────────────────────────────
   async headers() {
     return [
