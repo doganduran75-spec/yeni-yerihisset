@@ -1037,6 +1037,11 @@ export default {
         ok(/getMinutes\(\) % 5 === 1\)[\s\S]{0,80}syncTrendyolQuestions\(supabase\)/.test(cron) && /label: "Cevapsız Trendyol sorusu", href: "\/admin\/messages\?kanal=trendyol"/.test(dash)
           && /<MarketplaceQuestions \/>/.test(msg),
           "Sorular 5 dk'da bir çekiliyor; panoda “Cevapsız Trendyol sorusu”; Mesajlar'da “Trendyol soruları” sekmesi", "cron / pano / sekme eksik");
+        // Soru kartı fotoğrafı (2026-11-15): Trendyol adresi açılmıyordu → önce sitedeki ürün görseli, sonra Trendyol (yol ise CDN öneki), açılmazsa gri kutu
+        const qc = fs.readFileSync(new URL("../../src/components/admin/MarketplaceQuestions.tsx", import.meta.url), "utf8");
+        ok(/\[siteImg, trendyolImg\(r\.image_url\)\]/.test(qc) && /onError=\{\(\) => setImgIdx/.test(qc) && /from\("products"\)\.select\("id, image_url, images"\)/.test(qc)
+          && /https:\/\/cdn\.dsmcdn\.com/.test(qc),
+          "Trendyol soru kartında fotoğraf: önce sitedeki ürün görseli, açılmazsa sıradaki / gri kutu (kırık simge yok)", "görsel sırası eksik");
       });
 
       // YÖNETİCİ İZLEME (2026-11-14): yeni yönetici beklenmiyor → bir hesaba yönetici yetkisi verilirse dakikalık işleyici

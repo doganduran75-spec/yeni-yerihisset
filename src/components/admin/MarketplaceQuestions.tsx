@@ -28,6 +28,7 @@ async function api(body: any) {
 export default function MarketplaceQuestions() {
   const [rows, setRows] = useState<any[]>([]);
   const [stock, setStock] = useState<Record<string, { size: string; stock: number }[]>>({});
+  const [imgs, setImgs] = useState<Record<string, string>>({});
   const [filter, setFilter] = useState<"waiting" | "all">("waiting");
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -50,6 +51,11 @@ export default function MarketplaceQuestions() {
       }
       for (const k of Object.keys(m)) m[k].sort((a, b) => parseFloat(a.size.replace(",", ".")) - parseFloat(b.size.replace(",", ".")));
       setStock(m);
+      // Fotoğraf: önce sitedeki ürün görseli (Trendyol'un verdiği adres her zaman açılmıyor)
+      const { data: ps } = await (supabase as any).from("products").select("id, image_url, images").in("id", pids);
+      const im: Record<string, string> = {};
+      for (const p of (ps as any[]) || []) { const u = p.image_url || (p.images || [])[0]; if (u) im[p.id] = u; }
+      setImgs(im);
     }
     setLoading(false);
   }, [filter]);
@@ -80,14 +86,27 @@ export default function MarketplaceQuestions() {
       <div className="flex-1 overflow-y-auto space-y-3 pr-1">
         {loading ? <div className="p-8 text-center"><Loader2 className="animate-spin mx-auto text-blue-600" /></div>
           : rows.length === 0 ? <p className="p-8 text-center text-sm text-muted-foreground italic">{filter === "waiting" ? "Cevap bekleyen Trendyol sorusu yok." : "Henüz soru yok."}</p>
-          : rows.map((r) => <QuestionCard key={r.id} r={r} sizes={r.product_id ? stock[r.product_id] : undefined} onDone={load} />)}
+          : rows.map((r) => <QuestionCard key={r.id} r={r} sizes={r.product_id ? stock[r.product_id] : undefined} siteImg={r.product_id ? imgs[r.product_id] : undefined} onDone={load} />)}
       </div>
       <p className="text-[11px] text-muted-foreground">Sorular 5 dakikada bir Trendyol'dan çekilir. Cevap Trendyol'un incelemesinden sonra yayınlanır; telefon, e-posta, bağlantı ya da pazaryeri dışına yönlendirme içeren cevaplar reddedilir.</p>
     </div>
   );
 }
 
-function QuestionCard({ r, sizes, onDone }: { r: any; sizes?: { size: string; stock: number }[]; onDone: () => void }) {
+/** Trendyol bazen alan adı olmadan yol verir ("/ty…/product/…") → CDN önekiyle tamamla */
+export function trendyolImg(u?: string | null): string | null {
+  const s = String(u || "").trim();
+  if (!s) return null;
+  if (/^https?:\/\//i.test(s)) return s;
+  if (s.startsWith("//")) return `https:${s}`;
+  return `https://cdn.dsmcdn.com${s.startsWith("/") ? "" : "/"}${s}`;
+}
+
+function QuestionCard({ r, sizes, siteImg, onDone }: { r: any; sizes?: { size: string; stock: number }[]; siteImg?: string; onDone: () => void }) {
+  // Sıra: sitedeki ürün görseli → Trendyol görseli → gri kutu (açılmayan görsel kırık simge göstermez)
+  const srcs = [siteImg, trendyolImg(r.image_url)].filter(Boolean) as string[];
+  const [imgIdx, setImgIdx] = useState(0);
+  const img = srcs[imgIdx];
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -109,7 +128,7 @@ function QuestionCard({ r, sizes, onDone }: { r: any; sizes?: { size: string; st
   return (
     <div className="rounded-2xl border bg-white p-4 space-y-3">
       <div className="flex gap-3">
-        {r.image_url ? <img src={r.image_url} alt="" className="w-14 h-14 rounded-xl object-cover shrink-0 bg-slate-100" /> : <div className="w-14 h-14 rounded-xl bg-slate-100 shrink-0" />}
+        {img ? <img key={img} src={img} alt="" referrerPolicy="no-referrer" onError={() => setImgIdx((i) => i + 1)} className="w-14 h-14 rounded-xl object-cover shrink-0 bg-slate-100" /> : <div className="w-14 h-14 rounded-xl bg-slate-100 shrink-0" />}
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className={cn("text-[10px] font-bold rounded-full px-2 py-0.5", STATUS_TONE[r.status] ?? "bg-slate-100")}>{QNA_STATUS_LABEL[r.status] ?? r.status}</span>
