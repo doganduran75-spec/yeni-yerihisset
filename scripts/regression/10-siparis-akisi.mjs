@@ -1099,7 +1099,7 @@ export default {
           && /activeTab === "email-approval" && <EmailApprovals \/>/.test(st) && /activeTab === "email-test"\s+&& <EmailTestPage \/>/.test(st),
           "Sistem, E-posta denemesi, E-posta onayı Ayarlar sekmelerinde (sol menüde değil)", "menü taşıması eksik");
         const hct = rd("src/components/admin/settings/HomeContentTab.tsx"), up = rd("src/components/admin/settings/ImageUploadInput.tsx");
-        ok(/if \(k === "image"\) return [^\n]*<ImageUploadInput /.test(hct) && /storage\.from\("site"\)\.upload\(/.test(up) && /\^image\\\//.test(up) && /5 \* 1024 \* 1024/.test(up),
+        ok(/if \(k === "image"[^)]*\) return [^\n]*<ImageUploadInput /.test(hct) && /storage\.from\("site"\)\.upload\(/.test(up) && /\^image\\\//.test(up) && /5 \* 1024 \* 1024/.test(up),
           "Ana sayfa prensip görseli panelden yüklenebiliyor (yalnız görsel, en çok 5 MB)", "yükleme düğmesi eksik");
         const ps = rd("src/components/PrincipleStories.tsx"), hcf = rd("src/config/homeContent.ts");
         ok(/storyFullscreen: false/.test(hcf) && (hcf.match(/imageTall: ""/g) || []).length === 5 && /const full = !!P\.storyFullscreen/.test(ps) && /it\.imageTall \|\| it\.image/.test(ps)
