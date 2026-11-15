@@ -21,7 +21,7 @@ const SECTION: Record<string, string> = {
   sizeFinder: "Doğru numarayı bul (mobil)", footer: "Alt bilgi (masaüstü ana sayfa)",
 };
 const LABEL: Record<string, string> = {
-  storyFullscreen: "Hikâye tam ekran (görsel tüm ekranı kaplar, yazı üstünde)", imageTall: "Tam ekran hikâye için dik görsel (1080×1920; boşsa üstteki görsel kırpılır)",
+  storyFullscreen: "Hikâye tam ekran (görsel tüm ekranı kaplar, yazı üstünde)", shiftUp: "Tam ekranda görseli yukarı kaydır (% — ör. 8; eksi değer aşağı)", imageTall: "Tam ekran hikâye için dik görsel (1080×1920; boşsa üstteki görsel kırpılır)",
   badge: "Rozet (masaüstü)", question: "Soru", subtitleDesktop: "Alt yazı (masaüstü)", subtitleMobile: "Alt yazı (mobil)",
   promptMobile: "Mobil soru", continueLink: "\"Ana sayfaya devam\" bağlantısı", learn: "Rehber kartı", shop: "Mağaza kartı",
   pill: "Etiket", pillMobile: "Etiket (mobil)", title: "Başlık", titleMobile: "Başlık (mobil)", body: "Açıklama", cta: "Düğme yazısı",

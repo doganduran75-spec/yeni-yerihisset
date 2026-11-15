@@ -119,6 +119,8 @@ export default function PrincipleStories() {
     onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
   };
   const fullImg = it.imageTall || it.image;
+  // Panelden görseli yukarı / aşağı kaydırma (kullanıcı 2026-11-15: ürün her görselde aynı göz hizasında olsun; yeniden üretmeden ayar)
+  const shift = Math.max(-25, Math.min(25, Number((it as { shiftUp?: number }).shiftUp) || 0));
 
   return (
     <div className={`md:hidden fixed inset-0 z-[70] flex flex-col bg-[#F4EFE6]`} role="dialog" aria-modal="true" aria-label="Barefoot nedir?"
@@ -126,7 +128,7 @@ export default function PrincipleStories() {
       {/* Tam ekran: görsel arkada, alt yarıda okunurluk için koyu geçiş */}
       {full && phase === "story" && (
         <div className="absolute inset-0 select-none touch-manipulation" {...tap}>
-          {fullImg && <img key={fullImg} src={fullImg} alt={it.title} draggable={false} className="absolute inset-0 w-full h-full object-cover pointer-events-none" />}
+          {fullImg && <img key={fullImg} src={fullImg} alt={it.title} draggable={false} className="absolute inset-0 w-full h-full object-cover pointer-events-none" style={shift ? { transform: `translateY(${-shift}%)` } : undefined} />}
           {/* sonraki görseller önceden yüklensin (kısa sürelerde boş ekran olmasın) */}
           {items.map((x) => { const u = x.imageTall || x.image; return u && u !== fullImg ? <img key={`pre-${u}`} src={u} alt="" aria-hidden className="hidden" /> : null; })}
           {/* Açık krem geçiş: koyu yazı her görselde okunur (kullanıcı 2026-11-15: beyaz yazı yerine) */}
