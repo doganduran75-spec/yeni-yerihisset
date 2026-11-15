@@ -131,7 +131,7 @@ export default function PrincipleStories() {
           {items.map((x) => { const u = x.imageTall || x.image; return u && u !== fullImg ? <img key={`pre-${u}`} src={u} alt="" aria-hidden className="hidden" /> : null; })}
           {/* Açık krem geçiş: koyu yazı her görselde okunur (kullanıcı 2026-11-15: beyaz yazı yerine) */}
           <div className="absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-[#F4EFE6]/95 via-[#F4EFE6]/60 to-transparent pointer-events-none" />
-          <div className="absolute inset-x-0 bottom-0 h-[55%] bg-gradient-to-t from-[#F4EFE6] via-[#F4EFE6]/85 to-transparent pointer-events-none" />
+          <div className="absolute inset-x-0 bottom-0 h-[40%] bg-gradient-to-t from-[#F4EFE6] via-[#F4EFE6]/85 to-transparent pointer-events-none" />
         </div>
       )}
       {/* İlerleme çubukları */}
