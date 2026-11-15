@@ -1098,6 +1098,9 @@ export default {
         ok(!/href="\/admin\/system"/.test(lay) && !/href="\/admin\/crm\/email-test"/.test(lay) && /activeTab === "system"\s+&& <SystemPage \/>/.test(st)
           && /activeTab === "email-approval" && <EmailApprovals \/>/.test(st) && /activeTab === "email-test"\s+&& <EmailTestPage \/>/.test(st),
           "Sistem, E-posta denemesi, E-posta onayı Ayarlar sekmelerinde (sol menüde değil)", "menü taşıması eksik");
+        const hct = rd("src/components/admin/settings/HomeContentTab.tsx"), up = rd("src/components/admin/settings/ImageUploadInput.tsx");
+        ok(/if \(k === "image"\) return [^\n]*<ImageUploadInput /.test(hct) && /storage\.from\("site"\)\.upload\(/.test(up) && /\^image\\\//.test(up) && /5 \* 1024 \* 1024/.test(up),
+          "Ana sayfa prensip görseli panelden yüklenebiliyor (yalnız görsel, en çok 5 MB)", "yükleme düğmesi eksik");
       });
 
       await part("Eski site adresleri yeni sayfalara yönleniyor (301)", async () => {

@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import ImageUploadInput from "@/components/admin/settings/ImageUploadInput";
 import { siteAlert, siteConfirm } from "@/components/ui/site-dialog";
 import { homeContent } from "@/config/homeContent";
 import { mergeHomeContent } from "@/lib/home-content-merge";
@@ -51,6 +52,8 @@ function Field({ k, value, onChange }: { k: string; value: any; onChange: (v: an
     );
   }
   if (k === "icon") return null; // simge seçimi tasarımla ilgili; panelde değişmez
+  // Görsel adresi: kutu + "Yükle" düğmesi + küçük önizleme (2026-11-15)
+  if (k === "image") return (<div className="space-y-1"><label className="text-xs font-medium text-slate-600">{lbl(k)}</label><ImageUploadInput value={String(value ?? "")} onChange={onChange} /></div>);
   const long = String(value).length > 70;
   return (
     <div className="space-y-1">
