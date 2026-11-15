@@ -1071,6 +1071,14 @@ export default {
         const posts = [...(lib.match(/LEGACY_POSTS = \[[\s\S]*?\];/)?.[0].matchAll(/"([a-z0-9-]+)"/g) ?? [])].map((m) => m[1]).sort().join("|");
         const cPages = (cfg.match(/const pages = "([^"]+)"/)?.[1] || "").split("|").sort().join("|");
         const cPosts = (cfg.match(/const posts = "([^"]+)"/)?.[1] || "").split("|").sort().join("|");
+        // Canlıya geçiş betikleri (2026-11-15): Caddy bloğu güvenli eklenir (yedek + doğrulama + geri alma), www → kök, şifre kapısı / noindex yok
+        const gc = fs.readFileSync(new URL("../../scripts/golive-caddy.sh", import.meta.url), "utf8");
+        const ge = fs.readFileSync(new URL("../../scripts/golive-env.sh", import.meta.url), "utf8");
+        const liveBlock = gc.slice(gc.indexOf("yerihisset.com {"), gc.indexOf("www.yerihisset.com {"));
+        ok(/caddy validate/.test(gc) && /cp "\$BACKUP" "\$CF"/.test(gc) && /redir https:\/\/yerihisset\.com\{uri\} permanent/.test(gc)
+          && !/basic_auth|noindex/i.test(liveBlock) && /reverse_proxy 127\.0\.0\.1:3000/.test(liveBlock) && /respond @wpbot 410/.test(liveBlock)
+          && /NEXT_PUBLIC_SITE_URL https:\/\/yerihisset\.com/.test(ge) && /IYZICO_BASE_URL https:\/\/api\.iyzipay\.com/.test(ge) && !/IYZICO_API_KEY [^ ]/.test(ge),
+          "Canlıya geçiş betikleri: Caddy bloğu yedekli + doğrulamalı, şifre kapısı / noindex yok, www → kök; ayar betiği anahtar yazmıyor", "betik değişmiş");
         ok(keys && keys === cPages && posts && posts === cPosts, "next.config yönlendirme listesi ile eski adres kuralları aynı", `sayfa ${cPages === keys ? "aynı" : "FARKLI"} · yazı ${cPosts === posts ? "aynı" : "FARKLI"}`);
       });
 
