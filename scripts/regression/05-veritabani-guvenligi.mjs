@@ -89,6 +89,37 @@ export default {
         fns.error ? fns : fns.filter((r) => !PUBLIC_OK.has(r.f)),
         "gözden geçir (anon çalıştırabiliyor)", (r) => r.f, "warn");
 
+      // 2026-11-16 (MIG 20261190): SECURITY DEFINER içinde current_user HER ZAMAN fonksiyonun sahibidir (postgres) →
+      // "current_user IN / NOT IN (…)" ile yapılan yetki kontrolü hiç çalışmaz (apply_price_changes böyle açıktı).
+      // Güvenilen çağıran için public.trusted_db_caller() (session_user / service_role) kullanılır.
+      check("Yetkili (SECURITY DEFINER) fonksiyonlarda current_user'a dayanan yetki kontrolü yok",
+        list(`SELECT p.proname AS f FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+              WHERE n.nspname = 'public' AND p.prosecdef AND p.prosrc ~* 'current_user\\s+(not\\s+)?in\\s*\\(' ORDER BY 1`),
+        "kontrol çalışmıyor (current_user = sahibi)", (r) => r.f);
+
+      // Üyenin (giriş yapmış) çağırabildiği yetkili fonksiyonlar içeride kimlik kontrolü yapmalı (yönetici ya da kendi kaydı)
+      const MEMBER_OK = new Set([...PUBLIC_OK, "my_member_status"]);
+      const memFns = list(`SELECT DISTINCT p.proname AS f FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+                           WHERE n.nspname = 'public' AND p.prosecdef AND has_function_privilege('authenticated', p.oid, 'EXECUTE')
+                             AND p.prorettype <> 'trigger'::regtype
+                             AND p.prosrc !~* '(is_admin\\s*\\(|auth\\.uid\\s*\\(|trusted_db_caller\\s*\\()' ORDER BY 1`);
+      check("Üyenin çağırabildiği yetkili fonksiyonlar içeride kimlik kontrolü yapıyor",
+        memFns.error ? memFns : memFns.filter((r) => !MEMBER_OK.has(r.f)),
+        "gözden geçir (üye çalıştırabiliyor, kontrol görünmüyor)", (r) => r.f, "warn");
+
+      // Para / indirim / fiyat / yorum onayı tutan tablolarda üyeye yazma kuralı yok (yalnız yönetici ya da sunucu).
+      // İstisna: order_reviews ekleme kuralı ONAYSIZ (is_approved = false) şartıyla (Hesabım › Yorum yap).
+      const MONEY = ["affiliate_profiles", "affiliate_conversions", "store_credit_ledger", "user_coupons", "coupons", "order_coupons",
+        "orders", "order_items", "products", "product_variants", "item_prices", "price_lists", "order_reviews"];
+      check("Para / fiyat / kupon / yorum onayı tablolarında üyeye yazma kuralı yok",
+        list(`SELECT tablename AS t, policyname AS p, cmd FROM pg_policies
+              WHERE schemaname = 'public' AND cmd IN ('INSERT','UPDATE','DELETE','ALL')
+                AND tablename = ANY (ARRAY[${MONEY.map((x) => `'${x}'`).join(",")}])
+                AND coalesce(qual, '') || ' ' || coalesce(with_check, '') !~* '(is_admin|role\\s*=\\s*''admin'')'
+                AND NOT (tablename = 'order_reviews' AND cmd = 'INSERT' AND coalesce(with_check, '') ~* 'is_approved\\s*=\\s*false')
+              ORDER BY 1, 2`),
+        "üye yazabiliyor", (r) => `${r.t}.${r.p} (${r.cmd})`);
+
       // 20261107: dışarıdan çağrılabilen yetkili fonksiyonlar kapatıldı (gerçek çağrıyla dene; zararsız parametreler)
       const rpc = async (fn, body) => (await rest(`rpc/${fn}`, { method: "POST", body })).status;
       const l = await rpc("link_contacts_for_user", { p_user: "00000000-0000-0000-0000-000000000000", p_email: "rgt-yok@yerihisset.test" });

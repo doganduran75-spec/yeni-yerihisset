@@ -398,6 +398,46 @@ export default {
         ok(Array.isArray(mine.json) && mine.json.length === 1, "Üye kendi siparişini görüyor", `HTTP ${mine.status}, ${mine.text.slice(0, 80)}`);
         const u = await rest(`orders?id=eq.${O.paid}`, { token: F.member.token, method: "PATCH", headers: { Prefer: "return=representation" }, body: { payment_status: "paid" } });
         ok(ord(O.paid).payment_status === "pending", "Üye kendi siparişini 'ödendi' yapamıyor", `HTTP ${u.status} — ödeme durumu ${ord(O.paid).payment_status}`);
+
+        // Tarayıcıdan doğrudan veritabanı (güvenlik taraması 2026-11-16, MIG 20261190)
+        // a) Fiyat / eşleştirme fonksiyonları yalnız yöneticiye (eski kontrol SECURITY DEFINER içinde current_user'a
+        //    bakıyordu → hiç reddetmiyordu). Boş değişiklik listesi: açık olsa bile hiçbir fiyat değişmez.
+        {
+          const pm = await rest("rpc/apply_price_changes", { token: F.member.token, method: "POST", body: { p_changes: [], p_source: "regresyon" } });
+          const pa = await rest("rpc/apply_price_changes", { token: F.admin.token, method: "POST", body: { p_changes: [], p_source: "regresyon" } });
+          ok(pm.status >= 400 && pa.status === 200, "Üye fiyat değiştirme fonksiyonunu çağıramıyor, yönetici çağırabiliyor", `üye HTTP ${pm.status}, yönetici HTTP ${pa.status}`);
+          const rm = await rest("rpc/rematch_order_items", { token: F.member.token, method: "POST", body: {} });
+          ok(rm.status >= 400, "Üye aktarılan sipariş eşleştirmesini çalıştıramıyor", `HTTP ${rm.status}`);
+        }
+        // b) Üye kendine satış ortaklığı kaydı (kredi bakiyesiyle) açamıyor — başvuru yalnız sunucudan
+        {
+          const code = `RGT${RUN.toUpperCase()}KREDI`;
+          const ins = await rest("affiliate_profiles", { token: F.member.token, method: "POST", headers: { Prefer: "return=minimal" },
+            body: { user_id: F.member.id, code, status: "active", commission_rate: 50, credit_balance: 99999 } });
+          const made = num(`SELECT count(*) FROM public.affiliate_profiles WHERE code = ${lit(code)}`);
+          if (made) sql(`DELETE FROM public.affiliate_profiles WHERE code = ${lit(code)}`);
+          ok(ins.status >= 400 && made === 0, "Üye tarayıcıdan kendine satış ortaklığı / kredi kaydı açamıyor", `HTTP ${ins.status}, açılan kayıt ${made}`);
+        }
+        // c) Yorum: üye yalnız KENDİ siparişine ONAYSIZ yorum ekler; onaylı ekleyemez, başkasının siparişine ekleyemez,
+        //    eklediği yorumu "onaylı" yapamaz
+        {
+          const rv = (order_id, extra = {}) => rest("order_reviews", { token: F.member.token, method: "POST", headers: { Prefer: "return=minimal" },
+            body: { order_id, user_id: F.member.id, rating_shipping: 5, rating_quality: 5, rating_communication: 5, comment: "REGRESYON-TEST yorum", ...extra } });
+          const cnt = () => num(`SELECT count(*) FROM public.order_reviews WHERE user_id = ${lit(F.member.id)} AND comment = 'REGRESYON-TEST yorum'`);
+          const approved = await rv(O.paid, { is_approved: true });
+          const nApproved = cnt();
+          sql(`DELETE FROM public.order_reviews WHERE user_id = ${lit(F.member.id)} AND comment = 'REGRESYON-TEST yorum'`);
+          const other = O.guest ? await rv(O.guest) : { status: 403 };
+          const nOther = cnt();
+          sql(`DELETE FROM public.order_reviews WHERE user_id = ${lit(F.member.id)} AND comment = 'REGRESYON-TEST yorum'`);
+          const own = await rv(O.paid);
+          const pat = await rest(`order_reviews?order_id=eq.${O.paid}&user_id=eq.${F.member.id}`, { token: F.member.token, method: "PATCH", headers: { Prefer: "return=minimal" }, body: { is_approved: true } });
+          const st = one(`SELECT string_agg(is_approved::text, ',') FROM public.order_reviews WHERE user_id = ${lit(F.member.id)} AND comment = 'REGRESYON-TEST yorum'`);
+          sql(`DELETE FROM public.order_reviews WHERE user_id = ${lit(F.member.id)} AND comment = 'REGRESYON-TEST yorum'`);
+          ok(approved.status >= 400 && nApproved === 0 && other.status >= 400 && nOther === 0 && own.status < 300 && st === "false",
+            "Yorum: üye yalnız kendi siparişine onaysız yorum ekliyor; onaylı / başkasının siparişine ekleyemiyor, onaylı yapamıyor",
+            `onaylı ekleme HTTP ${approved.status} (${nApproved}), başkasının siparişi HTTP ${other.status} (${nOther}), kendi siparişi HTTP ${own.status}, onaylı yapma HTTP ${pat.status} → onay ${st}`);
+        }
       });
 
       await part("Ödeme onayı, iade, iptal", async () => {
