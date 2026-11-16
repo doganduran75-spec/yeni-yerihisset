@@ -66,12 +66,12 @@ export async function POST(req: NextRequest) {
       .from("user_coupons")
       .update({ max_uses: newGranted })
       .eq("id", (uc as any).id);
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) { console.error("[opportunity/claim]", error.message); return NextResponse.json({ error: "Fırsat eklenemedi, lütfen biraz sonra tekrar dene." }, { status: 500 }); }
   } else {
     const { error } = await supabase
       .from("user_coupons")
       .insert({ user_id: user.id, coupon_id: couponId, use_count: 0, max_uses: 1 } as any);
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) { console.error("[opportunity/claim]", error.message); return NextResponse.json({ error: "Fırsat eklenemedi, lütfen biraz sonra tekrar dene." }, { status: 500 }); }
   }
 
   return NextResponse.json({

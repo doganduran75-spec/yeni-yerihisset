@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { rateLimited, clientIp, TOO_MANY } from "@/lib/rate-limit";
 import { botVerdict, botResponse } from "@/lib/bot-guard";
@@ -11,8 +11,43 @@ import { sendPasswordRecoveryEmail } from "@/lib/notifications";
  * çalışır. Recovery linkini admin.generateLink ile üretir, markalı e-postayı
  * uygulama SMTP'si (nodemailer) ile gönderir. Tüm diğer e-postalarla aynı yol.
  *
- * Güvenlik: kullanıcı olsun olmasın DAİMA generic başarı döner (e-posta enum yok).
+ * Güvenlik: kullanıcı olsun olmasın cevap HER ZAMAN AYNI — { ok: true }, aynı hızda (güvenlik 2026-11-16: cevapta
+ * emailStatus "skipped" / "sent" dönüyordu → hesabın var olup olmadığı belli oluyordu). Hesap arama + bağlantı +
+ * e-posta cevaptan SONRA (after) çalışır; sonuç yalnız sunucu kaydında.
  */
+async function sendRecovery(email: string) {
+  const supabase = createAdminClient();
+  const storeUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com";
+
+  // Üye var mı? (yoksa sessizce bitir — enumeration önleme)
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("id, email, first_name, last_name")
+    .eq("email", email)
+    .maybeSingle();
+  if (!profile) return;
+
+  const { data: linkData, error: linkErr } = await supabase.auth.admin.generateLink({
+    type: "recovery",
+    email,
+    options: { redirectTo: `${storeUrl}/sifre-belirle` },
+  } as any);
+
+  // Supabase'in action_link'i yerine token_hash'i alıp linki KENDİ domainimizde
+  // kuruyoruz → e-postada altyapı (supabase/auth/verify) görünmez.
+  const hashedToken = (linkData as any)?.properties?.hashed_token;
+  const actionUrl = hashedToken
+    ? `${storeUrl}/sifre-belirle?token_hash=${hashedToken}&type=recovery`
+    : null;
+  if (linkErr || !actionUrl) {
+    console.error("[forgot-password] generateLink hatası:", linkErr?.message || "Recovery linki üretilemedi");
+    return;
+  }
+  const name = [(profile as any).first_name, (profile as any).last_name].filter(Boolean).join(" ") || null;
+  const res = await sendPasswordRecoveryEmail({ to: email, name, actionUrl });
+  if (res.status === "failed") console.error("[forgot-password] e-posta gönderilemedi:", res.error);
+}
+
 export async function POST(req: NextRequest) {
   // Toplu kötüye kullanıma karşı IP başına sınır
   if (rateLimited("forgot", clientIp(req), 5, 900000)) return NextResponse.json(TOO_MANY, { status: 429 });
@@ -25,46 +60,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Geçerli bir e-posta girin." }, { status: 400 });
   }
 
-  const supabase = createAdminClient();
-  const storeUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com";
-
-  // Üye var mı? (yoksa sessizce başarı dön — enumeration önleme)
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("id, email, first_name, last_name")
-    .eq("email", email)
-    .maybeSingle();
-
-  let emailStatus: "sent" | "failed" | "skipped" = "skipped";
-  let emailError: string | undefined;
-
-  if (profile) {
-    const { data: linkData, error: linkErr } = await supabase.auth.admin.generateLink({
-      type: "recovery",
-      email,
-      options: { redirectTo: `${storeUrl}/sifre-belirle` },
-    } as any);
-
-    // Supabase'in action_link'i yerine token_hash'i alıp linki KENDİ domainimizde
-    // kuruyoruz → e-postada altyapı (supabase/auth/verify) görünmez.
-    const hashedToken = (linkData as any)?.properties?.hashed_token;
-    const actionUrl = hashedToken
-      ? `${storeUrl}/sifre-belirle?token_hash=${hashedToken}&type=recovery`
-      : null;
-    if (linkErr || !actionUrl) {
-      emailStatus = "failed";
-      emailError = linkErr?.message || "Recovery linki üretilemedi";
-      console.error("[forgot-password] generateLink hatası:", emailError);
-    } else {
-      const name = [(profile as any).first_name, (profile as any).last_name].filter(Boolean).join(" ") || null;
-      const res = await sendPasswordRecoveryEmail({ to: email, name, actionUrl });
-      emailStatus = res.status;
-      emailError = res.error;
-      if (res.status === "failed") console.error("[forgot-password] e-posta gönderilemedi:", res.error);
-    }
-  }
-
-  // Kullanıcıya daima aynı mesaj (varlık sızdırma yok). emailStatus yalnız
-  // teşhis için döner; login ekranı generic başarı gösterir.
-  return NextResponse.json({ ok: true, emailStatus, emailError });
+  after(() => sendRecovery(email).catch((e) => console.error("[forgot-password]", e?.message || e)));
+  return NextResponse.json({ ok: true });
 }

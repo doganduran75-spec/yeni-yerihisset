@@ -245,7 +245,7 @@ export async function POST(req: NextRequest) {
 
   if (orderError || !order) {
     console.error("[iyzico/initialize] orderError:", orderError);
-    return NextResponse.json({ error: "Sipariş oluşturulamadı", detail: orderError?.message }, { status: 500 });
+    return NextResponse.json({ error: "Sipariş oluşturulamadı, lütfen tekrar dene." }, { status: 500 });
   }
 
   // Kuponlar siparişe yazılır; kullanım ÖDEME ONAYINDA sayılır (callback › countOrderCoupons)

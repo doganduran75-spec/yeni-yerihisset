@@ -22,6 +22,6 @@ export async function POST(req: NextRequest) {
   const { data, error } = await sb.from("messages").update({ is_read: true })
     .eq("order_id", orderId).eq("user_id", user.id).eq("sender_role", "admin").eq("is_read", false)
     .select("id");
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) { console.error("[messages/read]", error.message); return NextResponse.json({ error: "Kaydedilemedi" }, { status: 500 }); }
   return NextResponse.json({ ok: true, read: (data || []).length });
 }

@@ -51,11 +51,15 @@ export async function POST(req: NextRequest) {
   const res: any = await performCustomerCancel(x.sb, x.order, { reason: body.reason, ip, via: x.via, paidClaim: body.paidClaim === true, iban: body.iban, ibanName: body.ibanName });
   if (res.error) {
     if (res.notifyAdmin) {
+      // Veritabanı hatası: ayrıntı yalnız yöneticiye (metin olarak), müşteriye genel mesaj (güvenlik 2026-11-16)
+      console.error("[order-cancel]", x.order.id, res.error);
+      const safe = String(res.error).slice(0, 200).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
       import("@/lib/after-sale-mail").then(({ sendAdminCaseEmail }) =>
         sendAdminCaseEmail(x.order.id, "Müşteri iptal etmek istedi — tamamlanamadı", [
-          `Müşteri siparişi iptal etmek istedi ama işlem tamamlanamadı: <b>${String(res.error).slice(0, 200)}</b>`,
+          `Müşteri siparişi iptal etmek istedi ama işlem tamamlanamadı: <b>${safe}</b>`,
           "Siparişi panelden iptal edip ödemeyi iade et.",
         ])).catch(() => {});
+      return NextResponse.json({ error: "İptal şu an tamamlanamadı. Ekibimize haber verdik, en kısa sürede dönüş yapacağız." }, { status: 500 });
     }
     return NextResponse.json({ error: res.error }, { status: 400 });
   }

@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
     .select()
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) { console.error("[affiliate/apply]", error.message); return NextResponse.json({ error: "Başvuru kaydedilemedi, lütfen biraz sonra tekrar dene." }, { status: 500 }); }
 
   const { assignRole } = await import("@/lib/user-roles");
   await assignRole(user.id, "affiliate");

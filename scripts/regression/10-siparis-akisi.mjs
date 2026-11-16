@@ -2266,6 +2266,14 @@ export default {
         } else {
           ok(o.status === "cancelled" && !!note, "Kart dönüşünde sipariş ödeme anahtarıyla bulunuyor (başarısız → iptal + gerekçe notu)", `HTTP ${cb.status}, durum ${o.status}, not: ${note || "yok"}`);
           ok(/neden=(banka|iptal)/.test(cb.text), "Başarısız ödemede müşteriye neden bilgisi gidiyor", cb.text.slice(0, 160));
+          // Güvenlik 2026-11-16: adrese serbest metin (mesaj) konmuyor; aynı dönüş ikinci kez gelince yan etki yok
+          ok(!/[?&](amp;)?mesaj=/.test(cb.text), "Başarısız ödeme dönüş adresinde serbest metin (mesaj) yok", cb.text.slice(0, 160));
+          const notes1 = num(`SELECT count(*) FROM public.order_events WHERE order_id = ${lit(id)} AND note LIKE 'Kart ödemesi başarısız%'`);
+          const cb2 = await fetch(`${t.APP}/api/checkout/iyzico/callback`, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: `token=${encodeURIComponent(tok)}` })
+            .then(async (x) => ({ status: x.status, text: await x.text() })).catch((e) => ({ status: 0, text: String(e) }));
+          const notes2 = num(`SELECT count(*) FROM public.order_events WHERE order_id = ${lit(id)} AND note LIKE 'Kart ödemesi başarısız%'`);
+          ok(cb2.status === 200 && notes1 === 1 && notes2 === 1, "Aynı kart dönüşü ikinci kez gelince yeniden işlenmiyor (not / stok / kredi tek sefer)",
+            `ikinci dönüş HTTP ${cb2.status}, not sayısı ${notes1} → ${notes2}`);
         }
       });
 

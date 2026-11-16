@@ -49,7 +49,10 @@ export async function POST(req: NextRequest) {
     if (msg.includes("already") || msg.includes("registered") || msg.includes("exists") || (error as any)?.status === 422) {
       return NextResponse.json({ error: "Bu e-posta zaten kayıtlı. Giriş yapmayı deneyin." }, { status: 409 });
     }
-    return NextResponse.json({ error: error?.message || "Kayıt oluşturulamadı." }, { status: 400 });
+    // Ayrıntı (Supabase / veritabanı iletisi) yalnız sunucu kaydına (güvenlik 2026-11-16)
+    console.error("[register]", error?.message);
+    if (/password/i.test(error?.message || "")) return NextResponse.json({ error: "Şifre kabul edilmedi; daha uzun ve tahmini zor bir şifre dene." }, { status: 400 });
+    return NextResponse.json({ error: "Kayıt oluşturulamadı, lütfen biraz sonra tekrar dene." }, { status: 400 });
   }
 
   // Profil garantiye al (trigger yoksa) — ad/soyad dahil, doğrulanmadı olarak

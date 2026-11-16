@@ -167,7 +167,7 @@ export async function POST(req: NextRequest) {
     if (insertError) {
       console.error("stock_notify insert error:", insertError);
       return NextResponse.json(
-        { error: "Kayıt başarısız", detail: insertError.message, code: insertError.code },
+        { error: "Kayıt başarısız, lütfen biraz sonra tekrar dene." }, // ayrıntı yalnız sunucu kaydında (güvenlik 2026-11-16)
         { status: 500 }
       );
     }
@@ -211,7 +211,7 @@ export async function POST(req: NextRequest) {
   } catch (err: any) {
     console.error("stock_notify unexpected error:", err);
     return NextResponse.json(
-      { error: "Sunucu hatası", detail: err?.message ?? String(err) },
+      { error: "Bir sorun oluştu, lütfen biraz sonra tekrar dene." },
       { status: 500 }
     );
   }

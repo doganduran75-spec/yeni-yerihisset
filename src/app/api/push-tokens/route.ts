@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
     .from("push_tokens")
     .upsert({ user_id: user.id, token, platform }, { onConflict: "user_id,token" });
 
-  if (error) return Response.json({ error: error.message }, { status: 500 });
+  if (error) { console.error("[push-tokens]", error.message); return Response.json({ error: "Kaydedilemedi" }, { status: 500 }); }
   return Response.json({ success: true });
 }
 
@@ -32,6 +32,6 @@ export async function DELETE(request: NextRequest) {
     .eq("user_id", user.id)
     .eq("token", token);
 
-  if (error) return Response.json({ error: error.message }, { status: 500 });
+  if (error) { console.error("[push-tokens]", error.message); return Response.json({ error: "Kaydedilemedi" }, { status: 500 }); }
   return Response.json({ success: true });
 }

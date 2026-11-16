@@ -21,6 +21,9 @@ export const CANCEL_COLS = "id, order_number, user_id, channel, import_source, s
 export const orderLabelOf = (o: any) => (o.order_number ? `YH${o.order_number}` : String(o.id).slice(0, 8).toUpperCase());
 const money = (n: number) => `₺${n.toFixed(2)}`;
 const maskIban = (i: string) => `${i.slice(0, 4)} … ${i.slice(-4)}`;
+// Yönetici e-postasına giden müşteri / dış servis metni HTML olarak işlenmesin (güvenlik 2026-11-16: IBAN sahibi adına
+// bağlantı / sahte düğme yazılabiliyordu)
+const esc = (v: unknown) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 
 type Opts = { reason?: string; ip: string; via: "email" | "account"; paidClaim?: boolean; iban?: string; ibanName?: string };
 
@@ -95,16 +98,16 @@ export async function performCustomerCancel(sb: any, order: any, opts: Opts) {
   const adminLine: Record<CancelOutcome, string> = {
     cancelled: "Ödeme alınmamıştı; iade gerekmiyor.",
     card_refunded: `Kartla ödenmişti: <b>${money(refunded)}</b> iyzico'dan kendiliğinden iade edildi.`,
-    card_refund_pending: `Kartla ödenmişti ama <b>iyzico iadesi otomatik yapılamadı</b>${extraNote ? ` (${extraNote.replace(/^ — /, "")})` : ""}. Siparişte “Ücret iadesi yap”: iyzico'dan yeniden dene ya da iyzico panelinden yapıp işaretle.`,
-    bank_refund_pending: `Havaleyle ödenmişti: <b>${money(remaining)}</b> iade edilecek — IBAN: <b>${iban}</b> (${ibanName}). Gönderince siparişte “Ücret iadesi yap” → Havale.`,
-    transfer_check: `Havale ödemesi henüz onaylanmamıştı; müşteri <b>ödediğini söylüyor</b>. Hesaba ${money(remaining)} geldiyse IBAN'a iade et: <b>${iban}</b> (${ibanName}). Siparişte “Havale gelmişti — iadeyi gönderdim” ya da “Havale gelmemiş”.`,
+    card_refund_pending: `Kartla ödenmişti ama <b>iyzico iadesi otomatik yapılamadı</b>${extraNote ? ` (${esc(extraNote.replace(/^ — /, ""))})` : ""}. Siparişte “Ücret iadesi yap”: iyzico'dan yeniden dene ya da iyzico panelinden yapıp işaretle.`,
+    bank_refund_pending: `Havaleyle ödenmişti: <b>${money(remaining)}</b> iade edilecek — IBAN: <b>${esc(iban)}</b> (${esc(ibanName)}). Gönderince siparişte “Ücret iadesi yap” → Havale.`,
+    transfer_check: `Havale ödemesi henüz onaylanmamıştı; müşteri <b>ödediğini söylüyor</b>. Hesaba ${money(remaining)} geldiyse IBAN'a iade et: <b>${esc(iban)}</b> (${esc(ibanName)}). Siparişte “Havale gelmişti — iadeyi gönderdim” ya da “Havale gelmemiş”.`,
   };
   import("@/lib/after-sale-mail").then(({ sendAdminCaseEmail }) =>
     sendAdminCaseEmail(order.id, caseStatus ? "Müşteri iptal etti — ücret iadesi işi" : "Müşteri siparişi iptal etti", [
-      `Müşteri <b>${label}</b> siparişini kendisi iptal etti; stok geri eklendi, kargo etiketi alınamaz.`,
-      reason ? `Neden: <b>${reason}</b>` : "Neden belirtmedi.",
+      `Müşteri <b>${esc(label)}</b> siparişini kendisi iptal etti; stok geri eklendi, kargo etiketi alınamaz.`,
+      reason ? `Neden: <b>${esc(reason)}</b>` : "Neden belirtmedi.",
       adminLine[outcome],
-      ...(ibanMismatch ? [`<b style="color:#b91c1c">Dikkat: IBAN sahibi (${ibanName}) siparişteki adla (${orderName}) uyuşmuyor — iadeyi göndermeden önce kontrol et.</b>`] : []),
+      ...(ibanMismatch ? [`<b style="color:#b91c1c">Dikkat: IBAN sahibi (${esc(ibanName)}) siparişteki adla (${esc(orderName)}) uyuşmuyor — iadeyi göndermeden önce kontrol et.</b>`] : []),
     ])).catch(() => {});
   return { ok: true as const, outcome, refunded, amount: remaining, label, iban: iban ? maskIban(iban) : null, ibanMismatch };
 }

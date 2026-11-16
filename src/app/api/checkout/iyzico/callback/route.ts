@@ -13,9 +13,12 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://yerihisset.com";
 // pencereyi hedefe götürür; çerçeve yoksa aynı pencerede açar. Script çalışmazsa meta yenileme + bağlantı yedek.
 // Başarısız dönüş adresi: neden = banka (banka / iyzico reddetti — mesajı gösterilir) · teknik (bizim tarafta sorun;
 // para çekilmiş olabilir) · iptal (müşteri vazgeçti). Ödeme sayfası müşteriye net mesaj gösterir.
-function failUrl(neden: "banka" | "teknik" | "iptal", mesaj?: string | null) {
+// Güvenlik 2026-11-16: adrese serbest metin (mesaj) KONMAZ — biri sahte bağlantıyla ödeme sayfasında istediği yazıyı
+// gösterebiliyordu. Yalnız iyzico hata KODU (rakam) gider; ödeme sayfası bilinen kodları sabit metne çevirir.
+function failUrl(neden: "banka" | "teknik" | "iptal", kod?: string | null) {
   const q = new URLSearchParams({ hatali: "1", neden });
-  if (mesaj) q.set("mesaj", String(mesaj).replace(/\s+/g, " ").slice(0, 140));
+  const k = String(kod ?? "").trim();
+  if (/^\d{3,6}$/.test(k)) q.set("kod", k);
   return `${SITE_URL}/checkout?${q}`;
 }
 
@@ -108,8 +111,10 @@ async function handle(req: NextRequest) {
         }
         const wasCancelled = order.status === "cancelled"; // 30 dk dolup otomatik iptal edilmişti
 
-        // Ödeme başarılı → siparişi onayla
-        await (supabase as any)
+        // Ödeme başarılı → siparişi onayla. TEK SEFERLİK (güvenlik 2026-11-16): güncelleme yalnız henüz "ödendi"
+        // olmayan siparişte olur; aynı anda iki dönüş gelirse (iyzico tekrarı + tarayıcı) yalnız biri satırı değiştirir,
+        // öteki yan etkisiz (stok, kredi, kupon, e-posta iki kez işlenmez) başarı sayfasına gider.
+        const { data: claimed, error: claimErr } = await (supabase as any)
           .from("orders")
           .update({
             status: "processing",
@@ -117,7 +122,14 @@ async function handle(req: NextRequest) {
             shipment_status: "preparing",
             iyzico_payment_id: String(paymentId),
           })
-          .eq("id", order.id);
+          .eq("id", order.id)
+          .neq("payment_status", "paid")
+          .select("id");
+        if (claimErr) throw new Error(`sipariş onaylanamadı: ${claimErr.message}`);
+        if (!claimed?.length) {
+          resolve(go(successUrl));
+          return;
+        }
 
         // Kontrol notları: iyzico'nun onayladığı tutar ≠ sipariş tutarı, ya da süre dolup
         // iptal edilmiş sipariş sonradan ödendi → admin siparişte görür
@@ -210,14 +222,22 @@ async function handle(req: NextRequest) {
           return;
         }
         // Ödeme başarısız / iptal → siparişi iptal et + rezerve stoğu iade et (F9)
-        // + kullanılan YeriHisset Kredisi'ni cüzdana geri yükle
+        // + kullanılan YeriHisset Kredisi'ni cüzdana geri yükle. TEK SEFERLİK: önce "bekliyor" olan sipariş iptal edilir;
+        // aynı anda gelen ikinci dönüş satırı bulamaz ve yan etkisiz çıkar (stok / kredi / not iki kez işlenmez).
+        const { data: failedNow, error: failErr } = await (supabase as any)
+          .from("orders")
+          .update({ status: "cancelled", payment_status: "failed" })
+          .eq("id", order.id)
+          .eq("payment_status", "pending")
+          .select("id");
+        if (failErr) throw new Error(`sipariş iptal edilemedi: ${failErr.message}`);
+        if (!failedNow?.length) {
+          resolve(go(failUrl("iptal")));
+          return;
+        }
         await (supabase as any).rpc("restore_order_stock", { p_order_id: order.id });
         kickMarketplaceSync(); // stok değişti → pazaryerlerine (Trendyol) gönder
         await restoreOrderCredit(supabase, order.id);
-        await (supabase as any)
-          .from("orders")
-          .update({ status: "cancelled", payment_status: "failed" })
-          .eq("id", order.id);
         // Neden başarısız oldu → admin sipariş geçmişinde görür (müşteri ekranında genel mesaj)
         const reason = [result?.errorCode, result?.errorMessage].filter(Boolean).join(" — ") || paymentStatus || "bilinmiyor";
         // Pano › Sistem › "Hata alan müşteriler" (kart bilgisi yok, yalnız iyzico'nun gerekçesi)
@@ -228,7 +248,7 @@ async function handle(req: NextRequest) {
           order_id: order.id, type: "note", note: `Kart ödemesi başarısız: ${reason}`,
         });
 
-        resolve(go(failUrl(result?.errorCode || result?.errorMessage ? "banka" : "iptal", result?.errorMessage)));
+        resolve(go(failUrl(result?.errorCode || result?.errorMessage ? "banka" : "iptal", result?.errorCode)));
       }
      } catch (e: any) {
       console.error("[iyzico/callback] HATA (sonuç işlenirken):", e?.stack || e?.message || e);

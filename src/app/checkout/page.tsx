@@ -43,6 +43,18 @@ import { getAdContext } from "@/lib/ad-context";
 import { reportClientError } from "@/lib/report-error";
 import { taxIdLabel } from "@/lib/tax-id";
 
+// iyzico banka red kodu → müşteriye sabit açıklama (adresteki serbest metin gösterilmez; bilinmeyen kod → açıklama yok)
+const BANK_DECLINE_TEXT: Record<string, string> = {
+  "10051": "kart limiti ya da bakiye yetersiz",
+  "10054": "kartın son kullanma tarihi hatalı",
+  "10229": "kartın son kullanma tarihi hatalı",
+  "10084": "güvenlik kodu (CVC) hatalı",
+  "10206": "güvenlik kodu (CVC) hatalı",
+  "10093": "kartın internetten alışverişe kapalı",
+  "10215": "kart numarası geçersiz",
+  "10207": "bankandan onay alman gerekiyor",
+};
+
 function getCookie(name: string): string | null {
   if (typeof document === "undefined") return null;
   const match = document.cookie.match(new RegExp("(^| )" + name + "=([^;]+)"));
@@ -601,11 +613,13 @@ export default function CheckoutPage() {
   // URL'den hata parametresini oku (iyzico başarısız callback)
   const failQ = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
   const paymentFailed = failQ?.get("hatali") === "1";
-  // Ödeme neden olmadı — müşteriye net mesaj (iyzico dönüşü: neden = banka · teknik · iptal; mesaj = bankanın gerekçesi)
+  // Ödeme neden olmadı — müşteriye net mesaj (iyzico dönüşü: neden = banka · teknik · iptal; kod = iyzico hata kodu).
+  // Güvenlik 2026-11-16: adresteki serbest metin GÖSTERİLMEZ (sahte bağlantıyla sayfaya yazı konabiliyordu); yalnız
+  // bilinen kodlar sabit metne çevrilir, bilinmeyen kodda ek açıklama yok.
   const failNeden = failQ?.get("neden") || "";
-  const failMesaj = (failQ?.get("mesaj") || "").slice(0, 140);
+  const failReason = BANK_DECLINE_TEXT[failQ?.get("kod") || ""] || "";
   const failText =
-    failNeden === "banka" ? `Ödeme bankan tarafından onaylanmadı${failMesaj ? `: “${failMesaj}”` : ""}. Kartından para çekilmedi — başka bir kartla tekrar deneyebilir ya da Havale/EFT seçebilirsin.`
+    failNeden === "banka" ? `Ödeme bankan tarafından onaylanmadı${failReason ? ` (${failReason})` : ""}. Kartından para çekilmedi — başka bir kartla tekrar deneyebilir ya da Havale/EFT seçebilirsin.`
     : failNeden === "teknik" ? "Ödeme sırasında teknik bir sorun oluştu. Kartından tutar çekildiyse merak etme: kontrol edip seninle iletişime geçeceğiz. Tekrar denemeden önce birkaç dakika bekle ya da bize yaz."
     : failNeden === "iptal" ? "Ödeme tamamlanmadı (işlem yarıda kaldı). Kartından para çekilmedi — tekrar deneyebilir ya da Havale/EFT seçebilirsin."
     : "Ödeme tamamlanamadı, kartından para çekilmedi. Sepetin duruyor — tekrar deneyebilir ya da Havale/EFT seçebilirsin.";

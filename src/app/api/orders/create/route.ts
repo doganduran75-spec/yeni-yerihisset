@@ -210,7 +210,7 @@ export async function POST(req: NextRequest) {
 
   if (orderError || !order) {
     console.error("[orders/create] orderError:", JSON.stringify(orderError));
-    return NextResponse.json({ error: "Sipariş oluşturulamadı", detail: orderError?.message ?? "unknown" }, { status: 500 });
+    return NextResponse.json({ error: "Sipariş oluşturulamadı, lütfen tekrar dene." }, { status: 500 });
   }
 
   // YeriHisset Kredisi düşümü (bakiye − , ledger 'spend', orders.credit_used)
@@ -256,7 +256,7 @@ export async function POST(req: NextRequest) {
     // Rollback: düşülen krediyi geri yükle (silmeden önce), siparişi sil
     await restoreOrderCredit(supabase, order.id);
     await supabase.from("orders").delete().eq("id", order.id);
-    return NextResponse.json({ error: "Sipariş kalemleri oluşturulamadı", detail: itemsError?.message ?? "unknown" }, { status: 500 });
+    return NextResponse.json({ error: "Sipariş oluşturulamadı, lütfen tekrar dene." }, { status: 500 });
   }
 
   // ── STOK DÜŞÜMÜ (oversell guard) ──────────────────────────────────────────

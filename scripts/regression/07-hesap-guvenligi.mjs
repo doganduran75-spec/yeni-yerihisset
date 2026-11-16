@@ -63,5 +63,47 @@ export default {
       add(/updateUser\(\{ password \}\)[\s\S]{0,400}signOut\(\{ scope: "others" \}\)/.test(page) ? "ok" : "fail",
         "/sifre-belirle: şifre kaydedilince diğer oturumlar kapanıyor", "signOut({ scope: \"others\" }) updateUser'dan sonra yok");
     });
+
+    // "E-postamı düzelt" hız sınırı + şifre sıfırlama cevabı tek tip (güvenlik 2026-11-16, 3. parça kalanlar)
+    await part("Hesap güvenliği: e-posta değiştirme sınırı ve şifre sıfırlama cevabı", async () => {
+      const RUN = Date.now().toString(36);
+      const email = `rgt-hesap-degis-${RUN}@${DOMAIN}`;
+      const password = randomBytes(18).toString("base64url");
+      const ip = () => `10.251.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}`; // her istek ayrı IP: IP sınırından yemesin
+      let userId = null;
+      try {
+        sql(`DELETE FROM public.profiles WHERE email ILIKE 'rgt-hesap-degis-%@${DOMAIN}'; DELETE FROM auth.users WHERE email ILIKE 'rgt-hesap-degis-%@${DOMAIN}';`);
+        const c = await auth("admin/users", { method: "POST", service: true, body: { email, password, email_confirm: true } });
+        userId = c.json?.id;
+        if (!userId) return add("fail", "Test üyesi açılamadı", `HTTP ${c.status}`);
+        sql(`INSERT INTO public.profiles (id, email, first_name, last_name) VALUES (${lit(userId)}, ${lit(email)}, 'Regresyon', 'degis') ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email`);
+        const s = await auth("token?grant_type=password", { method: "POST", body: { email, password } });
+        const token = s.json?.access_token;
+        if (!token) return add("fail", "Test üyesi giriş yapamadı", `HTTP ${s.status}`);
+
+        // Şifre sıfırlama: kayıtlı ve kayıtsız adrese AYNI cevap (hesabın varlığı belli olmaz). Önce — e-posta değişmeden.
+        const fp = (e) => api("/api/auth/forgot-password", { headers: { "x-forwarded-for": ip() }, body: { email: e, _hp: "", _t: 6000 } });
+        const known = await fp(email);
+        const unknown = await fp(`rgt-hesap-yok-${RUN}@${DOMAIN}`);
+        add(known.status === 200 && unknown.status === 200 && known.text === unknown.text && JSON.stringify(known.json) === '{"ok":true}' ? "ok" : "fail",
+          "Şifre sıfırlama: kayıtlı ve kayıtsız adrese aynı cevap ({ ok: true }, emailStatus yok)", `kayıtlı HTTP ${known.status} ${known.text.slice(0, 80)} · kayıtsız HTTP ${unknown.status} ${unknown.text.slice(0, 80)}`);
+
+        // E-postamı düzelt: hesap başına 24 saatte 3 değişiklik, 4.'sü 429
+        const rs = [];
+        for (let i = 1; i <= 4; i++) {
+          rs.push(await api("/api/auth/change-email", { token, headers: { "x-forwarded-for": ip() }, body: { email: `rgt-hesap-degis-${i}-${RUN}@${DOMAIN}` } }));
+        }
+        add(rs.slice(0, 3).every((r) => r.status === 200) && rs[3].status === 429 ? "ok" : "fail",
+          "E-postamı düzelt: hesap başına 24 saatte en çok 3 değişiklik (4.'sü reddediliyor)", rs.map((r) => `${r.status}${r.json?.error ? ` ${r.json.error}` : ""}`).join(" / "));
+      } finally {
+        if (userId) sql(`DELETE FROM public.profiles WHERE id = ${lit(userId)}; DELETE FROM auth.users WHERE id = ${lit(userId)};`);
+        sql(`DO $$ BEGIN IF to_regclass('public.form_mail_log') IS NOT NULL THEN
+               DELETE FROM public.form_mail_log WHERE email ILIKE '%@${DOMAIN}'${userId ? ` OR email = ${lit(`change-email:${userId}`)}` : ""};
+             END IF; END $$;`);
+      }
+      const ce = readFileSync(new URL("../../src/app/api/auth/change-email/route.ts", import.meta.url), "utf8");
+      add(/form_mail_allowed/.test(ce) && /formMailAllowed\(supabase, newEmail, "change-email"\)/.test(ce) ? "ok" : "fail",
+        "E-postamı düzelt: sınır veritabanında (hesap + hedef adres)", "change-email/route.ts sınır satırları eksik");
+    });
   },
 };

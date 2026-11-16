@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
     const { data: ins, error } = await supabase.from("contacts")
       .insert({ email, source_channel: "newsletter", status: "lead", marketing_consent: false }).select("id").single();
     if (error?.code === "23505") return reply("confirm_sent"); // aynı anda gelen ikinci istek
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) { console.error("[newsletter]", error.message); return NextResponse.json({ error: "Kaydedilemedi, lütfen biraz sonra tekrar dene." }, { status: 500 }); }
     contactId = ins?.id ?? null;
   } else if (!(await formMailAllowed(supabase, email, "newsletter"))) {
     return reply("confirm_sent");

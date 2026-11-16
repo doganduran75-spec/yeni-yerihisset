@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
 
   const supabase = createAdminClient();
   const { error } = await supabase.from("feedback").insert({ email, message, source } as any);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) { console.error("[feedback]", error.message); return NextResponse.json({ error: "Not kaydedilemedi, lütfen biraz sonra tekrar dene." }, { status: 500 }); }
 
   return NextResponse.json({ ok: true });
 }
