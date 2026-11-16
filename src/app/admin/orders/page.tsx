@@ -270,6 +270,15 @@ const invoiceLabels: Record<string, string> = {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
+// Türkiye cep telefonu: yapıştırılan "0530…", "+90 530…", "90530…" → 10 hane "530…" (kullanıcı 2026-11-16:
+// "05305119940" yapıştırınca 10 hane sınırı sondaki rakamı kesiyordu → "0530511994")
+function trPhone(v: string): string {
+  let d = String(v || "").replace(/\D/g, "");
+  if (d.length > 10 && d.startsWith("90")) d = d.slice(2);
+  while (d.startsWith("0")) d = d.slice(1);
+  return d.slice(0, 10);
+}
+
 export default function OrdersPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -321,6 +330,11 @@ export default function OrdersPage() {
   const [newCustomerSaving, setNewCustomerSaving] = useState(false);
   const [newCustomerError, setNewCustomerError] = useState("");
   const [createdCustomerId, setCreatedCustomerId] = useState<string | null>(null); // bu pencerede eklenen
+  // Müşterinin adresi yoksa pencerede ekle (kullanıcı 2026-11-16: takılınca eksik bilgiyi ekleyebilmeliyim)
+  const EMPTY_NEW_ADDR = { phone: "", city: "", district: "", addressDetail: "" };
+  const [newAddr, setNewAddr] = useState(EMPTY_NEW_ADDR);
+  const [newAddrSaving, setNewAddrSaving] = useState(false);
+  const [newAddrError, setNewAddrError] = useState("");
   const [sendActivation, setSendActivation] = useState(true);
   const [customerSearched, setCustomerSearched] = useState(""); // son aranan (sonuç yok mesajı için)
   const [newAdminNote, setNewAdminNote] = useState("");
@@ -524,7 +538,7 @@ export default function OrdersPage() {
     setNewCustomer({
       ...EMPTY_NEW_CUSTOMER,
       firstName: f ?? "", lastName: rest.join(" "),
-      email: isEmail ? term : "", phone: isPhone ? digits.slice(-10) : "",
+      email: isEmail ? term : "", phone: isPhone ? trPhone(digits) : "",
     });
     setNewCustomerError("");
     setCustomerResults([]);
@@ -560,12 +574,56 @@ export default function OrdersPage() {
     setCustomerQuery(`${customer.first_name} ${customer.last_name}`);
     setCustomerResults([]);
     setCustomerSearched("");
+    setNewAddr({ ...EMPTY_NEW_ADDR, phone: trPhone(customer.phone || "") });
+    setNewAddrError("");
+    // Yönetici tüm adresleri okur (MIG 20261194; önceden yalnız kendi adresini görüyordu → "adres bulunamadı")
     const { data: addrs } = await supabase
       .from("user_addresses")
       .select("*")
       .eq("user_id", customer.id);
     setCustomerAddresses(addrs ?? []);
     setSelectedAddressId(addrs?.[0]?.id ?? "");
+  }
+
+  // Adresi olmayan müşteriye pencereden adres ekle
+  async function addCustomerAddress() {
+    if (!selectedCustomer) return;
+    const phone = trPhone(newAddr.phone);
+    if (phone.length !== 10) { setNewAddrError("Telefon 10 haneli olmalı (5XX XXX XX XX)."); return; }
+    if (!newAddr.city || !newAddr.district || !newAddr.addressDetail.trim()) { setNewAddrError("İl, ilçe ve açık adres zorunlu."); return; }
+    setNewAddrSaving(true);
+    setNewAddrError("");
+    const { data, error } = await (supabase as any).from("user_addresses").insert({
+      user_id: selectedCustomer.id, address_name: "Ev",
+      first_name: selectedCustomer.first_name || "", last_name: selectedCustomer.last_name || "", phone,
+      city: newAddr.city, district: newAddr.district, address_detail: newAddr.addressDetail.trim(),
+      is_corporate: false, is_default_shipping: true, is_default_billing: true,
+    }).select("*").single();
+    setNewAddrSaving(false);
+    if (error || !data) { setNewAddrError(`Adres eklenemedi: ${error?.message || "bilinmeyen hata"}`); return; }
+    setCustomerAddresses([data]);
+    setSelectedAddressId(data.id);
+  }
+
+  // Pencere kapanırken: bu pencerede eklenen müşteri için sipariş oluşmadıysa kaydı silmeyi öner (takılınca geri al)
+  async function closeCreate() {
+    const cid = createdCustomerId;
+    setCreateOpen(false);
+    setCreateError("");
+    if (!cid) return;
+    const name = selectedCustomer?.id === cid ? `${selectedCustomer.first_name} ${selectedCustomer.last_name}` : "Yeni eklenen müşteri";
+    const del = await siteConfirm({
+      title: "Sipariş oluşturulmadı",
+      message: `${name} bu pencerede eklendi ama siparişi oluşturulmadı. Müşteri kaydı (hesap + adres) silinsin mi?\n\nKalsın dersen müşteriyi sonra aramadan bulup siparişe devam edebilirsin.`,
+      confirmText: "Müşteriyi sil", cancelText: "Kalsın", tone: "danger",
+    });
+    if (del) {
+      const { data, error } = await (supabase as any).rpc("admin_delete_members", { p_ids: [cid] });
+      if (error || !data?.deleted) siteAlert({ title: "Silinemedi", message: error?.message || (data?.skipped?.[0]?.reason ?? "bilinmeyen hata"), tone: "danger" });
+    }
+    setCreatedCustomerId(null);
+    setCustomerQuery(""); setSelectedCustomer(null); setCustomerAddresses([]); setSelectedAddressId("");
+    setNewCustomerOpen(false); setNewCustomer(EMPTY_NEW_CUSTOMER);
   }
 
   // Türkçe-duyarsız normalize (Yeni Sipariş ürün araması)
@@ -675,7 +733,7 @@ export default function OrdersPage() {
       setCustomerQuery(""); setSelectedCustomer(null); setCustomerAddresses([]); setSelectedAddressId("");
       setNewItems([{ ...EMPTY_ITEM }]);
       setNewAdminNote(""); setNewPaymentMethod("credit_card"); setNewFreeShipping(false);
-      setCreatedCustomerId(null); setNewCustomerOpen(false);
+      setCreatedCustomerId(null); setNewCustomerOpen(false); setNewAddr(EMPTY_NEW_ADDR);
       await fetchOrders();
     } catch {
       setCreateError("Bağlantı hatası");
@@ -2166,7 +2224,7 @@ ${courierQueue.slice(0, 20).map((o) => orderLabel(o)).join(", ")}${courierQueue.
       </Dialog>
 
       {/* ─── Yeni Sipariş Dialog ──────────────────────────────────────────────── */}
-      <Dialog open={createOpen} onOpenChange={(o) => { if (!o) { setCreateOpen(false); setCreateError(""); } }}>
+      <Dialog open={createOpen} onOpenChange={(o) => { if (!o) closeCreate(); }}>
         <DialogContent className="w-[95vw] sm:max-w-[900px] max-h-[90vh] overflow-y-auto top-[5vh] translate-y-0">
           <DialogHeader>
             <DialogTitle>Yeni Sipariş Oluştur</DialogTitle>
@@ -2228,7 +2286,7 @@ ${courierQueue.slice(0, 20).map((o) => orderLabel(o)).join(", ")}${courierQueue.
                     <Input className="h-9 text-sm bg-white" placeholder="Ad" value={newCustomer.firstName} onChange={(e) => setNewCustomer({ ...newCustomer, firstName: e.target.value })} />
                     <Input className="h-9 text-sm bg-white" placeholder="Soyad" value={newCustomer.lastName} onChange={(e) => setNewCustomer({ ...newCustomer, lastName: e.target.value })} />
                     <Input className="h-9 text-sm bg-white" type="email" placeholder="E-posta" value={newCustomer.email} onChange={(e) => setNewCustomer({ ...newCustomer, email: e.target.value })} />
-                    <Input className="h-9 text-sm bg-white" inputMode="numeric" placeholder="Telefon (5XX XXX XX XX)" value={newCustomer.phone} onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value.replace(/\D/g, "").slice(0, 10) })} />
+                    <Input className="h-9 text-sm bg-white" inputMode="numeric" placeholder="Telefon (5XX XXX XX XX)" value={newCustomer.phone} onChange={(e) => setNewCustomer({ ...newCustomer, phone: trPhone(e.target.value) })} />
                     <GeoSelect options={CITIES} value={newCustomer.city} onChange={(city) => setNewCustomer({ ...newCustomer, city, district: "" })} placeholder="İl seçin…" />
                     <GeoSelect options={newCustomer.city ? (DISTRICTS[newCustomer.city] ?? []) : []} value={newCustomer.district} onChange={(district) => setNewCustomer({ ...newCustomer, district })} placeholder={newCustomer.city ? "İlçe seçin…" : "Önce il seçin"} disabled={!newCustomer.city} />
                   </div>
@@ -2282,9 +2340,28 @@ ${courierQueue.slice(0, 20).map((o) => orderLabel(o)).join(", ")}${courierQueue.
               </div>
             )}
             {selectedCustomer && customerAddresses.length === 0 && (
-              <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                Bu müşteriye ait kayıtlı adres bulunamadı.
-              </p>
+              <div className="border-2 border-amber-200 bg-amber-50/60 rounded-xl p-3 space-y-3">
+                <p className="text-sm font-bold text-amber-800">Bu müşterinin kayıtlı adresi yok — teslimat adresini ekle</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <Input className="h-9 text-sm bg-white" inputMode="numeric" placeholder="Telefon (5XX XXX XX XX)" value={newAddr.phone} onChange={(e) => setNewAddr({ ...newAddr, phone: trPhone(e.target.value) })} />
+                  <div />
+                  <GeoSelect options={CITIES} value={newAddr.city} onChange={(city) => setNewAddr({ ...newAddr, city, district: "" })} placeholder="İl seçin…" />
+                  <GeoSelect options={newAddr.city ? (DISTRICTS[newAddr.city] ?? []) : []} value={newAddr.district} onChange={(district) => setNewAddr({ ...newAddr, district })} placeholder={newAddr.city ? "İlçe seçin…" : "Önce il seçin"} disabled={!newAddr.city} />
+                </div>
+                <textarea
+                  className="w-full text-sm border rounded-lg px-3 py-2 resize-none bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  rows={2}
+                  placeholder="Açık adres (mahalle, sokak, bina, daire)"
+                  value={newAddr.addressDetail}
+                  onChange={(e) => setNewAddr({ ...newAddr, addressDetail: e.target.value })}
+                />
+                {newAddrError && <p className="text-xs font-semibold text-red-600">{newAddrError}</p>}
+                <div className="flex justify-end">
+                  <Button size="sm" className="gap-1.5" onClick={addCustomerAddress} disabled={newAddrSaving}>
+                    {newAddrSaving ? <Loader2 size={13} className="animate-spin" /> : <MapPin size={13} />} Adresi Ekle
+                  </Button>
+                </div>
+              </div>
             )}
 
             {/* Ürünler */}

@@ -400,6 +400,35 @@ export default {
         ok(ord(O.paid).payment_status === "pending", "Üye kendi siparişini 'ödendi' yapamıyor", `HTTP ${u.status} — ödeme durumu ${ord(O.paid).payment_status}`);
 
         // Tarayıcıdan doğrudan veritabanı (güvenlik taraması 2026-11-16, MIG 20261190)
+        // Manuel sipariş (kullanıcı 2026-11-16, MIG 20261194): yönetici müşterinin adresini görür ve ekler (önceden
+        // yalnız kendi adresini görüyordu → Yeni Sipariş "adres bulunamadı" diyor, sipariş oluşmuyordu); üye başkasınınkini
+        // göremez / ekleyemez. Telefon yapıştırınca baştaki 0 / +90 atılır; pencere kapanırken siparişsiz yeni müşteri silinebilir.
+        {
+          const adm = await rest(`user_addresses?user_id=eq.${F.member.id}&select=id`, { token: F.admin.token });
+          const oth = await rest(`user_addresses?user_id=eq.${F.partner.id}&select=id`, { token: F.member.token });
+          const insM = await rest("user_addresses", { token: F.member.token, method: "POST", headers: { Prefer: "return=minimal" },
+            body: { user_id: F.partner.id, address_name: "REGRESYON-TEST", first_name: "x", last_name: "y", phone: "5550000009", address_detail: "x", district: "Kadıköy", city: "İstanbul" } });
+          const insA = await rest("user_addresses", { token: F.admin.token, method: "POST", headers: { Prefer: "return=minimal" },
+            body: { user_id: F.partner.id, address_name: "REGRESYON-TEST", first_name: "x", last_name: "y", phone: "5550000009", address_detail: "x", district: "Kadıköy", city: "İstanbul" } });
+          const nTest = num(`SELECT count(*) FROM public.user_addresses WHERE address_name = 'REGRESYON-TEST'`);
+          sql(`DELETE FROM public.user_addresses WHERE address_name = 'REGRESYON-TEST'`);
+          ok(Array.isArray(adm.json) && adm.json.length >= 1 && Array.isArray(oth.json) && oth.json.length === 0 && insM.status >= 400 && insA.status < 300 && nTest === 1,
+            "Yönetici müşterinin adresini görüyor ve ekleyebiliyor; üye başkasının adresini göremiyor / ekleyemiyor",
+            `yönetici okuma ${adm.json?.length ?? adm.status}, üye başkasını okuma ${oth.json?.length ?? oth.status}, üye ekleme HTTP ${insM.status}, yönetici ekleme HTTP ${insA.status}`);
+          const fs = await import("node:fs");
+          const op = fs.readFileSync(new URL("../../src/app/admin/orders/page.tsx", import.meta.url), "utf8");
+          const cc = fs.readFileSync(new URL("../../src/app/api/admin/customers/create/route.ts", import.meta.url), "utf8");
+          const fn = /function trPhone\(v: string\): string \{([\s\S]*?)\n\}/.exec(op);
+          let trPhone = null;
+          try { trPhone = fn ? new Function("v", fn[1]) : null; } catch { trPhone = null; }
+          const cases = [["05305119940", "5305119940"], ["+90 530 511 99 40", "5305119940"], ["905305119940", "5305119940"], ["530 511 99 40", "5305119940"], ["5305119940", "5305119940"]];
+          const bad = trPhone ? cases.filter(([i, w]) => trPhone(i) !== w).map(([i, w]) => `${i} → ${trPhone(i)} (${w})`) : ["trPhone bulunamadı"];
+          ok(bad.length === 0 && /phone: trPhone\(e\.target\.value\)/.test(op), "Yeni müşteri telefonu: yapıştırılan 0 / +90 atılıyor (10 hane)", bad.join("; ") || "telefon kutusu trPhone kullanmıyor");
+          ok(/onOpenChange=\{\(o\) => \{ if \(!o\) closeCreate\(\); \}\}/.test(op) && /rpc\("admin_delete_members", \{ p_ids: \[cid\] \}\)/.test(op)
+            && /async function addCustomerAddress\(\)/.test(op) && /auth\.admin\.deleteUser\(r\.userId\)/.test(cc),
+            "Yeni Sipariş: adres yoksa pencerede eklenir, siparişsiz yeni müşteri kapanırken silinebilir, adres kaydı başarısızsa müşteri geri alınır",
+            "orders/page.tsx ya da customers/create geri alma / adres ekleme satırları eksik");
+        }
         // a) Fiyat / eşleştirme fonksiyonları yalnız yöneticiye (eski kontrol SECURITY DEFINER içinde current_user'a
         //    bakıyordu → hiç reddetmiyordu). Boş değişiklik listesi: açık olsa bile hiçbir fiyat değişmez.
         {

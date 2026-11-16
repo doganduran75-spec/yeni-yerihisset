@@ -34,7 +34,17 @@ export async function POST(req: NextRequest) {
     })
     .select("*")
     .single();
-  if (aErr) console.error("[admin/customers/create] adres:", aErr.message);
+  if (aErr || !address) {
+    // Adres kaydedilemediyse yeni açılan hesabı geri al (kullanıcı 2026-11-16: takılınca yapılan işlem geri çevrilsin) —
+    // yarım müşteri kalmasın, yönetici bilgileri düzeltip yeniden ekleyebilsin
+    console.error("[admin/customers/create] adres:", aErr?.message);
+    if (r.created) {
+      await (supabase as any).from("contacts").delete().eq("linked_user_id", r.userId);
+      await (supabase as any).auth.admin.deleteUser(r.userId);
+      await (supabase as any).from("profiles").delete().eq("id", r.userId);
+    }
+    return NextResponse.json({ error: "Adres kaydedilemedi; müşteri eklenmedi. Bilgileri kontrol edip yeniden deneyin." }, { status: 500 });
+  }
 
   return NextResponse.json({
     ok: true,
