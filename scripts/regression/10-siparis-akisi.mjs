@@ -324,6 +324,15 @@ export default {
         O.guest = r.json?.orderId;
         if (!O.guest) return add("fail", "Misafir siparişi oluşturulamadı", why(r));
         ok(r.json?.isGuest === true, "Misafir olarak işaretlendi", JSON.stringify(r.json).slice(0, 120));
+        // Misafir kupon kullanamaz (güvenlik taraması 2026-11-16): kişi başı sınır her yeni e-postayla sıfırlanıyordu.
+        // Sepet zaten giriş istiyor; doğrudan sipariş isteği de reddedilmeli, hesap / sipariş açılmamalı.
+        {
+          const ce = `rgt-misafir-kupon-${RUN}@${DOMAIN}`;
+          const ipC = `10.253.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}`; // ayrı IP: misafir hız sınırından yemesin
+          const rc = await api("/api/orders/create", { headers: { "x-forwarded-for": ipC }, body: { ...body, couponCode: F.cLIM, guest: { ...guest, email: ce } } });
+          const made = num(`SELECT count(*) FROM auth.users WHERE email = ${lit(ce)}`);
+          ok(rc.status === 401 && made === 0, "Misafir doğrudan istekle kupon kullanamıyor (hesap da açılmıyor)", `${why(rc)}, açılan hesap ${made}`);
+        }
         // Sözleşme onayı (2026-11-12, MIG 20261180): kutu işaretsizse sipariş oluşmaz; onaylı siparişe an + IP + tarayıcı +
         // metnin sürümü yazılır, sürümün tam metni legal_text_versions'ta
         {
@@ -746,6 +755,37 @@ export default {
         if (so) await api("/api/admin/orders/action", { token: F.admin.token, body: { action: "cancel", orderId: so.id, note: "regresyon", reason: "customer" } });
         ok(eq(bal(), 190) && num(`SELECT count(*) FROM public.store_credit_ledger WHERE affiliate_id = ${lit(aff.id)} AND type = 'refund'`) === 2,
           "İptal edilen siparişlerin kredisi cüzdana geri döndü (bir kez)", `bakiye ${bal()} (190 olmalı)`);
+
+        // 7b) AYNI ANDA iki kredili sipariş (güvenlik taraması 2026-11-16, MIG 20261188): kredi bir kez harcanır —
+        // eskiden ikisi de 190 TL kredi kullanıyordu. Ürün istek süresince açık kalsın diye doğrudan rawApi (api sarmalı
+        // her istekte ürünü açıp kapatır; paralel istekte biri ötekinin ürününü kapatırdı).
+        {
+          sql(`UPDATE public.products SET is_active = true WHERE id = ${lit(F.prod)}`);
+          let rs;
+          try {
+            const req = () => rawApi("/api/orders/create", { token: P.token, body: { items: [MAIN(1)], shippingAddressId: F.partnerAddr, billingSameAsShipping: true, paymentMethod: "bank_transfer", creditApply: 190, termsAccepted: true } });
+            rs = await Promise.all([req(), req()]);
+          } finally { sql(`UPDATE public.products SET is_active = false WHERE id = ${lit(F.prod)}`); }
+          const ids = rs.map((r) => r.json?.orderId).filter(Boolean);
+          const usedSum = ids.reduce((a, id) => a + Number(ord(id).credit_used || 0), 0);
+          const lost = rs.filter((r) => r.status === 409 && /Kredisi bakiyen/.test(r.json?.error || "")).length;
+          ok(eq(usedSum, 190) && eq(bal(), 0) && ids.length + lost === 2,
+            "Aynı anda iki kredili sipariş: kredi yalnız bir kez harcandı", `${rs.map(why).join(" / ")} → harcanan toplam ${usedSum} (190 olmalı), bakiye ${bal()}`);
+          // Aynı siparişe aynı anda iki iptal → kredi bir kez geri döner
+          const cid = ids.find((id) => Number(ord(id).credit_used || 0) > 0);
+          if (cid) {
+            const cancel = () => api("/api/admin/orders/action", { token: F.admin.token, body: { action: "cancel", orderId: cid, note: "regresyon", reason: "customer" } });
+            await Promise.all([cancel(), cancel()]);
+          }
+          for (const id of ids.filter((id) => id !== cid)) {
+            await api("/api/admin/orders/action", { token: F.admin.token, body: { action: "cancel", orderId: id, note: "regresyon", reason: "customer" } });
+          }
+          ok(eq(bal(), 190), "Aynı anda iki iptal: kredi bir kez geri döndü", `bakiye ${bal()} (190 olmalı)`);
+          // Eski "oku-yaz" kodu geri gelmesin
+          const sc = (await import("node:fs")).readFileSync(new URL("../../src/lib/store-credit.ts", import.meta.url), "utf8");
+          ok(/rpc\("spend_order_credit"/.test(sc) && /rpc\("restore_order_credit"/.test(sc) && !/update\(\{ credit_balance:/.test(sc),
+            "Kredi düşümü / iadesi veritabanında tek adımda (spend_order_credit / restore_order_credit)", "store-credit.ts bakiyeyi okuyup yazıyor");
+        }
 
         // 8) Kendi siparişi (C) + ortak olarak satış (A) → Barefoot Gurusu
         ok(hasRole("guru"), "Ortak ilk satışıyla Barefoot Gurusu oldu", "guru rolü yok");

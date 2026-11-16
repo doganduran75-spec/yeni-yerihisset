@@ -3,8 +3,8 @@ import { kickMarketplaceSync } from "@/lib/marketplace/sync";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { getAuthUserFromRequest } from "@/lib/auth-from-request";
 import { validateCartPricing } from "@/lib/order-pricing";
-import { evaluateCoupons, parseCouponCodes, saveOrderCoupons, countOrderCoupons } from "@/lib/coupon-rules";
-import { resolveCreditApply, deductCreditForOrder } from "@/lib/store-credit";
+import { evaluateCoupons, parseCouponCodes, saveOrderCoupons, countOrderCoupons, GUEST_COUPON_ERROR } from "@/lib/coupon-rules";
+import { resolveCreditApply, deductCreditForOrder, restoreOrderCredit, CREDIT_CHANGED_ERROR } from "@/lib/store-credit";
 import { resolveGuest, type GuestInput } from "@/lib/guest-checkout";
 import { rateLimited, clientIp, TOO_MANY } from "@/lib/rate-limit";
 import { botVerdict, botResponse } from "@/lib/bot-guard";
@@ -52,6 +52,8 @@ export async function POST(req: NextRequest) {
   }
   // Sözleşme onayı zorunlu (ödeme sayfasındaki kutu) — src/lib/terms-acceptance.ts
   if (!termsAccepted(body)) return NextResponse.json({ error: TERMS_REQUIRED_ERROR, terms: true }, { status: 400 });
+  // Misafir kupon kullanamaz (kişi başı sınır her yeni e-postayla sıfırlanıyordu; sepet de kupon için giriş ister)
+  if (!authUser && parseCouponCodes(couponCode).length) return NextResponse.json({ error: GUEST_COUPON_ERROR }, { status: 401 });
 
   // ── GÜVENLİK: Bu uç yalnızca havale/EFT içindir. Kartlı ödeme iyzico
   // (/api/checkout/iyzico/initialize) üzerinden gerçek tahsilatla yapılır.
@@ -213,9 +215,14 @@ export async function POST(req: NextRequest) {
 
   // YeriHisset Kredisi düşümü (bakiye − , ledger 'spend', orders.credit_used)
   if (creditApplied > 0 && creditWallet) {
-    await deductCreditForOrder(supabase, {
+    const spent = await deductCreditForOrder(supabase, {
       userId: userId, orderId: order.id, applied: creditApplied, wallet: creditWallet,
     });
+    // Bakiye bu arada başka bir siparişte harcandı (aynı anda iki sipariş) → bu siparişi geri al
+    if (!spent.ok) {
+      await supabase.from("orders").delete().eq("id", order.id);
+      return NextResponse.json({ error: CREDIT_CHANGED_ERROR }, { status: 409 });
+    }
   }
 
   // Varyasyon SKU'larını toplu çek (sku lookup için)
@@ -246,7 +253,8 @@ export async function POST(req: NextRequest) {
 
   if (itemsError) {
     console.error("[orders/create] itemsError:", JSON.stringify(itemsError));
-    // Rollback: siparişi sil
+    // Rollback: düşülen krediyi geri yükle (silmeden önce), siparişi sil
+    await restoreOrderCredit(supabase, order.id);
     await supabase.from("orders").delete().eq("id", order.id);
     return NextResponse.json({ error: "Sipariş kalemleri oluşturulamadı", detail: itemsError?.message ?? "unknown" }, { status: 500 });
   }
@@ -260,7 +268,8 @@ export async function POST(req: NextRequest) {
   );
   kickMarketplaceSync(); // stok değişti → pazaryerlerine (Trendyol) gönder
   if (reduceErr || !reduceRes?.ok) {
-    // Rollback: kalemleri ve siparişi sil (kupon/etiket henüz işlenmedi)
+    // Rollback: düşülen krediyi geri yükle (silmeden önce), kalemleri ve siparişi sil (kupon/etiket henüz işlenmedi)
+    await restoreOrderCredit(supabase, order.id);
     await supabase.from("order_items").delete().eq("order_id", order.id);
     await supabase.from("orders").delete().eq("id", order.id);
     const msg = String(reduceErr?.message ?? "");

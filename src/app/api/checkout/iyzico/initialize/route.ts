@@ -4,8 +4,8 @@ import { createAdminClient } from "@/lib/supabase-admin";
 import { getAuthUserFromRequest } from "@/lib/auth-from-request";
 import { createIyzicoClient, formatPrice, newConversationId } from "@/lib/iyzico";
 import { validateCartPricing } from "@/lib/order-pricing";
-import { evaluateCoupons, parseCouponCodes, saveOrderCoupons } from "@/lib/coupon-rules";
-import { resolveCreditApply, deductCreditForOrder, restoreOrderCredit } from "@/lib/store-credit";
+import { evaluateCoupons, parseCouponCodes, saveOrderCoupons, GUEST_COUPON_ERROR } from "@/lib/coupon-rules";
+import { resolveCreditApply, deductCreditForOrder, restoreOrderCredit, CREDIT_CHANGED_ERROR } from "@/lib/store-credit";
 import { resolveGuest, type GuestInput } from "@/lib/guest-checkout";
 import { rateLimited, clientIp, TOO_MANY } from "@/lib/rate-limit";
 import { botVerdict, botResponse } from "@/lib/bot-guard";
@@ -73,6 +73,8 @@ export async function POST(req: NextRequest) {
   }
   // Sözleşme onayı zorunlu (ödeme sayfasındaki kutu) — src/lib/terms-acceptance.ts
   if (!termsAccepted(body)) return NextResponse.json({ error: TERMS_REQUIRED_ERROR, terms: true }, { status: 400 });
+  // Misafir kupon kullanamaz (kişi başı sınır her yeni e-postayla sıfırlanıyordu; sepet de kupon için giriş ister)
+  if (!authUser && parseCouponCodes(couponCode).length) return NextResponse.json({ error: GUEST_COUPON_ERROR }, { status: 401 });
   // TC Kimlik No checkout'ta SORULMAZ ve SAKLANMAZ: iyzico'ya bireysel müşteri varsayılanı 11111111111
   // gider (fatura da bu numarayla kesilebilir). Kurumsal faturada vergi no kullanılır.
   const tcknInput = (identityNumber || "").replace(/\D/g, "");
@@ -252,9 +254,15 @@ export async function POST(req: NextRequest) {
   // YeriHisset Kredisi düşümü (sipariş oluştu). Ödeme başarısız/iptal olursa
   // aşağıdaki hata dalları restoreOrderCredit ile geri yükler.
   if (creditApplied > 0 && creditWallet) {
-    await deductCreditForOrder(supabase, {
+    const spent = await deductCreditForOrder(supabase, {
       userId: userId, orderId: order.id, applied: creditApplied, wallet: creditWallet,
     });
+    // Bakiye bu arada başka bir siparişte harcandı (aynı anda iki sipariş) → bu siparişi geri al
+    if (!spent.ok) {
+      await (supabase as any).from("order_coupons").delete().eq("order_id", order.id);
+      await supabase.from("orders").delete().eq("id", order.id);
+      return NextResponse.json({ error: CREDIT_CHANGED_ERROR }, { status: 409 });
+    }
   }
 
   // Sipariş kalemlerini kaydet
@@ -278,6 +286,7 @@ export async function POST(req: NextRequest) {
 
   const { error: itemsError } = await (supabase.from("order_items").insert(orderItems as any) as any);
   if (itemsError) {
+    await restoreOrderCredit(supabase, order.id); // düşülen krediyi geri yükle (silmeden önce)
     await supabase.from("orders").delete().eq("id", order.id);
     return NextResponse.json({ error: "Kalemler oluşturulamadı" }, { status: 500 });
   }

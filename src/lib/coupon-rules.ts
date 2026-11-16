@@ -19,7 +19,10 @@ import { rateLimited, rateExceeded } from "@/lib/rate-limit";
 const MISS_MAX = 10, MISS_WINDOW = 3600_000;
 type AdminClient = ReturnType<typeof createAdminClient>;
 
-export type CouponLine = { product_id: string; quantity: number; price: number; is_gift?: boolean };
+/** Misafir siparişinde kupon: kupon üyeye bağlı (kişi başı sınır her yeni misafir e-postasıyla sıfırlanıyordu). */
+export const GUEST_COUPON_ERROR = "Kupon kullanmak için giriş yap. Kuponu sepetten kaldırırsan misafir olarak devam edebilirsin.";
+
+export type CouponLine ={ product_id: string; quantity: number; price: number; is_gift?: boolean };
 
 export type CouponResult =
   | { ok: true; coupon: any; discount: number; freeShipping: boolean }
@@ -157,10 +160,22 @@ export async function countOrderCoupons(supabase: AdminClient, orderId: string, 
     const { data: done } = await s.from("order_coupons").update({ counted: true })
       .eq("order_id", orderId).eq("coupon_id", r.coupon_id).eq("counted", false).select("coupon_id");
     if (!done?.length) continue; // başka bir istek saydı
-    const { data: c } = await s.from("coupons").select("used_count").eq("id", r.coupon_id).maybeSingle();
+    const { data: c } = await s.from("coupons").select("code, used_count, max_uses, per_user_limit").eq("id", r.coupon_id).maybeSingle();
+    const { data: uc } = userId
+      ? await s.from("user_coupons").select("id, use_count, max_uses").eq("user_id", userId).eq("coupon_id", r.coupon_id).maybeSingle()
+      : { data: null };
+    // Sınır sipariş başlarken kontrol edildi; ama kartta kullanım ödeme anında sayılır — iki ödeme formu açılıp ikisi
+    // de ödenirse (ya da aynı anda iki sipariş) sınır burada aşılmış olur. Para alındığı için sipariş reddedilmez,
+    // yönetici siparişte görür.
+    const userLimit = uc?.max_uses ?? c?.per_user_limit ?? null;
+    const over: string[] = [];
+    if (userId && userLimit != null && Number(uc?.use_count || 0) >= Number(userLimit)) over.push(`kişi başı sınır (${userLimit})`);
+    if (c?.max_uses != null && Number(c.used_count || 0) >= Number(c.max_uses)) over.push(`toplam sınır (${c.max_uses})`);
+    if (over.length) {
+      await s.from("order_events").insert({ order_id: orderId, type: "note", note: `⚠ Kupon ${c?.code ?? ""} sınırı aşılarak kullanıldı: ${over.join(", ")} zaten dolmuştu — indirimi kontrol et` });
+    }
     await s.from("coupons").update({ used_count: Number(c?.used_count || 0) + 1, updated_at: now }).eq("id", r.coupon_id);
     if (!userId) continue;
-    const { data: uc } = await s.from("user_coupons").select("id, use_count").eq("user_id", userId).eq("coupon_id", r.coupon_id).maybeSingle();
     if (uc) await s.from("user_coupons").update({ use_count: Number(uc.use_count || 0) + 1, last_used_at: now, last_order_id: orderId }).eq("id", uc.id);
     else await s.from("user_coupons").insert({ user_id: userId, coupon_id: r.coupon_id, use_count: 1, last_used_at: now, last_order_id: orderId });
   }

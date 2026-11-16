@@ -40,60 +40,48 @@ export async function resolveCreditApply(
   return { applied: applied > 0 ? applied : 0, wallet };
 }
 
+/** Bakiye, bu sipariş sırasında başka bir siparişte harcandı (aynı anda iki sipariş) — müşteriye gösterilen mesaj. */
+export const CREDIT_CHANGED_ERROR = "YeriHisset Kredisi bakiyen az önce değişti. Sayfayı yenileyip tekrar dene.";
+
 /**
- * Krediyi düşer: cüzdan bakiyesini azalt, ledger'a 'spend' yaz, siparişe işaretle.
- * resolveCreditApply ile hesaplanmış `applied` ve `wallet` verilmeli.
+ * Krediyi düşer: cüzdan bakiyesini azalt, ledger'a 'spend' yaz, siparişe işaretle — TEK ADIMDA veritabanında
+ * (spend_order_credit, migration 20261188000001). Bakiye yetmezse (aynı anda başka sipariş harcadı) ok=false döner
+ * ve hiçbir şey değişmez; çağıran siparişi geri almalı. `wallet` yalnız tutarın sınırı için kullanıldı (resolveCreditApply).
  */
 export async function deductCreditForOrder(
   supabase: AdminClient,
   params: { userId: string; orderId: string; applied: number; wallet: { affiliateId: string; balance: number } }
-): Promise<void> {
-  const { userId, orderId, applied, wallet } = params;
-  if (applied <= 0) return;
-  const newBal = round2(wallet.balance - applied);
-  await (supabase as any).from("affiliate_profiles").update({ credit_balance: newBal }).eq("id", wallet.affiliateId);
-  await (supabase as any).from("orders").update({ credit_used: applied }).eq("id", orderId);
-  await (supabase as any).from("store_credit_ledger").insert({
-    affiliate_id: wallet.affiliateId,
-    user_id: userId,
-    type: "spend",
-    amount: -applied,
-    balance_after: newBal,
-    order_id: orderId,
-    note: "Sepette YeriHisset Kredisi kullanımı",
+): Promise<{ ok: boolean }> {
+  const { userId, orderId, applied } = params;
+  if (applied <= 0) return { ok: true };
+  const { data, error } = await (supabase as any).rpc("spend_order_credit", {
+    p_order: orderId, p_user: userId, p_amount: round2(applied),
   });
+  if (error || !data?.ok) {
+    console.error("[store-credit] kredi düşülemedi", orderId, error?.message ?? data?.error);
+    return { ok: false };
+  }
+  return { ok: true };
 }
 
 /**
- * İptal/iade durumunda kullanılan krediyi cüzdana geri yükler (idempotent:
- * credit_restored bayrağı). Sipariş id'sinden çalışır.
+ * İptal/iade durumunda kullanılan krediyi cüzdana geri yükler — bir kez (restore_order_credit, credit_restored bayrağı
+ * veritabanında koşullu çevrilir; aynı anda iki yol çağırsa da tek iade). Sipariş id'sinden çalışır.
  */
 export async function restoreOrderCredit(supabase: AdminClient, orderId: string): Promise<void> {
-  const { data: order } = await (supabase as any)
-    .from("orders")
-    .select("id, user_id, credit_used, credit_restored")
-    .eq("id", orderId)
-    .maybeSingle();
-  if (!order) return;
-  const used = Number(order.credit_used || 0);
-  if (used <= 0 || order.credit_restored) return;
+  const { error } = await (supabase as any).rpc("restore_order_credit", { p_order: orderId });
+  if (error) console.error("[store-credit] kredi geri yüklenemedi", orderId, error.message);
+}
 
-  const wallet = await getUserWallet(supabase, order.user_id);
-  if (!wallet) {
-    // Cüzdan bulunamadıysa yine de bayrağı set et (çift denemeyi önle)
-    await (supabase as any).from("orders").update({ credit_restored: true }).eq("id", orderId);
-    return;
+/**
+ * İptal edilip krediyi geri almış sipariş sonradan ÖDENDİYSE (kart formu süre dolduktan sonra ödendi) krediyi yeniden
+ * düşer. Bakiye yetmezse eldeki kadarını alır; eksik tutarı döner (çağıran yöneticiye not düşer).
+ */
+export async function reclaimOrderCredit(supabase: AdminClient, orderId: string): Promise<{ shortfall: number }> {
+  const { data, error } = await (supabase as any).rpc("reclaim_order_credit", { p_order: orderId });
+  if (error) {
+    console.error("[store-credit] kredi yeniden düşülemedi", orderId, error.message);
+    return { shortfall: 0 };
   }
-  const newBal = round2(wallet.balance + used);
-  await (supabase as any).from("affiliate_profiles").update({ credit_balance: newBal }).eq("id", wallet.affiliateId);
-  await (supabase as any).from("orders").update({ credit_restored: true }).eq("id", orderId);
-  await (supabase as any).from("store_credit_ledger").insert({
-    affiliate_id: wallet.affiliateId,
-    user_id: order.user_id,
-    type: "refund",
-    amount: used,
-    balance_after: newBal,
-    order_id: orderId,
-    note: "İptal/iade — YeriHisset Kredisi iadesi",
-  });
+  return { shortfall: Number(data?.shortfall || 0) };
 }

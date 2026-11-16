@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { kickMarketplaceSync } from "@/lib/marketplace/sync";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { createIyzicoClient } from "@/lib/iyzico";
-import { restoreOrderCredit } from "@/lib/store-credit";
+import { restoreOrderCredit, reclaimOrderCredit } from "@/lib/store-credit";
 import { isTestOrder } from "@/lib/notifications";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://yerihisset.com";
@@ -126,7 +126,12 @@ async function handle(req: NextRequest) {
         if (Number.isFinite(iyzPrice) && Math.abs(iyzPrice - Number(order.total_amount)) > 0.01) {
           notes.push(`⚠ iyzico tutarı (₺${iyzPrice.toFixed(2)}) sipariş tutarından (₺${Number(order.total_amount).toFixed(2)}) farklı — kontrol et`);
         }
-        if (wasCancelled) notes.push("Ödeme süresi dolup otomatik iptal edilmişti; ödeme sonradan geldi → sipariş yeniden açıldı");
+        if (wasCancelled) {
+          notes.push("Ödeme süresi dolup otomatik iptal edilmişti; ödeme sonradan geldi → sipariş yeniden açıldı");
+          // İptalde geri yüklenen kredi yeniden düşülür (müşteri krediyle indirilmiş tutarı ödedi)
+          const { shortfall } = await reclaimOrderCredit(supabase, order.id);
+          if (shortfall > 0) notes.push(`⚠ Bu siparişte kullanılan YeriHisset Kredisi iptalde geri verilmişti; yeniden düşülürken bakiye yetmedi — ₺${shortfall.toFixed(2)} eksik (müşteri bu tutarı fazladan indirim almış oldu)`);
+        }
         if (result?.fraudStatus === 0) notes.push("iyzico bu ödemeyi incelemeye aldı (fraudStatus=0) — iyzico panelinden onayı bekle");
         for (const n of notes) {
           await (supabase as any).from("order_events").insert({ order_id: order.id, type: "note", note: n });
