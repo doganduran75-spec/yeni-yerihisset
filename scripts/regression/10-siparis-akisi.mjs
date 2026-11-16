@@ -440,6 +440,78 @@ export default {
         }
       });
 
+      // SİTE İÇERİĞİ + YORUM GÖRSELİ (güvenlik 2026-11-16, MIG 20261191): site_content'e yalnız yönetici yazar; yorum görseli
+      // yalnız sunucudan (/api/review-images: 5 MB, gerçek görsel türü, 24 saatte 20), yorum başına en çok 5 görsel ve
+      // yalnız üyenin kendi yorum klasöründen adres
+      await part("Site içeriği ve yorum görseli: üye yapamıyor", async () => {
+        const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY || "", ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+        const folder = `reviews/${F.member.id}`;
+        const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
+        const up = async (token, buf, name = "a.png", type = "image/png") => {
+          const fd = new FormData();
+          fd.append("file", new Blob([buf], { type }), name);
+          try {
+            const r = await fetch(`${t.APP}/api/review-images`, { method: "POST", body: fd, headers: token ? { Authorization: `Bearer ${token}` } : {}, signal: AbortSignal.timeout(30000) });
+            return { status: r.status, json: await r.json().catch(() => null) };
+          } catch (e) { return { status: 0, json: { error: String(e?.message || e) } }; }
+        };
+        const clearFolder = async () => {
+          const l = await fetch(`${t.SB_URL}/storage/v1/object/list/product-images`, { method: "POST", headers: { apikey: SERVICE, Authorization: `Bearer ${SERVICE}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ prefix: `${folder}/`, limit: 1000 }) }).then((r) => r.json()).catch(() => []);
+          const names = (Array.isArray(l) ? l : []).map((o) => `${folder}/${o.name}`);
+          if (names.length) await fetch(`${t.SB_URL}/storage/v1/object/product-images`, { method: "DELETE", headers: { apikey: SERVICE, Authorization: `Bearer ${SERVICE}`, "Content-Type": "application/json" }, body: JSON.stringify({ prefixes: names }) }).catch(() => {});
+        };
+        try {
+          // site_content: üye yazamaz, yönetici yazar
+          const key = `rgt-${RUN}`;
+          const sc = (token) => rest("site_content", { token, method: "POST", headers: { Prefer: "return=minimal" }, body: { page: "regresyon", section: "test", key, value: "<script>regresyon</script>" } });
+          const scM = await sc(F.member.token);
+          const nM = num(`SELECT count(*) FROM public.site_content WHERE key = ${lit(key)}`);
+          const scA = await sc(F.admin.token);
+          const nA = num(`SELECT count(*) FROM public.site_content WHERE key = ${lit(key)}`);
+          sql(`DELETE FROM public.site_content WHERE key = ${lit(key)}`);
+          ok(scM.status >= 400 && nM === 0 && scA.status < 300 && nA === 1, "Site içeriğine (site_content) üye yazamıyor, yönetici yazabiliyor", `üye HTTP ${scM.status} (${nM}), yönetici HTTP ${scA.status} (${nA})`);
+
+          // Depoya doğrudan yükleme kapalı (üye kendi yorum klasörüne bile)
+          const direct = await fetch(`${t.SB_URL}/storage/v1/object/product-images/${folder}/dogrudan.png`, { method: "POST",
+            headers: { apikey: ANON, Authorization: `Bearer ${F.member.token}`, "Content-Type": "image/png" }, body: PNG }).then((r) => r.status).catch(() => 0);
+          ok(direct >= 400, "Üye depoya doğrudan görsel yükleyemiyor (yalnız sunucu ucundan)", `HTTP ${direct}`);
+
+          // Sunucu ucu: girişsiz 401, görsel olmayan dosya 400 (adı .png olsa da), 5 MB üstü 413, gerçek görsel 200
+          const anon = await up(null, PNG);
+          const fake = await up(F.member.token, Buffer.from("<html><script>alert(1)</script></html>"), "x.png", "image/png");
+          const big = await up(F.member.token, Buffer.concat([PNG, Buffer.alloc(5 * 1024 * 1024)]), "b.png");
+          const good = await up(F.member.token, PNG);
+          ok(anon.status === 401 && fake.status === 400 && big.status === 413 && good.status === 200 && String(good.json?.url || "").includes(`/product-images/${folder}/`),
+            "Yorum görseli: girişsiz 401, görsel olmayan dosya 400, 5 MB üstü 413, gerçek görsel yükleniyor",
+            `girişsiz ${anon.status}, sahte ${fake.status}, büyük ${big.status}, gerçek ${good.status} ${good.json?.url || good.json?.error || ""}`);
+
+          // Günlük sınır: 24 saatte 20 görsel (1 tanesi yukarıda yüklendi)
+          let last = null;
+          for (let i = 0; i < 20; i++) { last = await up(F.member.token, PNG); if (last.status !== 200) break; }
+          ok(last?.status === 429, "Yorum görseli: üye başına 24 saatte en çok 20 görsel", `21. yükleme HTTP ${last?.status} ${last?.json?.error || ""}`);
+
+          // Yorum kaydı: en çok 5 görsel, yalnız kendi yorum klasöründen adres
+          const base = `${t.SB_URL}/storage/v1/object/public/product-images/${folder}/`;
+          const rv = (images) => rest("order_reviews", { token: F.member.token, method: "POST", headers: { Prefer: "return=minimal" },
+            body: { order_id: O.paid, user_id: F.member.id, rating_shipping: 5, rating_quality: 5, rating_communication: 5, comment: "REGRESYON-TEST görsel", images } });
+          const del = () => sql(`DELETE FROM public.order_reviews WHERE user_id = ${lit(F.member.id)} AND comment = 'REGRESYON-TEST görsel'`);
+          const ext = await rv(["https://ornek.example/kotu.png"]); del();
+          const other = await rv([`${t.SB_URL}/storage/v1/object/public/product-images/reviews/00000000-0000-0000-0000-000000000000/x.png`]); del();
+          const six = await rv([1, 2, 3, 4, 5, 6].map((i) => `${base}${i}.png`)); del();
+          const five = await rv([1, 2, 3, 4, 5].map((i) => `${base}${i}.png`)); del();
+          ok(ext.status >= 400 && other.status >= 400 && six.status >= 400 && five.status < 300,
+            "Yorum: dış adres / başkasının klasörü / 6 görsel reddediliyor, kendi klasöründen 5 görsel kabul",
+            `dış ${ext.status}, başkası ${other.status}, 6 görsel ${six.status}, 5 görsel ${five.status}`);
+        } finally {
+          await clearFolder();
+        }
+        // Hesabım › Yorum yap görselleri sunucu ucundan yüklüyor (depoya doğrudan değil)
+        const acc = (await import("node:fs")).readFileSync(new URL("../../src/app/account/page.tsx", import.meta.url), "utf8");
+        ok(/fetch\("\/api\/review-images"/.test(acc) && !/storage\s*\.from\("product-images"\)\s*\.upload\(/.test(acc),
+          "Hesabım › Yorum yap görselleri sunucu ucundan yüklüyor", "account/page.tsx depoya doğrudan yüklüyor");
+      });
+
       await part("Ödeme onayı, iade, iptal", async () => {
         if (!O.paid || !O.cancel) return add("fail", "Önceki adımda sipariş oluşmadı", "bu bölüm denenemedi");
         // Ödenmemiş siparişi iptal → stok geri, ödeme "başarısız", fatura "gerekmiyor"

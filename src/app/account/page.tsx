@@ -54,6 +54,7 @@ import VerifyEmailNotice from "@/components/VerifyEmailNotice";
 import MarketingConsentToggle from "@/components/account/MarketingConsentToggle";
 import { customerCancelCheck } from "@/lib/customer-cancel-rule";
 import { isValidTckn, taxIdLabel } from "@/lib/tax-id";
+import { REVIEW_IMAGE_MAX_BYTES } from "@/lib/review-images";
 
 type TabType = "orders" | "addresses" | "profile" | "security" | "affiliate" | "coupons" | "messages";
 // Akordiyon bölüm anahtarları (tek akordiyon; üst menü yok)
@@ -369,7 +370,10 @@ function AccountPageInner() {
   }
 
   function handleReviewImageAdd(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files ?? []);
+    const all = Array.from(e.target.files ?? []);
+    // Görsel başına en çok 5 MB (sunucu da reddeder — src/lib/review-images.ts)
+    const files = all.filter((f) => f.size <= REVIEW_IMAGE_MAX_BYTES);
+    if (files.length < all.length) siteAlert("Her görsel en çok 5 MB olabilir; büyük olanlar eklenmedi.");
     const remaining = 3 - reviewImages.length;
     const added = files.slice(0, remaining);
     setReviewImages(prev => [...prev, ...added]);
@@ -394,17 +398,20 @@ function AccountPageInner() {
     }
     setReviewSubmitting(true);
     try {
-      // Görselleri yükle
+      // Görselleri yükle — sunucudan, tek tek (güvenlik 2026-11-16: üye depoya doğrudan yazamaz; boyut / tür / günlük
+      // sınır /api/review-images'te)
       const imageUrls: string[] = [];
-      for (const file of reviewImages) {
-        const ext = file.name.split(".").pop();
-        const path = `reviews/${user.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-        const { data: upload } = await supabase.storage
-          .from("product-images")
-          .upload(path, file, { upsert: true });
-        if (upload) {
-          const { data: { publicUrl } } = supabase.storage.from("product-images").getPublicUrl(path);
-          imageUrls.push(publicUrl);
+      if (reviewImages.length) {
+        const { data: { session } } = await supabase.auth.getSession();
+        for (const file of reviewImages) {
+          const fd = new FormData();
+          fd.append("file", file);
+          const res = await fetch("/api/review-images", {
+            method: "POST", body: fd, headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+          });
+          const d = await res.json().catch(() => ({}));
+          if (!res.ok || !d.url) throw new Error(d.error || "Görsel yüklenemedi");
+          imageUrls.push(d.url);
         }
       }
       const { error: reviewError } = await (supabase.from("order_reviews" as any).insert({
