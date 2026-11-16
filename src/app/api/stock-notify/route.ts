@@ -4,6 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { sendStockNotifySignupWelcome } from "@/lib/notifications";
+import { formMailAllowed } from "@/lib/form-mail-quota";
 import { rateLimited, clientIp, TOO_MANY } from "@/lib/rate-limit";
 import { botVerdict, botResponse } from "@/lib/bot-guard";
 
@@ -174,7 +175,9 @@ export async function POST(req: NextRequest) {
     // #10 — Kayıt onay e-postası (ürün fotosu + barefoot tanıtımı). Yalnız
     // e-posta varsa ve YENİ kayıtta. Ürün + varyant bilgisini çek.
     const toEmail: string | null = (user?.email as string) || guestEmail || null;
-    if (toEmail) {
+    // Misafirin yazdığı adrese: son 24 saatte en fazla 3 form e-postası (güvenlik 2026-11-16; başkasının adresine
+    // e-posta yağdırılmasın). Kayıt yine açılır, yalnız bu "talebini aldık" e-postası gitmez.
+    if (toEmail && (user || (await formMailAllowed(supabase, toEmail, "stock-notify")))) {
       try {
         const storeUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com";
         const { data: product } = await supabase

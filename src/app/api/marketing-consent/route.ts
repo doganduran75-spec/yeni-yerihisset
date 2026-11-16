@@ -45,10 +45,17 @@ export async function POST(req: NextRequest) {
   const contactId = body.t ? verifyContactConsentToken(body.t) : null;
   if (contactId) {
     const now = new Date().toISOString();
-    const { error } = await (createAdminClient() as any).from("contacts").update(body.granted
+    const sb = createAdminClient() as any;
+    const { data: before } = await sb.from("contacts").select("email, marketing_consent").eq("id", contactId).maybeSingle();
+    const { error } = await sb.from("contacts").update(body.granted
       ? { marketing_consent: true, marketing_consent_at: now, marketing_opt_out_at: null }
       : { marketing_consent: false, marketing_opt_out_at: now }).eq("id", contactId);
     if (error) return NextResponse.json({ error: "Kaydedilemedi" }, { status: 500 });
+    // Bülten çift onayı (güvenlik 2026-11-16): izin bu bağlantıyla İLK kez verildiyse hoş geldin e-postası şimdi gider
+    if (body.granted && before && !before.marketing_consent && before.email) {
+      const { sendNewsletterWelcome } = await import("@/lib/newsletter");
+      await sendNewsletterWelcome(contactId, before.email).catch(() => null);
+    }
     return NextResponse.json({ ok: true, granted: body.granted });
   }
   const { userId, viaLink } = await resolveUser(req, body.t);

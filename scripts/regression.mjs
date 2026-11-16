@@ -198,6 +198,7 @@ async function main() {
     ["20261185 E-posta onayı (ilk kez giden tür onaya düşer)", "SELECT to_regclass('public.email_approvals') IS NOT NULL AND to_regclass('public.email_approved_kinds') IS NOT NULL AND EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'settings' AND column_name = 'email_approval_enabled') AND EXISTS(SELECT 1 FROM pg_trigger WHERE tgname = 'trg_telegram_email_approval')"],
     ["20261186 Fırsatlar / Bilgi Bankası aç-kapa", "SELECT count(*) = 2 FROM information_schema.columns WHERE table_name = 'settings' AND column_name IN ('opportunities_enabled', 'kb_enabled') AND has_column_privilege('anon', 'public.settings', column_name, 'SELECT')"],
     ["20261187 Kategori sırası", "SELECT count(*) = 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'categories' AND column_name = 'sort_order'"],
+    ["20261189 Herkese açık formlarda adres başına e-posta sınırı", "SELECT to_regclass('public.form_mail_log') IS NOT NULL AND (SELECT relrowsecurity FROM pg_class WHERE oid = 'public.form_mail_log'::regclass) AND EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname = 'form_mail_allowed' AND NOT has_function_privilege('anon', p.oid, 'EXECUTE'))"],
     ["20261188 Kredi tek adımda (düş / geri yükle)", "SELECT count(*) = 3 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname IN ('spend_order_credit', 'restore_order_credit', 'reclaim_order_credit') AND NOT has_function_privilege('authenticated', p.oid, 'EXECUTE')"],
     ["20261184 Pazaryeri müşteri soruları (Trendyol soru-cevap)", "SELECT to_regclass('public.marketplace_questions') IS NOT NULL AND EXISTS(SELECT 1 FROM pg_trigger WHERE tgname = 'trg_telegram_marketplace_question')"],
     ["20261177 Topluluk katmanları: Meraklı / Tutkun / Guru (seviye 4) + iş ortağı satışıyla Guru", "SELECT (SELECT count(*) FROM public.roles WHERE (slug = 'musteri' AND name = 'Barefoot Meraklısı') OR (slug = 'mudavim' AND name = 'Barefoot Tutkunu') OR (slug = 'guru' AND level = 4)) = 3 AND pg_get_functiondef('public.refresh_member_auto_tags(uuid[])'::regprocedure) LIKE '%guru_added%' AND (SELECT count(*) FROM public.people_tiers()) = 7"],
@@ -624,17 +625,17 @@ async function main() {
   dupKeys.length
     ? add("warn", "Aynı pazaryeri kodu birden çok varyantta", dupKeys.map((r) => `${r[0]} ${r[1]}: ${r[3]}`).join(" · ").slice(0, 600) + " → fazla olanın barkod / SKU'sunu sil ya da düzelt")
     : add("ok", "Pazaryeri kodları tekil");
-  // Kaynak kodda görünmez kontrol karakteri yok (2026-11-14: bir betik "\\b" kelime sınırını geri-silme karakterine
-  // çevirmişti → Paraşüt süresiz oturum denetimi hiç eşleşmiyordu)
-  {
-    const bad = [];
-    const walk = (d) => { for (const e of readdirSync(d, { withFileTypes: true })) {
-      const f = `${d}/${e.name}`;
-      if (e.isDirectory()) walk(f); else if (/\.(ts|tsx|mjs|js|sql|sh)$/.test(e.name)) { try { if (/[\x07\x08\x0b\x0c]/.test(readFileSync(f, "utf8"))) bad.push(f.replace(/^.*?\/(src|scripts|supabase)\//, "$1/")); } catch { /* okunamadı */ } }
-    } };
-    for (const d of ["src", "scripts", "supabase/migrations"]) { try { walk(new URL(`../${d}`, import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1")); } catch { /* yok */ } }
-    bad.length ? add("fail", "Kaynak kodda görünmez kontrol karakteri", bad.slice(0, 5).join(", ")) : add("ok", "Kaynak kodda görünmez kontrol karakteri yok");
-  }
+  // Kaynak kodda görünmez kontrol karakteri yok (2026-11-14: bir betik "\\b" kelime sınırını geri-silme karakterine
+  // çevirmişti → Paraşüt süresiz oturum denetimi hiç eşleşmiyordu)
+  {
+    const bad = [];
+    const walk = (d) => { for (const e of readdirSync(d, { withFileTypes: true })) {
+      const f = `${d}/${e.name}`;
+      if (e.isDirectory()) walk(f); else if (/\.(ts|tsx|mjs|js|sql|sh)$/.test(e.name)) { try { if (/[\x07\x08\x0b\x0c]/.test(readFileSync(f, "utf8"))) bad.push(f.replace(/^.*?\/(src|scripts|supabase)\//, "$1/")); } catch { /* okunamadı */ } }
+    } };
+    for (const d of ["src", "scripts", "supabase/migrations"]) { try { walk(new URL(`../${d}`, import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1")); } catch { /* yok */ } }
+    bad.length ? add("fail", "Kaynak kodda görünmez kontrol karakteri", bad.slice(0, 5).join(", ")) : add("ok", "Kaynak kodda görünmez kontrol karakteri yok");
+  }
   // E-posta kilidinin bilerek durdurduğu gönderim hata sayılmaz (2026-11-14'ten önce "failed" yazılıyordu)
   const qFailed = num("SELECT count(*) FROM public.email_queue WHERE status='failed' AND created_at > now() - interval '7 days' AND coalesce(error_message, '') NOT LIKE 'E-posta kilidi%'");
   qFailed ? add("warn", "Gönderilemeyen e-posta (son 7 gün)", `${qFailed}`) : add("ok", "E-posta kuyruğunda hata yok");

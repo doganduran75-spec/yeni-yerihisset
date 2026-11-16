@@ -30,6 +30,14 @@ export async function POST(req: NextRequest) {
   if (!proved) return NextResponse.json({ ok: false, reason: "no-email-proof" });
 
   const sb = createAdminClient() as any;
+  // E-posta bağlantısıyla gelen kişi adresin sahibi → bu hesabın BAŞKA oturumları kapatılır (güvenlik 2026-11-16).
+  // Kayıt ve "e-postamı düzelt" adresi doğrulamadan kabul ettiği için biri başkasının e-postasıyla önceden hesap
+  // açıp oturumunu açık tutabiliyordu; sahibi şifre sıfırlama bağlantısını açınca o oturum düşer. (/sifre-belirle
+  // şifre kaydedilince de aynısını yapar.) Kapatma hatası doğrulamayı engellemez.
+  {
+    const { error: soErr } = await sb.auth.admin.signOut(token, "others");
+    if (soErr) console.error("[mark-verified] diğer oturumlar kapatılamadı:", soErr.message);
+  }
   const { data: p } = await sb.from("profiles").select("email, email_verified").eq("id", user.id).maybeSingle();
   // Şifre belirlendi + e-posta kanıtlandı → "Üye" (hoş geldin kuponları; aktarılan müşteriye verilmez)
   if (!p || p.email_verified) {

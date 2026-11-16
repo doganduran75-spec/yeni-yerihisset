@@ -13,7 +13,7 @@ export const EMAIL_KIND_LABEL: Record<string, string> = {
   order_placed: "Sipariş alındı", order_paid: "Ödeme onaylandı", order_shipped: "Kargoya verildi",
   order_delivered: "Teslim edildi", order_cancelled: "Sipariş iptal edildi", coupon_assigned: "Yeni kupon tanımlandı",
   cart_abandonment: "Sepet hatırlatma", order_recovery: "Sipariş kurtarma", review_request: "Yorum isteme",
-  trial_reminder: "Deneme hatırlatması", newsletter_welcome: "Bülten — hoş geldin", winback: "Seni özledik",
+  trial_reminder: "Deneme hatırlatması", newsletter_welcome: "Bülten — hoş geldin", newsletter_confirm: "Bülten — abonelik onayı", winback: "Seni özledik",
   message_reply: "Sipariş mesajına cevap", lead_magnet_welcome: "Fırsat — hoş geldin / kupon",
   email_verification: "E-posta doğrulama", password_recovery: "Şifre sıfırlama", guest_activation: "Misafir hesabı — şifre belirle",
   stock_notify_signup: "Stok talebi alındı", back_in_stock: "Stok geldi", affiliate_payout: "Satış ortağı hakedişi",

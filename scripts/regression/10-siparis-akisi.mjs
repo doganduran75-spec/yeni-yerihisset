@@ -50,6 +50,7 @@ export default {
         DELETE FROM public.marketing_consent_log WHERE email ILIKE '%@${DOMAIN}' OR user_id IN (${users});
         DO $$ BEGIN
           IF to_regclass('public.contacts') IS NOT NULL THEN DELETE FROM public.contacts WHERE email ILIKE '%@${DOMAIN}'; END IF;
+          IF to_regclass('public.form_mail_log') IS NOT NULL THEN DELETE FROM public.form_mail_log WHERE email ILIKE '%@${DOMAIN}'; END IF;
         END $$;
         DELETE FROM public.profiles WHERE email ILIKE '%@${DOMAIN}';
         DELETE FROM public.telegram_state WHERE key IN (SELECT 'admin_watch_test:' || id FROM auth.users WHERE email ILIKE '%@${DOMAIN}');
@@ -1264,35 +1265,58 @@ export default {
         const st = one(`SELECT status || ':' || coalesce(error_message, '') FROM public.email_queue WHERE id = ${lit(qid)}`);
         ok(cr.status === 200 && String(st).startsWith("skipped"), "İzinsiz üyeye kampanya e-postası gitmiyor", `HTTP ${cr.status} · ${st}`);
         sql(`DELETE FROM public.email_queue WHERE id = ${lit(qid)}`);
-        // Bülten aboneliği = kampanya izni (kişi kaydında)
+        // Bülten ÇİFT ONAY (güvenlik 2026-11-16): form izni YAZMAZ — kişi kaydı izinsiz açılır, adrese onay e-postası
+        // gider; izin e-postadaki imzalı bağlantıda "Evet"e basınca yazılır (hoş geldin e-postası o an)
         const ne = `rgt-bulten-${RUN}@${DOMAIN}`;
+        const csig = (id) => createHmac("sha256", `contact-marketing-consent:${process.env.SUPABASE_SERVICE_ROLE_KEY || ""}`).update(id).digest("base64url").slice(0, 32);
         const nl = await api("/api/newsletter", { headers: { "x-forwarded-for": F.ip }, body: { email: ne, _hp: "", _t: 6000 } });
         const c = row(`SELECT id, marketing_consent AS mc FROM public.contacts WHERE email = ${lit(ne)}`);
-        ok(nl.status === 200 && c?.mc === true, "Bülten aboneliği kampanya izni olarak kaydediliyor", `${why(nl)} ${JSON.stringify(c)}`);
-        // E-postadaki "abonelikten çık" bağlantısı (kişi: "c." önekli imzalı bağlantı)
+        ok(nl.status === 200 && nl.json?.result === "confirm_sent" && /onay bağlantısı/.test(nl.json?.message || "") && c?.id && c.mc === false,
+          "Bülten formu izni yazmıyor: kişi kaydı izinsiz, “onay bağlantısı gönderdik”", `${why(nl)} ${nl.json?.result} ${JSON.stringify(c)}`);
         if (c?.id) {
-          const sig = createHmac("sha256", `contact-marketing-consent:${process.env.SUPABASE_SERVICE_ROLE_KEY || ""}`).update(c.id).digest("base64url").slice(0, 32);
-          const un = await api("/api/marketing-consent", { body: { t: `c.${c.id}.${sig}`, granted: false } });
+          // E-postadaki onay bağlantısı ("c." önekli imzalı) → izin
+          const yes = await api("/api/marketing-consent", { body: { t: `c.${c.id}.${csig(c.id)}`, granted: true } });
+          ok(yes.status === 200 && row(`SELECT marketing_consent AS mc FROM public.contacts WHERE id = ${lit(c.id)}`)?.mc === true,
+            "Onay bağlantısıyla bülten izni yazılıyor", why(yes));
+          // "Abonelikten çık" bağlantısı
+          const un = await api("/api/marketing-consent", { body: { t: `c.${c.id}.${csig(c.id)}`, granted: false } });
           const c2 = row(`SELECT marketing_consent AS mc, marketing_opt_out_at IS NOT NULL AS out FROM public.contacts WHERE id = ${lit(c.id)}`);
           ok(un.status === 200 && c2?.mc === false && c2?.out === true, "Abonelikten çık bağlantısı çalışıyor", `${why(un)} ${JSON.stringify(c2)}`);
         }
-        // 2026-11-12: yeni kayıt "katıldınız" (hoş geldin e-postası), aynı adres tekrar "zaten listemizde", çıkan tekrar
-        // abone olabilir; kampanya iznini kapatmış üyenin kararını bülten formu ezmez (Hesabım'a yönlendirir)
+        // Çıkmış kişi formla yeniden abone EDİLEMEZ (yalnız yeni onay e-postası); onaylayınca "zaten listemizde";
+        // kampanya iznini kapatmış üyenin kararını bülten formu ezmez (Hesabım'a yönlendirir)
         const nl2 = await api("/api/newsletter", { headers: { "x-forwarded-for": F.ip }, body: { email: ne, _hp: "", _t: 6000 } });
+        const stillOut = c?.id ? row(`SELECT marketing_consent AS mc FROM public.contacts WHERE id = ${lit(c.id)}`)?.mc === false : false;
+        if (c?.id) await api("/api/marketing-consent", { body: { t: `c.${c.id}.${csig(c.id)}`, granted: true } });
         const nl3 = await api("/api/newsletter", { headers: { "x-forwarded-for": F.ip }, body: { email: ne, _hp: "", _t: 6000 } });
         sql(`UPDATE public.profiles SET marketing_consent = false, marketing_consent_at = now() WHERE id = ${lit(F.member.id)}`);
         const nl4 = await api("/api/newsletter", { headers: { "x-forwarded-for": F.ip }, body: { email: F.member.email, _hp: "", _t: 6000 } });
         const memberC = num(`SELECT count(*) FROM public.contacts WHERE email = ${lit(String(F.member.email).toLowerCase())} AND marketing_consent AND marketing_consent_at > now() - interval '1 minute'`);
         sql(`UPDATE public.profiles SET marketing_consent = false, marketing_consent_at = NULL WHERE id = ${lit(F.member.id)}`);
-        ok(nl.json?.result === "subscribed" && /katıldınız/.test(nl.json?.message || "") && nl2.json?.result === "resubscribed" && nl3.json?.result === "already" && /zaten/.test(nl3.json?.message || "")
+        ok(nl2.json?.result === "confirm_sent" && stillOut && nl3.json?.result === "already" && /zaten/.test(nl3.json?.message || "")
           && nl4.json?.result === "member_opted_out" && memberC === 0,
-          "Bülten: yeni kayıt “katıldınız”, tekrar yazınca “zaten listemizde”, çıkan yeniden katılabiliyor, iznini kapatmış üyenin kararı ezilmiyor",
-          `${nl.json?.result} / ${nl2.json?.result} / ${nl3.json?.result} / ${nl4.json?.result} · üye kişi kaydı ${memberC}`);
-        const nlSrc = (await import("node:fs")).readFileSync(new URL("../../src/lib/newsletter.ts", import.meta.url), "utf8");
-        ok(/sendNewsletterWelcome\(contactId, email\)/.test((await import("node:fs")).readFileSync(new URL("../../src/app/api/newsletter/route.ts", import.meta.url), "utf8"))
-          && /contactConsentUrl\(contactId, true\)/.test(nlSrc)
+          "Bülten: çıkan kişi formla yeniden abone edilemiyor (onay ister), onaylı adres “zaten listemizde”, iznini kapatmış üyenin kararı ezilmiyor",
+          `${nl2.json?.result} (izin hâlâ kapalı: ${stillOut}) / ${nl3.json?.result} / ${nl4.json?.result} · üye kişi kaydı ${memberC}`);
+        // Aynı adrese 24 saatte en fazla 3 form e-postası (MIG 20261189): 4. istek de "gönderdik" der ama sayılmaz
+        {
+          const qe = `rgt-bulten-sinir-${RUN}@${DOMAIN}`;
+          const ipQ = `10.252.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}`; // ayrı IP: bülten IP sınırından yemesin
+          const rs = [];
+          for (let i = 0; i < 4; i++) rs.push(await api("/api/newsletter", { headers: { "x-forwarded-for": ipQ }, body: { email: qe, _hp: "", _t: 6000 } }));
+          const logged = num(`SELECT count(*) FROM public.form_mail_log WHERE email = ${lit(qe)}`);
+          ok(rs.every((r) => r.status === 200 && r.json?.result === "confirm_sent") && logged === 3,
+            "Aynı adrese 24 saatte en fazla 3 form e-postası; 4. istek aynı cevabı alıyor ama e-posta gitmiyor", `${rs.map((r) => r.json?.result || r.status).join(" / ")} · sayılan ${logged} (3 olmalı)`);
+          sql(`DELETE FROM public.form_mail_log WHERE email ILIKE '%@${DOMAIN}'`);
+        }
+        const nodeFs = await import("node:fs");
+        const rdS = (p) => nodeFs.readFileSync(new URL(`../../src/${p}`, import.meta.url), "utf8");
+        const nlSrc = rdS("lib/newsletter.ts"), nlRoute = rdS("app/api/newsletter/route.ts"), mcRoute = rdS("app/api/marketing-consent/route.ts");
+        ok(/sendNewsletterConfirm\(contactId, email\)/.test(nlRoute) && !/marketing_consent: true/.test(nlRoute) && /sendNewsletterWelcome\(contactId, before\.email\)/.test(mcRoute)
+          && /contactConsentUrl\(contactId, true\)/.test(nlSrc) && /yh-tpl:newsletter_confirm/.test(nlSrc)
+          && ["campaign-claim", "lead-magnet", "stock-notify"].every((f) => new RegExp(`formMailAllowed\\([^)]*"${f}"\\)`).test(rdS(`app/api/${f === "campaign-claim" ? "coupons/campaign-claim" : f === "lead-magnet" ? "lead-magnet/claim" : "stock-notify"}/route.ts`)))
           && num("SELECT count(*) FROM public.email_templates WHERE trigger = 'newsletter_welcome' AND body_html LIKE '%{{unsubscribe_url}}%' AND body_html LIKE '%abonelikten çık%'") === 1,
-          "Bülten hoş geldin e-postası: çıkış bağlantısı + “her bültenin altında abonelikten çık var” bilgisi", "şablon ya da gönderim eksik");
+          "Bülten: onay e-postası formda, hoş geldin onaydan sonra (çıkış bağlantılı); kampanya kuponu / ücretsiz kargo / stok bildirimi formlarında adres sınırı",
+          "kaynakta onay / hoş geldin / adres sınırı satırlarından biri eksik");
       });
 
       await part("Stok bildirimi (Stoğa girince haber ver)", async () => {

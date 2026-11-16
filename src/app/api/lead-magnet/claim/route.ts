@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase-admin";
 import { rateLimited, clientIp, TOO_MANY } from "@/lib/rate-limit";
 import { botVerdict, botResponse } from "@/lib/bot-guard";
 import { sendLeadMagnetWelcome } from "@/lib/notifications";
+import { formMailAllowed } from "@/lib/form-mail-quota";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -33,6 +34,9 @@ export async function POST(req: NextRequest) {
 
   const supabase = createAdminClient();
   const storeUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com";
+  // Aynı adrese son 24 saatte en fazla 3 form e-postası (güvenlik 2026-11-16): dolduysa hesap açılmaz, kupon eklenmez,
+  // e-posta gitmez — form yine "gönderdik" der
+  if (!(await formMailAllowed(supabase, email, "lead-magnet"))) return NextResponse.json({ ok: true, status: "created" });
 
   // Kupon: amacıyla (coupons.purpose = 'lead_magnet'; kodu yenilense de bozulmaz), yoksa eski usul koda göre
   let coupon: any = null;

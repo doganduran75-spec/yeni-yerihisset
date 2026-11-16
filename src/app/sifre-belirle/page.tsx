@@ -93,6 +93,9 @@ export default function SetPasswordPage() {
     try {
       const { error } = await supabase.auth.updateUser({ password });
       if (error) throw error;
+      // Şifre değişti → bu tarayıcı dışındaki TÜM oturumlar kapanır (güvenlik 2026-11-16): biri bu e-postayla önceden
+      // hesap açıp oturumunu açık tuttuysa, sahibi şifreyi sıfırlayınca o oturum da düşer. Hata şifre değişimini bozmaz.
+      await supabase.auth.signOut({ scope: "others" }).catch(() => {});
       if (consent) {
         const { data: { session } } = await supabase.auth.getSession();
         await fetch("/api/marketing-consent", {

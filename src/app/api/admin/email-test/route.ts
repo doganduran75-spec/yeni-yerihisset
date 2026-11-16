@@ -16,7 +16,7 @@ import { sendCreditLoadedEmail } from "@/lib/affiliate-mail";
 import { sendInvoiceEmail } from "@/lib/invoice-mail";
 import { sendClaimEmail, campaignEmailHtml } from "@/lib/crm-campaign";
 import { sendRawSiteMail } from "@/lib/site-mail";
-import { sendNewsletterWelcome } from "@/lib/newsletter";
+import { sendNewsletterWelcome, sendNewsletterConfirm } from "@/lib/newsletter";
 import { afterSaleUrl } from "@/lib/after-sale";
 import { fitButtonsHtml } from "@/lib/trial-reminder";
 
@@ -39,6 +39,7 @@ const KINDS: { kind: string; group: string; label: string; order?: boolean }[] =
   { kind: "coupon_reminder", group: "Kupon / kampanya", label: "Kuponun bitmesine 3 gün" },
   { kind: "claim", group: "Kupon / kampanya", label: "Kuponu hesabına ekle (misafir)" },
   { kind: "lead_magnet", group: "Kupon / kampanya", label: "Ücretsiz kargo (e-posta karşılığı)" },
+  { kind: "newsletter_confirm", group: "Kupon / kampanya", label: "Bülten — abonelik onayı" },
   { kind: "newsletter_welcome", group: "Kupon / kampanya", label: "Bülten — hoş geldin" },
   { kind: "email_verify", group: "Üyelik", label: "E-posta onayı" },
   { kind: "password_recovery", group: "Üyelik", label: "Şifre sıfırlama" },
@@ -144,6 +145,10 @@ export async function POST(req: NextRequest) {
       case "email_verify": return sendEmailVerification({ to, name: me.first_name, verifyUrl: `${site}/eposta-onay?deneme=1` });
       case "password_recovery": return sendPasswordRecoveryEmail({ to, name: me.first_name, actionUrl: `${site}/sifre-belirle` });
       case "guest_activation": return sendGuestActivationEmail({ email: to, name: me.first_name, orderLabel: orderNo || "YH00000" });
+      case "newsletter_confirm": {
+        // Olmayan bir kişi kimliğiyle — bağlantıya basılsa da kimsenin izni değişmez
+        return sendNewsletterConfirm("00000000-0000-0000-0000-000000000000", to);
+      }
       case "newsletter_welcome": {
         // Çıkış bağlantısı olmayan bir kişi kimliğiyle — tıklansa da kimsenin kaydı değişmez
         return sendNewsletterWelcome("00000000-0000-0000-0000-000000000000", to);

@@ -11,6 +11,7 @@ import { getAuthUserFromRequest } from "@/lib/auth-from-request";
 import { rateLimited, clientIp, TOO_MANY } from "@/lib/rate-limit";
 import { botVerdict, botResponse } from "@/lib/bot-guard";
 import { sendClaimEmail } from "@/lib/crm-campaign";
+import { formMailAllowed } from "@/lib/form-mail-quota";
 
 export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => ({}))) as any;
@@ -49,6 +50,9 @@ export async function POST(req: NextRequest) {
   if (blocked) return blocked;
   const email = String(body.email || "").trim().toLowerCase();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return NextResponse.json({ error: "Geçerli bir e-posta yaz." }, { status: 400 });
+  // Aynı adrese son 24 saatte en fazla 3 form e-postası (güvenlik 2026-11-16): dolduysa hesap açılmaz, kupon eklenmez,
+  // e-posta gitmez — cevap yine aynı (adresin durumu dışarı sızmaz)
+  if (!(await formMailAllowed(sb, email, "campaign-claim"))) return NextResponse.json({ ok: true, status: "email" });
   const storeUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com").replace(/\/$/, "");
 
   const setPasswordUrl = async () => {
