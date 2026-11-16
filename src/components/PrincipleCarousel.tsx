@@ -1,6 +1,5 @@
 "use client";
 
-/* eslint-disable @next/next/no-img-element */
 // BAREFOOT PRENSİPLERİ — ana sayfanın üstü (kullanıcı kararları 2026-10-18): açılış hikâyesinin küçüğü.
 // Mobilde ekranın ~1/3'ü, parmakla sağa sola kaydırılır; masaüstünde beş kart yan yana.
 // İçerik: Ayarlar › Ana Sayfa › Barefoot prensipleri (varsayılan src/config/homeContent.ts).
@@ -10,6 +9,7 @@ import { PlayCircle } from "lucide-react";
 import { useHomeContent } from "@/lib/home-content-context";
 import { track } from "@/lib/track";
 import { STORIES_OPEN_EVENT } from "@/components/PrincipleStories";
+import PrincipleImage from "@/components/PrincipleImage";
 
 const EPI = "var(--font-epilogue), 'Epilogue', system-ui, sans-serif";
 
@@ -32,7 +32,7 @@ export default function PrincipleCarousel({ variant }: { variant: "mobile" | "de
           {items.map((it) => (
             <div key={it.title} className="rounded-2xl overflow-hidden bg-white" style={{ border: "1px solid #E8E4DC" }}>
               <div className="bg-[#F4EFE6]" style={{ aspectRatio: "4 / 3" }}>
-                {it.image && <img src={it.image} alt={it.title} className="w-full h-full object-contain" loading="lazy" />}
+                <PrincipleImage it={it} />
               </div>
               <div className="p-4">
                 <p style={{ fontFamily: EPI, fontWeight: 700, fontSize: 16, color: "#1C1C19" }}>{it.title}</p>
@@ -69,7 +69,7 @@ export default function PrincipleCarousel({ variant }: { variant: "mobile" | "de
           <div key={it.title} className="snap-start shrink-0 w-[82%] rounded-2xl overflow-hidden bg-white flex flex-col"
             style={{ border: "1px solid #E8E4DC", height: "max(220px, 33svh)" }}>
             <div className="flex-1 min-h-0 bg-[#F4EFE6]">
-              {it.image && <img src={it.image} alt={it.title} className="w-full h-full object-contain" loading="lazy" />}
+              <PrincipleImage it={it} />
             </div>
             <div className="px-4 py-3">
               <p style={{ fontFamily: EPI, fontWeight: 700, fontSize: 17, color: "#1C1C19", lineHeight: 1.2 }}>{it.title}</p>

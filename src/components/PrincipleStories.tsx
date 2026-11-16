@@ -1,6 +1,5 @@
 "use client";
 
-/* eslint-disable @next/next/no-img-element */
 // PRENSİP HİKÂYESİ — telefonda ilk ziyarette tam ekran (kullanıcı kararları 2026-10-18; eski karşılama videosunun yerine).
 //  * Instagram story gibi: üstte TURUNCU ilerleme çubukları; dokun → sonraki (sol kenar → önceki), basılı tut → durur.
 //  * Süreler panelden (Ayarlar › Ana Sayfa › Barefoot prensipleri › Hikâyede kaç saniye).
@@ -11,6 +10,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { useHomeContent } from "@/lib/home-content-context";
 import SegmentChooser from "@/components/SegmentChooser";
+import PrincipleImage from "@/components/PrincipleImage";
 import { track } from "@/lib/track";
 
 export const STORIES_OPEN_EVENT = "yh:stories-open";
@@ -173,7 +173,7 @@ export default function PrincipleStories() {
           onPointerCancel={() => setPaused(false)}
           onContextMenu={(e) => e.preventDefault()}>
           <div className="flex-1 min-h-0 flex items-center justify-center px-6">
-            {it.image && <img src={it.image} alt={it.title} draggable={false} className="max-h-full w-full object-contain pointer-events-none" />}
+            <div className="w-full max-h-full" style={{ aspectRatio: "4 / 3" }}><PrincipleImage it={it} big /></div>
           </div>
           <div className="px-6 pb-6">
             <h2 className="text-[30px] leading-tight font-black text-[#1C1C19]" style={{ fontFamily: "var(--font-epilogue), system-ui, sans-serif" }}>{it.title}</h2>
