@@ -118,7 +118,7 @@ BEGIN
     'unmatched', (SELECT count(*) FROM public.order_items oi JOIN public.orders o ON o.id = oi.order_id
                    WHERE o.import_source IS NOT NULL AND oi.product_id IS NULL)
   );
-END $;
+END $$;
 REVOKE ALL ON FUNCTION public.rematch_order_items() FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.rematch_order_items() TO authenticated, service_role;
 
