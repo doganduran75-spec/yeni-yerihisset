@@ -1165,6 +1165,9 @@ export default {
           && (hcf.match(/shiftUp: 0,/g) || []).length === 5 && /Math\.max\(-25, Math\.min\(25,/.test(ps) && /translateY\(\$\{-shift\}%\)/.test(ps) && /from-\[#F4EFE6\] via-\[#F4EFE6\]\/85/.test(ps)
           && /k === "image" \|\| k === "imageTall"/.test(hct),
           "Hikâye tam ekran seçeneği (varsayılan kapalı; dik görsel, yoksa yatay görsel kırpılır; panelden yüklenir)", "tam ekran hikâye eksik");
+        // "Geleneksel / Barefoot" etiketi kalktı (kullanıcı 2026-11-16: görseller karşılaştırma değil, gereksiz)
+        ok(!/labelLeft|labelRight/.test(hcf + hct + ps) && !/PrincipleImage/.test(ps + rd("src/components/PrincipleCarousel.tsx")),
+          "Prensip görsellerinde 'Geleneksel / Barefoot' etiketi yok", "etiket geri gelmiş");
       });
 
       await part("Eski site adresleri yeni sayfalara yönleniyor (301)", async () => {

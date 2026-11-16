@@ -31,7 +31,7 @@ const LABEL: Record<string, string> = {
   columns: "Sütunlar", links: "Bağlantılar", newsletterTitle: "Bülten başlığı", newsletterBody: "Bülten açıklaması",
   storiesEnabled: "Telefonda ilk ziyarette hikâye göster", shopButton: "\"Alışverişe geç\" düğmesi",
   replayLink: "Hikâyeyi yeniden izleme bağlantısı", items: "Prensipler", text: "Kısa yazı",
-  image: "Görsel adresi (/principles/… ya da https://…)", seconds: "Hikâyede kaç saniye", labelLeft: "Sol etiket (görsel üstü)", labelRight: "Sağ etiket (görsel üstü)", show: "Göster",
+  image: "Görsel adresi (/principles/… ya da https://…)", seconds: "Hikâyede kaç saniye", show: "Göster",
   copyright: "Telif satırı", tagline: "Slogan", legal: "Yasal bağlantılar",
 };
 const lbl = (k: string) => LABEL[k] ?? k;
