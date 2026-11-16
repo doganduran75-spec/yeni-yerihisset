@@ -105,5 +105,25 @@ export default {
       add(/form_mail_allowed/.test(ce) && /formMailAllowed\(supabase, newEmail, "change-email"\)/.test(ce) ? "ok" : "fail",
         "E-postamı düzelt: sınır veritabanında (hesap + hedef adres)", "change-email/route.ts sınır satırları eksik");
     });
+
+    // Supabase'in kendi kayıt adresleri dışarıya kapalı (güvenlik 2026-11-16, scripts/block-auth-signup-caddy.sh):
+    // açıkken site formu (bot tuzağı, sözleşme onayı, IP sınırı) atlanıp doğrudan hesap açılabiliyordu. Üyelik sunucudan
+    // (admin.createUser) açıldığı için site bu adresleri kullanmaz; Google ile giriş / şifreli giriş açık kalmalı.
+    await part("Hesap güvenliği: Supabase kayıt kapısı kapalı", async () => {
+      const email = `rgt-kayit-${Date.now().toString(36)}@${DOMAIN}`;
+      const made = () => Number(sql(`SELECT count(*) FROM auth.users WHERE email = ${lit(email)}`)[0]?.[0] || 0);
+      try {
+        const s = await auth("signup", { method: "POST", body: { email, password: randomBytes(18).toString("base64url") } });
+        const o = await auth("otp", { method: "POST", body: { email, create_user: true } });
+        const n = made();
+        add(s.status === 403 && o.status === 403 && n === 0 ? "ok" : "fail",
+          "Supabase kayıt adresleri (signup / otp) dışarıya kapalı — üyelik yalnız site üzerinden",
+          `signup HTTP ${s.status}, otp HTTP ${o.status} (403 olmalı), açılan hesap ${n} → sunucuda: bash scripts/block-auth-signup-caddy.sh`);
+        const tk = await auth("token?grant_type=password", { method: "POST", body: { email, password: "yanlis-sifre" } });
+        add(tk.status === 400 ? "ok" : "fail", "Şifreli giriş adresi açık (kapı yalnız kayıt adreslerini kapatıyor)", `token HTTP ${tk.status} (400 olmalı)`);
+      } finally {
+        sql(`DELETE FROM public.profiles WHERE id IN (SELECT id FROM auth.users WHERE email = ${lit(email)}); DELETE FROM auth.users WHERE email = ${lit(email)};`);
+      }
+    });
   },
 };
