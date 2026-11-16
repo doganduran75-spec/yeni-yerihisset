@@ -398,6 +398,18 @@ async function main() {
     const r = await get(path, opts);
     r.status === want ? add("ok", name) : add("fail", name, `HTTP ${r.status} (beklenen ${want})`);
   }
+  // Dış izleme ucu (kullanıcı 2026-11-16: eski sunucu dondu, kimse fark etmedi) — UptimeRobot buraya bakar; şifre kapısı
+  // dışında, site + veritabanı cevap veriyorsa 200 ve "ok", ayrıntı dönmez. Sunucu sağlığı betiği takas alanını da denetler.
+  {
+    const h = await get("/api/health");
+    const shSrc = (await import("node:fs")).readFileSync(new URL("./server-health.sh", import.meta.url), "utf8");
+    h.status === 200 && /"ok":true/.test(h.text) && !/error|message|stack/i.test(h.text)
+      ? add("ok", "Dış izleme ucu (/api/health) site + veritabanı ayakta diyor")
+      : add("fail", "Dış izleme ucu (/api/health)", `HTTP ${h.status} — 200 ve {"ok":true} bekleniyordu`);
+    /add swap warn "Takas alanı"/.test(shSrc) && /en çok: \$TOPMEM/.test(shSrc)
+      ? add("ok", "Sunucu sağlığı: takas alanı kontrolü + bellek uyarısında en çok kullanan süreçler var")
+      : add("fail", "Sunucu sağlığı betiği", "takas alanı kontrolü ya da bellek uyarısındaki süreç listesi kaldırılmış");
+  }
   // iyzico kütüphanesinde kullandığımız servis adları gerçekten var mı (checkoutFormAuth diye bir servis yoktu → ödeme dönüşü 500)
   try {
     const { readdirSync: rd } = await import("node:fs");

@@ -90,10 +90,17 @@ else add disk ok "Disk" "%$DISK dolu ($DISK_FREE boş)" ""; fi
 MEM=$(free -m | awk '/^Mem:/ {printf "%d", ($2-$7)*100/$2}')
 SWAP_MB=$(free -m | awk '/^Swap:/ {print $3+0}')
 MEM_N=$(streak mem "$([ "${MEM:-0}" -ge 85 ] && echo true || echo false)")
-if   [ "${MEM:-0}" -ge 95 ]; then add memory fail "Bellek" "%$MEM kullanımda (swap ${SWAP_MB} MB)" "Bellek bitmek üzere; site yavaşlayabilir veya çökebilir."
-elif [ "$MEM_N" -ge 2 ]; then add memory warn "Bellek" "%$MEM kullanımda (swap ${SWAP_MB} MB)" "Bellek 30 dakikadır yüksek; yeniden başlatma veya inceleme gerekebilir." true
+# Uyarıda belleği en çok kullanan 3 süreç de yazılır (kullanıcı 2026-11-16: neyin doldurduğu hemen görülsün)
+TOPMEM=$(ps -eo rss,comm --sort=-rss 2>/dev/null | awk 'NR>1 && NR<=4 {printf "%s%s %d MB", (NR>2 ? ", " : ""), $2, $1/1024}')
+if   [ "${MEM:-0}" -ge 95 ]; then add memory fail "Bellek" "%$MEM kullanımda (swap ${SWAP_MB} MB) — en çok: $TOPMEM" "Bellek bitmek üzere; site yavaşlayabilir veya çökebilir."
+elif [ "$MEM_N" -ge 2 ]; then add memory warn "Bellek" "%$MEM kullanımda (swap ${SWAP_MB} MB) — en çok: $TOPMEM" "Bellek 30 dakikadır yüksek; yeniden başlatma veya inceleme gerekebilir." true
 elif [ "$MEM_N" -ge 1 ]; then add memory ok "Bellek" "%$MEM kullanımda (swap ${SWAP_MB} MB) — yüksek, izleniyor" ""
 else add memory ok "Bellek" "%$MEM kullanımda" ""; fi
+
+# 2b) Takas alanı (kullanıcı 2026-11-16: eski sunucu takassızdı, bellek dolunca tamamen dondu — takas varsa yalnız yavaşlar)
+SWAP_TOTAL=$(free -m | awk '/^Swap:/ {print $2+0}')
+if [ "${SWAP_TOTAL:-0}" -lt 1024 ]; then add swap warn "Takas alanı" "${SWAP_TOTAL:-0} MB" "Takas alanı yok: bellek dolarsa sunucu donar. 2–4 GB /swapfile eklenmeli ve /etc/fstab'a yazılmalı." true
+else add swap ok "Takas alanı" "$(( SWAP_TOTAL / 1024 )) GB" ""; fi
 
 # 3) İşlemci yükü (15 dk ortalaması / çekirdek sayısı; %100 = bütün çekirdekler dolu)
 #    %90 sarı (30 dk sürerse, dağıtım hariç), %200 kırmızı (iş kuyruğu çekirdek sayısının iki katı)
