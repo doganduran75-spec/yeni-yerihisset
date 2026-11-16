@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Search, PackageX, Bell, ShoppingBag } from "lucide-react";
+import { Search, PackageX, Bell, ShoppingBag, ChevronDown, X } from "lucide-react";
 import { formatPriceDisplay, getMinPrice } from "@/lib/product-price";
 import { compareVariantValues } from "@/lib/variant-sort";
 import StockNotifyModal from "@/components/products/StockNotifyModal";
@@ -54,8 +54,9 @@ function ProductCard({ product, categoryName, size, outOfStock, onNotify, canQui
           <Image src={img} alt={product.title} fill priority={priority} loading={priority ? undefined : "eager"} sizes="(max-width: 768px) 50vw, 25vw" className="object-cover group-hover:scale-110 transition-transform duration-1000" />
         </Link>
         {outOfStock && onNotify ? (
-          /* Stokta olmayan (numara filtresi) — kalıcı aksiyonlar: Haber Ver (birincil) + İncele (ikincil) */
-          <div className="absolute bottom-2.5 md:bottom-5 left-1/2 -translate-x-1/2 w-[92%] md:w-[88%] flex flex-col gap-1.5 md:gap-2">
+          /* Stokta olmayan (numara filtresi) — kalıcı aksiyonlar: Haber Ver (birincil) + İncele (ikincil). Yalnız bilgisayarda:
+             mobilde fotoğraf kapanmasın, düğme fotoğrafın altında (kullanıcı 2026-11-16) */
+          <div className="absolute bottom-2.5 md:bottom-5 left-1/2 -translate-x-1/2 w-[92%] md:w-[88%] hidden md:flex flex-col gap-1.5 md:gap-2">
             <button
               onClick={(e) => { e.preventDefault(); onNotify(product); }}
               className="h-10 md:h-12 rounded-xl md:rounded-2xl bg-olive-600 text-white font-black text-[10px] md:text-xs uppercase tracking-wide md:tracking-widest flex items-center justify-center gap-1.5 md:gap-2 text-center leading-tight px-1 hover:bg-olive-700 active:scale-95 shadow-xl shadow-olive-900/10"
@@ -68,8 +69,8 @@ function ProductCard({ product, categoryName, size, outOfStock, onNotify, canQui
             </Link>
           </div>
         ) : canQuickBuy && onQuickBuy ? (
-          /* Stokta (numara filtresi) — Hemen Sipariş Ver (birincil) + İncele (ikincil) */
-          <div className="absolute bottom-2.5 md:bottom-5 left-1/2 -translate-x-1/2 w-[92%] md:w-[88%] flex flex-col gap-1.5 md:gap-2">
+          /* Stokta (numara filtresi) — Hemen Sipariş Ver (birincil) + İncele (ikincil) — yalnız bilgisayarda */
+          <div className="absolute bottom-2.5 md:bottom-5 left-1/2 -translate-x-1/2 w-[92%] md:w-[88%] hidden md:flex flex-col gap-1.5 md:gap-2">
             <button
               onClick={(e) => { e.preventDefault(); onQuickBuy(product); }}
               className="h-10 md:h-12 rounded-xl md:rounded-2xl bg-olive-600 text-white font-black text-[10px] md:text-xs uppercase tracking-wide md:tracking-widest flex items-center justify-center gap-1.5 md:gap-2 text-center leading-tight px-1 hover:bg-olive-700 active:scale-95 shadow-xl shadow-olive-900/10"
@@ -83,7 +84,7 @@ function ProductCard({ product, categoryName, size, outOfStock, onNotify, canQui
           </div>
         ) : (
           <Link href={href}
-            className="absolute bottom-2.5 md:bottom-6 left-1/2 -translate-x-1/2 w-[90%] md:w-[85%] h-10 md:h-14 glass rounded-xl md:rounded-2xl text-slate-900 font-black text-[11px] md:text-xs uppercase tracking-wide md:tracking-widest transition-all flex items-center justify-center gap-2 hover:bg-olive-600 hover:text-white hover:border-olive-600 active:scale-95 shadow-xl opacity-100 translate-y-0 md:opacity-0 md:translate-y-4 md:group-hover:opacity-100 md:group-hover:translate-y-0">
+            className="absolute bottom-2.5 md:bottom-6 left-1/2 -translate-x-1/2 w-[90%] md:w-[85%] h-10 md:h-14 glass rounded-xl md:rounded-2xl text-slate-900 font-black text-[11px] md:text-xs uppercase tracking-wide md:tracking-widest transition-all hidden md:flex items-center justify-center gap-2 hover:bg-olive-600 hover:text-white hover:border-olive-600 active:scale-95 shadow-xl opacity-100 translate-y-0 md:opacity-0 md:translate-y-4 md:group-hover:opacity-100 md:group-hover:translate-y-0">
             <Search size={18} /> İNCELE
           </Link>
         )}
@@ -99,6 +100,18 @@ function ProductCard({ product, categoryName, size, outOfStock, onNotify, canQui
           )}
         </div>
       </div>
+      {/* Mobil: düğme fotoğrafın hemen altında (fotoğrafa dokunmak ürünü açar; "İncele" yok) — kullanıcı 2026-11-16 */}
+      {outOfStock && onNotify ? (
+        <button onClick={() => onNotify(product)}
+          className="md:hidden w-full h-10 mb-3 rounded-xl bg-olive-600 text-white font-black text-[11px] uppercase tracking-wide flex items-center justify-center gap-1.5 active:scale-95">
+          <Bell size={15} /> Gelince haber ver
+        </button>
+      ) : canQuickBuy && onQuickBuy ? (
+        <button onClick={() => onQuickBuy(product)}
+          className="md:hidden w-full h-10 mb-3 rounded-xl bg-olive-600 text-white font-black text-[11px] uppercase tracking-wide flex items-center justify-center gap-1.5 active:scale-95">
+          <ShoppingBag size={15} /> Sipariş ver
+        </button>
+      ) : null}
       <div className="space-y-1 px-1 md:px-2">
         <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.1em]">{categoryName ?? ""}</p>
         <Link href={href}>
@@ -149,9 +162,14 @@ export default function SizeFilterGrid({ products: cachedProducts, categoryName,
     product_variants: (p.product_variants ?? [])
       .filter((v: any) => v.is_active !== false)
       .map((v: any) => (liveVariants?.has(v.id) ? { ...v, stock: liveVariants.get(v.id) } : v)),
-  })), [cachedProducts, liveVariants]);
+  }))
+    // Segment mağazası: "Hepsi" listesi kategori sırasıyla (kışın önce botlar — kullanıcı 2026-11-16); kategori içinde sıra aynı
+    .map((p, i) => ({ p, i }))
+    .sort((a, b) => (segment ? Number(a.p.categories?.sort_order ?? 100) - Number(b.p.categories?.sort_order ?? 100) : 0) || a.i - b.i)
+    .map(({ p }) => p), [cachedProducts, liveVariants, segment]);
 
   const [size, setSize] = useState<string | null>(null);
+  const [sheet, setSheet] = useState<null | "size" | "cat" | "brand">(null); // mobil süzgeç paneli (segment mağazası)
   const [cat, setCat] = useState<string | null>(null); // seçili kategori id'si
   const [brand, setBrand] = useState<string | null>(null); // seçili marka slug'ı
   // "Haber Ver" modalı hedefi (stokta olmayan kart tıklanınca)
@@ -228,14 +246,16 @@ export default function SizeFilterGrid({ products: cachedProducts, categoryName,
   // BAĞIMLI SÜZGEÇLER (sıra: Kategori → Marka → Numara). Her satır yalnız ürünü olan seçenekleri gösterir:
   // Attipas seçiliyken yalnız İlkadım kategorisi, Ayakkabı seçiliyken yalnız Dodura… Geçersiz kalan seçim
   // (ör. 40 numara İlkadım'da yok) "Hepsi" sayılır — durum sıfırlamak yerine etkin değer türetilir.
+  // Kategoriler panelde verilen sırayla (categories.sort_order — kullanıcı 2026-11-16, mevsime göre), sonra ada göre
   const listOf = (ps: any[], key: "categories" | "brands") => {
-    const m = new Map<string, string>();
+    const m = new Map<string, { name: string; sort: number }>();
     for (const p of ps) {
       const x = p[key];
       const k = key === "categories" ? x?.id : x?.slug;
-      if (k && x?.name) m.set(k, x.name);
+      if (k && x?.name) m.set(k, { name: x.name, sort: Number(x.sort_order ?? 100) });
     }
-    return [...m.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name, "tr"));
+    return [...m.entries()].map(([id, v]) => ({ id, name: v.name, sort: v.sort }))
+      .sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name, "tr"));
   };
   // Segment mağazasında sıra Numara → Kategori: numara listesi kategoriden bağımsız, kategoriler seçili numarası
   // olan (ya da numarasız — aksesuar) ürünlerden. Genel listede (kategori / marka sayfası) eski sıra.
@@ -304,11 +324,75 @@ export default function SizeFilterGrid({ products: cachedProducts, categoryName,
     return { inStock: inS, outStock: outS };
   }, [base, effSize]);
 
+  // Segment mağazasında mobil: üç satır yerine TEK satır düğme (Numara / Kategori / Marka) + alttan açılan panel
+  // (kullanıcı 2026-11-16); satırlar yalnız bilgisayarda. Kategori / marka sayfalarında düzen aynı.
+  const rowCls = `${sizeFirst ? "hidden md:flex" : "flex"} items-center gap-2 overflow-x-auto md:flex-wrap md:overflow-visible -mx-4 px-4 md:mx-0 md:px-0 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden`;
+  const catName = cats.find((c) => c.id === effCat)?.name;
+  const brandName = brands.find((x) => x.id === effBrand)?.name;
+  const optCls = (on: boolean) => `rounded-xl border-2 font-bold transition-all active:scale-95 ${on ? "border-olive-600 bg-olive-600 text-white" : "border-slate-200 text-slate-700"}`;
+  const barBtn = (on: boolean) => `flex-1 min-w-0 h-11 px-2 rounded-xl text-[13px] font-bold flex items-center justify-center gap-1 border-2 bg-white ${on ? "border-olive-600 text-olive-700" : "border-slate-200 text-slate-700"}`;
+  const mobileBar = sizeFirst && (sizes.length > 0 || showCatFilter || showBrandFilter) ? (
+    <div className="md:hidden flex gap-2">
+      {sizes.length > 0 && (
+        // Numara en önemli seçim: seçilmemişken yeşil ve belirgin, seçilince "Numara: 42"
+        <button type="button" onClick={() => setSheet("size")}
+          className={`${effSize ? barBtn(true) : "h-11 px-2 rounded-xl text-[13px] font-bold flex items-center justify-center gap-1 border-2 border-olive-600 bg-olive-600 text-white"} !flex-none shrink-0`}>
+          <span className="truncate">{effSize ? `Numara: ${effSize}` : "Numaranı seç"}</span><ChevronDown size={16} className="shrink-0" />
+        </button>
+      )}
+      {showCatFilter && (
+        <button type="button" onClick={() => setSheet("cat")} className={barBtn(!!effCat)}>
+          <span className="truncate">{catName || "Kategori"}</span><ChevronDown size={16} className="shrink-0" />
+        </button>
+      )}
+      {showBrandFilter && (
+        <button type="button" onClick={() => setSheet("brand")} className={barBtn(!!effBrand)}>
+          <span className="truncate">{brandName || "Marka"}</span><ChevronDown size={16} className="shrink-0" />
+        </button>
+      )}
+    </div>
+  ) : null;
+  const mobileSheet = sheet ? (
+    <div className="md:hidden fixed inset-0 z-[60]" role="dialog" aria-modal="true" aria-label={sheet === "size" ? "Numara seç" : sheet === "cat" ? "Kategori seç" : "Marka seç"}>
+      <button type="button" aria-label="Kapat" className="absolute inset-0 bg-black/40" onClick={() => setSheet(null)} />
+      <div className="absolute inset-x-0 bottom-0 bg-white rounded-t-3xl px-5 pt-5 max-h-[80vh] overflow-y-auto" style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 20px)" }}>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-black text-slate-900">{sheet === "size" ? "Numaranı seç" : sheet === "cat" ? "Kategori" : "Marka"}</h2>
+          <button type="button" aria-label="Kapat" onClick={() => setSheet(null)} className="p-1 text-slate-500"><X size={22} /></button>
+        </div>
+        {sheet === "size" ? (
+          <>
+            <div className="grid grid-cols-5 gap-2">
+              {sizes.map((s) => (
+                <button key={s} type="button" onClick={() => { pickSize(s); setSheet(null); }} className={`h-12 text-base ${optCls(effSize === s)}`}>{s}</button>
+              ))}
+            </div>
+            <button type="button" onClick={() => { pickSize(null); setSheet(null); }} className={`mt-3 w-full h-12 text-sm ${optCls(effSize === null)}`}>Tüm numaralar</button>
+          </>
+        ) : (
+          <div className="flex flex-col gap-2">
+            <button type="button" onClick={() => { if (sheet === "cat") setCat(null); else setBrand(null); setSheet(null); }}
+              className={`h-12 px-4 text-left text-sm ${optCls(sheet === "cat" ? effCat === null : effBrand === null)}`}>Hepsi</button>
+            {(sheet === "cat" ? cats : brands).map((x) => (
+              <button key={x.id} type="button"
+                onClick={() => {
+                  if (sheet === "cat") { setCat(x.id); track("category_click", { category_id: x.id, category: x.name }); }
+                  else { setBrand(x.id); track("brand_click", { brand: x.id, source: "filter" }); }
+                  setSheet(null);
+                }}
+                className={`h-12 px-4 text-left text-sm ${optCls(sheet === "cat" ? effCat === x.id : effBrand === x.id)}`}>{x.name}</button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  ) : null;
+
   // Numara satırı: segment mağazasında en üstte, genel listede marka satırından sonra
   const sizeRow = (
     <>
     {sizes.length > 0 && (
-        <div className="flex items-center gap-2 overflow-x-auto md:flex-wrap md:overflow-visible -mx-4 px-4 md:mx-0 md:px-0 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className={rowCls}>
           <span className="text-xs font-black uppercase tracking-widest text-slate-400 mr-1 shrink-0">Numara:</span>
           <button
             onClick={() => pickSize(null)}
@@ -335,10 +419,12 @@ export default function SizeFilterGrid({ products: cachedProducts, categoryName,
 
   return (
     <div className="space-y-4 md:space-y-8">
+      {mobileBar}
+      {mobileSheet}
       {sizeFirst && sizeRow}
       {/* Kategori filtresi (en üstte) — seçili markada ürünü olan kategoriler */}
       {showCatFilter && (
-        <div className="flex items-center gap-2 overflow-x-auto md:flex-wrap md:overflow-visible -mx-4 px-4 md:mx-0 md:px-0 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className={rowCls}>
           <span className="text-xs font-black uppercase tracking-widest text-slate-400 mr-1 shrink-0">Kategori:</span>
           <button
             onClick={() => setCat(null)}
@@ -360,7 +446,7 @@ export default function SizeFilterGrid({ products: cachedProducts, categoryName,
 
       {/* Marka filtresi (kategoriden sonra) — seçili kategoride tek marka varsa gizli */}
       {showBrandFilter && (
-        <div className="flex items-center gap-2 overflow-x-auto md:flex-wrap md:overflow-visible -mx-4 px-4 md:mx-0 md:px-0 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className={rowCls}>
           <span className="text-xs font-black uppercase tracking-widest text-slate-400 mr-1 shrink-0">Marka:</span>
           <button
             onClick={() => setBrand(null)}

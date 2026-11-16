@@ -10,7 +10,7 @@ import { supabase } from "@/lib/supabase";
 import { Plus, Trash2, Loader2, Bookmark, FileText } from "lucide-react";
 import ListPageContentDialog from "./ListPageContentDialog";
 
-type Category = { id: string; name: string; slug: string; created_at: string; intro?: string | null; faq?: any };
+type Category = { id: string; name: string; slug: string; created_at: string; intro?: string | null; faq?: any; sort_order?: number | null };
 
 const toSlug = (text: string) =>
   text.toString().toLowerCase().trim()
@@ -30,7 +30,7 @@ export default function CategoriesTab() {
 
   async function fetch() {
     setLoading(true);
-    const { data } = await supabase.from("categories").select("*").order("name");
+    const { data } = await (supabase as any).from("categories").select("*").order("sort_order").order("name");
     setCategories(data || []);
     setLoading(false);
   }
@@ -56,6 +56,16 @@ export default function CategoriesTab() {
     const { error } = await (supabase as any).from("categories").update({ segment }).eq("id", id);
     if (error) { alert("Kaydedilemedi: " + error.message); return; }
     setCategories((prev) => prev.map((c: any) => (c.id === id ? { ...c, segment } : c)));
+  }
+
+  // Mağazadaki sıra (kullanıcı 2026-11-16): küçük sayı önce — kategori düğmeleri ve "Hepsi" listesindeki ürünler bu sırayla
+  async function setSort(id: string, value: string) {
+    const n = Math.round(Number(value));
+    if (!Number.isFinite(n)) return;
+    const { error } = await (supabase as any).from("categories").update({ sort_order: n }).eq("id", id);
+    if (error) { alert("Kaydedilemedi: " + error.message); return; }
+    setCategories((prev) => [...prev.map((c) => (c.id === id ? { ...c, sort_order: n } : c))]
+      .sort((a, b) => (a.sort_order ?? 100) - (b.sort_order ?? 100) || a.name.localeCompare(b.name, "tr")));
   }
 
   async function handleDelete(id: string) {
@@ -92,7 +102,7 @@ export default function CategoriesTab() {
       <Card className="shadow-sm border-muted">
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Kategori Listesi</CardTitle>
-          <CardDescription>Sistemdeki tüm ürün kategorileri.</CardDescription>
+          <CardDescription>Sistemdeki tüm ürün kategorileri. “Sıra”: mağazada küçük sayı önce gelir (kategori düğmeleri ve “Hepsi” listesindeki ürünler).</CardDescription>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -103,6 +113,7 @@ export default function CategoriesTab() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-20" title="Mağazada küçük sayı önce gelir">Sıra</TableHead>
                   <TableHead>Kategori Adı</TableHead>
                   <TableHead>Slug</TableHead>
                   <TableHead>Mağaza</TableHead>
@@ -113,6 +124,10 @@ export default function CategoriesTab() {
               <TableBody>
                 {categories.map(cat => (
                   <TableRow key={cat.id}>
+                    <TableCell>
+                      <input type="number" defaultValue={cat.sort_order ?? 100} key={`${cat.id}-${cat.sort_order}`} onBlur={(e) => { if (Number(e.target.value) !== (cat.sort_order ?? 100)) setSort(cat.id, e.target.value); }}
+                        className="h-8 w-16 rounded-md border px-2 text-xs bg-white" title="Mağazada küçük sayı önce gelir (ör. kışın Bot 10, Ayakkabı 20, Babet 30, Aksesuar 40)" />
+                    </TableCell>
                     <TableCell className="font-medium">
                       <div className="flex items-center gap-2">
                         <Bookmark size={14} className="text-muted-foreground" />

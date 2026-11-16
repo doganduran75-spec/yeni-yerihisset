@@ -1083,6 +1083,23 @@ export default {
           "Panoda “Onay bekleyen e-posta”; Telegram “E-posta onayı” konusu varsayılan açık", "pano / Telegram eksik");
       });
 
+      // MAĞAZA MOBİL (2026-11-16, MIG 20261187): tek satır süzgeç + alttan panel, kart düğmesi fotoğrafın altında, kategori sırası
+      await part("Mağaza (mobil): tek satır süzgeç, düğme fotoğrafın altında, kategori sırası", async () => {
+        const fs = await import("node:fs");
+        const g = fs.readFileSync(new URL("../../src/components/SizeFilterGrid.tsx", import.meta.url), "utf8");
+        const mg = fs.readFileSync(new URL("../../src/app/magaza/[segment]/page.tsx", import.meta.url), "utf8");
+        ok(/\{effSize \? `Numara: \$\{effSize\}` : "Numaranı seç"\}/.test(g) && /aria-label=\{sheet === "size" \? "Numara seç"/.test(g) && /sizeFirst \? "hidden md:flex" : "flex"/.test(g),
+          "Mobil mağazada Numara / Kategori / Marka tek satırda, seçim alttan açılan panelde", "SizeFilterGrid mobil süzgeç");
+        ok(/md:hidden w-full h-10 mb-3[^\n]*\r?\n\s*<ShoppingBag size=\{15\} \/> Sipariş ver/.test(g) && (g.match(/w-\[92%\] md:w-\[88%\] hidden md:flex/g) || []).length === 2 && /transition-all hidden md:flex items-center/.test(g),
+          "Mobil kartta fotoğraf üstünde düğme yok; “Sipariş ver” fotoğrafın altında", "kart düğmeleri");
+        ok(/a\.sort - b\.sort \|\| a\.name\.localeCompare/.test(g) && /categories!inner\(id, name, slug, segment, sort_order\)/.test(mg),
+          "Kategoriler ve “Hepsi” listesi paneldeki sırayla", "kategori sırası");
+        ok(/hidden md:flex flex-wrap items-center justify-between/.test(mg) && /md:hidden mt-12 space-y-3/.test(mg) && fs.existsSync(new URL("../../src/app/products/[slug]/loading.tsx", import.meta.url)),
+          "Mobilde gezinti yolu ve açıklama altta; ürün sayfası açılırken “yükleniyor” görünümü", "mağaza üst kısmı / loading.tsx");
+        const cats = one("SELECT count(*) FROM public.categories WHERE sort_order IS NOT NULL");
+        ok(Number(cats) > 0, "Kategori sırası alanı veritabanında", `kayıt: ${cats}`);
+      });
+
       // FIRSATLAR / BİLGİ BANKASI AÇ-KAPA (2026-11-15, MIG 20261186) + Sistem / E-posta denemesi Ayarlar'da
       await part("Fırsatlar / Bilgi Bankası menüden kapatılabiliyor; Sistem Ayarlar'da", async () => {
         const bad = await api("/api/admin/section-flags", { token: F.admin.token, body: { field: "role", value: true } });

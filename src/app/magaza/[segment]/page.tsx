@@ -39,7 +39,7 @@ export default async function SegmentPage({ params }: { params: Promise<{ segmen
     (sb as any).from("products")
       .select(`
         id, title, slug, price, stock, images, image_url, has_variants,
-        categories!inner(id, name, slug, segment),
+        categories!inner(id, name, slug, segment, sort_order),
         brands(name, slug),
         product_variants(id, price, is_active, stock, variant_options(value, variant_groups(name)))
       `)
@@ -56,30 +56,40 @@ export default async function SegmentPage({ params }: { params: Promise<{ segmen
     { "@type": "ListItem", position: 3, name: S.label, item: `${SITE}${S.path}` },
   ] };
 
+  const crumbNav = (
+    <nav className="flex items-center gap-1.5 text-sm text-slate-500">
+      <Link href="/" className="hover:text-olive-600">Ana Sayfa</Link>
+      <ChevronRight size={14} />
+      <Link href="/magaza" className="hover:text-olive-600">Mağaza</Link>
+      <ChevronRight size={14} />
+      <span className="text-slate-900 font-medium">{S.label}</span>
+    </nav>
+  );
+
   return (
     <>
       <Navbar />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(crumbs).replace(/</g, "\\u003c") }} />
       <main className="min-h-screen bg-background">
         <div className="container mx-auto px-4 py-6 md:py-8 max-w-7xl">
-          <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-            <nav className="flex items-center gap-1.5 text-sm text-slate-500">
-              <Link href="/" className="hover:text-olive-600">Ana Sayfa</Link>
-              <ChevronRight size={14} />
-              <Link href="/magaza" className="hover:text-olive-600">Mağaza</Link>
-              <ChevronRight size={14} />
-              <span className="text-slate-900 font-medium">{S.label}</span>
-            </nav>
+          {/* Mobil (kullanıcı 2026-11-16): ürün hemen görünsün — gezinti yolu sayfanın altına, mağaza değiştirme alt menüdeki
+              "Mağaza" panelinde, açıklama ürünlerin altında; bilgisayarda düzen aynı */}
+          <div className="hidden md:flex flex-wrap items-center justify-between gap-2 mb-4">
+            {crumbNav}
             {/* Diğer segmente geçiş (herkes alt menüyü düşünmez) */}
             <Link href={other.path} className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 px-3 h-8 text-sm font-semibold text-olive-700 hover:border-olive-300">
               <ArrowRightLeft size={14} /> {other.goTo}
             </Link>
           </div>
-          <header className="mb-6">
+          <header className="mb-4 md:mb-6">
             <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">{S.h1}</h1>
-            <p className="text-sm text-slate-500 mt-1 max-w-2xl">{S.intro}</p>
+            <p className="hidden md:block text-sm text-slate-500 mt-1 max-w-2xl">{S.intro}</p>
           </header>
           <SizeFilterGrid products={list} freeOver={freeOver} segment={seg} />
+          <div className="md:hidden mt-12 space-y-3">
+            <p className="text-sm text-slate-500">{S.intro}</p>
+            {crumbNav}
+          </div>
           <FeedbackForm source={`magaza_${seg}`} />
         </div>
       </main>
