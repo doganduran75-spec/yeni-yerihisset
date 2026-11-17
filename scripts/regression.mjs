@@ -693,6 +693,13 @@ async function main() {
   liveOnly(st.lock !== "true", "E-posta kilidi açık", "canlıda müşterilere e-posta gitmez → Ayarlar › Genel › E-posta Kilidi'ni kapat");
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "";
   /^https:\/\//.test(siteUrl) ? add("ok", "Site adresi") : add("fail", "Site adresi (NEXT_PUBLIC_SITE_URL) ayarlı değil / https değil", siteUrl || "boş");
+  // Staging'de site adresi canlı alan adına bakmamalı (kullanıcı 2026-11-17: bülten onay bağlantısı eski WordPress'e gitti —
+  // e-posta bağlantıları, şifre sıfırlama, iyzico dönüşü hep bu adresi kullanır). Canlıda dev adresi kalmamalı: aşağıdaki liveOnly kontrolü.
+  {
+    const host = siteUrl.replace(/^https?:\/\//, "").replace(/[/:].*$/, "");
+    if (!LIVE && /^(www\.)?yerihisset\.com$/.test(host)) add("warn", "Staging'de site adresi canlı alan adı", `${siteUrl} — e-postadaki bağlantılar eski siteye gider; .env.local'da NEXT_PUBLIC_SITE_URL=https://dev.yerihisset.com yapıp deploy et`);
+    else add("ok", "Site adresi ortama uygun", siteUrl);
+  }
   liveOnly(!/dev\./.test(siteUrl), "Site adresi test sitesini gösteriyor", `${siteUrl} → canlı adres olmalı (iyzico dönüşü, e-posta bağlantıları)`);
   process.env.CRON_SECRET ? add("ok", "CRON_SECRET tanımlı") : add("fail", "CRON_SECRET yok");
   // Bakım sayfası: deploy sırasında / çökmede Caddy maintenance/index.html gösterir (docs/BAKIM-SAYFASI.md)
