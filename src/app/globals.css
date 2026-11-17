@@ -178,3 +178,10 @@ body {
 
 /* Kart ödeme formu açıkken mobil alt menü gizli (ödemenin ortasında çıkılmasın) — src/app/checkout/page.tsx */
 body[data-paying] .yh-tabbar { display: none; }
+
+/* Dönen kapak görseli (src/components/RotatingCover.tsx): <html data-cv="0–5"> kök düzendeki betikle ilk açılışta yazılır;
+   her kutuda yalnız sıradaki görsel görünür. Betik yoksa ilk görsel. */
+.yh-cv { display: none; }
+html:not([data-cv]) .yh-cv[data-first],
+html[data-cv="0"] .yh-cv[data-show~="0"], html[data-cv="1"] .yh-cv[data-show~="1"], html[data-cv="2"] .yh-cv[data-show~="2"],
+html[data-cv="3"] .yh-cv[data-show~="3"], html[data-cv="4"] .yh-cv[data-show~="4"], html[data-cv="5"] .yh-cv[data-show~="5"] { display: block; }

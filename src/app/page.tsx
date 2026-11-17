@@ -30,7 +30,7 @@ async function getFeaturedProducts() {
 async function getCategoryTiles(): Promise<CategoryTile[]> {
   const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
   const { data } = await (sb as any).from("products")
-    .select("images, image_url, stock, price, has_variants, categories!inner(id, name, slug, segment), product_variants(stock, is_active, price)")
+    .select("images, image_url, stock, price, has_variants, categories!inner(id, name, slug, segment, cover_images), product_variants(stock, is_active, price)")
     .eq("is_active", true).order("created_at", { ascending: false }).limit(300);
   const inStock = (p: any) => Number(p.stock || 0) > 0 || (p.product_variants || []).some((v: any) => v.is_active !== false && Number(v.stock || 0) > 0);
   const img = (p: any) => p.images?.[0] || p.image_url || null;
@@ -54,7 +54,9 @@ async function getCategoryTiles(): Promise<CategoryTile[]> {
     .map((e) => {
       const seg = e.c.segment === "ilkadim" ? "ilkadim" : "yetiskin";
       const href = seg === "ilkadim" && ilkCount <= 1 ? "/magaza/ilkadim" : `/magaza/${seg}?kategori=${encodeURIComponent(e.c.slug)}`;
-      return { id: e.c.id, name: e.c.name, href, image: e.stockImg || e.anyImg, segment: seg, min: Number.isFinite(e.min) ? e.min : null, max: e.max || null };
+      // Kapak: panelde seçilenler (Ayarlar › Kategoriler › Kapak, en çok 3, ziyarette biri); seçilmemişse stoktaki son ürün
+      const covers = ((e.c.cover_images as string[] | null) || []).filter(Boolean).slice(0, 3);
+      return { id: e.c.id, name: e.c.name, href, image: covers[0] || e.stockImg || e.anyImg, covers, segment: seg, min: Number.isFinite(e.min) ? e.min : null, max: e.max || null };
     });
 }
 

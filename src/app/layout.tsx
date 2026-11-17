@@ -84,8 +84,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="tr" className="antialiased" data-scroll-behavior="smooth">
+    <html lang="tr" className="antialiased" data-scroll-behavior="smooth" suppressHydrationWarning>
       <head>
+        {/* Dönen kapak görseli: her açılışta 0–5 arası sıra (src/components/RotatingCover.tsx) — boyamadan önce yazılır */}
+        <script dangerouslySetInnerHTML={{ __html: "try{document.documentElement.setAttribute('data-cv',String(Math.floor(Math.random()*6)))}catch(e){}" }} />
         <GlobalStructuredData />
         <GoogleAnalytics />
         <MarketingSetup />

@@ -4,13 +4,13 @@
 // Mağaza panelinde aynı kartlar. Son seçilen segment vurgulanır ("Devam et").
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
+import RotatingCover from "@/components/RotatingCover";
 import { ArrowRight } from "lucide-react";
 import { SEGMENTS, LAST_SEGMENT_KEY, type Segment } from "@/config/segments";
 import { track } from "@/lib/track";
 
 export default function SegmentChooser({ images = {}, source, onPick, compact = false }: {
-  images?: Partial<Record<Segment, string | null>>;
+  images?: Partial<Record<Segment, string | string[] | null>>; // dizi: panelde seçilen kapaklar (ziyarette biri)
   source: string;            // ölçüm: magaza_sayfasi | alt_menu | ana_sayfa | hikaye
   onPick?: () => void;
   compact?: boolean;         // alt menü paneli: görselsiz, kısa
@@ -24,7 +24,7 @@ export default function SegmentChooser({ images = {}, source, onPick, compact = 
     <div className={compact ? "grid grid-cols-1 gap-3" : "grid grid-cols-1 sm:grid-cols-2 gap-4"}>
       {(Object.keys(SEGMENTS) as Segment[]).map((seg) => {
         const S = SEGMENTS[seg];
-        const img = images[seg];
+        const imgs = ([] as (string | null | undefined)[]).concat(images[seg] ?? []);
         const isLast = last === seg;
         return (
           <Link key={seg} href={S.path}
@@ -32,7 +32,7 @@ export default function SegmentChooser({ images = {}, source, onPick, compact = 
             className={`group relative flex overflow-hidden rounded-3xl border-2 transition-all active:scale-[0.99] ${isLast ? "border-olive-600" : "border-slate-200 hover:border-olive-300"} ${compact ? "items-center gap-4 p-4 bg-white" : "flex-col bg-white"}`}>
             {!compact && (
               <div className="relative w-full bg-[#F3EFEA]" style={{ aspectRatio: "16 / 10" }}>
-                {img && <Image src={img} alt={S.h1} fill sizes="(max-width: 640px) 100vw, 50vw" className="object-cover group-hover:scale-105 transition-transform duration-700" />}
+                <RotatingCover images={imgs} alt={S.h1} sizes="(max-width: 640px) 100vw, 50vw" className="object-cover group-hover:scale-105 transition-transform duration-700" />
               </div>
             )}
             <div className={compact ? "flex-1 min-w-0" : "p-5"}>

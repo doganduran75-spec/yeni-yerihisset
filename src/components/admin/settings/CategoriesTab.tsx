@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -7,10 +9,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { supabase } from "@/lib/supabase";
-import { Plus, Trash2, Loader2, Bookmark, FileText } from "lucide-react";
+import { Plus, Trash2, Loader2, Bookmark, FileText, Image as ImageIcon } from "lucide-react";
 import ListPageContentDialog from "./ListPageContentDialog";
+import CoverPickerDialog, { productImages } from "./CoverPickerDialog";
+import { SEGMENTS, type Segment } from "@/config/segments";
 
-type Category = { id: string; name: string; slug: string; created_at: string; intro?: string | null; faq?: any; sort_order?: number | null };
+type Category = { id: string; name: string; slug: string; created_at: string; intro?: string | null; faq?: any; sort_order?: number | null; cover_images?: string[] | null };
+
+async function authHeaders(): Promise<Record<string, string>> {
+  const { data: { session } } = await supabase.auth.getSession();
+  return session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
+}
 
 const toSlug = (text: string) =>
   text.toString().toLowerCase().trim()
@@ -25,8 +34,50 @@ export default function CategoriesTab() {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [contentFor, setContentFor] = useState<Category | null>(null); // "Sayfa metni" (tanıtım + SSS)
+  // Kapak görselleri (kullanıcı 2026-11-17, MIG 20261195): kategori kutusu (ana sayfa) + mağaza kartları (/magaza)
+  const [coverFor, setCoverFor] = useState<Category | null>(null);
+  const [segCoverFor, setSegCoverFor] = useState<Segment | null>(null);
+  const [segCovers, setSegCovers] = useState<Record<string, string[]>>({});
 
-  useEffect(() => { fetch(); }, []);
+  useEffect(() => { fetch(); loadSegCovers(); }, []);
+
+  async function loadSegCovers() {
+    try {
+      const r = await window.fetch("/api/admin/settings", { headers: await authHeaders(), cache: "no-store" });
+      const d = await r.json();
+      setSegCovers(d?.settings?.segment_covers || {});
+    } catch { /* kart boş görünür */ }
+  }
+
+  async function saveCategoryCovers(id: string, covers: string[]): Promise<string | null> {
+    const { error } = await (supabase as any).from("categories").update({ cover_images: covers }).eq("id", id);
+    if (error) return "Kaydedilemedi: " + error.message;
+    setCategories((prev) => prev.map((c) => (c.id === id ? { ...c, cover_images: covers } : c)));
+    return null;
+  }
+
+  async function saveSegmentCovers(seg: Segment, covers: string[]): Promise<string | null> {
+    const next = { ...segCovers, [seg]: covers };
+    const r = await window.fetch("/api/admin/settings", {
+      method: "POST", headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+      body: JSON.stringify({ settings: { segment_covers: next } }),
+    });
+    if (!r.ok) { const d = await r.json().catch(() => ({})); return "Kaydedilemedi: " + (d?.error || r.status); }
+    setSegCovers(next);
+    return null;
+  }
+
+  // Adaylar: kategorinin / mağazanın aktif ürünlerinin görselleri (yeni ürün önce)
+  async function categoryCandidates(id: string) {
+    const { data } = await (supabase as any).from("products").select("name, images, image_url, created_at")
+      .eq("category_id", id).eq("is_active", true).order("created_at", { ascending: false }).limit(200);
+    return productImages(data || []);
+  }
+  async function segmentCandidates(seg: Segment) {
+    const { data } = await (supabase as any).from("products").select("name, images, image_url, created_at, categories!inner(segment)")
+      .eq("categories.segment", seg).eq("is_active", true).order("created_at", { ascending: false }).limit(300);
+    return productImages(data || []);
+  }
 
   async function fetch() {
     setLoading(true);
@@ -101,8 +152,35 @@ export default function CategoriesTab() {
 
       <Card className="shadow-sm border-muted">
         <CardHeader className="pb-3">
+          <CardTitle className="text-base">Mağaza kartlarının görseli</CardTitle>
+          <CardDescription>/magaza sayfasındaki Yetişkin ve 0–4 Yaş İlkadım kartları. En çok 3 görsel seç; her ziyarette biri gösterilir. Seçmezsen stoktaki son ürünün görseli çıkar.</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-3">
+          {(Object.keys(SEGMENTS) as Segment[]).map((seg) => {
+            const list = segCovers[seg] || [];
+            return (
+              <button key={seg} type="button" onClick={() => setSegCoverFor(seg)}
+                className="flex items-center gap-3 rounded-xl border bg-white px-3 py-2 hover:border-olive-400 text-left">
+                <div className="flex -space-x-3">
+                  {list.length ? list.map((src) => (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img key={src} src={src} alt="" className="w-12 h-[30px] rounded-md object-cover border-2 border-white" />
+                  )) : <span className="w-12 h-[30px] rounded-md bg-slate-100 grid place-items-center"><ImageIcon size={14} className="text-slate-400" /></span>}
+                </div>
+                <div>
+                  <p className="text-sm font-semibold">{SEGMENTS[seg].label}</p>
+                  <p className="text-xs text-slate-500">{list.length ? `${list.length} görsel seçili` : "otomatik (seçim yok)"}</p>
+                </div>
+              </button>
+            );
+          })}
+        </CardContent>
+      </Card>
+
+      <Card className="shadow-sm border-muted">
+        <CardHeader className="pb-3">
           <CardTitle className="text-base">Kategori Listesi</CardTitle>
-          <CardDescription>Sistemdeki tüm ürün kategorileri. “Sıra”: mağazada küçük sayı önce gelir (kategori düğmeleri ve “Hepsi” listesindeki ürünler).</CardDescription>
+          <CardDescription>Sistemdeki tüm ürün kategorileri. “Sıra”: mağazada küçük sayı önce gelir (kategori düğmeleri ve “Hepsi” listesindeki ürünler). “Kapak”: ana sayfadaki Kategoriler kutusunun görseli (en çok 3, her ziyarette biri).</CardDescription>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -143,6 +221,9 @@ export default function CategoriesTab() {
                     </TableCell>
                     <TableCell className="text-sm">{new Date(cat.created_at).toLocaleDateString("tr-TR")}</TableCell>
                     <TableCell className="text-right">
+                      <Button variant="outline" size="sm" className="h-8 gap-1 mr-1" onClick={() => setCoverFor(cat)} title="Ana sayfadaki kategori kutusunun görseli">
+                        <ImageIcon size={13} /> Kapak{cat.cover_images?.length ? ` (${cat.cover_images.length})` : ""}
+                      </Button>
                       <Button variant="outline" size="sm" className="h-8 gap-1 mr-1" onClick={() => setContentFor(cat)}><FileText size={13} /> Sayfa metni</Button>
                       <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => handleDelete(cat.id)}>
                         <Trash2 size={14} />
@@ -155,6 +236,18 @@ export default function CategoriesTab() {
           )}
         </CardContent>
       </Card>
+      {coverFor && (
+        <CoverPickerDialog title={`Kapak görseli: ${coverFor.name}`} aspect="1 / 1" previewWidth={220}
+          label={coverFor.name} sublabel={SEGMENTS[((coverFor as any).segment || "yetiskin") as Segment]?.label}
+          initial={coverFor.cover_images || []} loadCandidates={() => categoryCandidates(coverFor.id)}
+          onSave={(c) => saveCategoryCovers(coverFor.id, c)} onClose={() => setCoverFor(null)} />
+      )}
+      {segCoverFor && (
+        <CoverPickerDialog title={`Mağaza kartı görseli: ${SEGMENTS[segCoverFor].label}`} aspect="16 / 10" previewWidth={340}
+          label={SEGMENTS[segCoverFor].label} sublabel={SEGMENTS[segCoverFor].card}
+          initial={segCovers[segCoverFor] || []} loadCandidates={() => segmentCandidates(segCoverFor)}
+          onSave={(c) => saveSegmentCovers(segCoverFor, c)} onClose={() => setSegCoverFor(null)} />
+      )}
       {contentFor && <ListPageContentDialog table="categories" row={contentFor} onClose={() => setContentFor(null)} onSaved={() => { setContentFor(null); fetch(); }} />}
     </div>
   );
