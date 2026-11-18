@@ -13,6 +13,22 @@ import { STORIES_OPEN_EVENT } from "@/components/PrincipleStories";
 
 const EPI = "var(--font-epilogue), 'Epilogue', system-ui, sans-serif";
 
+// TEK GÖRSEL (kullanıcı 2026-11-18): dik görsel (imageTall, telefonda tam ekran hikâye) yüklüyse kartlarda da o kullanılır —
+// kartı doldurur (object-cover), görünen kısım panelde "Kartlarda görünen kısım" (focusY: 0 üst, 100 alt). Dik görsel
+// yoksa eski davranış: yatay görsel (image) kırpılmadan sığdırılır.
+type PItem = { image?: string; imageTall?: string; focusY?: number; title: string };
+export function principleCardImage(it: PItem): { src: string; className: string; style?: React.CSSProperties } | null {
+  if (it.imageTall) {
+    const y = Math.max(0, Math.min(100, Number(it.focusY ?? 50)));
+    return { src: it.imageTall, className: "w-full h-full object-cover", style: { objectPosition: `50% ${y}%` } };
+  }
+  return it.image ? { src: it.image, className: "w-full h-full object-contain" } : null;
+}
+function CardImg({ it }: { it: PItem }) {
+  const c = principleCardImage(it);
+  return c ? <img src={c.src} alt={it.title} className={c.className} style={c.style} loading="lazy" /> : null;
+}
+
 export default function PrincipleCarousel({ variant }: { variant: "mobile" | "desktop" }) {
   const HC = useHomeContent();
   const P = HC.principles;
@@ -31,8 +47,8 @@ export default function PrincipleCarousel({ variant }: { variant: "mobile" | "de
         <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` }}>
           {items.map((it) => (
             <div key={it.title} className="rounded-2xl overflow-hidden bg-white" style={{ border: "1px solid #E8E4DC" }}>
-              <div className="bg-[#F4EFE6]" style={{ aspectRatio: "4 / 3" }}>
-                {it.image && <img src={it.image} alt={it.title} className="w-full h-full object-contain" loading="lazy" />}
+              <div className="bg-[#F4EFE6] overflow-hidden" style={{ aspectRatio: "4 / 3" }}>
+                <CardImg it={it} />
               </div>
               <div className="p-4">
                 <p style={{ fontFamily: EPI, fontWeight: 700, fontSize: 16, color: "#1C1C19" }}>{it.title}</p>
@@ -68,8 +84,8 @@ export default function PrincipleCarousel({ variant }: { variant: "mobile" | "de
         {items.map((it) => (
           <div key={it.title} className="snap-start shrink-0 w-[82%] rounded-2xl overflow-hidden bg-white flex flex-col"
             style={{ border: "1px solid #E8E4DC", height: "max(220px, 33svh)" }}>
-            <div className="flex-1 min-h-0 bg-[#F4EFE6]">
-              {it.image && <img src={it.image} alt={it.title} className="w-full h-full object-contain" loading="lazy" />}
+            <div className="flex-1 min-h-0 bg-[#F4EFE6] overflow-hidden">
+              <CardImg it={it} />
             </div>
             <div className="px-4 py-3">
               <p style={{ fontFamily: EPI, fontWeight: 700, fontSize: 17, color: "#1C1C19", lineHeight: 1.2 }}>{it.title}</p>

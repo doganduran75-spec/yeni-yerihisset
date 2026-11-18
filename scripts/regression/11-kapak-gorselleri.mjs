@@ -51,5 +51,25 @@ export default {
       t.add(ok3 ? "ok" : "fail", "Panelde seçim penceresi görselleri sitedeki oranda ve kırpmayla gösteriyor (kategori kare, mağaza kartı 16:10)",
         ok3 ? "" : "CoverPickerDialog / CategoriesTab oranı sitedeki kutularla aynı değil");
     });
+    // PRENSİP KARTLARINDA TEK GÖRSEL (kullanıcı 2026-11-18): dik görsel (imageTall) yüklüyse kartlar onu doldurarak gösterir,
+    // görünen kısım panelde "Kartlarda görünen kısım" (focusY) — yatay görsel ayrıca yüklenmez. Dik görsel yoksa eski davranış.
+    await t.part("Prensip kartlarında tek görsel (dik görsel + görünen kısım)", async () => {
+      const hc = rd("src/config/homeContent.ts"), pc = rd("src/components/PrincipleCarousel.tsx"), ps = rd("src/components/PrincipleStories.tsx"), tab = rd("src/components/admin/settings/HomeContentTab.tsx");
+      const items = (hc.match(/imageTall: "", focusY: 50,/g) || []).length;
+      t.add(items >= 5 ? "ok" : "fail", "Her prensipte 'görünen kısım' ayarı var (varsayılan orta)", `${items} prensipte`);
+      // Kart kırpma mantığı gerçekten çalıştırılır: dik görsel → doldurur + konum; yalnız yatay → sığdırır
+      const body = /export function principleCardImage\(it: PItem\)[^\n]*\| null \{([\s\S]*?)\r?\n\}/.exec(pc);
+      let fn = null;
+      try { fn = body ? new Function("it", body[1]) : null; } catch { fn = null; }
+      const a = fn?.({ title: "x", image: "/y.svg", imageTall: "/t.jpg", focusY: 30 });
+      const b2 = fn?.({ title: "x", image: "/y.svg", imageTall: "" });
+      const c = fn?.({ title: "x", imageTall: "/t.jpg", focusY: 250 });
+      const good = a?.src === "/t.jpg" && /object-cover/.test(a.className) && a.style?.objectPosition === "50% 30%"
+        && b2?.src === "/y.svg" && /object-contain/.test(b2.className) && c?.style?.objectPosition === "50% 100%";
+      t.add(good ? "ok" : "fail", "Kartta dik görsel kartı dolduruyor, seçilen kısım görünüyor; dik görsel yoksa yatay görsel eskisi gibi", good ? "" : JSON.stringify({ a, b2, c }).slice(0, 200));
+      const ok2 = /<CardImg it=\{it\} \/>/.test(pc) && (pc.match(/<CardImg it=\{it\} \/>/g) || []).length >= 2 && /it\.image \|\| it\.imageTall/.test(ps)
+        && /function PrincipleCrop/.test(tab) && /"4 \/ 3"/.test(tab) && /type="range"/.test(tab);
+      t.add(ok2 ? "ok" : "fail", "Masaüstü ve telefon kartı aynı kırpmayı kullanıyor; panelde önizlemeli kaydırma çubuğu var", ok2 ? "" : "PrincipleCarousel / PrincipleStories / HomeContentTab satırları eksik");
+    });
   },
 };

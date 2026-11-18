@@ -173,7 +173,7 @@ export default function PrincipleStories() {
           onPointerCancel={() => setPaused(false)}
           onContextMenu={(e) => e.preventDefault()}>
           <div className="flex-1 min-h-0 flex items-center justify-center px-6">
-            {it.image && <img src={it.image} alt={it.title} draggable={false} className="max-h-full w-full object-contain pointer-events-none" />}
+            {(it.image || it.imageTall) && <img src={it.image || it.imageTall} alt={it.title} draggable={false} className="max-h-full w-full object-contain pointer-events-none" />}
           </div>
           <div className="px-6 pb-6">
             <h2 className="text-[30px] leading-tight font-black text-[#1C1C19]" style={{ fontFamily: "var(--font-epilogue), system-ui, sans-serif" }}>{it.title}</h2>

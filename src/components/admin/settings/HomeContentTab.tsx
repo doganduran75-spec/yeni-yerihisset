@@ -21,7 +21,7 @@ const SECTION: Record<string, string> = {
   sizeFinder: "Doğru numarayı bul (mobil)", footer: "Alt bilgi (masaüstü ana sayfa)",
 };
 const LABEL: Record<string, string> = {
-  storyFullscreen: "Hikâye tam ekran (görsel tüm ekranı kaplar, yazı üstünde)", shiftUp: "Tam ekranda görseli yukarı kaydır (% — ör. 8; eksi değer aşağı)", imageTall: "Tam ekran hikâye için dik görsel (1080×1920; boşsa üstteki görsel kırpılır)",
+  storyFullscreen: "Hikâye tam ekran (görsel tüm ekranı kaplar, yazı üstünde)", shiftUp: "Tam ekranda görseli yukarı kaydır (% — ör. 8; eksi değer aşağı)", imageTall: "Görsel — dik, 1080×1920 (telefonda tam ekran; kartlarda aşağıdaki ayarla kırpılır)", focusY: "Kartlarda görünen kısım",
   badge: "Rozet (masaüstü)", question: "Soru", subtitleDesktop: "Alt yazı (masaüstü)", subtitleMobile: "Alt yazı (mobil)",
   promptMobile: "Mobil soru", continueLink: "\"Ana sayfaya devam\" bağlantısı", learn: "Rehber kartı", shop: "Mağaza kartı",
   pill: "Etiket", pillMobile: "Etiket (mobil)", title: "Başlık", titleMobile: "Başlık (mobil)", body: "Açıklama", cta: "Düğme yazısı",
@@ -31,7 +31,7 @@ const LABEL: Record<string, string> = {
   columns: "Sütunlar", links: "Bağlantılar", newsletterTitle: "Bülten başlığı", newsletterBody: "Bülten açıklaması",
   storiesEnabled: "Telefonda ilk ziyarette hikâye göster", shopButton: "\"Alışverişe geç\" düğmesi",
   replayLink: "Hikâyeyi yeniden izleme bağlantısı", items: "Prensipler", text: "Kısa yazı",
-  image: "Görsel adresi (/principles/… ya da https://…)", seconds: "Hikâyede kaç saniye", show: "Göster",
+  image: "Eski yatay görsel (dik görsel yüklüyse kullanılmaz)", seconds: "Hikâyede kaç saniye", show: "Göster",
   copyright: "Telif satırı", tagline: "Slogan", legal: "Yasal bağlantılar",
 };
 const lbl = (k: string) => LABEL[k] ?? k;
@@ -53,6 +53,7 @@ function Field({ k, value, onChange }: { k: string; value: any; onChange: (v: an
     );
   }
   if (k === "icon") return null; // simge seçimi tasarımla ilgili; panelde değişmez
+  if (k === "focusY") return null; // prensip kartı: önizlemeli kaydırma çubuğu (PrincipleCrop) gösterir
   // Görsel adresi: kutu + "Yükle" düğmesi + küçük önizleme (2026-11-15)
   if (k === "image" || k === "imageTall") return (<div className="space-y-1"><label className="text-xs font-medium text-slate-600">{lbl(k)}</label><ImageUploadInput value={String(value ?? "")} onChange={onChange} /></div>);
   const long = String(value).length > 70;
@@ -65,6 +66,40 @@ function Field({ k, value, onChange }: { k: string; value: any; onChange: (v: an
       ) : (
         <Input value={value} onChange={(e) => onChange(e.target.value)} className="h-9" />
       )}
+    </div>
+  );
+}
+
+// Prensip kartında dik görselin hangi kısmı görünsün (kullanıcı 2026-11-18: tek görsel yükle, masaüstünde görünen kısmı ayarla).
+// Önizlemeler sitedeki kutularla aynı oranda ve aynı kırpmayla (PrincipleCarousel › principleCardImage): masaüstü kartı 4:3,
+// telefondaki kaydırmalı kart ~10:7, telefonda tam ekran hikâye 9:16 (orada görselin tamamı).
+function PrincipleCrop({ item, onChange }: { item: any; onChange: (v: any) => void }) {
+  const src = String(item.imageTall || "");
+  const y = Math.max(0, Math.min(100, Number(item.focusY ?? 50)));
+  if (!src) return <p className="sm:col-span-2 text-xs text-slate-500">Dik görsel yüklenince burada kartlarda nasıl görüneceği ve görünen kısım ayarı çıkar.</p>;
+  const box = (w: number, ratio: string, label: string, pos?: string) => (
+    <div className="space-y-1">
+      <div className="rounded-lg overflow-hidden border bg-[#F4EFE6]" style={{ width: w, aspectRatio: ratio }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={src} alt="" className="w-full h-full object-cover" style={{ objectPosition: pos ?? `50% ${y}%` }} />
+      </div>
+      <p className="text-[11px] text-slate-500">{label}</p>
+    </div>
+  );
+  return (
+    <div className="sm:col-span-2 rounded-lg bg-slate-50 border p-3 space-y-3">
+      <div className="flex items-center gap-3">
+        <label className="text-xs font-medium text-slate-600 shrink-0">{lbl("focusY")}</label>
+        <span className="text-[11px] text-slate-500">üst</span>
+        <input type="range" min={0} max={100} step={1} value={y} onChange={(e) => onChange({ ...item, focusY: Number(e.target.value) })} className="flex-1" />
+        <span className="text-[11px] text-slate-500">alt</span>
+        <span className="text-xs font-mono w-10 text-right">%{y}</span>
+      </div>
+      <div className="flex flex-wrap items-end gap-4">
+        {box(205, "4 / 3", "Masaüstü kartı")}
+        {box(250, "10 / 7", "Telefon: kaydırmalı kart")}
+        {box(90, "9 / 16", "Telefon: tam ekran hikâye", "50% 50%")}
+      </div>
     </div>
   );
 }
@@ -93,6 +128,7 @@ function Node({ k, value, onChange, depth }: { k: string; value: any; onChange: 
           {keys.map((x) => (
             <Node key={x} k={x} value={value[x]} depth={depth + 1} onChange={(v) => onChange({ ...value, [x]: v })} />
           ))}
+          {"focusY" in value && "imageTall" in value && <PrincipleCrop item={value} onChange={onChange} />}
         </div>
       </div>
     );

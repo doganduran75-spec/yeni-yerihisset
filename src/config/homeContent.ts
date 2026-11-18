@@ -25,11 +25,11 @@ export const homeContent = {
     shopButton: "Alışverişe geç",
     replayLink: "Barefoot nedir? İzle",
     items: [
-      { title: "Geniş parmak alanı", text: "Burun kısmı geniş; parmaklar sıkışmadan doğal hâliyle yayılır.", image: "/principles/1-genis-parmak.svg", imageTall: "", shiftUp: 0, seconds: 4, show: true },
-      { title: "Sıfır topuk farkı", text: "Topuk ile parmak ucu aynı hizada; ayak düz basar.", image: "/principles/2-sifir-topuk.svg", imageTall: "", shiftUp: 0, seconds: 4, show: true },
-      { title: "Esnek taban", text: "Taban ayağınla birlikte bükülür, her adıma eşlik eder.", image: "/principles/3-esnek-taban.svg", imageTall: "", shiftUp: 0, seconds: 4, show: true },
-      { title: "İnce taban", text: "Zemini hissedersin — adı üstünde: yeri hisset.", image: "/principles/4-ince-taban.svg", imageTall: "", shiftUp: 0, seconds: 4, show: true },
-      { title: "Hafiflik", text: "Ayağında yük değil; gün boyu hafif adımlar.", image: "/principles/5-hafiflik.svg", imageTall: "", shiftUp: 0, seconds: 4, show: true },
+      { title: "Geniş parmak alanı", text: "Burun kısmı geniş; parmaklar sıkışmadan doğal hâliyle yayılır.", image: "/principles/1-genis-parmak.svg", imageTall: "", focusY: 50, shiftUp: 0, seconds: 4, show: true },
+      { title: "Sıfır topuk farkı", text: "Topuk ile parmak ucu aynı hizada; ayak düz basar.", image: "/principles/2-sifir-topuk.svg", imageTall: "", focusY: 50, shiftUp: 0, seconds: 4, show: true },
+      { title: "Esnek taban", text: "Taban ayağınla birlikte bükülür, her adıma eşlik eder.", image: "/principles/3-esnek-taban.svg", imageTall: "", focusY: 50, shiftUp: 0, seconds: 4, show: true },
+      { title: "İnce taban", text: "Zemini hissedersin — adı üstünde: yeri hisset.", image: "/principles/4-ince-taban.svg", imageTall: "", focusY: 50, shiftUp: 0, seconds: 4, show: true },
+      { title: "Hafiflik", text: "Ayağında yük değil; gün boyu hafif adımlar.", image: "/principles/5-hafiflik.svg", imageTall: "", focusY: 50, shiftUp: 0, seconds: 4, show: true },
     ],
   },
 
