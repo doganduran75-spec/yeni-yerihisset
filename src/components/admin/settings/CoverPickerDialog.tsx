@@ -28,10 +28,12 @@ export default function CoverPickerDialog({ title, aspect, previewWidth, label, 
   const [sel, setSel] = useState<string[]>(initial.slice(0, MAX_COVERS));
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
+  const [loadErr, setLoadErr] = useState("");
 
   useEffect(() => {
     let live = true;
-    loadCandidates().then((c) => { if (live) setCands(c); }).catch(() => { if (live) setCands([]); });
+    loadCandidates().then((c) => { if (live) setCands(c); })
+      .catch((e) => { if (live) { setCands([]); setLoadErr(String(e?.message || e)); } });
     return () => { live = false; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps -- adaylar pencere açılınca bir kez yüklenir
 
@@ -84,7 +86,7 @@ export default function CoverPickerDialog({ title, aspect, previewWidth, label, 
           {!cands ? (
             <div className="py-8 text-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground mx-auto" /></div>
           ) : all.length === 0 ? (
-            <p className="text-xs text-slate-500">Bu bölümde görseli olan ürün yok.</p>
+            <p className={`text-xs ${loadErr ? "text-red-600 font-semibold" : "text-slate-500"}`}>{loadErr ? `Ürün görselleri alınamadı: ${loadErr}` : "Bu bölümde görseli olan ürün yok."}</p>
           ) : (
             <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${aspect === "1 / 1" ? 120 : 170}px, 1fr))` }}>
               {all.map((c) => {
@@ -121,7 +123,7 @@ export function productImages(rows: any[]): CoverCandidate[] {
   const out: CoverCandidate[] = [];
   for (const p of rows || []) {
     const imgs: string[] = [...(Array.isArray(p.images) ? p.images : []), p.image_url].filter(Boolean);
-    for (const src of imgs) if (!seen.has(src)) { seen.add(src); out.push({ src, name: p.name || "" }); }
+    for (const src of imgs) if (!seen.has(src)) { seen.add(src); out.push({ src, name: p.title || p.name || "" }); }
   }
   return out;
 }

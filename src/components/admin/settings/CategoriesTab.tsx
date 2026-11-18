@@ -67,15 +67,18 @@ export default function CategoriesTab() {
     return null;
   }
 
-  // Adaylar: kategorinin / mağazanın aktif ürünlerinin görselleri (yeni ürün önce)
+  // Adaylar: kategorinin / mağazanın aktif ürünlerinin görselleri (yeni ürün önce). Ürün adı kolonu "title"
+  // (2026-11-18: "name" istenince sorgu hata verip liste boş kalıyordu → hata artık pencerede görünür)
   async function categoryCandidates(id: string) {
-    const { data } = await (supabase as any).from("products").select("name, images, image_url, created_at")
+    const { data, error } = await (supabase as any).from("products").select("title, images, image_url, created_at")
       .eq("category_id", id).eq("is_active", true).order("created_at", { ascending: false }).limit(200);
+    if (error) throw new Error(error.message);
     return productImages(data || []);
   }
   async function segmentCandidates(seg: Segment) {
-    const { data } = await (supabase as any).from("products").select("name, images, image_url, created_at, categories!inner(segment)")
+    const { data, error } = await (supabase as any).from("products").select("title, images, image_url, created_at, categories!inner(segment)")
       .eq("categories.segment", seg).eq("is_active", true).order("created_at", { ascending: false }).limit(300);
+    if (error) throw new Error(error.message);
     return productImages(data || []);
   }
 

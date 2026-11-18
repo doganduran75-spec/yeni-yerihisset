@@ -42,6 +42,9 @@ export default {
       t.add(ok2 ? "ok" : "fail", "Her ziyarette seçilenlerden biri gösteriliyor (titremeden; betik yoksa ilk görsel)", ok2 ? "" : "layout betiği / globals.css .yh-cv kuralları / RotatingCover dağıtımı eksik");
       const ok3 = /MAX_COVERS = 3/.test(pick) && /object-cover/.test(pick) && /aspect="1 \/ 1"/.test(tab) && /aspect="16 \/ 10"/.test(tab)
         && /aspectRatio: "1 \/ 1"/.test(hc) && /aspectRatio: "16 \/ 10"/.test(sc);
+      // Aday sorgusu ürün adını "title" kolonundan almalı (2026-11-18: "name" istenince liste boş kalıyordu); sorgu hatası pencerede görünmeli
+      const ok4 = !/select\("name,/.test(tab) && /select\("title, images, image_url/.test(tab) && /if \(error\) throw/.test(tab) && /setLoadErr/.test(pick);
+      t.add(ok4 ? "ok" : "fail", "Kapak seçim penceresi ürün görsellerini listeliyor (ürün adı kolonu doğru, hata görünür)", ok4 ? "" : "CategoriesTab aday sorgusu / CoverPickerDialog hata gösterimi");
       t.add(ok3 ? "ok" : "fail", "Panelde seçim penceresi görselleri sitedeki oranda ve kırpmayla gösteriyor (kategori kare, mağaza kartı 16:10)",
         ok3 ? "" : "CoverPickerDialog / CategoriesTab oranı sitedeki kutularla aynı değil");
     });
