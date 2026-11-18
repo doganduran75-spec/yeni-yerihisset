@@ -42,6 +42,9 @@ export default {
       t.add(ok2 ? "ok" : "fail", "Her ziyarette seçilenlerden biri gösteriliyor (titremeden; betik yoksa ilk görsel)", ok2 ? "" : "layout betiği / globals.css .yh-cv kuralları / RotatingCover dağıtımı eksik");
       const ok3 = /MAX_COVERS = 3/.test(pick) && /object-cover/.test(pick) && /aspect="1 \/ 1"/.test(tab) && /aspect="16 \/ 10"/.test(tab)
         && /aspectRatio: "1 \/ 1"/.test(hc) && /aspectRatio: "16 \/ 10"/.test(sc);
+      // Panelde değişen kapak ~1 dk içinde her süreçte görünsün (4 pm2 süreci, ayrı önbellek): /magaza ve ana sayfa en çok 60 sn
+      const rv = (s) => Number((/export const revalidate = (\d+)/.exec(s) || [])[1] || 9999);
+      t.add(rv(mg) <= 60 && rv(home) <= 60 ? "ok" : "fail", "Seçilen kapak en geç ~1 dk içinde sitede (sayfa önbelleği 60 sn)", `magaza ${rv(mg)} sn, ana sayfa ${rv(home)} sn`);
       // Aday sorgusu ürün adını "title" kolonundan almalı (2026-11-18: "name" istenince liste boş kalıyordu); sorgu hatası pencerede görünmeli
       const ok4 = !/select\("name,/.test(tab) && /select\("title, images, image_url/.test(tab) && /if \(error\) throw/.test(tab) && /setLoadErr/.test(pick);
       t.add(ok4 ? "ok" : "fail", "Kapak seçim penceresi ürün görsellerini listeliyor (ürün adı kolonu doğru, hata görünür)", ok4 ? "" : "CategoriesTab aday sorgusu / CoverPickerDialog hata gösterimi");

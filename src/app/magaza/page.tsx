@@ -8,7 +8,9 @@ import { createAdminClient } from "@/lib/supabase-admin";
 
 // MAĞAZA = SEÇİM EKRANI (kullanıcı kararları 2026-10-18): Yetişkin / 0–4 Yaş İlkadım. Ürünler segment
 // mağazalarında (/magaza/yetiskin, /magaza/ilkadim). Eski sitenin Google'daki /magaza/ kaydı bu sayfaya gelir.
-export const revalidate = 300;
+// 60 sn (kullanıcı 2026-11-18): panelde kart görseli değişince 5 dk boyunca eski görsel de çıkıyordu — site 4 süreçle
+// çalışıyor (pm2 cluster), her sürecin önbelleği ayrı tazelenir; ana sayfa gibi ~1 dk içinde hepsi yeni görseli gösterir
+export const revalidate = 60;
 
 export const metadata: Metadata = {
   title: "Barefoot Ayakkabı Mağazası — Yetişkin ve 0–4 Yaş İlkadım",
