@@ -49,7 +49,7 @@ export type OrderLike = {
   mp_claim_state?: string | null;          // Trendyol iade talebi: in_transit / arrived / accepted / disputed / done
   mp_claim_note?: string | null;           // "1 × ürün (beden) — sebep"
   shipped_at?: string | null;              // kargoya verildiği an (fatura 7 gün takibi)
-  order_items?: { id?: string; quantity: number; returned_qty?: number | null; exchange_of?: string | null }[] | null;
+  order_items?: { id?: string; quantity: number; returned_qty?: number | null; exchange_of?: string | null; unit_price?: number | string | null }[] | null;
   created_at?: string | null;
   fit_status?: string | null;      // trial · ok · exchange · return
   delivered_at?: string | null;
@@ -135,6 +135,31 @@ export function isMarketplaceOrder(o: OrderLike) {
 
 /** Geri gelen ÜCRETLİ adet: değişim çiftinde (asıl + exchange_of ile bağlı alternatif) ücretsiz giden adet kadar geri gelen
  *  düşülür. Kalemlerde id / exchange_of yoksa (liste sorgusu) her kalem kendi başına sayılır. */
+/** KISMİ İADEDE iade edilmesi gereken tutar (kullanıcı 2026-11-18: kısmi iadenin ücreti iade edildiği halde panoda
+ *  "Ücret iadesi yapılacak" kalıyordu — kural "kalan tutar > 0" idi, oysa kalan tutar tutulan ürünün parası).
+ *  Geri gelen ücretli adetlerin fiyatı × (sipariş tutarı / ürün tutarı, en çok 1 → kupon / indirim payı düşer).
+ *  Fiyat bilinmiyorsa null (çağıran: daha önce hiç ücret iadesi yapılmadıysa yapılacak sayar). */
+export function returnedRefundTarget(o: Pick<OrderLike, "order_items" | "total_amount">): number | null {
+  const items = o.order_items;
+  if (!items?.length || items.some((i) => i.unit_price == null)) return null;
+  const ids = new Set(items.map((i) => i.id).filter(Boolean));
+  const groups = new Map<string, { price: number; qty: number; returned: number; free: number }>();
+  items.forEach((i, k) => {
+    const alt = !!(i.exchange_of && ids.has(i.exchange_of));
+    const root = alt ? String(i.exchange_of) : (i.id || `#${k}`);
+    const g = groups.get(root) || { price: 0, qty: 0, returned: 0, free: 0 };
+    g.returned += Number(i.returned_qty || 0);
+    if (alt) g.free += Number(i.quantity || 0);
+    else { g.price = Number(i.unit_price || 0); g.qty += Number(i.quantity || 0); }
+    groups.set(root, g);
+  });
+  let gross = 0, ret = 0;
+  for (const g of groups.values()) { gross += g.price * g.qty; ret += g.price * Math.max(0, g.returned - g.free); }
+  if (gross <= 0) return null;
+  const ratio = Math.min(1, Number(o.total_amount || 0) / gross);
+  return Math.round(ret * ratio * 100) / 100;
+}
+
 export function paidReturnedUnits(items: OrderLike["order_items"]): number {
   if (!items?.length) return 0;
   const ids = new Set(items.map((i) => i.id).filter(Boolean));
@@ -341,7 +366,11 @@ function coreNextStep(o: OrderLike): NextStep {
   // Kargodan sonra: iade geldiyse önce para iadesi + iade faturası
   if (someReturned) {
     const acts: NextAction[] = [];
-    if (paid && remaining > 0) acts.push({ key: "refund", label: "Ücret iadesi yap", kind: "danger" });
+    // Hepsi geri geldiyse kalan tutarın tamamı iade edilir; kısmi iadede yalnız geri gelen ürünlerin tutarı (1 TL pay)
+    const refunded = Number(o.refunded_amount || 0);
+    const target = allReturned ? null : returnedRefundTarget(o);
+    const owes = allReturned ? remaining > 0 : target != null ? refunded + 1 < target : refunded === 0;
+    if (paid && remaining > 0 && owes) acts.push({ key: "refund", label: "Ücret iadesi yap", kind: "danger" });
     if (!allReturned) acts.push({ key: "return", label: "İade al", kind: "danger" });
     if (inv === "invoiced" && (pay === "refunded" || pay === "partial_refund")) acts.push(...returnInvoiceActs);
     if (inv === "pending" && !allReturned) acts.push(...invoiceActs);

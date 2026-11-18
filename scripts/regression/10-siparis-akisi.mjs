@@ -964,6 +964,7 @@ export default {
 
         // Deneme hatırlatması: teslimden 4 gün sonra, cevap yoksa, bir kez
         let m = null;
+        const fs0 = await import("node:fs");
         try { m = await import(new URL("../../src/lib/order-next-step.ts", import.meta.url)); } catch { /* eski Node */ }
         if (m) {
           const D = 86400000, now = Date.now();
@@ -973,6 +974,18 @@ export default {
             && !m.trialReminderDue({ ...base, trial_reminded_at: new Date().toISOString() }, now) && !m.trialReminderDue({ ...base, has_open_case: true }, now)
             && !m.trialReminderDue({ ...base, channel: "trendyol" }, now) && !m.trialReminderDue({ ...base, status: "cancelled" }, now),
             "Deneme hatırlatması: teslimden 4 gün sonra, cevap yoksa, bir kez (erken / son 2 gün / cevaplı / talepli / pazaryeri / iptal hariç)");
+          // Kısmi iade (2026-11-18, YH24721): 2 üründen 1'i geri geldi, onun parası iade edildi → "Ücret iadesi yapılacak"tan düşer
+          const po = { channel: "site", import_source: null, status: "processing", payment_status: "partial_refund", shipment_status: "delivered", invoice_status: "invoiced", total_amount: 6998,
+            order_items: [{ id: "a", quantity: 1, returned_qty: 1, unit_price: 3499 }, { id: "b", quantity: 1, returned_qty: 0, unit_price: 3499 }] };
+          const due = (x) => m.isRefundDue(m.orderNextStep(x));
+          const paidOnly = { ...po, payment_status: "paid" };
+          ok(!due({ ...po, refunded_amount: 3499 }) && due({ ...paidOnly, refunded_amount: 0 }) && due({ ...po, refunded_amount: 1000 })
+            && due({ ...paidOnly, refunded_amount: 0, order_items: po.order_items.map(({ unit_price, ...i }) => i) })
+            && !due({ ...po, refunded_amount: 3499, order_items: po.order_items.map(({ unit_price, ...i }) => i) })
+            && !due({ ...po, total_amount: 6000, refunded_amount: 3000 }),
+            "Kısmi iadede ücreti iade edilen sipariş 'Ücret iadesi yapılacak'tan düşüyor (eksik iade / hiç iade yoksa kalıyor, kupon payı düşülüyor)");
+          const lists = ["src/app/admin/page.tsx", "src/app/admin/orders/page.tsx"].map((f) => (fs0.readFileSync(new URL(`../../${f}`, import.meta.url), "utf8").match(/ret_items:order_items\([^)]*unit_price\)/g) || []).length);
+          ok(lists[0] >= 1 && lists[1] >= 3, "Pano ve sipariş listesi ürün fiyatını okuyor (kısmi iade tutarı için)", `pano ${lists[0]}, liste ${lists[1]}`);
         }
         const cron = (await import("node:fs")).readFileSync(new URL("../../src/app/api/cron/marketplace-sync/route.ts", import.meta.url), "utf8");
         ok(/processTrialReminders\(supabase\)/.test(cron) && /rpc\("stamp_settled_orders"\)/.test(cron)
@@ -1168,10 +1181,10 @@ export default {
             // ürün satırlarını (ret_items) okuyup "Ücret iadesi yapılacak" saymalı; öneri yalnız iade gelen ürünün bedeli
             const part2 = nx.orderNextStep({ ...base, total_amount: 6998, order_items: [{ id: "x", quantity: 1, returned_qty: 1 }, { id: "y", quantity: 1, returned_qty: 0 }] });
             const ordersPg = (await import("node:fs")).readFileSync(new URL("../../src/app/admin/orders/page.tsx", import.meta.url), "utf8");
-            const emb = await rest("orders?select=id,ret_items:order_items(id,quantity,returned_qty,exchange_of)&limit=1", { token: F.admin.token });
+            const emb = await rest("orders?select=id,ret_items:order_items(id,quantity,returned_qty,exchange_of,unit_price)&limit=1", { token: F.admin.token });
             ok(nx.isRefundDue(part2) && emb.status === 200
-              && /ret_items:order_items\(id, quantity, returned_qty, exchange_of\)/.test(dash) && /order_items: o\.ret_items \?\? null/.test(dash)
-              && (ordersPg.match(/ret_items:order_items\(id, quantity, returned_qty, exchange_of\)/g) || []).length === 3 && /order_items: o\.order_items \?\? o\.ret_items \?\? null/.test(ordersPg)
+              && /ret_items:order_items\(id, quantity, returned_qty, exchange_of, unit_price\)/.test(dash) && /order_items: o\.ret_items \?\? null/.test(dash)
+              && (ordersPg.match(/ret_items:order_items\(id, quantity, returned_qty, exchange_of, unit_price\)/g) || []).length === 3 && /order_items: o\.order_items \?\? o\.ret_items \?\? null/.test(ordersPg)
               && /mode === "refund" \? String\(refundSuggest\)/.test(ordersPg) && !/"Bekleyen İşlerim", openOrders\.length/.test(dash),
               "Kısmi iade (kargo teslim edildi): pano ve sipariş listesi ürün satırlarından görüp “Ücret iadesi yapılacak” sayıyor; öneri iade gelen ürünün bedeli; panodaki “Bekleyen İşlerim” listesi kalktı",
               `${part2.stage} · embed HTTP ${emb.status}`);

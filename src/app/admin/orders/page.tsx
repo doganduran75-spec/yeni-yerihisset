@@ -406,7 +406,7 @@ export default function OrdersPage() {
       for (let from = 0; ; from += 1000) {
         const { data, error } = await supabase
           .from("orders")
-          .select(`*, profiles(first_name, last_name, email, phone, email_verified), affiliate_profiles(code), affiliate_conversions(commission_amount, affiliate_profiles(code)), order_cases(*), ret_items:order_items(id, quantity, returned_qty, exchange_of)`)
+          .select(`*, profiles(first_name, last_name, email, phone, email_verified), affiliate_profiles(code), affiliate_conversions(commission_amount, affiliate_profiles(code)), order_cases(*), ret_items:order_items(id, quantity, returned_qty, exchange_of, unit_price)`)
           .order("created_at", { ascending: false })
           .range(from, from + 999);
         if (error) {
@@ -909,7 +909,7 @@ export default function OrdersPage() {
   // Tek siparişi (talepleriyle) yeniden oku → liste + detay güncellenir
   async function refreshOrder(id: string) {
     const { data } = await (supabase as any).from("orders")
-      .select(`*, profiles(first_name, last_name, email, phone, email_verified), affiliate_profiles(code), affiliate_conversions(commission_amount, affiliate_profiles(code)), order_cases(*), ret_items:order_items(id, quantity, returned_qty, exchange_of)`)
+      .select(`*, profiles(first_name, last_name, email, phone, email_verified), affiliate_profiles(code), affiliate_conversions(commission_amount, affiliate_profiles(code)), order_cases(*), ret_items:order_items(id, quantity, returned_qty, exchange_of, unit_price)`)
       .eq("id", id).maybeSingle();
     if (!data) return;
     setOrders((prev) => prev.map((x) => (x.id === id ? { ...x, ...data } : x)));
@@ -921,7 +921,7 @@ export default function OrdersPage() {
   // (ör. "Yolda olan iade"de iadesi işlenen sipariş listeden düşer; kullanıcı 2026-11-01)
   async function syncOrder(id: string) {
     const { data } = await (supabase as any).from("orders")
-      .select(`*, profiles(first_name, last_name, email, phone, email_verified), affiliate_profiles(code), affiliate_conversions(commission_amount, affiliate_profiles(code)), order_cases(*), ret_items:order_items(id, quantity, returned_qty, exchange_of)`)
+      .select(`*, profiles(first_name, last_name, email, phone, email_verified), affiliate_profiles(code), affiliate_conversions(commission_amount, affiliate_profiles(code)), order_cases(*), ret_items:order_items(id, quantity, returned_qty, exchange_of, unit_price)`)
       .eq("id", id).maybeSingle();
     if (data) setOrders((prev) => prev.map((x) => (x.id === id ? { ...x, ...data } : x)));
   }
