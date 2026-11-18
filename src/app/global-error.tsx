@@ -1,7 +1,7 @@
 "use client"; // Hata sınırları Client Component olmalı
 
 import { useEffect } from "react";
-import { reportCrash } from "@/lib/report-crash";
+import { reportCrash, reloadIfStaleBuild } from "@/lib/report-crash";
 
 /**
  * Kök layout dahil her şey çökerse bu sayfa devreye girer.
@@ -18,7 +18,7 @@ export default function GlobalError({
   reset?: () => void;
 }) {
   const retry = () => (unstable_retry ?? reset)?.();
-  useEffect(() => { reportCrash(error, "root"); }, [error]); // pano + Telegram "Site hatası"
+  useEffect(() => { if (!reloadIfStaleBuild(error)) reportCrash(error, "root"); }, [error]); // eski sekme → yenile; değilse pano + Telegram "Site hatası"
 
   return (
     <html lang="tr">

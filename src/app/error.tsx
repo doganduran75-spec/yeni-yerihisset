@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { RefreshCw, Home, WifiOff, AlertTriangle } from "lucide-react";
-import { reportCrash } from "@/lib/report-crash";
+import { reportCrash, reloadIfStaleBuild } from "@/lib/report-crash";
 
 export default function Error({
   error,
@@ -17,6 +17,7 @@ export default function Error({
 }) {
   useEffect(() => {
     console.error("[app/error]", error);
+    if (reloadIfStaleBuild(error)) return; // deploy sonrası eski sekme → bir kez yenile, çökme sayılmaz
     reportCrash(error, "page"); // pano + Telegram "Site hatası" (src/lib/report-crash.ts)
   }, [error]);
 

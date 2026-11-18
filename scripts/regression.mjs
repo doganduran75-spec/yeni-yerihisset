@@ -701,6 +701,24 @@ async function main() {
     if (!LIVE && /^(www\.)?yerihisset\.com$/.test(host)) add("warn", "Staging'de site adresi canlı alan adı", `${siteUrl} — e-postadaki bağlantılar eski siteye gider; .env.local'da NEXT_PUBLIC_SITE_URL=https://dev.yerihisset.com yapıp deploy et`);
     else add("ok", "Site adresi ortama uygun", siteUrl);
   }
+  // Deploy sonrası eski sekme (kullanıcı 2026-11-18: "Failed to load chunk" çökmesi): her build sürüm kimliği taşır →
+  // eski sayfa gezinmede tam yenilenir; kaçarsa hata sınırı bir kez kendiliğinden yeniler, çökme sayılmaz.
+  {
+    const hp = await get("/");
+    const dpl = (/data-dpl-id="([^"]+)"/.exec(hp.text) || [])[1];
+    dpl ? add("ok", "Sürüm kimliği sayfada (deploy sonrası eski sekme kendini yeniler)", dpl) : add("warn", "Sürüm kimliği yok", "scripts/deploy.sh NEXT_DEPLOYMENT_ID ile build edilmedi — deploy'dan önce açık sekmeler 'Failed to load chunk' ile çökebilir");
+    const { readFileSync: rf } = await import("node:fs");
+    const rc = rf(new URL("../src/lib/report-crash.ts", import.meta.url), "utf8");
+    const er = rf(new URL("../src/app/error.tsx", import.meta.url), "utf8") + rf(new URL("../src/app/global-error.tsx", import.meta.url), "utf8");
+    let re = null;
+    try { const m = /const STALE_RE = \/(.+)\/i;/.exec(rc); re = m ? new RegExp(m[1], "i") : null; } catch { re = null; }
+    const stale = ["Failed to load chunk /_next/static/chunks/1fzslc3-pdfdj.js from module 64893", "ChunkLoadError: Loading chunk 123 failed.", "Failed to fetch dynamically imported module: https://x/y.js"];
+    const real = ["Cannot read properties of undefined (reading 'map')", "Failed to fetch"];
+    const okRe = !!re && stale.every((s) => re.test(s)) && real.every((s) => !re.test(s));
+    const okUse = (er.match(/reloadIfStaleBuild\(error\)/g) || []).length >= 2 && /Date\.now\(\) - last < 60_000/.test(rc);
+    okRe && okUse ? add("ok", "Eski sürüm parçası hatası çökme sayılmıyor, sayfa bir kez yenileniyor (döngü yok)")
+      : add("fail", "Eski sürüm parçası hatası", !re ? "STALE_RE bulunamadı" : !okRe ? "desen gerçek hatayı yakalıyor ya da chunk hatasını kaçırıyor" : "error.tsx / global-error.tsx reloadIfStaleBuild kullanmıyor ya da döngü koruması yok");
+  }
   liveOnly(!/dev\./.test(siteUrl), "Site adresi test sitesini gösteriyor", `${siteUrl} → canlı adres olmalı (iyzico dönüşü, e-posta bağlantıları)`);
   process.env.CRON_SECRET ? add("ok", "CRON_SECRET tanımlı") : add("fail", "CRON_SECRET yok");
   // Bakım sayfası: deploy sırasında / çökmede Caddy maintenance/index.html gösterir (docs/BAKIM-SAYFASI.md)

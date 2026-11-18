@@ -48,7 +48,11 @@ if [ -d .next ]; then
   find .next -mindepth 1 -maxdepth 1 ! -name cache -exec rm -rf {} +
 fi
 
-echo "▸ npm run build"
+# Sürüm kimliği (kullanıcı 2026-11-18: deploy'dan önce açık kalan sekme "Failed to load chunk" ile çöktü): her build'e
+# commit kimliği verilir; tarayıcıdaki sayfa eski sürümdeyse Next gezinmede tam sayfa yenilemeye döner (yeni dosyalar gelir).
+# pm2 aynı kabuktan --update-env ile başladığı için sunucu da aynı kimliği görür.
+export NEXT_DEPLOYMENT_ID="$(git rev-parse --short HEAD 2>/dev/null || date +%s)"
+echo "▸ npm run build (sürüm $NEXT_DEPLOYMENT_ID)"
 npm run build
 
 echo "▸ pm2 başlat/yükle (cluster — ecosystem.config.js)"
