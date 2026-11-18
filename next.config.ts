@@ -1,4 +1,15 @@
 import type { NextConfig } from "next";
+import { readFileSync } from "node:fs";
+
+// SÜRÜM KİMLİĞİ (kullanıcı 2026-11-18: deploy'dan önce açık kalan sekme "Failed to load chunk" ile çöktü). Build ve çalışan
+// süreçler AYNI kimliği görmeli: scripts/deploy.sh build'den önce .deployment-id dosyasına commit kimliğini yazar; hem
+// "next build" hem pm2'nin başlattığı "next start" (yeniden başlatmalar dahil) bu dosyayı okur — pm2 ortam değişkenini
+// süreçlere taşımadığı için yalnız NEXT_DEPLOYMENT_ID yetmedi. Kimlik varsa sayfa <html data-dpl-id> taşır; tarayıcıdaki
+// eski sürüm gezinmede tam sayfa yenilenir.
+const DEPLOYMENT_ID = (() => {
+  if (process.env.NEXT_DEPLOYMENT_ID) return process.env.NEXT_DEPLOYMENT_ID;
+  try { return readFileSync(".deployment-id", "utf8").trim() || undefined; } catch { return undefined; }
+})();
 
 // ─── Content-Security-Policy ───────────────────────────────────────────────
 // Tarayıcıya "bu site yalnız şu kaynaklardan script/bağlantı/görsel yükler"
@@ -33,6 +44,7 @@ const CSP = [
 ].join("; ");
 
 const nextConfig: NextConfig = {
+  deploymentId: DEPLOYMENT_ID,
   // ─── Sunucu-harici paketler ──────────────────────────────────────────────
   // iyzipay dinamik require() kullanıyor; Turbopack derleyemiyor.
   // Bunu bundle'a dahil etmeyip çalışma anında Node ile yükletiyoruz.

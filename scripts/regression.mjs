@@ -706,8 +706,15 @@ async function main() {
   {
     const hp = await get("/");
     const dpl = (/data-dpl-id="([^"]+)"/.exec(hp.text) || [])[1];
-    dpl ? add("ok", "Sürüm kimliği sayfada (deploy sonrası eski sekme kendini yeniler)", dpl) : add("warn", "Sürüm kimliği yok", "scripts/deploy.sh NEXT_DEPLOYMENT_ID ile build edilmedi — deploy'dan önce açık sekmeler 'Failed to load chunk' ile çökebilir");
     const { readFileSync: rf } = await import("node:fs");
+    let fileId = "";
+    try { fileId = rf(new URL("../.deployment-id", import.meta.url), "utf8").trim(); } catch { /* yerelde yok */ }
+    dpl && (!fileId || dpl === fileId) ? add("ok", "Sürüm kimliği sayfada (deploy sonrası eski sekme kendini yeniler)", dpl)
+      : dpl ? add("warn", "Sayfadaki sürüm kimliği son build'le aynı değil", `sayfa ${dpl}, build ${fileId} — site süreçleri yeniden başlamamış olabilir: pm2 reload yerihisset`)
+      : add("warn", "Sürüm kimliği yok", "sayfada data-dpl-id yok — next.config.ts deploymentId / scripts/deploy.sh .deployment-id; deploy'dan önce açık sekmeler 'Failed to load chunk' ile çökebilir");
+    const nc = rf(new URL("../next.config.ts", import.meta.url), "utf8"), ds = rf(new URL("./deploy.sh", import.meta.url), "utf8");
+    add(/deploymentId: DEPLOYMENT_ID/.test(nc) && /\.deployment-id/.test(nc) && /> \.deployment-id/.test(ds) ? "ok" : "fail",
+      "Sürüm kimliği build ve çalışan süreçlerde aynı kaynaktan (.deployment-id)", "next.config.ts deploymentId / deploy.sh satırı eksik");
     const rc = rf(new URL("../src/lib/report-crash.ts", import.meta.url), "utf8");
     const er = rf(new URL("../src/app/error.tsx", import.meta.url), "utf8") + rf(new URL("../src/app/global-error.tsx", import.meta.url), "utf8");
     let re = null;
