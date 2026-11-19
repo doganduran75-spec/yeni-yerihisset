@@ -55,10 +55,11 @@ export default {
     // görünen kısım panelde "Kartlarda görünen kısım" (focusY) — yatay görsel ayrıca yüklenmez. Dik görsel yoksa eski davranış.
     await t.part("Prensip kartlarında tek görsel (dik görsel + görünen kısım)", async () => {
       const hc = rd("src/config/homeContent.ts"), pc = rd("src/components/PrincipleCarousel.tsx"), ps = rd("src/components/PrincipleStories.tsx"), tab = rd("src/components/admin/settings/HomeContentTab.tsx");
+      const pl = rd("src/lib/principle-image.ts"), about = rd("src/app/hakkimizda/page.tsx");
       const items = (hc.match(/imageTall: "", focusY: 50,/g) || []).length;
       t.add(items >= 5 ? "ok" : "fail", "Her prensipte 'görünen kısım' ayarı var (varsayılan orta)", `${items} prensipte`);
       // Kart kırpma mantığı gerçekten çalıştırılır: dik görsel → doldurur + konum; yalnız yatay → sığdırır
-      const body = /export function principleCardImage\(it: PItem\)[^\n]*\| null \{([\s\S]*?)\r?\n\}/.exec(pc);
+      const body = /export function principleCardImage\(it: PItem\)[^\n]*\| null \{([\s\S]*?)\r?\n\}/.exec(pl);
       let fn = null;
       try { fn = body ? new Function("it", body[1]) : null; } catch { fn = null; }
       const a = fn?.({ title: "x", image: "/y.svg", imageTall: "/t.jpg", focusY: 30 });
@@ -70,6 +71,11 @@ export default {
       const ok2 = /<CardImg it=\{it\} \/>/.test(pc) && (pc.match(/<CardImg it=\{it\} \/>/g) || []).length >= 2 && /it\.image \|\| it\.imageTall/.test(ps)
         && /function PrincipleCrop/.test(tab) && /"4 \/ 3"/.test(tab) && /type="range"/.test(tab);
       t.add(ok2 ? "ok" : "fail", "Masaüstü ve telefon kartı aynı kırpmayı kullanıyor; panelde önizlemeli kaydırma çubuğu var", ok2 ? "" : "PrincipleCarousel / PrincipleStories / HomeContentTab satırları eksik");
+      // 2026-11-19: telefon kartında görsel alanı sabit oran (paneldeki önizlemeyle aynı, 10:7 — sabit kart yüksekliği yok);
+      // Hakkımızda › "Her ayakkabıda aradığımız" kartları da aynı kuralı kullanıyor
+      const ok3 = /mobile: "10 \/ 7"/.test(pl) && /aspectRatio: PRINCIPLE_CARD_RATIO\.mobile/.test(pc) && !/height: "max\(220px, 33svh\)"/.test(pc)
+        && /"10 \/ 7", "Telefon: kaydırmalı kart"/.test(tab) && /principleCardImage\(x\)/.test(about);
+      t.add(ok3 ? "ok" : "fail", "Telefondaki prensip kartı paneldeki önizlemeyle aynı oranda; Hakkımızda kartları da aynı kırpmayla", ok3 ? "" : "principle-image / PrincipleCarousel / HomeContentTab / hakkimizda satırları eksik");
     });
   },
 };

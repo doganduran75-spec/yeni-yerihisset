@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { principleCardImage, PRINCIPLE_CARD_RATIO } from "@/lib/principle-image";
 import { createClient } from "@supabase/supabase-js";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -73,10 +74,17 @@ export default async function HakkimizdaPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                 {principles.map((x, i) => (
                   <div key={x.title} className="rounded-3xl bg-cream p-5 flex flex-col">
-                    {x.image && (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={x.image} alt="" className="w-full aspect-[4/3] object-contain mb-4" loading="lazy" />
-                    )}
+                    {/* Ana sayfadaki prensip kartlarıyla aynı kural: dik görsel kartı doldurur, görünen kısım panelden
+                        (kullanıcı 2026-11-19: burada dik görsel küçük ve kenarları boş görünüyordu) */}
+                    {(() => {
+                      const c = principleCardImage(x);
+                      return c ? (
+                        <div className="rounded-2xl overflow-hidden bg-[#F4EFE6] mb-4" style={{ aspectRatio: PRINCIPLE_CARD_RATIO.desktop }}>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={c.src} alt={x.title} className={c.className} style={c.style} loading="lazy" />
+                        </div>
+                      ) : null;
+                    })()}
                     <span className="text-xs font-black text-olive-600">0{i + 1}</span>
                     <h3 className="text-lg font-black text-slate-900 mt-1">{x.title}</h3>
                     <p className="text-sm text-slate-600 leading-relaxed mt-1">{x.text}</p>

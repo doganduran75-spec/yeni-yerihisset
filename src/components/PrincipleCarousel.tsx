@@ -4,6 +4,7 @@
 // BAREFOOT PRENSİPLERİ — ana sayfanın üstü (kullanıcı kararları 2026-10-18): açılış hikâyesinin küçüğü.
 // Mobilde ekranın ~1/3'ü, parmakla sağa sola kaydırılır; masaüstünde beş kart yan yana.
 // İçerik: Ayarlar › Ana Sayfa › Barefoot prensipleri (varsayılan src/config/homeContent.ts).
+import { principleCardImage, PRINCIPLE_CARD_RATIO, type PItem } from "@/lib/principle-image";
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { PlayCircle } from "lucide-react";
@@ -16,14 +17,7 @@ const EPI = "var(--font-epilogue), 'Epilogue', system-ui, sans-serif";
 // TEK GÖRSEL (kullanıcı 2026-11-18): dik görsel (imageTall, telefonda tam ekran hikâye) yüklüyse kartlarda da o kullanılır —
 // kartı doldurur (object-cover), görünen kısım panelde "Kartlarda görünen kısım" (focusY: 0 üst, 100 alt). Dik görsel
 // yoksa eski davranış: yatay görsel (image) kırpılmadan sığdırılır.
-type PItem = { image?: string; imageTall?: string; focusY?: number; title: string };
-export function principleCardImage(it: PItem): { src: string; className: string; style?: React.CSSProperties } | null {
-  if (it.imageTall) {
-    const y = Math.max(0, Math.min(100, Number(it.focusY ?? 50)));
-    return { src: it.imageTall, className: "w-full h-full object-cover", style: { objectPosition: `50% ${y}%` } };
-  }
-  return it.image ? { src: it.image, className: "w-full h-full object-contain" } : null;
-}
+// Kural ortak dosyada (Hakkımızda sayfası da kullanır): src/lib/principle-image.ts
 function CardImg({ it }: { it: PItem }) {
   const c = principleCardImage(it);
   return c ? <img src={c.src} alt={it.title} className={c.className} style={c.style} loading="lazy" /> : null;
@@ -47,7 +41,7 @@ export default function PrincipleCarousel({ variant }: { variant: "mobile" | "de
         <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` }}>
           {items.map((it) => (
             <div key={it.title} className="rounded-2xl overflow-hidden bg-white" style={{ border: "1px solid #E8E4DC" }}>
-              <div className="bg-[#F4EFE6] overflow-hidden" style={{ aspectRatio: "4 / 3" }}>
+              <div className="bg-[#F4EFE6] overflow-hidden" style={{ aspectRatio: PRINCIPLE_CARD_RATIO.desktop }}>
                 <CardImg it={it} />
               </div>
               <div className="p-4">
@@ -83,8 +77,10 @@ export default function PrincipleCarousel({ variant }: { variant: "mobile" | "de
       <div ref={strip} onScroll={onScroll} className="flex gap-3 overflow-x-auto snap-x snap-mandatory px-5" style={{ scrollbarWidth: "none", scrollPaddingInline: 20 }}>
         {items.map((it) => (
           <div key={it.title} className="snap-start shrink-0 w-[82%] rounded-2xl overflow-hidden bg-white flex flex-col"
-            style={{ border: "1px solid #E8E4DC", height: "max(220px, 33svh)" }}>
-            <div className="flex-1 min-h-0 bg-[#F4EFE6] overflow-hidden">
+            style={{ border: "1px solid #E8E4DC" }}>
+            {/* Görsel alanı paneldeki "Telefon: kaydırmalı kart" önizlemesiyle aynı oranda (kullanıcı 2026-11-19: sabit kart
+                yüksekliğinde görsel basık kalıp alttaki ölçü yazıları kesiliyordu) */}
+            <div className="shrink-0 bg-[#F4EFE6] overflow-hidden" style={{ aspectRatio: PRINCIPLE_CARD_RATIO.mobile }}>
               <CardImg it={it} />
             </div>
             <div className="px-4 py-3">
