@@ -25,8 +25,9 @@ export default {
       t.add(rejected ? "ok" : "fail", "Adsız ve siparişsiz yorum kaydedilemiyor", rejected ? "" : "order_reviews_author_chk yok");
 
       // Üye kendi yorumuna başkasının adını / kaynak etiketi yazamaz
-      const pol = t.one("SELECT with_check FROM pg_policies WHERE tablename = 'order_reviews' AND policyname = 'user_insert_own_review'") || "";
-      const polOk = /author_name IS NULL/i.test(pol) && /origin IS NULL/i.test(pol) && /cardinality/i.test(pol);
+      // Kural metni çok satırlı → karşılaştırma veritabanında (t.one ilk satırı okur)
+      const polOk = t.one(`SELECT coalesce(bool_and(with_check ~* 'author_name IS NULL' AND with_check ~* 'origin IS NULL' AND with_check ~* 'cardinality'), false)
+        FROM pg_policies WHERE tablename = 'order_reviews' AND policyname = 'user_insert_own_review'`) === "t";
       t.add(polOk ? "ok" : "fail", "Üye yorumunda görünen ad / kaynak etiketi yazılamıyor", polOk ? "" : "user_insert_own_review kuralında author_name / origin kısıtı yok");
 
       // 2) Kod: panelde "Yorum ekle", ürün sayfasında ad + kaynak etiketi, Google yıldızları gerçek yorumlardan
