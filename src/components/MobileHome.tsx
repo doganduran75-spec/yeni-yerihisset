@@ -6,6 +6,8 @@ import { ChevronRight, BadgeCheck, Truck, Footprints, CreditCard } from "lucide-
 import { formatPriceDisplay, getMinPrice } from "@/lib/product-price";
 import { useHomeContent } from "@/lib/home-content-context";
 import PrincipleCarousel from "@/components/PrincipleCarousel";
+import SizeFinderSheet from "@/components/SizeFinderSheet";
+import { useState } from "react";
 import HomeCategories, { type CategoryTile } from "@/components/HomeCategories";
 
 // DESIGN.md ("YeriHisset Grounded Wellness") temelli mobil ana sayfa.
@@ -36,6 +38,7 @@ export default function MobileHome({ products, tiles = [] }: { products: any[]; 
   const HC = useHomeContent(); // Ayarlar › Ana Sayfa (varsayılan: src/config/homeContent.ts)
   const popular = (products || []).slice(0, HC.products.limitMobile);
   const chips = HC.trust.slice(0, HC.trustMobileCount);
+  const [finder, setFinder] = useState(false); // "Doğru Numarayı Bul" penceresi (kullanıcı 2026-11-19)
 
   return (
     <div className="md:hidden" style={{ fontFamily: JAK, background: C.base, color: C.ink }}>
@@ -107,7 +110,8 @@ export default function MobileHome({ products, tiles = [] }: { products: any[]; 
       {/* Doğru Numarayı Bul */}
       {HC.sizeFinder.enabled && (
         <div className="px-5 pb-8">
-          <Link href={HC.sizeFinder.href} className="flex items-center gap-4 rounded-2xl p-4"
+          {/* Ölçüden numara bulan pencereyi açar (eskiden yalnız /magaza'ya gidiyordu, numara adımı yoktu) */}
+          <button type="button" onClick={() => setFinder(true)} className="w-full text-left flex items-center gap-4 rounded-2xl p-4"
             style={{ background: C.leafTint, border: `1px solid ${C.leafBorder}` }}>
             <div className="w-14 h-14 rounded-full shrink-0 flex items-center justify-center" style={{ background: "#fff", border: `1px solid ${C.leafBorder}` }}>
               <Footprints size={26} style={{ color: C.green }} />
@@ -117,7 +121,8 @@ export default function MobileHome({ products, tiles = [] }: { products: any[]; 
               <p style={{ color: C.muted, fontSize: 13, lineHeight: 1.45, marginTop: 3 }}>{HC.sizeFinder.body}</p>
             </div>
             <ChevronRight size={20} style={{ color: C.stone }} />
-          </Link>
+          </button>
+          {finder && <SizeFinderSheet onClose={() => setFinder(false)} />}
         </div>
       )}
     </div>

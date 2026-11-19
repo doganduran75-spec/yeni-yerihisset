@@ -292,11 +292,15 @@ export default function SizeFilterGrid({ products: cachedProducts, categoryName,
     if (!segment) return;
     try {
       localStorage.setItem(LAST_SEGMENT_KEY, segment);
-      const q = new URLSearchParams(window.location.search).get("numara");
+      const sp = new URLSearchParams(window.location.search);
+      // "Doğru numarayı bul" numara + tablodaki ikinci adını (numara_alt) gönderir: ürün numaralarında hangisi yazıyorsa o seçilir
+      const nz = (s: unknown) => String(s ?? "").trim().replace(",", ".").toLocaleUpperCase("tr-TR");
+      const want = [sp.get("numara"), sp.get("numara_alt")].filter(Boolean) as string[];
+      const q = want.length ? (sizesFirst.find((s) => want.some((w) => nz(w) === nz(s))) ?? want[0]) : null;
       const saved = q || localStorage.getItem(`yh-size-${segment}`);
       if (saved) setSize(saved); // eslint-disable-line react-hooks/set-state-in-effect
     } catch { /* tarayıcı depolaması kapalı */ }
-  }, [segment]);
+  }, [segment]); // eslint-disable-line react-hooks/exhaustive-deps -- adresteki numara sayfa açılışında bir kez okunur
   function pickSize(s: string | null) {
     setSize(s);
     if (segment) { try { if (s) localStorage.setItem(`yh-size-${segment}`, s); else localStorage.removeItem(`yh-size-${segment}`); } catch { /* yok */ } }

@@ -35,5 +35,15 @@ export default {
       const bk = await t.rest("product_description_backup_20261119?select=product_id&limit=1");
       t.add(bk.status >= 400 || (Array.isArray(bk.json) && bk.json.length === 0) ? "ok" : "fail", "Eski açıklama yedeği dışarıdan okunamıyor", `HTTP ${bk.status}`);
     });
+    // DOĞRU NUMARAYI BUL (kullanıcı 2026-11-19: mobil ana sayfa bandı yalnız /magaza'yı açıyordu, numara adımı yoktu)
+    await t.part("Doğru numarayı bul (mobil ana sayfa)", async () => {
+      const mh = rd("src/components/MobileHome.tsx"), sf = rd("src/components/SizeFinderSheet.tsx"), sg = rd("src/components/SizeFilterGrid.tsx");
+      const ok = /<SizeFinderSheet/.test(mh) && /onClick=\{\(\) => setFinder\(true\)\}/.test(mh) && !/<Link href=\{HC\.sizeFinder\.href\}/.test(mh)
+        && /recommendSize\(chart, mm\)/.test(sf) && /from\("size_charts"\)/.test(sf) && /\?numara=\$\{encodeURIComponent\(label\)\}/.test(sf) && /numara_alt/.test(sf)
+        && /sp\.get\("numara_alt"\)/.test(sg);
+      t.add(ok ? "ok" : "fail", "Bant ölçüden numara bulan pencereyi açıyor; öneri mağazayı o numara seçili açıyor", ok ? "" : "MobileHome / SizeFinderSheet / SizeFilterGrid satırları eksik");
+      const sz = t.num("SELECT count(*) FROM public.size_charts WHERE jsonb_array_length(rows) > 0");
+      t.add(sz > 0 ? "ok" : "warn", "Ölçü tablosu var (numara önerisi için)", sz > 0 ? `${sz} marka` : "Ayarlar › Markalar'da ölçü tablosu yok — pencere doğrudan mağazaya gider");
+    });
   },
 };
