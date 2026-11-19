@@ -7,6 +7,7 @@
  * - ProductPageClient'a veri prop olarak aktarılır (SEO için sunucu render)
  */
 
+import { extractFaq } from "@/lib/description-faq";
 import { createClient } from "@supabase/supabase-js";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
@@ -218,6 +219,14 @@ export default async function ProductDetailPage({
         reviewStats={reviewStats ?? undefined}
         segment={segment}
       />
+
+      {/* Açıklamadaki "Sık sorulan sorular" → FAQPage (yapay zekâ / arama motorları soru-cevabı doğrudan okur) */}
+      {(() => {
+        const faq = extractFaq((product as any).description);
+        if (!faq.length) return null;
+        const ld = { "@context": "https://schema.org", "@type": "FAQPage", mainEntity: faq.map((f) => ({ "@type": "Question", name: f.q, acceptedAnswer: { "@type": "Answer", text: f.a } })) };
+        return <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(ld).replace(/</g, "\\u003c") }} />;
+      })()}
 
       {/* İnteraktif ürün sayfası (client component) */}
       <ProductPageClient product={product as any} initialSize={beden ?? null} initialVariantId={variant ?? null} sizeChart={sizeChart} ratingSummary={ratingSummary} brandAbout={brandAbout} segment={segment} />

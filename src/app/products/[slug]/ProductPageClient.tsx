@@ -28,6 +28,8 @@ import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { sortByVariantValue } from "@/lib/variant-sort";
 import ProductReviews from "@/components/products/ProductReviews";
+import ReadMore from "@/components/ReadMore";
+import { faqAccordion } from "@/lib/description-faq";
 import StockNotifyModal from "@/components/products/StockNotifyModal";
 import GiftPromo from "@/components/products/GiftPromo";
 import { useCartStore } from "@/store/useCartStore";
@@ -673,12 +675,15 @@ export default function ProductPageClient({ product, initialSize = null, initial
             {product.description && (
               <section className="border-t border-slate-100 pt-8">
                 <h2 className="text-2xl font-black text-slate-900 mb-4">Ürün Açıklaması</h2>
-                {isPlainText(product.description) ? (
-                  <div className="text-slate-600 leading-relaxed whitespace-pre-wrap">{product.description}</div>
-                ) : (
-                  /* Görselli / biçimli açıklama (yönetici yazar; safeHtml ikinci emniyet katmanı) */
-                  <div className="rich-text" dangerouslySetInnerHTML={{ __html: safeHtml(product.description) }} />
-                )}
+                {/* Uzun açıklama kısa görünür, "Devamını oku" ile açılır — metnin tamamı sayfada (arama motoru / yapay zekâ okur) */}
+                <ReadMore maxHeight={340}>
+                  {isPlainText(product.description) ? (
+                    <div className="text-slate-600 leading-relaxed whitespace-pre-wrap">{product.description}</div>
+                  ) : (
+                    /* Görselli / biçimli açıklama (yönetici yazar; safeHtml ikinci emniyet katmanı) */
+                    <div className="rich-text" dangerouslySetInnerHTML={{ __html: faqAccordion(safeHtml(product.description)) }} />
+                  )}
+                </ReadMore>
               </section>
             )}
 

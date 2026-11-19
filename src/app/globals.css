@@ -175,6 +175,15 @@ body {
 .rich-text blockquote { border-left: 3px solid rgb(203 213 225); padding-left: 1rem; font-style: italic; }
 .rich-text table { display: block; overflow-x: auto; border-collapse: collapse; font-size: 0.9em; }
 .rich-text th, .rich-text td { border: 1px solid rgb(226 232 240); padding: 0.4em 0.6em; text-align: left; }
+/* Açıklamadaki "Sık sorulan sorular" → açılır-kapanır (src/lib/description-faq.ts) */
+.rich-text details.faq-item { border-top: 1px solid rgb(226 232 240); padding: 0.7em 0; }
+.rich-text details.faq-item + details.faq-item { margin-top: 0; }
+.rich-text details.faq-item:last-of-type { border-bottom: 1px solid rgb(226 232 240); }
+.rich-text details.faq-item summary { cursor: pointer; list-style: none; font-weight: 700; color: rgb(30 41 59); display: flex; justify-content: space-between; gap: 1em; }
+.rich-text details.faq-item summary::-webkit-details-marker { display: none; }
+.rich-text details.faq-item summary::after { content: "+"; font-weight: 800; color: rgb(77 107 31); }
+.rich-text details.faq-item[open] summary::after { content: "–"; }
+.rich-text details.faq-item p { margin-top: 0.5em; }
 
 /* Kart ödeme formu açıkken mobil alt menü gizli (ödemenin ortasında çıkılmasın) — src/app/checkout/page.tsx */
 body[data-paying] .yh-tabbar { display: none; }

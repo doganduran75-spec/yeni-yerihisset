@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { Star, MessageSquare, Loader2, User } from "lucide-react";
 import { reviewOriginBadge } from "@/config/review-origins";
+import ReadMore from "@/components/ReadMore";
 
 interface Review {
   id: string;
@@ -149,7 +150,10 @@ export default function ProductReviews({ productId }: { productId: string }) {
                 </div>
 
                 {review.comment && (
-                  <p className="text-slate-600 leading-relaxed italic">&quot;{review.comment}&quot;</p>
+                  // Uzun yorum 7 satırda kesilir, "Devamını oku" ile açılır (kullanıcı 2026-11-19)
+                  <ReadMore lines={7}>
+                    <p className="text-slate-600 leading-relaxed italic whitespace-pre-line">&quot;{review.comment}&quot;</p>
+                  </ReadMore>
                 )}
 
                 {review.images.length > 0 && (
