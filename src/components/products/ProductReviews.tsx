@@ -4,10 +4,12 @@ import Image from "next/image";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { Star, MessageSquare, Loader2, User } from "lucide-react";
+import { reviewOriginBadge } from "@/config/review-origins";
 
 interface Review {
   id: string;
   user_name: string;
+  origin: string;   // "Trendyol müşterisi", "Instagram'dan"… (elle eklenen yorum; boşsa yok)
   rating: number;
   comment: string;
   created_at: string;
@@ -37,7 +39,7 @@ export default function ProductReviews({ productId }: { productId: string }) {
     let query = (supabase as any)
       .from("order_reviews")
       .select(
-        "id, user_id, comment, rating_overall, rating_shipping, rating_quality, rating_communication, images, created_at"
+        "id, user_id, author_name, origin, comment, rating_overall, rating_shipping, rating_quality, rating_communication, images, created_at"
       )
       .eq("is_approved", true)
       .order("created_at", { ascending: false });
@@ -60,10 +62,11 @@ export default function ProductReviews({ productId }: { productId: string }) {
       ) as number[];
       const avg = typeof r.rating_overall === "number" ? r.rating_overall // yeni biçim: genel puan
         : nums.length ? Math.round(nums.reduce((a, b) => a + b, 0) / nums.length) : 5;
-      const name = nameById.get(r.user_id) || "Müşteri";
+      const name = r.author_name || nameById.get(r.user_id) || "Müşteri"; // elle eklenen yorum: panelde yazılan ad
       return {
         id: r.id,
         user_name: name,
+        origin: reviewOriginBadge(r.origin),
         rating: avg,
         comment: r.comment || "",
         created_at: r.created_at || new Date().toISOString(),
@@ -124,7 +127,10 @@ export default function ProductReviews({ productId }: { productId: string }) {
                       <User size={20} />
                     </div>
                     <div>
-                      <h5 className="font-bold text-slate-900">{review.user_name}</h5>
+                      <h5 className="font-bold text-slate-900">
+                        {review.user_name}
+                        {review.origin && <span className="ml-2 align-middle text-[11px] font-semibold text-olive-700 bg-olive-50 px-2 py-0.5 rounded-full">{review.origin}</span>}
+                      </h5>
                       <p className="text-[10px] text-slate-400 font-bold uppercase">
                         {new Date(review.created_at).toLocaleDateString("tr-TR")}
                       </p>

@@ -83,16 +83,23 @@ async function getReviewStats(productId: string): Promise<{ ratingValue: number;
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 
-  const { data } = await supabase
-    .from("product_reviews")
-    .select("rating")
+  // Sitede görünen yorumlar (order_reviews, onaylı) — 2026-11-19: eskiden kullanılmayan product_reviews'tan okuyordu.
+  // Google kuralı: yalnız BU ürünün yorumları (ayar "tüm yorumlar her üründe" olsa da)
+  const { data } = await (supabase as any)
+    .from("order_reviews")
+    .select("rating_overall, rating_shipping, rating_quality, rating_communication")
     .eq("product_id", productId)
     .eq("is_approved", true);
 
-  if (!data || data.length === 0) return null;
+  const stars = ((data as any[]) || []).map((r) => {
+    if (typeof r.rating_overall === "number") return r.rating_overall;
+    const n = [r.rating_shipping, r.rating_quality, r.rating_communication].filter((x) => typeof x === "number") as number[];
+    return n.length ? n.reduce((a, b) => a + b, 0) / n.length : null;
+  }).filter((x): x is number => x != null);
+  if (!stars.length) return null;
 
-  const reviewCount = data.length;
-  const ratingValue = Math.round((data.reduce((sum, r) => sum + (r.rating ?? 0), 0) / reviewCount) * 10) / 10;
+  const reviewCount = stars.length;
+  const ratingValue = Math.round((stars.reduce((sum, r) => sum + r, 0) / reviewCount) * 10) / 10;
 
   return { ratingValue, reviewCount };
 }

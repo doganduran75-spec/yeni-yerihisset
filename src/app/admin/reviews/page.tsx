@@ -2,19 +2,25 @@
 
 import { useEffect, useState, useCallback } from "react";
 import AdminOpsTabs from "@/components/admin/AdminOpsTabs";
+import AddReviewDialog from "@/components/admin/reviews/AddReviewDialog";
+import { reviewOriginBadge } from "@/config/review-origins";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   Star, CheckCircle2, XCircle, Clock, Loader2, Eye, ChevronDown, ChevronUp,
-  MessageSquare, Filter, Image as ImageIcon,
+  MessageSquare, Filter, Image as ImageIcon, Plus, Trash2,
 } from "lucide-react";
 
 type Review = {
   id: string;
-  order_id: string;
-  user_id: string;
+  order_id: string | null;                      // elle eklenen yorumda yok (MIG 20261196)
+  user_id: string | null;
+  author_name: string | null;                   // elle eklenen yorumun görünen adı
+  origin: string | null;                        // elle eklenen yorumun kaynağı (Instagram, Trendyol…)
+  product_id: string | null;
+  products: { title: string | null } | null;
   rating_shipping: number | null;
   rating_quality: number | null;
   rating_communication: number | null;
@@ -70,6 +76,7 @@ export default function AdminReviewsPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [adminNotes, setAdminNotes] = useState<Record<string, string>>({});
   const [lightboxImg, setLightboxImg] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false); // "Yorum ekle" (elle, eski yorumlar)
 
   const fetchReviews = useCallback(async () => {
     setLoading(true);
@@ -77,7 +84,7 @@ export default function AdminReviewsPage() {
       let query = (supabase as any)
         .from("order_reviews")
         .select(`
-          id, order_id, user_id,
+          id, order_id, user_id, author_name, origin, product_id, products (title),
           rating_shipping, rating_quality, rating_communication, rating_overall, answers, source,
           comment, images, is_approved, admin_note, created_at,
           orders (order_number),
@@ -119,6 +126,15 @@ export default function AdminReviewsPage() {
     fetchReviews();
   }
 
+  // Yalnız elle eklenen yorum silinir (müşteri yorumu reddedilir / onayı kaldırılır)
+  async function deleteManualReview(id: string) {
+    if (!window.confirm("Bu elle eklenen yorum silinsin mi? Geri alınamaz.")) return;
+    setActionLoading(id);
+    await (supabase as any).from("order_reviews").delete().eq("id", id).eq("source", "manual");
+    setActionLoading(null);
+    fetchReviews();
+  }
+
   async function saveAdminNote(id: string) {
     const note = adminNotes[id] ?? "";
     await (supabase as any)
@@ -137,6 +153,7 @@ export default function AdminReviewsPage() {
           <h2 className="text-3xl font-bold tracking-tight">Ürün Yorumları</h2>
           <p className="text-muted-foreground">Müşteri yorumlarını inceleyin, onaylayın veya reddedin.</p>
         </div>
+        <Button size="sm" className="gap-1.5 ml-auto mr-3" onClick={() => setAdding(true)}><Plus size={14} /> Yorum ekle</Button>
         {filter === "pending" && pendingCount > 0 && (
           <Badge className="bg-amber-500 text-white text-sm px-3 py-1 rounded-full">
             {pendingCount} onay bekliyor
@@ -185,7 +202,8 @@ export default function AdminReviewsPage() {
             const isExpanded = expandedId === review.id;
             const isLoading = actionLoading === review.id;
             const avg = avgRating(review);
-            const customerName = [review.profiles?.first_name, review.profiles?.last_name].filter(Boolean).join(" ") || "—";
+            const customerName = review.author_name || [review.profiles?.first_name, review.profiles?.last_name].filter(Boolean).join(" ") || "—";
+            const manual = review.source === "manual";
 
             return (
               <Card
@@ -219,6 +237,8 @@ export default function AdminReviewsPage() {
                           YH{review.orders.order_number}
                         </span>
                       )}
+                      {manual && <span className="text-xs bg-sky-50 text-sky-700 px-1.5 py-0.5 rounded">Elle eklendi{reviewOriginBadge(review.origin) ? ` · ${reviewOriginBadge(review.origin)}` : ""}</span>}
+                      {review.products?.title && <span className="text-xs text-slate-500 truncate max-w-[220px]">{review.products.title}</span>}
                       <span className="text-xs text-slate-400">
                         {new Date(review.created_at).toLocaleDateString("tr-TR", {
                           day: "2-digit", month: "short", year: "numeric",
@@ -304,9 +324,11 @@ export default function AdminReviewsPage() {
                     )}
 
                     {/* Müşteri bilgisi */}
-                    <div className="text-xs text-slate-400">
-                      <span className="font-medium text-slate-500">Email:</span> {review.profiles?.email ?? "—"}
-                    </div>
+                    {!manual && (
+                      <div className="text-xs text-slate-400">
+                        <span className="font-medium text-slate-500">Email:</span> {review.profiles?.email ?? "—"}
+                      </div>
+                    )}
 
                     {/* Admin notu */}
                     <div className="space-y-2">
@@ -358,6 +380,11 @@ export default function AdminReviewsPage() {
                           Reddet
                         </Button>
                       )}
+                      {manual && (
+                        <Button size="sm" variant="outline" className="gap-1.5 ml-auto text-slate-600" disabled={isLoading} onClick={() => deleteManualReview(review.id)}>
+                          <Trash2 size={13} /> Sil
+                        </Button>
+                      )}
                     </div>
                   </div>
                 )}
@@ -366,6 +393,8 @@ export default function AdminReviewsPage() {
           })}
         </div>
       )}
+
+      {adding && <AddReviewDialog onClose={() => setAdding(false)} onSaved={() => { setFilter("approved"); fetchReviews(); }} />}
 
       {/* Lightbox */}
       {lightboxImg && (
