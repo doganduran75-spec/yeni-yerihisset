@@ -247,6 +247,27 @@ function Inner() {
                   ))}
                 </div>
               )}
+              {opts.colors?.length > 0 && (
+                // Aynı modelin diğer renkleri (kullanıcı 2026-11-20: müşteri numarayla birlikte rengi de değiştirmek istedi)
+                <div className="space-y-2">
+                  <p className="text-xs font-bold text-slate-500">Rengini de değiştirmek ister misin?</p>
+                  {opts.colors.map((c: any) => (
+                    <div key={c.product_id} className={`flex items-center gap-3 rounded-xl border p-2 ${c.sizes.some((s: any) => s.variant_id === pick) ? "border-olive-500 bg-olive-50" : "border-slate-200"}`}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      {c.image && <img src={c.image} alt="" className="w-12 h-12 rounded-lg object-cover shrink-0" />}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-slate-800 truncate">{c.color}</p>
+                        <div className="flex flex-wrap gap-1.5 mt-1">
+                          {c.sizes.map((s: any) => (
+                            <button key={s.variant_id} type="button" onClick={() => setPick(s.variant_id)}
+                              className={`min-w-10 h-8 px-2 rounded-lg border text-xs font-bold ${pick === s.variant_id ? "border-olive-600 bg-olive-600 text-white" : s.variant_id === c.target_variant_id ? "border-olive-400 text-olive-800" : "border-slate-300 text-slate-700"}`}>{s.size}</button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
               {opts.target && opts.suggested && opts.suggested.stock < 1 && (
                 <div className="grid gap-2">
                   <button disabled={busy} onClick={() => post({ action: "exchange", reason, note, items: [{ order_item_id: exItem, variant_id: opts.suggested.variant_id, wait: true }] }, `${opts.target} numara stoğa girince gönderip seni haberdar edeceğiz.`)}
@@ -258,7 +279,7 @@ function Inner() {
               <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder="Eklemek istediğin bir not (opsiyonel)" className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" />
               {err && <p className="text-sm text-red-600">{err}</p>}
               <button disabled={busy || !pick} onClick={() => post({ action: "exchange", reason, note, items: [{ order_item_id: exItem, variant_id: pick }] }, "Değişim talebini aldık; yeni numaranı kısa süre içinde kargoya veriyoruz. Elindekini, yeni numarayı denedikten sonra geri göndereceksin.")}
-                className="w-full h-12 rounded-xl bg-olive-600 text-white font-bold text-sm disabled:opacity-50">Bu numarayı gönderin</button>
+                className="w-full h-12 rounded-xl bg-olive-600 text-white font-bold text-sm disabled:opacity-50">{!pick || opts.same.some((s: any) => s.variant_id === pick) ? "Bu numarayı gönderin" : "Seçtiğim ürünü gönderin"}</button>
               <p className="text-xs text-slate-400 text-center">Yeni numarayı gönderiyoruz; ikisini de deneyip olmayanı geri gönderirsin.</p>
             </div>
           )}

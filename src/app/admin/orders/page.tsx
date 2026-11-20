@@ -2941,6 +2941,9 @@ function CaseBox({ order, kase, canSendLabel, canShipAlt, onDone }: {
   const [code, setCode] = useState("");
   const [tracking, setTracking] = useState("");
   const [busy, setBusy] = useState(false);
+  // Gönderilecek ürünü değiştir (kullanıcı 2026-11-20: müşteri numarayla birlikte rengi de değiştirmek istedi)
+  const [swap, setSwap] = useState<Record<string, { variant_id: string; label: string }>>({});
+  const [swapFor, setSwapFor] = useState<{ item: string; opts: any } | null>(null);
   const items: any[] = (order as any).order_items || [];
   const label = (id: string) => { const i = items.find((x) => x.id === id); return i ? `${i.products?.title ?? i.title ?? "Ürün"}${i.variant_name ? ` (${i.variant_name})` : ""}` : "—"; };
 
@@ -2960,6 +2963,22 @@ function CaseBox({ order, kase, canSendLabel, canShipAlt, onDone }: {
     } finally { setBusy(false); }
   }
 
+  async function openSwap(itemId: string) {
+    if (swapFor?.item === itemId) { setSwapFor(null); return; }
+    setBusy(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const r = await fetch("/api/admin/orders/case", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
+        body: JSON.stringify({ orderId: order.id, op: "options", item: itemId }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { siteAlert({ message: d.error || "Seçenekler alınamadı", tone: "danger" }); return; }
+      setSwapFor({ item: itemId, opts: d });
+    } finally { setBusy(false); }
+  }
+
   return (
     <div className="rounded-lg border border-purple-200 bg-white p-3 space-y-2 text-xs">
       <div className="flex flex-wrap items-center gap-2">
@@ -2969,10 +2988,38 @@ function CaseBox({ order, kase, canSendLabel, canShipAlt, onDone }: {
       </div>
       {kase.reason && <p><span className="text-muted-foreground">Sebep:</span> {caseReasonLabel(kase.reason)}</p>}
       {(kase.items || []).map((x: any, i: number) => (
-        <p key={i}>
-          {label(x.order_item_id)}
-          {kase.kind === "exchange" && <> → <b>{x.want_label || "numara seçmedi"}</b>{x.wait ? <span className="text-amber-700"> · stok bekliyor</span> : null}</>}
-        </p>
+        <div key={i} className="space-y-1">
+          <p>
+            {label(x.order_item_id)}
+            {kase.kind === "exchange" && (swap[x.order_item_id]
+              ? <> → <b className="text-olive-800">{swap[x.order_item_id].label}</b> <span className="text-muted-foreground">(değiştirdin; müşteri: {x.want_label || "numara seçmedi"})</span></>
+              : <> → <b>{x.want_label || "numara seçmedi"}</b>{x.wait ? <span className="text-amber-700"> · stok bekliyor</span> : null}</>)}
+            {canShipAlt && (
+              <button type="button" disabled={busy} onClick={() => openSwap(x.order_item_id)} className="ml-2 text-olive-700 font-semibold underline underline-offset-2">
+                {swapFor?.item === x.order_item_id ? "Kapat" : "Değiştir"}
+              </button>
+            )}
+          </p>
+          {swapFor?.item === x.order_item_id && (
+            <select value={swap[x.order_item_id]?.variant_id || ""} className="h-8 w-full rounded-md border px-2 bg-white"
+              onChange={(e) => {
+                const v = e.target.value, lb = e.target.selectedOptions[0]?.dataset.label || "";
+                setSwap((p) => { const n = { ...p }; if (v) n[x.order_item_id] = { variant_id: v, label: lb }; else delete n[x.order_item_id]; return n; });
+              }}>
+              <option value="">Müşterinin seçtiği gönderilsin</option>
+              <optgroup label="Aynı ürün, başka numara">
+                {(swapFor?.opts.same || []).filter((s: any) => s.stock > 0).map((s: any) => (
+                  <option key={s.variant_id} value={s.variant_id} data-label={`${s.title} (${s.size})`}>{s.size} · stok {s.stock}</option>
+                ))}
+              </optgroup>
+              {(swapFor?.opts.colors || []).map((c: any) => (
+                <optgroup key={c.product_id} label={`Renk: ${c.color}`}>
+                  {c.sizes.map((s: any) => <option key={s.variant_id} value={s.variant_id} data-label={`${c.title} (${s.size})`}>{c.color} — {s.size} · stok {s.stock}</option>)}
+                </optgroup>
+              ))}
+            </select>
+          )}
+        </div>
       ))}
       {kase.keep_item_id && <p><span className="text-muted-foreground">Tuttuğu:</span> <b>{label(kase.keep_item_id)}</b> — diğeri geri gelecek</p>}
       {kase.return_method && <p><span className="text-muted-foreground">Kargo:</span> {RETURN_METHOD_SHOW[kase.return_method] ?? kase.return_method}{kase.return_code ? <> · kod <code className="font-mono">{kase.return_code}</code></> : null}</p>}
@@ -2985,7 +3032,11 @@ function CaseBox({ order, kase, canSendLabel, canShipAlt, onDone }: {
         <div className="flex flex-wrap items-center gap-2 pt-1 border-t">
           <input value={tracking} onChange={(e) => setTracking(e.target.value)} placeholder="Kargo takip no (opsiyonel)" className="h-8 flex-1 min-w-[160px] rounded-md border px-2" />
           <Button size="sm" disabled={busy} onClick={async () => {
-            if (await siteConfirm({ title: "Alternatif gönderilsin mi?", message: "İstenen numara siparişe eklenir ve stoğu düşer.", confirmText: "Gönder" })) call({ op: "ship_alt", tracking });
+            const picks = Object.keys(swap).length
+              ? (kase.items || []).map((x: any) => ({ order_item_id: x.order_item_id, variant_id: swap[x.order_item_id]?.variant_id || x.want_variant_id }))
+              : null;
+            if (await siteConfirm({ title: "Alternatif gönderilsin mi?", message: picks ? "Seçtiğin ürün siparişe eklenir ve stoğu düşer." : "İstenen numara siparişe eklenir ve stoğu düşer.", confirmText: "Gönder" }))
+              call({ op: "ship_alt", tracking, ...(picks ? { items: picks } : {}) });
           }}>Alternatifi gönder</Button>
         </div>
       )}

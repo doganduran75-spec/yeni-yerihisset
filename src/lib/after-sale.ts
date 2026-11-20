@@ -80,13 +80,16 @@ export async function loadAfterSale(orderId: string): Promise<AfterSaleView | nu
 
 /**
  * Değişim önerileri: aynı ürünün stoktaki numaraları (istenen yöne göre önerilen işaretli);
- * önerilen numara bu üründe stokta yoksa kategorideki aynı numaralı, stokta olan ürünler.
+ * önerilen numara bu üründe stokta yoksa kategorideki aynı numaralı, stokta olan ürünler;
+ * colors: aynı modelin diğer renkleri ve stoktaki numaraları (kullanıcı 2026-11-20: müşteri değişimde rengi de
+ * değiştirmek istedi, yalnız aynı renk sunuluyordu). Model = Ayarlar › Ürün modelleri (products.model_id);
+ * modeli yoksa aynı marka + kategori + adın parantez öncesi aynı ("… Premium Deri (Beyaz-Turuncu)" / "(Beyaz-Beyaz)").
  */
 export async function exchangeOptions(orderId: string, itemId: string, dir: "up" | "down" | "same") {
   const sb = createAdminClient() as any;
   const { data: it } = await sb.from("order_items").select("id, product_id, variant_id, unit_price, variant_name").eq("id", itemId).eq("order_id", orderId).maybeSingle();
   if (!it) return null;
-  const { data: prod } = await sb.from("products").select("id, title, category_id, brand_id").eq("id", it.product_id).maybeSingle();
+  const { data: prod } = await sb.from("products").select("id, title, category_id, brand_id, model_id").eq("id", it.product_id).maybeSingle();
   // Markanın ölçü tablosu varsa sıradaki/önceki numara tablodan (harfli bedenler de: S → M)
   const { data: chart } = prod?.brand_id ? await sb.from("size_charts").select("rows").eq("brand_id", prod.brand_id).maybeSingle() : { data: null };
   const chartRows: SizeRow[] = Array.isArray(chart?.rows) ? [...chart.rows].sort((a: SizeRow, b: SizeRow) => a.min_mm - b.min_mm) : [];
@@ -105,17 +108,43 @@ export async function exchangeOptions(orderId: string, itemId: string, dir: "up"
   const isTarget = (size: string) => (targetRow ? rowMatches(targetRow, size) : sizeNum(size) === target);
   const suggested = same.find((v) => isTarget(v.size)) ?? null;
 
+  // Aynı modelin diğer renkleri (yalnız stoktaki numaralar; hedef numara işaretli)
+  const baseTitle = (t: string) => String(t || "").replace(/\s*\([^()]*\)\s*$/, "").trim().toLocaleLowerCase("tr-TR");
+  const colorOf = (t: string) => /\(([^()]*)\)\s*$/.exec(String(t || ""))?.[1] ?? String(t || "");
+  let colors: any[] = [];
+  if (prod && (prod.model_id || prod.brand_id)) {
+    let q = sb.from("products").select("id, title, image_url, images, product_variants(id, stock, is_active, variant_options(value))")
+      .eq("is_active", true).neq("id", prod.id);
+    q = prod.model_id ? q.eq("model_id", prod.model_id) : q.eq("brand_id", prod.brand_id);
+    if (!prod.model_id && prod.category_id) q = q.eq("category_id", prod.category_id);
+    const { data: sib } = await q.limit(60);
+    colors = ((sib as any[]) || [])
+      .filter((p) => prod.model_id || baseTitle(p.title) === baseTitle(prod.title))
+      .map((p) => {
+        const sizes = ((p.product_variants as any[]) || [])
+          .filter((v) => v.is_active !== false && Number(v.stock || 0) > 0)
+          .map((v) => ({ variant_id: v.id, size: v.variant_options?.value ?? "", stock: Number(v.stock || 0) }))
+          .sort((a, b) => sizeNum(a.size) - sizeNum(b.size));
+        return { product_id: p.id, title: p.title, color: colorOf(p.title), image: p.image_url || p.images?.[0] || null, sizes,
+          target_variant_id: sizes.find((s) => isTarget(s.size))?.variant_id ?? null };
+      })
+      .filter((p) => p.sizes.length)
+      .sort((a, b) => Number(!!b.target_variant_id) - Number(!!a.target_variant_id) || a.color.localeCompare(b.color, "tr"))
+      .slice(0, 12);
+  }
+  const colorIds = new Set(colors.map((c) => c.product_id));
+
   let others: any[] = [];
   if ((targetRow || Number.isFinite(target)) && (!suggested || suggested.stock < 1) && prod?.category_id) {
     const { data: cand } = await sb.from("product_variants")
       .select("id, stock, price, is_active, product_id, variant_options(value), products!inner(id, title, slug, image_url, images, is_active, category_id)")
       .eq("products.category_id", prod.category_id).eq("products.is_active", true).gt("stock", 0).neq("product_id", it.product_id).limit(200);
     others = ((cand as any[]) || [])
-      .filter((v) => v.is_active !== false && isTarget(v.variant_options?.value ?? ""))
+      .filter((v) => v.is_active !== false && !colorIds.has(v.product_id) && isTarget(v.variant_options?.value ?? ""))
       .slice(0, 12)
       .map((v) => ({ variant_id: v.id, product_id: v.product_id, title: v.products?.title ?? "", size: v.variant_options?.value ?? "", stock: Number(v.stock || 0), price: Number(v.price), image: v.products?.image_url || v.products?.images?.[0] || null }));
   }
-  return { current: it.variant_name, target: targetRow ? targetRow.label : Number.isFinite(target) ? String(target) : null, suggested, same, others };
+  return { current: it.variant_name, target: targetRow ? targetRow.label : Number.isFinite(target) ? String(target) : null, suggested, same, others, colors };
 }
 
 /**

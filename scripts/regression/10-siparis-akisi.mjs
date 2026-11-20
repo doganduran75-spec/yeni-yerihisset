@@ -724,6 +724,28 @@ export default {
         ok(one(`SELECT parasut_invoice_id IS NULL AND parasut_status IS NULL FROM public.orders WHERE id = ${lit(B)}`) === "t",
           "Değişim tamamlanınca test siparişi Paraşüt'e gitmiyor", "test siparişi Paraşüt'e gönderildi!");
 
+        // ── Değişimde başka renk (kullanıcı 2026-11-20): müşteri 45 Beyaz-Turuncu yerine 44 Beyaz-Beyaz istedi; sistem
+        //    yalnız aynı rengi sunuyordu. Yönetici talep kutusunda "Değiştir" ile gönderilecek ürünü değiştirebilir. ──
+        const P2 = insert("products", { title: "REGRESYON-TEST Ayakkabı (Beyaz)", slug: `regresyon-test-urun-beyaz-${RUN}`, price: 1000, stock: 0, is_active: false, category_id: F.cat });
+        const V3 = insert("product_variants", { product_id: P2, price: 1000, stock: 3, is_active: true });
+        const E = await delivered();
+        const itE = row(`SELECT id FROM public.order_items WHERE order_id = ${lit(E)} AND unit_price > 0`);
+        await cust(E, { action: "exchange", reason: "big", items: [{ order_item_id: itE.id, variant_id: F.var2 }] });
+        const opE = await adminCase(E, { op: "options", item: itE.id });
+        ok(opE.status === 200 && Array.isArray(opE.json?.colors) && Array.isArray(opE.json?.same), "Değişim seçenekleri yöneticiye geliyor (numaralar + aynı modelin renkleri)", why(opE));
+        const opM = await api("/api/admin/orders/case", { token: F.member.token, body: { orderId: E, op: "options", item: itE.id } });
+        ok(opM.status === 403, "Üye yönetici değişim seçeneklerini alamıyor", why(opM));
+        const shE = await adminCase(E, { op: "ship_alt", items: [{ order_item_id: itE.id, variant_id: V3 }] });
+        const altE = row(`SELECT product_id FROM public.order_items WHERE order_id = ${lit(E)} AND exchange_of = ${lit(itE.id)}`);
+        const wantE = one(`SELECT items->0->>'want_product_id' FROM public.order_cases WHERE order_id = ${lit(E)} ORDER BY created_at DESC LIMIT 1`);
+        ok(shE.status === 200 && altE?.product_id === P2 && wantE === P2 && num(`SELECT stock FROM public.product_variants WHERE id = ${lit(V3)}`) === 2,
+          "Yönetici değişimde başka renk gönderebiliyor (siparişe o ürün eklendi, stoğu düştü, talep satırı güncellendi)", `${why(shE)} → ürün ${altE?.product_id === P2}, talep ${wantE === P2}`);
+        await adminCase(E, { op: "close" });
+        const fsE = (await import("node:fs")).readFileSync;
+        const ui = fsE(new URL("../../src/app/deneme-sonucu/page.tsx", import.meta.url), "utf8"), libE = fsE(new URL("../../src/lib/after-sale.ts", import.meta.url), "utf8");
+        ok(/opts\.colors\?\.length > 0/.test(ui) && /Rengini de değiştirmek ister misin\?/.test(ui) && /suggested, same, others, colors \}/.test(libE),
+          "Müşteri değişim ekranında aynı modelin diğer renkleri sunuluyor", "deneme-sonucu / after-sale satırları eksik");
+
         // ── İade (havale → IBAN) ──
         const C = await delivered();
         const itC = row(`SELECT id FROM public.order_items WHERE order_id = ${lit(C)} AND unit_price > 0`);
