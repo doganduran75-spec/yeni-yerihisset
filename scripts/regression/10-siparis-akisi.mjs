@@ -1309,6 +1309,10 @@ export default {
           "Mobil mağazada Numara / Kategori / Marka tek satırda, seçim alttan açılan panelde", "SizeFilterGrid mobil süzgeç");
         ok(/md:hidden w-full h-10 mb-3[^\n]*\r?\n\s*<ShoppingBag size=\{15\} \/> Sipariş ver/.test(g) && (g.match(/w-\[92%\] md:w-\[88%\] hidden md:flex/g) || []).length === 2 && /transition-all hidden md:flex items-center/.test(g),
           "Mobil kartta fotoğraf üstünde düğme yok; “Sipariş ver” fotoğrafın altında", "kart düğmeleri");
+        // 2026-11-21: stokta olmayanın "haber ver" düğmesi yeşil değil (yeşil = satın al); numara seçiliyken numarasız ürün (aksesuar) yok
+        const notify = g.slice(g.indexOf("onClick={() => onNotify(product)}"), g.indexOf("Gelince haber ver"));
+        ok(notify.length > 0 && !/bg-olive-600/.test(notify) && /bg-white border border-slate-300/.test(notify) && !/hasSizes/.test(g) && /if \(sizeVars\.length === 0\) continue;/.test(g),
+          "Stokta olmayan kartın düğmesi yeşil değil; numara seçiliyken aksesuar (numarasız ürün) listelenmiyor", "SizeFilterGrid haber ver düğmesi / numarasız ürün");
         ok(/a\.sort - b\.sort \|\| a\.name\.localeCompare/.test(g) && /categories!inner\(id, name, slug, segment, sort_order\)/.test(mg),
           "Kategoriler ve “Hepsi” listesi paneldeki sırayla", "kategori sırası");
         ok(/hidden md:flex flex-wrap items-center justify-between/.test(mg) && /md:hidden mt-12 space-y-3/.test(mg) && fs.existsSync(new URL("../../src/app/products/[slug]/loading.tsx", import.meta.url)),

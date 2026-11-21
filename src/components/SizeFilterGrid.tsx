@@ -51,15 +51,16 @@ function ProductCard({ product, categoryName, size, outOfStock, onNotify, canQui
     <div className="group cursor-pointer">
       <div className="relative aspect-[3/4] overflow-hidden rounded-2xl md:rounded-[2.5rem] bg-olive-50 mb-3 md:mb-6 border border-slate-100 shadow-sm transition-all duration-700 hover:shadow-2xl hover:shadow-slate-200">
         <Link href={href} className="block w-full h-full relative">
-          <Image src={img} alt={product.title} fill priority={priority} loading={priority ? undefined : "eager"} sizes="(max-width: 768px) 50vw, 25vw" className="object-cover group-hover:scale-110 transition-transform duration-1000" />
+          <Image src={img} alt={product.title} fill priority={priority} loading={priority ? undefined : "eager"} sizes="(max-width: 768px) 50vw, 25vw" className={`object-cover group-hover:scale-110 transition-transform duration-1000${outOfStock ? " opacity-70" : ""}`} />
         </Link>
         {outOfStock && onNotify ? (
-          /* Stokta olmayan (numara filtresi) — kalıcı aksiyonlar: Haber Ver (birincil) + İncele (ikincil). Yalnız bilgisayarda:
-             mobilde fotoğraf kapanmasın, düğme fotoğrafın altında (kullanıcı 2026-11-16) */
+          /* Stokta olmayan (numara filtresi) — kalıcı aksiyonlar: Haber Ver + İncele. Yalnız bilgisayarda:
+             mobilde fotoğraf kapanmasın, düğme fotoğrafın altında (kullanıcı 2026-11-16). Haber Ver düğmesi yeşil DEĞİL:
+             yeşil = satın al; stokta olmayanın da yeşil olması kafa karıştırıyordu (kullanıcı 2026-11-21) */
           <div className="absolute bottom-2.5 md:bottom-5 left-1/2 -translate-x-1/2 w-[92%] md:w-[88%] hidden md:flex flex-col gap-1.5 md:gap-2">
             <button
               onClick={(e) => { e.preventDefault(); onNotify(product); }}
-              className="h-10 md:h-12 rounded-xl md:rounded-2xl bg-olive-600 text-white font-black text-[10px] md:text-xs uppercase tracking-wide md:tracking-widest flex items-center justify-center gap-1.5 md:gap-2 text-center leading-tight px-1 hover:bg-olive-700 active:scale-95 shadow-xl shadow-olive-900/10"
+              className="h-10 md:h-12 rounded-xl md:rounded-2xl bg-white/95 border border-slate-300 text-slate-700 font-black text-[10px] md:text-xs uppercase tracking-wide md:tracking-widest flex items-center justify-center gap-1.5 md:gap-2 text-center leading-tight px-1 hover:bg-white active:scale-95 shadow-xl shadow-slate-900/10"
             >
               <Bell size={16} /> Stoğa Girince Haber Ver
             </button>
@@ -103,7 +104,7 @@ function ProductCard({ product, categoryName, size, outOfStock, onNotify, canQui
       {/* Mobil: düğme fotoğrafın hemen altında (fotoğrafa dokunmak ürünü açar; "İncele" yok) — kullanıcı 2026-11-16 */}
       {outOfStock && onNotify ? (
         <button onClick={() => onNotify(product)}
-          className="md:hidden w-full h-10 mb-3 rounded-xl bg-olive-600 text-white font-black text-[11px] uppercase tracking-wide flex items-center justify-center gap-1.5 active:scale-95">
+          className="md:hidden w-full h-10 mb-3 rounded-xl bg-white border border-slate-300 text-slate-600 font-black text-[11px] uppercase tracking-wide flex items-center justify-center gap-1.5 active:scale-95">
           <Bell size={15} /> Gelince haber ver
         </button>
       ) : canQuickBuy && onQuickBuy ? (
@@ -123,8 +124,6 @@ function ProductCard({ product, categoryName, size, outOfStock, onNotify, canQui
   );
 }
 
-// Numarası olmayan ürün (aksesuar): numara seçilse de listede kalır
-const hasSizes = (p: any) => (p.product_variants ?? []).some(isSizeVariant);
 
 export default function SizeFilterGrid({ products: cachedProducts, categoryName, freeOver = null, segment }: {
   products: any[]; categoryName?: string; freeOver?: number | null;
@@ -258,7 +257,7 @@ export default function SizeFilterGrid({ products: cachedProducts, categoryName,
       .sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name, "tr"));
   };
   // Segment mağazasında sıra Numara → Kategori: numara listesi kategoriden bağımsız, kategoriler seçili numarası
-  // olan (ya da numarasız — aksesuar) ürünlerden. Genel listede (kategori / marka sayfası) eski sıra.
+  // olan ürünlerden (numarasız aksesuar numara seçiliyken yok — kullanıcı 2026-11-21). Genel listede eski sıra.
   const sizeFirst = !!segment;
   const sizeValues = (ps: any[]) => {
     const set = new Set<string>();
@@ -268,7 +267,7 @@ export default function SizeFilterGrid({ products: cachedProducts, categoryName,
   const sizesFirst = useMemo(() => (sizeFirst ? sizeValues(products.filter((p) => !brand || p.brands?.slug === brand)) : []), [products, brand, sizeFirst]);
   const sizeFirstEff = sizeFirst && size && sizesFirst.includes(size) ? size : null;
   const cats = useMemo(() => listOf(products.filter((p) => (!brand || p.brands?.slug === brand)
-    && (!sizeFirstEff || !hasSizes(p) || (p.product_variants ?? []).some((v: any) => isSizeVariant(v) && sizeValue(v) === sizeFirstEff))), "categories"),
+    && (!sizeFirstEff || (p.product_variants ?? []).some((v: any) => isSizeVariant(v) && sizeValue(v) === sizeFirstEff))), "categories"),
   [products, brand, sizeFirstEff]);
   const effCat = cat && cats.some((c) => c.id === cat) ? cat : null;
   const brands = useMemo(() => listOf(products.filter((p) => !effCat || p.categories?.id === effCat), "brands"), [products, effCat]);
@@ -314,14 +313,9 @@ export default function SizeFilterGrid({ products: cachedProducts, categoryName,
     const outS: any[] = [];
     for (const p of base) {
       const sizeVars = (p.product_variants ?? []).filter((v: any) => isSizeVariant(v) && sizeValue(v) === effSize);
-      if (sizeVars.length === 0) {
-        // Numarasız ürün (aksesuar) her numarada görünür; numarası olup bu numarası olmayan gizlenir
-        if (!hasSizes(p)) {
-          const any = (p.product_variants ?? []).some((v: any) => Number(v.stock ?? 0) > 0) || Number(p.stock ?? 0) > 0;
-          (any ? inS : outS).push(p);
-        }
-        continue;
-      }
+      // Bu numarası olmayan ürün gizlenir — numarasız ürün (aksesuar, ör. Denge Barı) da: "40 numara" başlığı altında
+      // görünmesi hata gibi duruyordu (kullanıcı 2026-11-21). Aksesuarlar "Tüm numaralar"da görünür.
+      if (sizeVars.length === 0) continue;
       const hasStock = sizeVars.some((v: any) => Number(v.stock ?? 0) > 0);
       (hasStock ? inS : outS).push(p);
     }
