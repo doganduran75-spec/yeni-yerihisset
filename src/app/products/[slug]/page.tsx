@@ -106,16 +106,16 @@ async function getReviewStats(productId: string): Promise<{ ratingValue: number;
 }
 
 // Ürün sayfasının üstündeki yıldızlar — GERÇEK yorumlardan (onaylı order_reviews; aşağıdaki
-// yorum listesiyle aynı kural: ayar "tüm yorumlar" ise hepsi, değilse bu ürününkiler).
+// yorum listesiyle aynı kural: ayar açıksa aynı kategorideki ürünlerinkiler, kapalıysa bu ürününkiler).
 // Yorum yoksa null → yıldız gösterilmez (eskiden sabit "4.0 (12)" yazıyordu).
-async function getRatingSummary(productId: string): Promise<{ avg: number; count: number } | null> {
+async function getRatingSummary(productId: string, categoryId: string | null): Promise<{ avg: number; count: number } | null> {
   const supabase = createClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   ) as any;
   const { data: st } = await supabase.from("settings").select("product_reviews_show_all").limit(1).maybeSingle();
-  let q = supabase.from("order_reviews").select("rating_overall, rating_shipping, rating_quality, rating_communication").eq("is_approved", true);
-  if (st?.product_reviews_show_all === false) q = q.eq("product_id", productId);
+  let q = supabase.from("order_reviews").select("rating_overall, rating_shipping, rating_quality, rating_communication, products!inner(category_id)").eq("is_approved", true);
+  q = st?.product_reviews_show_all !== false && categoryId ? q.eq("products.category_id", categoryId) : q.eq("product_id", productId);
   const { data } = await q;
   const per = ((data as any[]) ?? []).map((r) => {
     if (typeof r.rating_overall === "number") return r.rating_overall; // yeni biçim: genel puan (yorum isteme e-postası)
@@ -206,7 +206,7 @@ export default async function ProductDetailPage({
 
   if (!product) notFound();
 
-  const [reviewStats, ratingSummary, sizeChart, brandAbout, segment] = await Promise.all([getReviewStats(product.id), getRatingSummary(product.id), getSizeChart((product as any).brand_id), getBrandAbout((product as any).brand_id), getSegment((product as any).category_id)]);
+  const [reviewStats, ratingSummary, sizeChart, brandAbout, segment] = await Promise.all([getReviewStats(product.id), getRatingSummary(product.id, (product as any).category_id ?? null), getSizeChart((product as any).brand_id), getBrandAbout((product as any).brand_id), getSegment((product as any).category_id)]);
 
   return (
     <>

@@ -17,19 +17,20 @@ interface Review {
   images: string[];
 }
 
-export default function ProductReviews({ productId }: { productId: string }) {
+export default function ProductReviews({ productId, categoryId }: { productId: string; categoryId?: string | null }) {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchReviews();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [productId]);
+  }, [productId, categoryId]);
 
   async function fetchReviews() {
     setLoading(true);
 
-    // Ayar: tüm yorumlar mı, ürüne özel mi?
+    // Ayar açık: AYNI KATEGORİDEKİ ürünlerin yorumları (bota gelen yorum tüm botlarda; Attipas'ta görünmez —
+    // kullanıcı 2026-11-21, eskiden tüm ürünlerin yorumları her yerdeydi). Kapalı: yalnız bu ürününkiler.
     const { data: settingRow } = await (supabase as any)
       .from("settings")
       .select("product_reviews_show_all")
@@ -40,12 +41,12 @@ export default function ProductReviews({ productId }: { productId: string }) {
     let query = (supabase as any)
       .from("order_reviews")
       .select(
-        "id, user_id, author_name, origin, comment, rating_overall, rating_shipping, rating_quality, rating_communication, images, created_at"
+        "id, user_id, author_name, origin, comment, rating_overall, rating_shipping, rating_quality, rating_communication, images, created_at, products!inner(category_id)"
       )
       .eq("is_approved", true)
       .order("created_at", { ascending: false });
 
-    if (!showAll) query = query.eq("product_id", productId);
+    query = showAll && categoryId ? query.eq("products.category_id", categoryId) : query.eq("product_id", productId);
 
     const { data } = await query;
 

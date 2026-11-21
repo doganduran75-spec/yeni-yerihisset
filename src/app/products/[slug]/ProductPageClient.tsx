@@ -669,7 +669,7 @@ export default function ProductPageClient({ product, initialSize = null, initial
             </div>
 
             {/* Müşteri yorumları — sağ sütunda (sol foto sabit kalsın diye) */}
-            <div id="yorumlar" className="scroll-mt-24"><ProductReviews productId={product.id} /></div>
+            <div id="yorumlar" className="scroll-mt-24"><ProductReviews productId={product.id} categoryId={product.category_id} /></div>
 
             {/* Detaylı açıklama — yorumların altında */}
             {product.description && (

@@ -355,9 +355,9 @@ function SettingsPageInner() {
           <CardContent>
             <div className="flex items-center justify-between p-4 rounded-xl border border-muted">
               <div className="pr-4">
-                <p className="font-medium text-sm">Tüm yorumları her üründe göster</p>
+                <p className="font-medium text-sm">Aynı kategorideki ürünlerin yorumlarını göster</p>
                 <p className="text-xs text-muted-foreground">
-                  Açık: onaylı tüm yorumlar her ürün sayfasında görünür (yorum azken önerilir).
+                  Açık: bir ürüne gelen yorum aynı kategorideki tüm ürünlerde görünür (ör. bota gelen yorum tüm botlarda; yorum azken önerilir).
                   Kapalı: her ürün yalnızca kendi yorumlarını gösterir.
                 </p>
               </div>
@@ -370,7 +370,7 @@ function SettingsPageInner() {
                 />
                 <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                 <span className="ml-2 text-xs font-semibold text-muted-foreground">
-                  {settings.product_reviews_show_all ? "Tümü" : "Ürüne özel"}
+                  {settings.product_reviews_show_all ? "Kategori" : "Ürüne özel"}
                 </span>
               </label>
             </div>

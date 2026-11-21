@@ -41,6 +41,12 @@ export default {
       const stats = (/async function getReviewStats[\s\S]*?\n\}/.exec(pg) || [""])[0];
       const ok3 = /from\("order_reviews"\)/.test(stats) && !/product_reviews"/.test(stats) && /\.eq\("product_id", productId\)/.test(stats);
       t.add(ok3 ? "ok" : "fail", "Google'a giden yıldızlar sitede görünen yorumlardan (yalnız o ürünün)", ok3 ? "" : "getReviewStats hâlâ eski product_reviews tablosunu okuyor");
+      // 2026-11-21: ayar açıkken yorumlar AYNI KATEGORİDEKİ ürünlerde (bota gelen yorum Attipas'ta çıkıyordu)
+      const ok4 = /query\.eq\("products\.category_id", categoryId\)/.test(pr) && /products!inner\(category_id\)/.test(pr)
+        && /categoryId=\{product\.category_id\}/.test(rd("src/app/products/[slug]/ProductPageClient.tsx")) && /q\.eq\("products\.category_id", categoryId\)/.test(rd("src/app/products/[slug]/page.tsx"));
+      const cat = t.one("SELECT category_id FROM public.products WHERE category_id IS NOT NULL LIMIT 1");
+      const rq = await t.rest(`order_reviews?select=id,products!inner(category_id)&is_approved=eq.true&products.category_id=eq.${cat}&limit=1`);
+      t.add(ok4 && rq.status === 200 ? "ok" : "fail", "Yorumlar aynı kategorideki ürünlerde görünüyor (başka kategoride değil)", ok4 ? `HTTP ${rq.status}` : "ProductReviews / ürün sayfası satırları eksik");
     });
   },
 };
