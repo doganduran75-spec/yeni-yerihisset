@@ -12,6 +12,7 @@ import { X } from "lucide-react";
 import { useHomeContent } from "@/lib/home-content-context";
 import SegmentChooser from "@/components/SegmentChooser";
 import { track } from "@/lib/track";
+import { optimizedImg } from "@/lib/principle-image";
 
 export const STORIES_OPEN_EVENT = "yh:stories-open";
 const SEEN_KEY = "yh:stories-seen";
@@ -96,6 +97,12 @@ export default function PrincipleStories() {
     return () => cancelAnimationFrame(raf);
   }, [open, phase, paused, idx, items, next]);
 
+  // GÖRSELLER SIRAYLA (kullanıcı 2026-11-22): önce ekrandaki hikâye, o gelince sıradaki, o gelince bir sonraki…
+  // chain: sıradaki görsellerden kaçının yüklenmesine izin var (ekrandaki yüklenince başlar). Eskiden hepsi aynı anda.
+  const [chain, setChain] = useState(0);
+  const queue = [...new Set(items.map((x) => x.imageTall || x.image).filter(Boolean) as string[])];
+  const allowNext = (u: string) => setChain((c) => Math.max(c, queue.indexOf(u) + 2));
+
   const close = (why: string) => {
     setOpen(false);
     track("story_close", { why, at: idx + 1, phase });
@@ -128,9 +135,9 @@ export default function PrincipleStories() {
       {/* Tam ekran: görsel arkada, alt yarıda okunurluk için koyu geçiş */}
       {full && phase === "story" && (
         <div className="absolute inset-0 select-none touch-manipulation" {...tap}>
-          {fullImg && <img key={fullImg} src={fullImg} alt={it.title} draggable={false} className="absolute inset-0 w-full h-full object-cover pointer-events-none" style={shift ? { transform: `translateY(${-shift}%)` } : undefined} />}
-          {/* sonraki görseller önceden yüklensin (kısa sürelerde boş ekran olmasın) */}
-          {items.map((x) => { const u = x.imageTall || x.image; return u && u !== fullImg ? <img key={`pre-${u}`} src={u} alt="" aria-hidden className="hidden" /> : null; })}
+          {fullImg && <img key={fullImg} {...optimizedImg(fullImg, "100vw")} fetchPriority="high" onLoad={() => allowNext(fullImg)} alt={it.title} draggable={false} className="absolute inset-0 w-full h-full object-cover pointer-events-none" style={shift ? { transform: `translateY(${-shift}%)` } : undefined} />}
+          {/* sonraki görseller SIRAYLA önceden yüklensin (kısa sürelerde boş ekran olmasın): biri bitince sıradaki */}
+          {queue.slice(0, chain).map((u) => (u !== fullImg ? <img key={`pre-${u}`} {...optimizedImg(u, "100vw")} onLoad={() => allowNext(u)} alt="" aria-hidden className="hidden" /> : null))}
           {/* Açık krem geçiş: koyu yazı her görselde okunur (kullanıcı 2026-11-15: beyaz yazı yerine) */}
           <div className="absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-[#F4EFE6]/95 via-[#F4EFE6]/60 to-transparent pointer-events-none" />
           <div className="absolute inset-x-0 bottom-0 h-[40%] bg-gradient-to-t from-[#F4EFE6] via-[#F4EFE6]/85 to-transparent pointer-events-none" />
@@ -173,7 +180,7 @@ export default function PrincipleStories() {
           onPointerCancel={() => setPaused(false)}
           onContextMenu={(e) => e.preventDefault()}>
           <div className="flex-1 min-h-0 flex items-center justify-center px-6">
-            {(it.image || it.imageTall) && <img src={it.image || it.imageTall} alt={it.title} draggable={false} className="max-h-full w-full object-contain pointer-events-none" />}
+            {(it.image || it.imageTall) && <img key={it.image || it.imageTall} {...optimizedImg((it.image || it.imageTall)!, "100vw")} fetchPriority="high" alt={it.title} draggable={false} className="max-h-full w-full object-contain pointer-events-none" />}
           </div>
           <div className="px-6 pb-6">
             <h2 className="text-[30px] leading-tight font-black text-[#1C1C19]" style={{ fontFamily: "var(--font-epilogue), system-ui, sans-serif" }}>{it.title}</h2>

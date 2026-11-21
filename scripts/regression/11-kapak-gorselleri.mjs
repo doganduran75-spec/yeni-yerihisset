@@ -59,9 +59,11 @@ export default {
       const items = (hc.match(/imageTall: "", focusY: 50,/g) || []).length;
       t.add(items >= 5 ? "ok" : "fail", "Her prensipte 'görünen kısım' ayarı var (varsayılan orta)", `${items} prensipte`);
       // Kart kırpma mantığı gerçekten çalıştırılır: dik görsel → doldurur + konum; yalnız yatay → sığdırır
-      const body = /export function principleCardImage\(it: PItem\)[^\n]*\| null \{([\s\S]*?)\r?\n\}/.exec(pl);
-      let fn = null;
-      try { fn = body ? new Function("it", body[1]) : null; } catch { fn = null; }
+      // (2026-11-22: görsel adresi optimizedImg ile küçültülür — testte adresi olduğu gibi döndüren yerine geçen kullanılır)
+      const body = /export function principleCardImage\(it: PItem[^\n]*\| null \{([\s\S]*?)\r?\n\}/.exec(pl);
+      let fn0 = null;
+      try { fn0 = body ? new Function("it", "sizes", "optimizedImg", body[1]) : null; } catch { fn0 = null; }
+      const fn = fn0 && ((it) => fn0(it, "100vw", (s) => ({ src: s })));
       const a = fn?.({ title: "x", image: "/y.svg", imageTall: "/t.jpg", focusY: 30 });
       const b2 = fn?.({ title: "x", image: "/y.svg", imageTall: "" });
       const c = fn?.({ title: "x", imageTall: "/t.jpg", focusY: 250 });
@@ -74,8 +76,14 @@ export default {
       // 2026-11-19: telefon kartında görsel alanı sabit oran (paneldeki önizlemeyle aynı, 10:7 — sabit kart yüksekliği yok);
       // Hakkımızda › "Her ayakkabıda aradığımız" kartları da aynı kuralı kullanıyor
       const ok3 = /mobile: "10 \/ 7"/.test(pl) && /aspectRatio: PRINCIPLE_CARD_RATIO\.mobile/.test(pc) && !/height: "max\(220px, 33svh\)"/.test(pc)
-        && /"10 \/ 7", "Telefon: kaydırmalı kart"/.test(tab) && /principleCardImage\(x\)/.test(about);
+        && /"10 \/ 7", "Telefon: kaydırmalı kart"/.test(tab) && /principleCardImage\(x[,)]/.test(about);
       t.add(ok3 ? "ok" : "fail", "Telefondaki prensip kartı paneldeki önizlemeyle aynı oranda; Hakkımızda kartları da aynı kırpmayla", ok3 ? "" : "principle-image / PrincipleCarousel / HomeContentTab / hakkimizda satırları eksik");
+      // 2026-11-22: hikâye / prensip görselleri ham yükleniyordu (her biri 2–3 MB) → ekran boyuna küçültülmüş; hikâyede
+      // önce ekrandaki görsel, o gelince sıradaki (hepsi aynı anda değil)
+      const ok4 = /getImageProps\(/.test(pl) && /\{\.\.\.optimizedImg\(fullImg, "100vw"\)\} fetchPriority="high" onLoad=\{\(\) => allowNext\(fullImg\)\}/.test(ps)
+        && /queue\.slice\(0, chain\)\.map/.test(ps) && !/<img key=\{`pre-\$\{u\}`\} src=\{u\}/.test(ps)
+        && /srcSet=\{c\.srcSet\} sizes=\{c\.sizes\}/.test(pc) && /srcSet=\{c\.srcSet\} sizes=\{c\.sizes\}/.test(about);
+      t.add(ok4 ? "ok" : "fail", "Hikâye ve prensip görselleri küçültülmüş geliyor; hikâyede görseller sırayla yükleniyor", ok4 ? "" : "principle-image / PrincipleStories / PrincipleCarousel / hakkimizda satırları eksik");
     });
   },
 };

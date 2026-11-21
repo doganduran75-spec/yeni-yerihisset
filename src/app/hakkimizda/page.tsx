@@ -77,11 +77,11 @@ export default async function HakkimizdaPage() {
                     {/* Ana sayfadaki prensip kartlarıyla aynı kural: dik görsel kartı doldurur, görünen kısım panelden
                         (kullanıcı 2026-11-19: burada dik görsel küçük ve kenarları boş görünüyordu) */}
                     {(() => {
-                      const c = principleCardImage(x);
+                      const c = principleCardImage(x, "(min-width: 768px) 30vw, 90vw");
                       return c ? (
                         <div className="rounded-2xl overflow-hidden bg-[#F4EFE6] mb-4" style={{ aspectRatio: PRINCIPLE_CARD_RATIO.desktop }}>
                           {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={c.src} alt={x.title} className={c.className} style={c.style} loading="lazy" />
+                          <img src={c.src} srcSet={c.srcSet} sizes={c.sizes} alt={x.title} className={c.className} style={c.style} loading="lazy" />
                         </div>
                       ) : null;
                     })()}

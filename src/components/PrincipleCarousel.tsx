@@ -20,7 +20,7 @@ const EPI = "var(--font-epilogue), 'Epilogue', system-ui, sans-serif";
 // Kural ortak dosyada (Hakkımızda sayfası da kullanır): src/lib/principle-image.ts
 function CardImg({ it }: { it: PItem }) {
   const c = principleCardImage(it);
-  return c ? <img src={c.src} alt={it.title} className={c.className} style={c.style} loading="lazy" /> : null;
+  return c ? <img src={c.src} srcSet={c.srcSet} sizes={c.sizes} alt={it.title} className={c.className} style={c.style} loading="lazy" /> : null;
 }
 
 export default function PrincipleCarousel({ variant }: { variant: "mobile" | "desktop" }) {
