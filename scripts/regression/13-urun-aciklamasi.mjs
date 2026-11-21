@@ -35,6 +35,12 @@ export default {
       const bk = await t.rest("product_description_backup_20261119?select=product_id&limit=1");
       t.add(bk.status >= 400 || (Array.isArray(bk.json) && bk.json.length === 0) ? "ok" : "fail", "Eski açıklama yedeği dışarıdan okunamıyor", `HTTP ${bk.status}`);
     });
+    // ÜRÜN FOTOĞRAFLARI SIRAYLA (kullanıcı 2026-11-21: 5 foto 2-3 sn sonra hepsi birden geliyordu)
+    await t.part("Ürün fotoğrafları sırayla yükleniyor", async () => {
+      const pc = rd("src/app/products/[slug]/ProductPageClient.tsx");
+      const ok = /onLoad=\{\(\) => setImgStage\(\(s\) => Math\.max\(s, 1\)\)\}/.test(pc) && /\{imgStage >= 1 && \(/.test(pc) && /\{imgStage >= 2 && \[\.\.\.new Set/.test(pc);
+      t.add(ok ? "ok" : "fail", "Önce büyük foto, sonra küçükler, en son diğer fotoların büyük hâli", ok ? "" : "ProductPageClient imgStage satırları eksik");
+    });
     // DOĞRU NUMARAYI BUL (kullanıcı 2026-11-19: mobil ana sayfa bandı yalnız /magaza'yı açıyordu, numara adımı yoktu)
     await t.part("Doğru numarayı bul (mobil ana sayfa)", async () => {
       const mh = rd("src/components/MobileHome.tsx"), sf = rd("src/components/SizeFinderSheet.tsx"), sg = rd("src/components/SizeFilterGrid.tsx");

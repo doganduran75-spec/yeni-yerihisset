@@ -106,6 +106,14 @@ export default function ProductPageClient({ product, initialSize = null, initial
     || (activeVariants.length > 0 ? activeVariants[0] : null);
 
   const [selectedImage, setSelectedImage] = useState<string>(images[0]);
+  // Görseller SIRAYLA (kullanıcı 2026-11-21: büyük foto + 4 küçük + gizli ön-yüklemeler aynı anda isteniyordu, sunucu
+  // hepsini birlikte hazırlayınca 2-3 sn sonra hepsi birden geliyordu): 1) büyük foto, 2) o gelince küçükler,
+  // 3) biraz sonra diğer fotoların büyük hâli (foto değiştirince anlık gelsin diye). Büyük foto takılırsa 3 sn'de devam.
+  const [imgStage, setImgStage] = useState(0); // 0: büyük foto bekleniyor · 1: küçükler · 2: ön-yükleme
+  useEffect(() => {
+    const t = setTimeout(() => setImgStage((s) => Math.max(s, imgStage === 0 ? 1 : 2)), imgStage === 0 ? 3000 : 800);
+    return () => clearTimeout(t);
+  }, [imgStage]);
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
   const [quantity, setQuantity] = useState(1);
 
@@ -353,6 +361,7 @@ export default function ProductPageClient({ product, initialSize = null, initial
                 width={800}
                 height={1000}
                 priority
+                onLoad={() => setImgStage((s) => Math.max(s, 1))}
                 sizes="(max-width: 768px) 100vw, 50vw"
                 className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
               />
@@ -388,19 +397,22 @@ export default function ProductPageClient({ product, initialSize = null, initial
                   <button
                     key={idx}
                     onClick={() => setSelectedImage(img)}
-                    className={`aspect-square rounded-xl overflow-hidden border-2 transition-all ${
+                    className={`aspect-square rounded-xl overflow-hidden border-2 transition-all bg-slate-100 ${
                       selectedImage === img
                         ? "border-olive-600 ring-2 ring-olive-100"
                         : "border-transparent hover:border-slate-200"
                     }`}
                   >
-                    <Image
-                      src={img}
-                      alt={`${product.title} ${idx + 1}`}
-                      width={96}
-                      height={96}
-                      className="w-full h-full object-cover"
-                    />
+                    {imgStage >= 1 && (
+                      <Image
+                        src={img}
+                        alt={`${product.title} ${idx + 1}`}
+                        width={96}
+                        height={96}
+                        loading="eager"
+                        className="w-full h-full object-cover"
+                      />
+                    )}
                   </button>
                 ))}
               </div>
@@ -411,7 +423,7 @@ export default function ProductPageClient({ product, initialSize = null, initial
                 değiştirince anlık gelir (soğuk optimizasyon beklemesi olmaz).
                 Ekranda görünmez. */}
             <div aria-hidden className="absolute w-0 h-0 overflow-hidden opacity-0 pointer-events-none">
-              {[...new Set([
+              {imgStage >= 2 && [...new Set([
                 ...images,
                 ...activeVariants.map((v) => v.image_url).filter((u): u is string => !!u),
               ])]
