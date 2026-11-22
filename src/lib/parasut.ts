@@ -239,13 +239,15 @@ async function throttle() {
   }
 }
 
-async function rawCall(token: string, method: string, path: string, body?: unknown, retried = false): Promise<any> {
+async function rawCall(token: string, method: string, path: string, body?: unknown, retried = false, jsonApi = false): Promise<any> {
+  // jsonApi: Accept / Content-Type application/vnd.api+json (webhook uçları düz application/json'a 500 dönebiliyor)
+  const ct = jsonApi ? "application/vnd.api+json" : "application/json";
   await throttle();
   let res: Response;
   try {
     res = await fetch(BASE + path, {
       method,
-      headers: { Authorization: `Bearer ${token}`, Accept: "application/json", ...(body !== undefined ? { "Content-Type": "application/json" } : {}) },
+      headers: { Authorization: `Bearer ${token}`, Accept: ct, ...(body !== undefined ? { "Content-Type": ct } : {}) },
       body: body === undefined ? undefined : JSON.stringify(body),
       signal: AbortSignal.timeout(30000), cache: "no-store",
     });
@@ -254,7 +256,7 @@ async function rawCall(token: string, method: string, path: string, body?: unkno
   }
   if (res.status === 429 && !retried) {
     await new Promise((r) => setTimeout(r, 10_000));
-    return rawCall(token, method, path, body, true);
+    return rawCall(token, method, path, body, true, jsonApi);
   }
   if (res.status === 204) return null;
   const text = await res.text();
@@ -268,11 +270,11 @@ async function rawCall(token: string, method: string, path: string, body?: unkno
 }
 
 /** Firma uç noktasına istek: path "/products" → /v4/{firma}/products */
-export async function parasutCall(sb: Sb, method: string, path: string, body?: unknown) {
+export async function parasutCall(sb: Sb, method: string, path: string, body?: unknown, opts: { jsonApi?: boolean } = {}) {
   const c = await parasutConfig(sb);
   if (!c.companyId) throw new ParasutError(400, "Paraşüt firma numarası girilmemiş.");
   const token = await accessToken(sb, c);
-  return rawCall(token, method, `/v4/${encodeURIComponent(c.companyId)}${path}`, body);
+  return rawCall(token, method, `/v4/${encodeURIComponent(c.companyId)}${path}`, body, false, !!opts.jsonApi);
 }
 
 /** Tüm sayfaları gez (JSONAPI page[number] / page[size]) */

@@ -96,15 +96,45 @@ export async function enableWebhook(sb: Sb, origin: string) {
   if (!PARASUT_ORIGINS.includes(origin)) throw new ParasutError(400, `Bildirim yalnız ${PARASUT_ORIGINS.join(" / ")} adresinden açılır.`);
   const uri = origin + WEBHOOK_PATH;
   const key = randomBytes(32).toString("hex"); // 64 karakter [0-9a-f]
-  const list = await parasutCall(sb, "GET", "/webhooks");
-  const ex = ((list?.data as any[]) || []).find((w) => w?.attributes?.model === "inbound_e_invoice" && w?.attributes?.action === "create");
+  // Hangi adımda hata olduğu mesajda yazsın (Paraşüt desteğine iletilebilsin). Liste okunamazsa yine kurmayı dener.
+  const step = async <R>(label: string, f: (jsonApi: boolean) => Promise<R>): Promise<R> => {
+    try { return await f(true); }
+    catch (e: any) {
+      // JSON:API başlığıyla 5xx → düz JSON'la bir kez daha
+      if (e instanceof ParasutError && e.status >= 500) {
+        try { return await f(false); } catch (e2: any) { throw new ParasutError(e2?.status ?? 502, `${label}: ${e2?.message || e2}`); }
+      }
+      throw new ParasutError(e?.status ?? 502, `${label}: ${e?.message || e}`);
+    }
+  };
+  let ex: any = null;
+  let listError: string | null = null;
+  try {
+    const list = await step("Bildirim listesi okunamadı", (jsonApi) => parasutCall(sb, "GET", "/webhooks", undefined, { jsonApi }));
+    ex = ((list?.data as any[]) || []).find((w) => w?.attributes?.model === "inbound_e_invoice" && w?.attributes?.action === "create") ?? null;
+  } catch (e: any) {
+    if (e instanceof ParasutError && (e.status === 401 || e.status === 403)) throw e; // yetki / paket sorunu: kurmak da olmaz
+    listError = e?.message || String(e);
+  }
   let id: string;
-  if (ex) {
-    await parasutCall(sb, "PATCH", `/webhooks/${ex.id}`, { data: { id: String(ex.id), type: "webhook", attributes: { uri, client_key: key } } });
-    id = String(ex.id);
-  } else {
-    const j = await parasutCall(sb, "POST", "/webhooks", { data: { type: "webhook", attributes: { model: "inbound_e_invoice", action: "create", uri, client_key: key } } });
-    id = String(j?.data?.id ?? "");
+  try {
+    if (ex) {
+      await step("Bildirim güncellenemedi", (jsonApi) => parasutCall(sb, "PATCH", `/webhooks/${ex.id}`, { data: { id: String(ex.id), type: "webhook", attributes: { uri, client_key: key } } }, { jsonApi }));
+      id = String(ex.id);
+    } else {
+      const j = await step("Bildirim kurulamadı", (jsonApi) => parasutCall(sb, "POST", "/webhooks", { data: { type: "webhook", attributes: { model: "inbound_e_invoice", action: "create", uri, client_key: key } } }, { jsonApi }));
+      id = String(j?.data?.id ?? "");
+    }
+  } catch (e: any) {
+    // Paraşüt: 500 alınsa da bildirim oluşmuş olabilir → listede varsa anahtarı güncelle
+    let found: any = null;
+    try {
+      const again = await parasutCall(sb, "GET", "/webhooks", undefined, { jsonApi: true });
+      found = ((again?.data as any[]) || []).find((w) => w?.attributes?.model === "inbound_e_invoice" && w?.attributes?.action === "create") ?? null;
+      if (found) await parasutCall(sb, "PATCH", `/webhooks/${found.id}`, { data: { id: String(found.id), type: "webhook", attributes: { uri, client_key: key } } }, { jsonApi: true });
+    } catch { found = null; }
+    if (!found) throw new ParasutError(e?.status ?? 502, `${e?.message || e}${listError ? ` (önce: ${listError})` : ""}`);
+    id = String(found.id);
   }
   await (sb as any).from("parasut_auth").update({ webhook_key: key, webhook_id: id, webhook_uri: uri, webhook_at: new Date().toISOString() }).eq("id", 1);
   return webhookStatus(sb);

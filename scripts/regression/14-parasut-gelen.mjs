@@ -45,6 +45,11 @@ export default {
         && /href: "\/admin\/parasut\/gelen"/.test(rd("src/app/admin/page.tsx")) && /href="\/admin\/parasut\/gelen"/.test(rd("src/app/admin/layout.tsx"))
         && /refreshInboundInvoices\(supabase\)/.test(rd("src/app/api/cron/marketplace-sync/route.ts"));
       t.add(ok3 ? "ok" : "fail", "Panel: Gelen e-faturalar sayfası + pano satırı + menü; Paraşüt'te işlenen saatte bir düşüyor", ok3 ? "" : "rota / sayfa / pano / cron satırı eksik");
+      // 2026-11-22: "Bildirimi aç" Paraşüt 500 verdi → webhook uçlarına JSON:API başlığı, hangi adımın hata verdiği mesajda,
+      // 500 alınsa da oluşmuşsa listeden bulunup anahtarı güncellenir
+      const ok5 = /Accept: ct/.test(rd("src/lib/parasut.ts")) && /parasutCall\(sb, "POST", "\/webhooks", \{[^\n]*\{ jsonApi \}\)/.test(lib)
+        && /"Bildirim kurulamadı"/.test(lib) && /500 alınsa da bildirim oluşmuş olabilir/.test(lib);
+      t.add(ok5 ? "ok" : "fail", "Bildirim kurulumu JSON:API başlığıyla; hata hangi adımda yazıyor; 500 sonrası oluşmuş bildirim kurtarılıyor", ok5 ? "" : "enableWebhook satırları eksik");
     });
   },
 };
