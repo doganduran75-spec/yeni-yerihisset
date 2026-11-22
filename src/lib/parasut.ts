@@ -276,7 +276,7 @@ export async function parasutCall(sb: Sb, method: string, path: string, body?: u
 }
 
 /** Tüm sayfaları gez (JSONAPI page[number] / page[size]) */
-async function listAll(sb: Sb, path: string, params: Record<string, string> = {}, max = 400) {
+export async function listAll(sb: Sb, path: string, params: Record<string, string> = {}, max = 400) {
   const out: any[] = [];
   for (let page = 1; page <= max; page++) {
     const q = new URLSearchParams({ ...params, "page[number]": String(page), "page[size]": "25" });
@@ -315,7 +315,18 @@ export async function listAccounts(sb: Sb) {
 
 /** Satış faturası kategorileri (Paraşüt'te faturadaki "Kategori" — kanal / proje ayrımı) */
 export async function listInvoiceCategories(sb: Sb) {
-  const rows = await listAll(sb, "/item_categories", { "filter[category_type]": "SalesInvoice" }, 20);
+  return listCategories(sb, "SalesInvoice");
+}
+
+/** Etiketler (gelen e-fatura kuralları) */
+export async function listTags(sb: Sb) {
+  const rows = await listAll(sb, "/tags", {}, 20);
+  return rows.map((r) => ({ id: String(r.id), name: String(r.attributes?.name ?? r.id) })).sort((a, b) => a.name.localeCompare(b.name, "tr"));
+}
+
+/** Kategori listesi — SalesInvoice: satış faturası · Expenditure: gider (fiş / fatura) */
+export async function listCategories(sb: Sb, type: "SalesInvoice" | "Expenditure") {
+  const rows = await listAll(sb, "/item_categories", { "filter[category_type]": type }, 20);
   // full_path Paraşüt'te dizi olabilir (üst kategoriler); boş dizi "doğru" sayıldığı için ad boş görünüyordu → önce name
   const label = (a: any) => {
     const fp = Array.isArray(a?.full_path) ? a.full_path.map((x: any) => (typeof x === "string" ? x : x?.name)).filter(Boolean).join(" › ") : typeof a?.full_path === "string" ? a.full_path : "";

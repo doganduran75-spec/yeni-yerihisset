@@ -32,6 +32,7 @@ export default function AdminDashboard() {
   const [msgCount, setMsgCount] = useState(0);         // cevapsız müşteri mesajı (sipariş konuşması)
   const [mailApprovalCount, setMailApprovalCount] = useState(0); // onay bekleyen müşteri e-postası (MIG 20261185, /admin/email-onay)
   const [qnaCount, setQnaCount] = useState(0);         // cevap bekleyen Trendyol müşteri sorusu (MIG 20261184)
+  const [inboundCount, setInboundCount] = useState(0); // Paraşüt gelen e-fatura — kabul edilip kaydedilecek (MIG 20261198)
   const [reviewCount, setReviewCount] = useState(0);   // onay bekleyen yorum
   const [feedbackCount, setFeedbackCount] = useState(0); // bekleyen talep (Talep & Geri Bildirim)
   const [returnsOpen, setReturnsOpen] = useState(0); // yoldaki iadeler (kod gönderildi / müşteri gönderiyor) — iş: gelince "İade geldi"
@@ -94,6 +95,8 @@ export default function AdminDashboard() {
       setMsgCount([...lastPerOrder.values()].filter((m) => m.sender_role === 'user').length);
       const { count: qn } = await (supabase as any).from("marketplace_questions").select("id", { count: "exact", head: true }).eq("status", "WAITING_FOR_ANSWER");
       setQnaCount(qn ?? 0);
+      const { count: inb } = await (supabase as any).from("parasut_inbound_invoices").select("id", { count: "exact", head: true }).in("status", ["pending", "error"]);
+      setInboundCount(inb ?? 0);
       // Onay bekleyen e-posta (tablo yalnız sunucuda → uç üzerinden)
       try {
         const { data: { session } } = await supabase.auth.getSession();
@@ -205,6 +208,8 @@ export default function AdminDashboard() {
               { n: exchangeOpen, label: "Süren değişim", href: "/admin/orders?iade=exchange_open" },
               // Kargolanmış, faturası kesilmemiş — 7 günü geçen varsa kırmızı not (VUK)
               { n: uninvoiced.n, label: "Faturası kesilmemiş", href: "/admin/orders?iade=uninvoiced_shipped", late: uninvoiced.late },
+              // Paraşüt'e gelen e-fatura: panelde kabul edilip kurala göre kaydedilir (kullanıcı 2026-11-22)
+              { n: inboundCount, label: "Paraşüt gelen e-fatura", href: "/admin/parasut/gelen" },
               // Ay bitti, ortakların hakedişi işlenmedi (Satış Ortaklığı › Hakediş; en eski dönem açılır)
               { n: payoutDue.n, label: payoutDue.period ? `Hakediş işlenecek (${periodLabel(payoutDue.period)})` : "Hakediş işlenecek",
                 href: `/admin/affiliates?view=payout${payoutDue.period ? `&period=${payoutDue.period}` : ""}` },
