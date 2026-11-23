@@ -2,7 +2,7 @@
 // KARGO ENTEGRASYONU AKIŞI (kullanıcının akışı, 2026-10-13) — iki sağlayıcı, aynı adımlar:
 //   1) "Kargoya ver" → desi → taslak gönderi + firma teklifleri (quoteOrder)
 //   2) Yönetici firmayı seçer → onay (confirmOrder) → kargo kodu (Basit Kargo hemen; Kargonomi'de birkaç sn – 10+ dk)
-//   3) Kod beklenirken dakikada bir sorgu (pollKargonomi; cron) + siparişte "Şimdi sorgula"
+//   3) Kod beklenirken 5 dakikada bir sorgu (pollKargonomi; cron) + siparişte "Şimdi sorgula"
 //   4) Kod gelince: kod + firma kaydedilir (Kargoda YAPILMAZ). Etiket basılınca sipariş kendiliğinden "Kargo hazırlandı"
 //      (packed_at; veritabanı tetikleyicisi 20261165) → kurye alınca kargo firmasının durumu siparişi Kargoda yapar.
 //   Basit Kargo ayrıca durum bildirir (webhook + saatlik sorgu): kargoda → "Kurye aldı" ile aynı (Kargoda + e-posta),
@@ -386,7 +386,7 @@ export async function basitReturnCode(sb: Sb, orderId: string) {
   return { code: r.code };
 }
 
-/** Cron (dakikada bir): firma seçilmiş, kodu gelmemiş siparişler + kodu gelmiş, teslim edilmemiş gönderilerin saatlik durumu */
+/** Cron (5 dakikada bir): firma seçilmiş, kodu gelmemiş siparişler + kodu gelmiş, teslim edilmemiş gönderilerin saatlik durumu */
 /** Entegrasyon dışında (Kargonomi panelinden elle) açılmış gönderileri siparişe bağla: kargoda olan, Kargonomi kaydı olmayan,
  *  kodu girilmiş siparişlerin kodu Kargonomi'nin son gönderilerinde aranır; eşleşince sipariş saatlik durum sorgusuna girer
  *  (teslim edildi → Teslim edildi + e-posta). Saatte bir (dakikalık işleyicide 7. dakika). */

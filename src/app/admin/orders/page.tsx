@@ -934,7 +934,7 @@ export default function OrdersPage() {
     setUpdatingId(o.id);
     try {
       const r = await parasutApi({ op: busy && !carrier ? "check_invoice" : "invoice", order_id: o.id, ...(acceptDiff ? { accept_diff: true } : {}), ...(carrier ? { carrier } : {}) });
-      siteAlert({ title: "Paraşüt", message: r.status === "done" ? `Fatura kesildi${r.invoiceNo ? `: ${r.invoiceNo}` : ""}. Sipariş “Faturalandı”.` : "e-Belge hazırlanıyor; dakikada bir kontrol edilir, bitince sipariş “Faturalandı” olur.", tone: "success" });
+      siteAlert({ title: "Paraşüt", message: r.status === "done" ? `Fatura kesildi${r.invoiceNo ? `: ${r.invoiceNo}` : ""}. Sipariş “Faturalandı”.` : "e-Belge hazırlanıyor; 10 dakikada bir kontrol edilir, bitince sipariş “Faturalandı” olur.", tone: "success" });
     } catch (e: any) {
       const msg = String(e?.message || e);
       if (/Tutarı onayla/.test(msg) && (await siteConfirm({ title: "Tutar farkı", message: msg, confirmText: "Tutarı onayla ve devam et" }))) { setUpdatingId(null); return invoiceParasut(o, true, carrier); }
@@ -1973,7 +1973,7 @@ ${courierQueue.slice(0, 20).map((o) => orderLabel(o)).join(", ")}${courierQueue.
                       ) : (
                         <div className="text-xs flex flex-wrap items-center gap-2">
                           <span className={(o as any).mp_invoice_error ? "text-red-700" : "text-amber-700"}>
-                            {(o as any).mp_invoice_error ? `${mp}'a yüklenemedi: ${(o as any).mp_invoice_error}` : `Fatura henüz ${mp}'a yüklenmedi (dakikada bir denenir).`}
+                            {(o as any).mp_invoice_error ? `${mp}'a yüklenemedi: ${(o as any).mp_invoice_error}` : `Fatura henüz ${mp}'a yüklenmedi (20 dakikada bir denenir).`}
                           </span>
                           {o.channel === "hepsiburada" && !(o as any).mp_package_number && (
                             <input

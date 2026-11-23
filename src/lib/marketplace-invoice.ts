@@ -108,7 +108,7 @@ export async function trendyolPicking(sb: Sb, orderId: string): Promise<{ ok: bo
   return { ok: true };
 }
 
-/** Cron (dakikada bir): Paraşüt faturası bitmiş, pazaryerine henüz gitmemiş siparişler. Hata alanlar elle yeniden
+/** Cron (20 dakikada bir): Paraşüt faturası bitmiş, pazaryerine henüz gitmemiş siparişler. Hata alanlar elle yeniden
  *  denenir; yalnız "paket numarası henüz yok" (Hepsiburada paketlemesini bekliyor) kendiliğinden yeniden denenir. */
 export async function pollMarketplaceInvoices(sb: Sb = createAdminClient()) {
   const { data } = await (sb as any).from("orders").select("id")

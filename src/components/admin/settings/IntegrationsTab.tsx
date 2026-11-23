@@ -664,7 +664,7 @@ export default function IntegrationsTab() {
       <IntegrationSection id="kargonomi" icon={<Truck size={20} className="text-blue-600" />} title="Kargonomi"
         summary="Teklif → firma seçimi → kargo kodu" status={!s.kargonomi_enabled ? "Kapalı" : s.kargonomi_api_token && s.kargonomi_warehouse_id ? "Hazır" : "Token bekleniyor"} tone={!s.kargonomi_enabled ? "off" : s.kargonomi_api_token && s.kargonomi_warehouse_id ? "ok" : "warn"}
         right={<Toggle on={s.kargonomi_enabled} onChange={(v) => save("kargonomi", { kargonomi_enabled: v })} disabled={savingKey === "kargonomi"} />}>
-          <p className="text-sm text-muted-foreground">Siparişte “Kargoya ver (Kargonomi)”: desi gir → firma teklifleri gelir → firmayı seç → kargo kodu gelene kadar dakikada bir sorgulanır → kod gelince sipariş “Kargoda”, müşteriye takip numarası gider.</p>
+          <p className="text-sm text-muted-foreground">Siparişte “Kargoya ver (Kargonomi)”: desi gir → firma teklifleri gelir → firmayı seç → kargo kodu gelene kadar 5 dakikada bir sorgulanır → kod gelince sipariş “Kargoda”, müşteriye takip numarası gider.</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Field label="API Token (Bearer)" hint="Panelde görünmüyor — Kargonomi destekten (destek@kargonomi.com.tr) istenir">
               <SecretInput value={s.kargonomi_api_token} onChange={(v) => set({ kargonomi_api_token: v })} placeholder="••••••••••••••••••••" />

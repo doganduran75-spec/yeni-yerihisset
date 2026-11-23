@@ -3,7 +3,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // Siparişte "Kargoya ver" penceresi (Kargonomi / Basit Kargo — ayarlardan) — akış src/lib/kargonomi-flow.ts:
 //   desi → "Teklifleri getir" → firma seç → "Bu firmayla gönder" → kod bekleniyor (pencere açıkken 30 sn'de bir,
-//   kapalıyken sunucu dakikada bir sorgular) → kod gelince siparişe yazılır (etiket → kendiliğinden "Kargo hazırlandı" → firma paketi okutunca Kargoda + e-posta).
+//   kapalıyken sunucu 5 dakikada bir sorgular) → kod gelince siparişe yazılır (etiket → kendiliğinden "Kargo hazırlandı" → firma paketi okutunca Kargoda + e-posta).
 import { useEffect, useState, useCallback } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -66,7 +66,7 @@ export default function KargonomiDialog({ order, onClose, onChanged }: {
 
   const waiting = !!(o?.kargonomi_confirmed_at && !o?.kargonomi_tracking_code && !o?.kargonomi_error);
 
-  // Kod beklerken pencere açıksa 30 sn'de bir sorgula (sunucu ayrıca dakikada bir sorgular)
+  // Kod beklerken pencere açıksa 30 sn'de bir sorgula (sunucu ayrıca 5 dakikada bir sorgular)
   useEffect(() => {
     if (!o?.id || !waiting) return;
     const t = setInterval(() => { call({ op: "check", order_id: o.id }).then(() => reload(o.id)).catch(() => {}); }, 30_000);

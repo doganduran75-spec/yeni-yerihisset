@@ -31,13 +31,21 @@ async function run(req: NextRequest) {
     return NextResponse.json({ error: "Yetkisiz" }, { status: 401 });
   }
   const supabase = createAdminClient();
+  // SIKLIK (kullanıcı 2026-11-23, boşta yük): sipariş + stok + fiyat + Telegram dakikada bir; diğerleri seyrek.
+  // Dakika eşleşmesi: cron dakikada bir çağırır → "m === X" saatte bir, "m % N === X" N dakikada bir demek.
+  const now = new Date();
+  const m = now.getMinutes();
+  const h = now.getUTCHours();
   // 1) Pazaryeri siparişleri → sitedeki stok düşer/iade olur (kuyruğa girer)
   const orders = await importMarketplaceOrders(supabase);
   for (const o of orders) {
     if (o.errors.length) console.error(`[cron/marketplace-orders:${o.channel}]`, o.errors.join(" | "));
   }
-  // 1a) Trendyol iade talepleri (kısmi iade sipariş servisinde görünmüyor) → siparişte "İade yolda / depoya ulaştı"
-  const claims = await syncTrendyolClaims(supabase).catch((e: any) => ({ fetched: 0, orders: 0, errors: [e?.message || String(e)] }));
+  // 1a) Trendyol iade talepleri (kısmi iade sipariş servisinde görünmüyor) → siparişte "İade yolda / depoya ulaştı".
+  // 6 saatte bir (kullanıcı: iade zaten 1 günden geç geliyor, hızın yararı yok).
+  const claims = h % 6 === 0 && m === 11
+    ? await syncTrendyolClaims(supabase).catch((e: any) => ({ fetched: 0, orders: 0, errors: [e?.message || String(e)] }))
+    : { fetched: 0, orders: 0, errors: [] as string[] };
   if (claims.errors.length) console.error("[cron/trendyol-claims]", claims.errors.join(" | "));
   // 1b) İlan eşitleme (saatte bir): stok/fiyat yalnız o kanalda ilanı olan ürüne gider
   try {
@@ -56,11 +64,17 @@ async function run(req: NextRequest) {
   for (const p of prices) {
     if (p.errors.length) console.error(`[cron/marketplace-prices:${p.channel}]`, p.errors.join(" | "));
   }
-  // 4) Kargonomi: firması seçilmiş, kargo kodu gelmemiş siparişler (kod gelince sipariş "Kargoda" + e-posta)
-  const kargo = await pollKargonomi(supabase).catch((e: any) => ({ checked: 0, shipped: 0, errors: [e?.message || String(e)] }));
+  // 4) Kargonomi: (a) firması seçilmiş, ETİKET kodu gelmemiş siparişler (pencere kapalıysa kod buradan gelir) +
+  // (b) yoldaki gönderilerin durumu (kurye okutunca "Kargoda", teslim) — (b) zaten sipariş başına saatte bir.
+  // 5 dakikada bir (dakika 2, 7, 12…; pollKargonomi içindeki panel gönderisi bağlama dakika 7'de çalışır).
+  const kargo = m % 5 === 2
+    ? await pollKargonomi(supabase).catch((e: any) => ({ checked: 0, shipped: 0, errors: [e?.message || String(e)] }))
+    : { checked: 0, shipped: 0, errors: [] as string[] };
   if (kargo.errors.length) console.error("[cron/kargonomi]", kargo.errors.join(" | "));
-  // 5) Paraşüt: e-Arşiv / e-Fatura işi + PDF bekleyen faturalar (bitince sipariş "Faturalandı")
-  const fatura = await pollParasut(supabase).catch((e: any) => ({ checked: 0, done: 0, errors: [e?.message || String(e)] }));
+  // 5) Paraşüt: e-Arşiv / e-Fatura işi + PDF bekleyen faturalar (bitince sipariş "Faturalandı") — 10 dakikada bir
+  const fatura = m % 10 === 2
+    ? await pollParasut(supabase).catch((e: any) => ({ checked: 0, done: 0, errors: [e?.message || String(e)] }))
+    : { checked: 0, done: 0, errors: [] as string[] };
   if (fatura.errors.length) console.error("[cron/parasut]", fatura.errors.join(" | "));
   // 5a) Paraşüt yeni altyapı: oturum ~30 gün kullanılmazsa düşer → saatte bir bak, 3 günde bir yenile
   if (new Date().getMinutes() === 17) await parasutKeepAlive(supabase).catch((e: any) => console.error("[cron/parasut-keepalive]", e?.message || e));
@@ -69,8 +83,10 @@ async function run(req: NextRequest) {
   // Görsel ısıtma (kullanıcı 2026-11-23): yeni yüklenen ana sayfa / ürün görselinin küçük hâli ilk ziyaretçiden önce üretilsin.
   // Beklenmez (arka planda); önbellekteki görseller anında döner.
   if (new Date().getMinutes() === 43) void warmImages().catch((e: any) => console.error("[cron/warm-images]", e?.message || e));
-  // 5b) Paraşüt faturası bitmiş Trendyol siparişleri → faturayı Trendyol'a yükle (ilk deneme; hata olursa elle)
-  const tyInv = await pollMarketplaceInvoices(supabase).catch((e: any) => ({ sent: 0, errors: [e?.message || String(e)] }));
+  // 5b) Paraşüt faturası bitmiş Trendyol siparişleri → faturayı Trendyol'a yükle (ilk deneme; hata olursa elle) — 20 dakikada bir
+  const tyInv = m % 20 === 4
+    ? await pollMarketplaceInvoices(supabase).catch((e: any) => ({ sent: 0, errors: [e?.message || String(e)] }))
+    : { sent: 0, errors: [] as string[] };
   if (tyInv.errors.length) console.error("[cron/marketplace-invoice]", tyInv.errors.join(" | "));
   // 6) Google Merchant API: değişen ürünler (besleme günlük tam eşitlemeyi sürdürür)
   const google = await processGmcQueue(supabase).catch((e: any) => ({ products: 0, sent: 0, deleted: 0, failed: 0, skipped: "", errors: [e?.message || String(e)] }));
@@ -93,11 +109,13 @@ async function run(req: NextRequest) {
     const { error: stErr } = await (supabase as any).rpc("stamp_settled_orders");
     if (stErr) console.error("[cron/settle]", stErr.message);
   }
-  await (supabase as any).from("marketplace_stock_log")
-    .delete().lt("created_at", new Date(Date.now() - 180 * 86400_000).toISOString());
-  // Form spam koruması kayıtları (src/lib/bot-guard.ts): 30 günden eskiler
-  await (supabase as any).from("bot_blocks")
-    .delete().lt("created_at", new Date(Date.now() - 30 * 86400_000).toISOString());
+  // Eski kayıt temizliği günde bir (00:53 UTC = 03:53 TR): stok geçmişi 180 gün, form spam kayıtları (src/lib/bot-guard.ts) 30 gün
+  if (h === 0 && m === 53) {
+    await (supabase as any).from("marketplace_stock_log")
+      .delete().lt("created_at", new Date(Date.now() - 180 * 86400_000).toISOString());
+    await (supabase as any).from("bot_blocks")
+      .delete().lt("created_at", new Date(Date.now() - 30 * 86400_000).toISOString());
+  }
   // Sunucu Sağlığı: "çalışıyorum" kaydı (uzun süre gelmezse dashboard + e-posta uyarır)
   const firstError = [...orders, ...reports, ...prices].flatMap((r: { errors?: string[] }) => r.errors ?? [])[0];
   await (supabase as any).from("cron_heartbeats").upsert({

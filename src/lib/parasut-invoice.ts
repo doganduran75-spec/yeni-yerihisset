@@ -7,7 +7,7 @@
 //     kalemlere tutarlarıyla orantılı dağıtılır, kargoya dokunulmaz. Kargo ücreti varsa ayrı "Kargo" kalemi.
 //   * Kanal ayarı (parasut_channel_settings): tahsilat hesabı + "tahsil edildi" (Trendyol → kasa "Trendyol").
 //   * Alıcı e-Fatura kullanıcısıysa (VKN gelen kutusu) e-Fatura, değilse e-Arşiv (internet satışı + kargo
-//     firması adı / VKN / tarih). İş arka planda → dakikada bir takip (cron) → PDF özel depoya → "Faturalandı".
+//     firması adı / VKN / tarih). İş arka planda → 10 dakikada bir takip (cron) → PDF özel depoya → "Faturalandı".
 // İade faturası: refundInvoiceOrder (aşağıda) — siparişte "İade faturasını kes (Paraşüt)".
 
 import { createAdminClient } from "@/lib/supabase-admin";
@@ -514,7 +514,7 @@ export async function checkInvoice(sb: Sb, orderId: string) {
   return { status: "done", invoiceNo };
 }
 
-/** Cron (dakikada bir): e-belge / PDF bekleyen siparişler */
+/** Cron (10 dakikada bir): e-belge / PDF bekleyen siparişler */
 export async function pollParasut(sb: Sb = createAdminClient()) {
   const { data } = await (sb as any).from("orders").select("id")
     .in("parasut_status", ["job_pending", "pdf_pending"]).gte("updated_at", new Date(Date.now() - 3 * 86400_000).toISOString()).limit(20);
