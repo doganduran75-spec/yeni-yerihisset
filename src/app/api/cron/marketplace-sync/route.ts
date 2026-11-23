@@ -11,6 +11,7 @@ import { pollKargonomi } from "@/lib/kargonomi-flow";
 import { pollParasut } from "@/lib/parasut-invoice";
 import { parasutKeepAlive } from "@/lib/parasut";
 import { refreshPending as refreshInboundInvoices } from "@/lib/parasut-inbound";
+import { warmImages } from "@/lib/warm-images";
 import { pollMarketplaceInvoices } from "@/lib/marketplace-invoice";
 import { processGmcQueue } from "@/lib/gmc-sync";
 import { processReviewRequests, processWinback } from "@/lib/review-winback";
@@ -65,6 +66,9 @@ async function run(req: NextRequest) {
   if (new Date().getMinutes() === 17) await parasutKeepAlive(supabase).catch((e: any) => console.error("[cron/parasut-keepalive]", e?.message || e));
   // 5a') Gelen e-faturalar: Paraşüt'te elle kaydedilen / reddedilen panelden düşsün (saatte bir; bekleyen yoksa istek yok)
   if (new Date().getMinutes() === 37) await refreshInboundInvoices(supabase).catch((e: any) => console.error("[cron/parasut-inbound]", e?.message || e));
+  // Görsel ısıtma (kullanıcı 2026-11-23): yeni yüklenen ana sayfa / ürün görselinin küçük hâli ilk ziyaretçiden önce üretilsin.
+  // Beklenmez (arka planda); önbellekteki görseller anında döner.
+  if (new Date().getMinutes() === 43) void warmImages().catch((e: any) => console.error("[cron/warm-images]", e?.message || e));
   // 5b) Paraşüt faturası bitmiş Trendyol siparişleri → faturayı Trendyol'a yükle (ilk deneme; hata olursa elle)
   const tyInv = await pollMarketplaceInvoices(supabase).catch((e: any) => ({ sent: 0, errors: [e?.message || String(e)] }));
   if (tyInv.errors.length) console.error("[cron/marketplace-invoice]", tyInv.errors.join(" | "));

@@ -84,8 +84,9 @@ const nextConfig: NextConfig = {
         hostname: "img.youtube.com",
       },
     ],
-    // Desteklenen formatlar (AVIF daha iyi sıkıştırma, WebP geniş destek)
-    formats: ["image/avif", "image/webp"],
+    // Yalnız WebP (kullanıcı 2026-11-23): AVIF ilk üretimde ~%50 daha yavaş — telefonda hikâye görseli gelmeden süre
+    // doluyordu. Next de çoğu durumda WebP öneriyor; tüm güncel tarayıcılar destekler.
+    formats: ["image/webp"],
     // Minimum TTL: 1 gün (optimize edilmiş görseller cache'lenir)
     minimumCacheTTL: 86400,
   },

@@ -88,3 +88,7 @@ if [ "${SKIP_REGRESSION:-0}" != "1" ]; then
   # Regresyon TS dosyalarını (order-next-step, kargonomi) doğrudan yükler; Node'un "Module type not specified" uyarısı gürültü
   node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/regression.mjs || true
 fi
+
+# GÖRSEL ISITMA (kullanıcı 2026-11-23): ana sayfa / ürün görsellerinin telefona uygun küçük hâli önceden üretilir; ilk
+# ziyaretçi (hikâye!) üretimi beklemez. Arka planda çalışır, sonucu /tmp/yh-warm-images.log içinde.
+nohup node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/warm-images.mjs > /tmp/yh-warm-images.log 2>&1 &

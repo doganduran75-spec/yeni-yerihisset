@@ -8,7 +8,7 @@
 //  * Gösterilmez: bilgisayarda, daha önce görene, reklamdan / kampanyadan gelene (gclid, fbclid, utm_…), "hareketi azalt"
 //    tercihinde. Ana sayfadaki "Barefoot nedir? İzle" yeniden açar; ?hikaye=1 deneme için zorlar.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { X } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 import { useHomeContent } from "@/lib/home-content-context";
 import SegmentChooser from "@/components/SegmentChooser";
 import { track } from "@/lib/track";
@@ -80,9 +80,24 @@ export default function PrincipleStories() {
   }, [items.length]);
   const prev = () => { elapsed.current = 0; setProgress(0); setIdx((i) => Math.max(0, i - 1)); };
 
-  // Zamanlayıcı (duraklatılabilir)
+  // GÖRSEL GELMEDEN SÜRE BAŞLAMAZ (kullanıcı 2026-11-23: telefonda ilk açılışta görsel yüklenmeden süre doldu, sonraki
+  // hikâyeye geçti). Ekrandaki görsel yüklenene (ya da hata verene) kadar çubuk durur, ortada yükleniyor işareti döner.
+  // Çok yavaş bağlantıda sonsuza dek beklemesin: 10 sn sonra süre yine başlar.
+  const full = !!P.storyFullscreen;
+  const cur = items[idx];
+  const curImg = (cur ? (full ? cur.imageTall || cur.image : cur.image || cur.imageTall) : "") || "";
+  const [ready, setReady] = useState<Record<string, true>>({});
+  const markReady = useCallback((u: string) => setReady((r) => (r[u] ? r : { ...r, [u]: true })), []);
+  const waiting = open && phase === "story" && !!curImg && !ready[curImg];
   useEffect(() => {
-    if (!open || phase !== "story" || paused) return;
+    if (!waiting) return;
+    const t = setTimeout(() => markReady(curImg), 10000);
+    return () => clearTimeout(t);
+  }, [waiting, curImg, markReady]);
+
+  // Zamanlayıcı (duraklatılabilir; görsel gelene kadar başlamaz)
+  useEffect(() => {
+    if (!open || phase !== "story" || paused || waiting) return;
     const dur = Math.max(1, Number(items[idx]?.seconds) || 4) * 1000;
     let last = performance.now();
     let raf = 0;
@@ -95,7 +110,7 @@ export default function PrincipleStories() {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [open, phase, paused, idx, items, next]);
+  }, [open, phase, paused, waiting, idx, items, next]);
 
   // GÖRSELLER SIRAYLA (kullanıcı 2026-11-22): önce ekrandaki hikâye, o gelince sıradaki, o gelince bir sonraki…
   // chain: sıradaki görsellerden kaçının yüklenmesine izin var (ekrandaki yüklenince başlar). Eskiden hepsi aynı anda.
@@ -113,7 +128,6 @@ export default function PrincipleStories() {
   const it = items[idx];
   // TAM EKRAN (kullanıcı 2026-11-15, Ayarlar › Ana Sayfa › "Hikâye tam ekran"): görsel bütün ekranı kaplar (dik görsel
   // imageTall, yoksa yatay görsel kırpılır), yazı görselin üstünde; çubuklar / başlık / düğme görselin üstünde.
-  const full = !!P.storyFullscreen;
   const tap = {
     onPointerDown: () => { downAt.current = Date.now(); setPaused(true); },
     onPointerUp: (e: React.PointerEvent) => {
@@ -135,9 +149,10 @@ export default function PrincipleStories() {
       {/* Tam ekran: görsel arkada, alt yarıda okunurluk için koyu geçiş */}
       {full && phase === "story" && (
         <div className="absolute inset-0 select-none touch-manipulation" {...tap}>
-          {fullImg && <img key={fullImg} {...optimizedImg(fullImg, "100vw")} fetchPriority="high" onLoad={() => allowNext(fullImg)} alt={it.title} draggable={false} className="absolute inset-0 w-full h-full object-cover pointer-events-none" style={shift ? { transform: `translateY(${-shift}%)` } : undefined} />}
+          {fullImg && <img key={fullImg} {...optimizedImg(fullImg, "100vw")} fetchPriority="high" onLoad={() => { allowNext(fullImg); markReady(fullImg); }} onError={() => markReady(fullImg)} alt={it.title} draggable={false} className="absolute inset-0 w-full h-full object-cover pointer-events-none" style={shift ? { transform: `translateY(${-shift}%)` } : undefined} />}
           {/* sonraki görseller SIRAYLA önceden yüklensin (kısa sürelerde boş ekran olmasın): biri bitince sıradaki */}
-          {queue.slice(0, chain).map((u) => (u !== fullImg ? <img key={`pre-${u}`} {...optimizedImg(u, "100vw")} onLoad={() => allowNext(u)} alt="" aria-hidden className="hidden" /> : null))}
+          {queue.slice(0, chain).map((u) => (u !== fullImg ? <img key={`pre-${u}`} {...optimizedImg(u, "100vw")} onLoad={() => { allowNext(u); markReady(u); }} alt="" aria-hidden className="hidden" /> : null))}
+          {waiting && <div className="absolute inset-0 flex items-center justify-center pointer-events-none"><Loader2 size={36} className="animate-spin text-[#3F6D14]/70" /></div>}
           {/* Açık krem geçiş: koyu yazı her görselde okunur (kullanıcı 2026-11-15: beyaz yazı yerine) */}
           <div className="absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-[#F4EFE6]/95 via-[#F4EFE6]/60 to-transparent pointer-events-none" />
           <div className="absolute inset-x-0 bottom-0 h-[40%] bg-gradient-to-t from-[#F4EFE6] via-[#F4EFE6]/85 to-transparent pointer-events-none" />
@@ -179,8 +194,9 @@ export default function PrincipleStories() {
           }}
           onPointerCancel={() => setPaused(false)}
           onContextMenu={(e) => e.preventDefault()}>
-          <div className="flex-1 min-h-0 flex items-center justify-center px-6">
-            {(it.image || it.imageTall) && <img key={it.image || it.imageTall} {...optimizedImg((it.image || it.imageTall)!, "100vw")} fetchPriority="high" alt={it.title} draggable={false} className="max-h-full w-full object-contain pointer-events-none" />}
+          <div className="relative flex-1 min-h-0 flex items-center justify-center px-6">
+            {(it.image || it.imageTall) && <img key={it.image || it.imageTall} {...optimizedImg((it.image || it.imageTall)!, "100vw")} fetchPriority="high" onLoad={() => markReady((it.image || it.imageTall)!)} onError={() => markReady((it.image || it.imageTall)!)} alt={it.title} draggable={false} className="max-h-full w-full object-contain pointer-events-none" />}
+            {waiting && <Loader2 size={36} className="absolute animate-spin text-[#3F6D14]/70" />}
           </div>
           <div className="px-6 pb-6">
             <h2 className="text-[30px] leading-tight font-black text-[#1C1C19]" style={{ fontFamily: "var(--font-epilogue), system-ui, sans-serif" }}>{it.title}</h2>

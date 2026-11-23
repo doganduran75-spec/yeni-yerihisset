@@ -80,10 +80,39 @@ export default {
       t.add(ok3 ? "ok" : "fail", "Telefondaki prensip kartı paneldeki önizlemeyle aynı oranda; Hakkımızda kartları da aynı kırpmayla", ok3 ? "" : "principle-image / PrincipleCarousel / HomeContentTab / hakkimizda satırları eksik");
       // 2026-11-22: hikâye / prensip görselleri ham yükleniyordu (her biri 2–3 MB) → ekran boyuna küçültülmüş; hikâyede
       // önce ekrandaki görsel, o gelince sıradaki (hepsi aynı anda değil)
-      const ok4 = /getImageProps\(/.test(pl) && /\{\.\.\.optimizedImg\(fullImg, "100vw"\)\} fetchPriority="high" onLoad=\{\(\) => allowNext\(fullImg\)\}/.test(ps)
+      const ok4 = /getImageProps\(/.test(pl) && /\{\.\.\.optimizedImg\(fullImg, "100vw"\)\} fetchPriority="high" onLoad=\{\(\) => \{ allowNext\(fullImg\); markReady\(fullImg\); \}\}/.test(ps)
         && /queue\.slice\(0, chain\)\.map/.test(ps) && !/<img key=\{`pre-\$\{u\}`\} src=\{u\}/.test(ps)
         && /srcSet=\{c\.srcSet\} sizes=\{c\.sizes\}/.test(pc) && /srcSet=\{c\.srcSet\} sizes=\{c\.sizes\}/.test(about);
       t.add(ok4 ? "ok" : "fail", "Hikâye ve prensip görselleri küçültülmüş geliyor; hikâyede görseller sırayla yükleniyor", ok4 ? "" : "principle-image / PrincipleStories / PrincipleCarousel / hakkimizda satırları eksik");
+      // 2026-11-23: telefonda ilk açılışta görsel gelmeden süre doluyordu → süre görsel yüklenince başlıyor (hata / 10 sn sonra
+      // yine başlar), beklerken yükleniyor işareti; görsel servisi yalnız WebP (AVIF ilk üretimde yavaş)
+      const cfg = rd("next.config.ts");
+      const ok5 = /if \(!open \|\| phase !== "story" \|\| paused \|\| waiting\) return;/.test(ps) && /setTimeout\(\(\) => markReady\(curImg\), 10000\)/.test(ps)
+        && /onError=\{\(\) => markReady\(fullImg\)\}/.test(ps) && /\{waiting && <div[^>]*><Loader2/.test(ps)
+        && /formats: \["image\/webp"\]/.test(cfg) && !/image\/avif/.test(cfg.replace(/\/\/[^\r\n]*/g, ""));
+      t.add(ok5 ? "ok" : "fail", "Hikâyede süre görsel yüklenince başlıyor (yüklenene kadar bekliyor); görseller hızlı üretilen WebP", ok5 ? "" : "PrincipleStories bekleme / next.config formats");
+    });
+    // GÖRSEL ISITMA (kullanıcı 2026-11-23): görselin küçük hâli ilk istekte üretilir (ham 1536×2752 → saniyeler); deploy sonrası
+    // ve saatte bir ana sayfa + ürünler sayfasındaki görseller tarayıcıların seçtiği genişliklerde önceden istenir.
+    await t.part("Görsel ısıtma (ilk ziyaretçi görsel üretimini beklemesin)", async () => {
+      const http = await import("node:http");
+      const { warmImages } = await import("../../src/lib/warm-images.ts");
+      const hit = [];
+      const img = (w) => `/_next/image?url=https%3A%2F%2Fx.test%2Fa.jpg&amp;w=${w}&amp;q=75`;
+      const html = `<img srcSet="${[16, 384, 640, 750, 828, 1080, 1200, 1920, 3840].map((w) => `${img(w)} ${w}w`).join(", ")}" src="${img(3840)}">`;
+      const srv = http.createServer((req, res) => {
+        hit.push(req.url);
+        if (req.url.startsWith("/_next/image")) { res.writeHead(200, { "content-type": "image/webp" }); res.end("x"); return; }
+        res.writeHead(200, { "content-type": "text/html" }); res.end(html);
+      });
+      await new Promise((r) => srv.listen(0, "127.0.0.1", r));
+      let r = null;
+      try { r = await warmImages(`http://127.0.0.1:${srv.address().port}`, ["/"]); } finally { srv.close(); }
+      const ws = hit.filter((u) => u.startsWith("/_next/image")).map((u) => Number(new URL(u, "http://x").searchParams.get("w"))).sort((a, b) => a - b);
+      const good = r?.ok === 6 && ws.join(",") === "384,640,750,828,1080,1200";
+      t.add(good ? "ok" : "fail", "Isıtma sayfadaki görselleri telefon / bilgisayar genişliklerinde bir kez istiyor (çok büyük / küçükleri atlıyor)", good ? "" : `istenen: ${ws.join(",")}`);
+      const ok2 = /scripts\/warm-images\.mjs/.test(rd("scripts/deploy.sh")) && /getMinutes\(\) === 43\) void warmImages\(\)/.test(rd("src/app/api/cron/marketplace-sync/route.ts"));
+      t.add(ok2 ? "ok" : "fail", "Isıtma deploy sonrası ve saatte bir çalışıyor", ok2 ? "" : "deploy.sh / cron satırı eksik");
     });
   },
 };
