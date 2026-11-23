@@ -11,7 +11,14 @@
 //   * yerihisset siparişi → kanal "site" (YeriHisset), KENDİ numarasıyla (YH22559);
 //     numara doluysa yeni numara alır, eski no "Eski no" olarak görünür.
 //   * attipas siparişi → kanal "attipas", yeni numara + eski no.
-//   * STOK DÜŞMEZ, e-posta/satış ortaklığı tetiklenmez. Ciroya dahildir (iadeler düşülür).
+//   * E-posta/satış ortaklığı tetiklenmez. Ciroya dahildir (iadeler düşülür).
+//   * STOK (kullanıcı 2026-11-23): eski siteden gelen YERİHİSSET siparişi stoktan düşer → stok değişince Trendyol /
+//     Hepsiburada / Amazon kendiliğinden güncellenir. Yalnız "stok başlangıcı"ndan sonra verilen ve ÖDENMİŞ (hazırlanıyor /
+//     tamamlandı) siparişler; öncekiler elle düzeltilmişti, dokunulmaz. Başlangıç ilk --apply turunda
+//     .woo-report/stok-baslangic.txt dosyasına yazılır. Havale bekleyen sipariş ödenince (sonraki turda) düşer — beklerken
+//     düşmez (yeni sistemin "24 saatte ödenmeyen havale iptal" kuralı ona dokunmasın). Eski sitede iptal / tam iade olursa
+//     düşülen stok geri eklenir. Yeni sistemde işlenmiş siparişe dokunulmaz (oradaki iptal / iade düğmeleri stoğu yönetir).
+//     Attipas siparişleri stok düşmez. Eşleşmeyen (sitede olmayan) ürün satırı stok düşmez.
 //   * Başarısız / taslak siparişler alınmaz (müşterisi alınır). 2021 öncesi ₺0 = test, alınmaz.
 //   * "Beklemede/ödeme bekleniyor" 30 günden eskiyse İptal (ödenmemiş) olarak gelir.
 //   * Ürün eşleştirme: elle eşleme → SKU → barkod (rematch_order_items). Eşleşmeyenler
@@ -25,7 +32,7 @@
 //   --urunler  eski sitenin ürün kartlarını da çek (barkodla eşleşme; yavaş — varsayılan kapalı)
 
 import { createClient } from "@supabase/supabase-js";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { loadEnv, wooClient, mapAddress, phone10, lower, normSku, round2, BARCODE_KEY, EMAIL_RE } from "./lib/woo-common.mjs";
 
 loadEnv();
@@ -36,6 +43,7 @@ const FULL = process.argv.includes("--hepsi");            // tüm siparişleri b
 const OUT_DIR = new URL("../.woo-report/", import.meta.url);
 const SKIP_ZERO_BEFORE = "2021-01-01";
 const UNPAID_CANCEL_DAYS = 30;
+const STOCK_FILE = new URL("stok-baslangic.txt", OUT_DIR);
 const STAFF_ROLES = new Set(["administrator", "shop_manager", "editor", "author", "contributor"]);
 
 const SITES = [
@@ -141,7 +149,7 @@ async function main() {
   }
   const profiles = new Map((await pageAll("profiles", "id, email, first_name, last_name, phone, import_source")).map((p) => [p.id, p]));
   const withAddress = new Set((await pageAll("user_addresses", "user_id")).map((a) => a.user_id));
-  const existingOrders = await pageAll("orders", "id, order_number, import_source, import_ref, external_raw, status, payment_status, shipment_status, invoice_status");
+  const existingOrders = await pageAll("orders", "id, order_number, import_source, import_ref, external_raw, status, payment_status, shipment_status, invoice_status, created_at, stock_reduced_at");
   const imported = new Map(existingOrders.filter((o) => o.import_source).map((o) => [`${o.import_source}:${o.import_ref}`, o]));
   // Dolu numaralar (aktarılanlar dahil): eski sitenin sonraki siparişleri, sayaçtan numara almış
   // bir siparişle çakışırsa yeni numara alır (eski no "Eski no" olarak görünür)
@@ -155,6 +163,17 @@ async function main() {
 
   const report = [];
   const log = (s = "") => { report.push(s); };
+
+  // Stok başlangıcı: bu andan sonra verilen ödenmiş yerihisset siparişleri stoktan düşer (ilk --apply turunda yazılır)
+  let stockFrom = existsSync(STOCK_FILE) ? readFileSync(STOCK_FILE, "utf8").trim() : "";
+  if (!stockFrom) {
+    stockFrom = new Date().toISOString();
+    if (APPLY) { mkdirSync(OUT_DIR, { recursive: true }); writeFileSync(STOCK_FILE, `${stockFrom}\n`); }
+  }
+  const stockable = (site, created, st) => site.code === "yerihisset" && !!created && created >= stockFrom
+    && st.payment_status === "paid" && !["cancelled", "refunded"].includes(st.status);
+  const toReduce = [], toRestore = [];
+  const stockStat = { reduce: 0, restore: 0 };
   let seqBumped = false;
   const addrPlanned = new Set(); // aynı kişiye iki siteden iki adres eklenmesin
 
@@ -295,9 +314,16 @@ async function main() {
           continue;
         }
         oStat.update++;
+        let upErr = null;
         if (APPLY) {
           const { error } = await sb.from("orders").update({ ...fields, external_raw: { ...(prev.external_raw || {}), wc_status: o.status, wc_modified: wcModified } }).eq("id", prev.id);
           if (error) console.log(`  ! #${o.number} güncellenemedi: ${error.message}`);
+          upErr = error;
+        }
+        // Stok: eski sitede iptal / tam iade → düşülen stok geri; havale ödendi → şimdi düş
+        if (!upErr) {
+          if (prev.stock_reduced_at && ["cancelled", "refunded"].includes(fields.status)) { stockStat.restore++; toRestore.push(prev.id); }
+          else if (!prev.stock_reduced_at && stockable(site, gmt(o.date_created_gmt) || prev.created_at, fields)) { stockStat.reduce++; toReduce.push(prev.id); }
         }
         continue;
       }
@@ -365,6 +391,8 @@ async function main() {
       });
       oStat.insert++;
       oStat.items += items.length;
+      const reduceStock = stockable(site, payload.created_at, fields);
+      if (reduceStock) stockStat.reduce++;
 
       if (APPLY) {
         let { data: ins, error } = await sb.from("orders").insert(payload).select("id").single();
@@ -384,6 +412,7 @@ async function main() {
           if (iErr) console.log(`  ! #${num} satırları eklenemedi: ${iErr.message}`);
         }
         imported.set(`${site.source}:${ref}`, { id: ins.id, external_raw: payload.external_raw });
+        if (reduceStock && items.length) toReduce.push(ins.id);
       }
     }
 
@@ -398,12 +427,30 @@ async function main() {
     if (site.ownNumbers) log(`  Kendi numarasıyla gelen: ${oStat.insert - oStat.conflicts} · numarası dolu olduğu için yeni numara alan: ${oStat.conflicts}`);
     log(`  Ciroya eklenecek (yıl): ${[...revenueByYear.keys()].sort().map((y) => `${y}: ${money(revenueByYear.get(y))}`).join(" · ") || "—"}`);
     log(`  Ürün eşleşmesi: elle eşleme ${match.map} · SKU ${match.sku} · barkod ${match.barcode} · eşleşmeyen ${match.none}`);
+    if (site.code === "yerihisset") log(`  Stok: ${stockStat.reduce} sipariş stoktan düşecek · ${stockStat.restore} iptal / iadede stok geri (başlangıç ${new Date(stockFrom).toLocaleString("tr-TR", { timeZone: "Europe/Istanbul" })})`);
   }
 
   if (APPLY) {
     const { data: rm, error } = await sb.rpc("rematch_order_items");
     log("");
     log(error ? `! Eşleştirme hatası: ${error.message}` : `EŞLEŞTİRME: ${rm.matched} satır ürüne bağlandı · ${rm.unmatched} satır eşleşmedi (sitede olmayan eski ürünler)`);
+    // Stok (satırlar ürüne bağlandıktan SONRA): düş (yetmezse 0'a iner, sipariş reddedilmez) / geri ekle. Pazaryerleri
+    // stok değişikliğini kendiliğinden alır. Fonksiyonlar iki kez düşmez / iki kez geri eklemez (stock_reduced_at).
+    let red = 0, back = 0;
+    const short = [];
+    for (const id of toReduce) {
+      const { data, error: e } = await sb.rpc("reduce_order_stock", { p_order_id: id, p_strict: false });
+      if (e) { console.log(`  ! stok düşülemedi: ${e.message}`); continue; }
+      if (!data?.already) red++;
+      for (const x of data?.shortages || []) short.push(`${x.title || "?"} (gereken ${x.needed}, stokta ${x.available})`);
+    }
+    for (const id of toRestore) {
+      const { data, error: e } = await sb.rpc("restore_order_stock", { p_order_id: id });
+      if (e) { console.log(`  ! stok geri eklenemedi: ${e.message}`); continue; }
+      if (!data?.noop) back++;
+    }
+    if (toReduce.length || toRestore.length) log(`STOK: ${red} sipariş stoktan düştü · ${back} siparişte stok geri eklendi`);
+    if (short.length) log(`  ! Stok yetmedi (0'a indi, kontrol et): ${short.join(" · ")}`);
   }
 
   const text = report.join("\n");
