@@ -25,15 +25,15 @@ export const TELEGRAM_TOPICS = [
   { key: "site_error", label: "Site hatası (müşteri)", desc: "Müşterinin karşılaştığı hata dakikasında: kart / havale başlatılamadı, ödeme başarısız ya da siparişle eşleşmedi, sayfa çöktü, sunucu hatası. Ayrıca gündüz saatlerinde ziyaretçi ödeme adımına geldiği halde 4 saattir site siparişi yoksa uyarı. Varsayılan açık", ready: true },
   { key: "email_approval", label: "E-posta onayı", desc: "Müşteriye ilk kez gidecek bir e-posta türü onayını bekliyor (tür + konu). Varsayılan açık", ready: true },
   { key: "server_alert", label: "Sunucu / sistem uyarısı", desc: "Sunucu sağlığı uyarısı (disk, yedek, yeni IP’den SSH girişi, zamanlanmış görev durdu…) ve “giderildi”", ready: true },
-  { key: "daily_summary", label: "Günlük özet (periyodik)", desc: "Her sabah seçtiğin saatte: dünkü satış (kanal kırılımı), bekleyen işler, stok talepleri, sunucu durumu", ready: true },
+  { key: "daily_summary", label: "Günlük özet (periyodik)", desc: "Her sabah seçtiğin saatte (yarım saat adımlı): dünkü satış (kanal kırılımı), bekleyen işler, stok talepleri, sunucu durumu", ready: true },
 ] as const;
 export type TelegramTopic = (typeof TELEGRAM_TOPICS)[number]["key"];
 
-export type TelegramConfig = { enabled: boolean; token: string; chatId: string; topics: Record<string, boolean>; dailyHour: number };
+export type TelegramConfig = { enabled: boolean; token: string; chatId: string; topics: Record<string, boolean>; dailyHour: number; dailyMinute: number };
 
 export async function getTelegramConfig(sb: SB): Promise<TelegramConfig> {
   const { data } = await sb.from("settings")
-    .select("telegram_enabled, telegram_bot_token, telegram_chat_id, telegram_topics, telegram_daily_hour")
+    .select("telegram_enabled, telegram_bot_token, telegram_chat_id, telegram_topics, telegram_daily_hour, telegram_daily_minute")
     .order("id", { ascending: true }).limit(1).maybeSingle();
   return {
     enabled: !!data?.telegram_enabled,
@@ -42,6 +42,7 @@ export async function getTelegramConfig(sb: SB): Promise<TelegramConfig> {
     // site_error varsayılan AÇIK (canlıda müşteri hatası kaçmasın — kullanıcı 2026-11-15); panelde kapatılırsa false kaydedilir
     topics: { site_error: true, email_approval: true, ...((data?.telegram_topics && typeof data.telegram_topics === "object") ? data.telegram_topics : { new_order: true }) },
     dailyHour: Number.isInteger(data?.telegram_daily_hour) ? data.telegram_daily_hour : 9,
+    dailyMinute: Number.isInteger(data?.telegram_daily_minute) ? data.telegram_daily_minute : 0, // MIG 20261199
   };
 }
 
@@ -457,6 +458,8 @@ async function scanIntegrationErrors(sb: SB, cfg: TelegramConfig): Promise<numbe
 // ─── Günlük özet ────────────────────────────────────────────────────────────
 const trDate = (ms: number) => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Istanbul" }).format(new Date(ms)); // YYYY-MM-DD
 const trHour = (ms: number) => Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Istanbul", hour: "2-digit", hourCycle: "h23" }).format(new Date(ms)));
+/** Türkiye saatiyle günün dakikası (08:30 → 510) */
+const trMinuteOfDay = (ms: number) => trHour(ms) * 60 + new Date(ms).getUTCMinutes(); // TR = UTC+3, dakika aynı
 
 export async function composeDailySummary(sb: SB): Promise<string> {
   const today = trDate(Date.now());
@@ -528,7 +531,7 @@ export async function composeDailySummary(sb: SB): Promise<string> {
 
 async function maybeDailySummary(sb: SB, cfg: TelegramConfig): Promise<number> {
   const now = Date.now();
-  if (trHour(now) < cfg.dailyHour) return 0;
+  if (trMinuteOfDay(now) < cfg.dailyHour * 60 + cfg.dailyMinute) return 0;
   const today = trDate(now);
   if ((await getState(sb, "daily_summary_date")) === today) return 0;
   await setState(sb, "daily_summary_date", today); // önce işaretle: hata olsa da aynı gün tekrar tekrar denemesin
@@ -658,7 +661,9 @@ export async function composeOrderMessage(sb: SB, orderId: string, opts: { final
 
 const MIN_AGE_MS = 15_000; // pazaryeri siparişinde kalemler + stok düşümü yazılsın
 
-export async function processTelegramOutbox(sb: SB = createAdminClient()): Promise<{ sent: number; updated: number; skipped: number; errors: string[] }> {
+/** holdOrders: yeni sipariş mesajlarını bu turda gönderme (dakikalık iş pazaryeri siparişini 30 dakikada bir toplu gönderir;
+ *  site siparişi kickTelegram ile holdOrders olmadan hemen işlenir). */
+export async function processTelegramOutbox(sb: SB = createAdminClient(), opts: { holdOrders?: boolean } = {}): Promise<{ sent: number; updated: number; skipped: number; errors: string[] }> {
   const out = { sent: 0, updated: 0, skipped: 0, errors: [] as string[] };
   const cfg = await getTelegramConfig(sb);
   const now = Date.now();
@@ -676,9 +681,11 @@ export async function processTelegramOutbox(sb: SB = createAdminClient()): Promi
   if (off) return out;
 
   // 1) Yeni kayıtlar → gönder
-  const { data: pend } = await sb.from("telegram_outbox").select("id, topic, ref_id, status, attempts")
+  let pq = sb.from("telegram_outbox").select("id, topic, ref_id, status, attempts")
     .or(`status.eq.pending,and(status.eq.sending,locked_at.lt.${iso(now - 5 * 60_000)})`)
-    .lte("created_at", iso(now - MIN_AGE_MS)).order("created_at").limit(20);
+    .lte("created_at", iso(now - MIN_AGE_MS));
+  if (opts.holdOrders) pq = pq.neq("topic", "new_order");
+  const { data: pend } = await pq.order("created_at").limit(20);
   for (const r of (pend as any[]) || []) {
     const { data: claimed } = await sb.from("telegram_outbox").update({ status: "sending", locked_at: iso(Date.now()) })
       .eq("id", r.id).eq("status", r.status).select("id");

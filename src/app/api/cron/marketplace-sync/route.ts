@@ -59,8 +59,9 @@ async function run(req: NextRequest) {
   for (const r of reports) {
     if (r.errors.length) console.error(`[cron/marketplace-sync:${r.channel}]`, r.errors.join(" | "));
   }
-  // 3) Fiyat kuyruğu (yalnız Fiyatlar sayfasından gönderilenler) → gönder / doğrula / tekrar dene
-  const prices = await processMarketplacePrices(supabase);
+  // 3) Fiyat kuyruğu (yalnız Fiyatlar sayfasından gönderilenler). Gönderim düğmeye basınca ANINDA (pushPrices);
+  // burası yalnız doğrulama / tekrar deneme yedeği → 10 dakikada bir (kullanıcı 2026-11-23).
+  const prices = m % 10 === 5 ? await processMarketplacePrices(supabase) : [];
   for (const p of prices) {
     if (p.errors.length) console.error(`[cron/marketplace-prices:${p.channel}]`, p.errors.join(" | "));
   }
@@ -88,16 +89,19 @@ async function run(req: NextRequest) {
     ? await pollMarketplaceInvoices(supabase).catch((e: any) => ({ sent: 0, errors: [e?.message || String(e)] }))
     : { sent: 0, errors: [] as string[] };
   if (tyInv.errors.length) console.error("[cron/marketplace-invoice]", tyInv.errors.join(" | "));
-  // 6) Google Merchant API: değişen ürünler (besleme günlük tam eşitlemeyi sürdürür)
-  const google = await processGmcQueue(supabase).catch((e: any) => ({ products: 0, sent: 0, deleted: 0, failed: 0, skipped: "", errors: [e?.message || String(e)] }));
+  // 6) Google Merchant API: değişen ürünler (besleme günlük tam eşitlemeyi sürdürür) — 30 dakikada bir
+  const google = m % 30 === 9
+    ? await processGmcQueue(supabase).catch((e: any) => ({ products: 0, sent: 0, deleted: 0, failed: 0, skipped: "", errors: [e?.message || String(e)] }))
+    : { products: 0, sent: 0, deleted: 0, failed: 0, skipped: "", errors: [] as string[] };
   if (google.errors.length) console.error("[cron/gmc]", google.errors.slice(0, 5).join(" | "));
   // 6a) Trendyol müşteri soruları (5 dk'da bir; Trendyol bildirim göndermez) → Mesajlar › Trendyol soruları
   if (new Date().getMinutes() % 5 === 1) {
     const qna = await syncTrendyolQuestions(supabase).catch((e: any) => ({ errors: [e?.message || String(e)] }));
     if (qna.errors.length) console.error("[cron/trendyol-qna]", qna.errors.join(" | "));
   }
-  // 6b) Telegram bildirimleri (yeni sipariş: mesaj + entegrasyonlar bitince güncelleme; src/lib/telegram.ts)
-  const telegram = await processTelegramOutbox(supabase).catch((e: any) => ({ sent: 0, updated: 0, skipped: 0, errors: [e?.message || String(e)] }));
+  // 6b) Telegram bildirimleri (src/lib/telegram.ts). Dakikada bir: müşteri mesajı, iade / değişim talebi, entegrasyon ve
+  // site hatası. PAZARYERİ sipariş mesajı 30 dakikada bir toplu (kullanıcı 2026-11-23; site siparişi kickTelegram ile anında).
+  const telegram = await processTelegramOutbox(supabase, { holdOrders: m % 30 !== 0 }).catch((e: any) => ({ sent: 0, updated: 0, skipped: 0, errors: [e?.message || String(e)] }));
   if (telegram.errors.length) console.error("[cron/telegram]", telegram.errors.slice(0, 3).join(" | "));
   // 7) Saatte bir: yorum isteme + "seni özledik" (src/lib/review-winback.ts; ayarlar Ayarlar › E-posta Şablonları)
   if (new Date().getMinutes() === 23) {

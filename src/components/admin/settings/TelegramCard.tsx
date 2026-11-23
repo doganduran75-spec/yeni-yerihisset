@@ -133,9 +133,9 @@ export default function TelegramCard() {
               {t.key === "daily_summary" && (
                 <span className="mt-1 flex flex-wrap items-center gap-2 text-xs">
                   Saat:
-                  <select className="h-7 rounded border px-1 bg-white" disabled={!!busy} value={st?.dailyHour ?? 9}
-                    onChange={(e) => run("hour", async () => { await api({ op: "save", dailyHour: Number(e.target.value) }); })}>
-                    {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}
+                  <select className="h-7 rounded border px-1 bg-white" disabled={!!busy} value={(st?.dailyHour ?? 9) * 60 + (st?.dailyMinute ?? 0)}
+                    onChange={(e) => run("hour", async () => { const v = Number(e.target.value); await api({ op: "save", dailyHour: Math.floor(v / 60), dailyMinute: v % 60 }); })}>
+                    {Array.from({ length: 48 }, (_, i) => i * 30).map((v) => <option key={v} value={v}>{String(Math.floor(v / 60)).padStart(2, "0")}:{v % 60 ? "30" : "00"}</option>)}
                   </select>
                   <button type="button" className="underline text-sky-700 disabled:opacity-50" disabled={!!busy || !st?.tokenSet || !st?.chatId}
                     onClick={() => run("daily", async () => { await api({ op: "send_daily" }); siteAlert({ message: "Günlük özet gönderildi — Telegram’a bak.", tone: "success" }); })}>

@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
       if (ids.length) ((await sb.from("orders").select("id, order_number, external_order_number").in("id", ids)).data || [])
         .forEach((o: any) => nums.set(o.id, o.order_number ? `YH${o.order_number}` : o.external_order_number || ""));
       return NextResponse.json({
-        ok: true, enabled: cfg.enabled, tokenSet: !!cfg.token, bot, tokenError, chatId: cfg.chatId, topics: cfg.topics, dailyHour: cfg.dailyHour,
+        ok: true, enabled: cfg.enabled, tokenSet: !!cfg.token, bot, tokenError, chatId: cfg.chatId, topics: cfg.topics, dailyHour: cfg.dailyHour, dailyMinute: cfg.dailyMinute,
         topicList: TELEGRAM_TOPICS,
         recent: ((recent as any[]) || []).map((r) => ({ ...r, order: nums.get(r.ref_id) || null })),
       });
@@ -69,6 +69,11 @@ export async function POST(req: NextRequest) {
         const h = Number(body.dailyHour);
         if (!Number.isInteger(h) || h < 0 || h > 23) return NextResponse.json({ error: "Saat 0–23 olmalı" }, { status: 400 });
         patch.telegram_daily_hour = h;
+      }
+      if (body.dailyMinute !== undefined) {
+        const mi = Number(body.dailyMinute);
+        if (![0, 30].includes(mi)) return NextResponse.json({ error: "Dakika 00 ya da 30 olmalı" }, { status: 400 });
+        patch.telegram_daily_minute = mi;
       }
       if (typeof body.enabled === "boolean") {
         if (body.enabled && !((patch.telegram_bot_token as string) || cfg.token)) return NextResponse.json({ error: "Önce bot token'ı kaydet" }, { status: 400 });
