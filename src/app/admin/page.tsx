@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { orderNextStep, isReturnInvoiceDue, isRefundDue, isGeneralOrderTodo, isUninvoicedShipped, type NextStep } from "@/lib/order-next-step";
+import { orderNextStep, isReturnInvoiceDue, isRefundDue, isGeneralOrderTodo, isUninvoicedShipped, todoKind, TODO_KINDS, type TodoKind, type NextStep } from "@/lib/order-next-step";
 import { Card } from "@/components/ui/card";
 import { supabase } from "@/lib/supabase";
 import DashboardSummary from "@/components/admin/DashboardSummary";
@@ -176,8 +176,13 @@ export default function AdminDashboard() {
   const refundDue = openOrders.filter((o) => o.step && isRefundDue(o.step)).length;
   // Süren değişimdeki siparişin işi "Süren değişim" satırında (iki yerde sayılmasın)
   const hasOpenExchange = (o: any) => (o.order_cases || []).some((c: any) => !c.closed_at && c.kind === "exchange");
-  // Kalan genel işler — listede ?todo=diger aynı kuralla süzer (tıklayınca yalnız bunlar açılır; bir sipariş iki satırda sayılmaz)
-  const generalTodo = openOrders.filter((o) => o.step && isGeneralOrderTodo(o.step, hasOpenExchange(o), isUninvoicedShipped(o))).length;
+  // Kalan genel işler İŞ TÜRÜNE göre (kullanıcı 2026-11-25) — listede ?todo=odeme|sevk|fatura|diger aynı kuralla süzer
+  // (tıklayınca yalnız bunlar açılır; bir sipariş iki satırda sayılmaz). Fatura satırına kargolanmış faturası kesilmemişler eklenir.
+  const kindCount = (k: TodoKind) => openOrders.filter((o) => o.step && isGeneralOrderTodo(o.step, hasOpenExchange(o), isUninvoicedShipped(o)) && todoKind(o.step) === k).length;
+  const todoRows = TODO_KINDS.map((t) => ({
+    n: kindCount(t.kind) + (t.kind === "invoice" ? uninvoiced.n : 0), label: t.label, href: `/admin/orders?todo=${t.param}`,
+    late: t.kind === "invoice" ? uninvoiced.late : 0,
+  }));
 
   return (
     <div className="space-y-3">
@@ -190,8 +195,9 @@ export default function AdminDashboard() {
           <div className="px-4 pb-1 font-semibold text-sm flex items-center gap-2"><Clock size={16} className="text-amber-500" /> Bugünün işleri</div>
           <div className="px-2 text-sm">
             {[
-              // İade faturası bekleyenler ayrı satırda (aşağıda), burada sayılmaz (kullanıcı 2026-11-03)
-              { n: generalTodo, label: "Bekleyen sipariş işi", href: "/admin/orders?todo=diger" },
+              // Sipariş işleri türüne göre: Ödeme beklenen / Sevk edilecek / Fatura kesilecek (+ kargolanmış faturası kesilmemiş,
+              // 7 günü geçen kırmızı — VUK) / İade-talep-diğer. İade faturası, ücret iadesi, süren değişim ayrı satırlarda (aşağıda).
+              ...todoRows,
               { n: mailApprovalCount, label: "Onay bekleyen e-posta", href: "/admin/email-onay" },
               { n: msgCount, label: "Cevapsız müşteri mesajı", href: "/admin/messages" },
               { n: qnaCount, label: "Cevapsız Trendyol sorusu", href: "/admin/messages?kanal=trendyol" },
@@ -206,8 +212,6 @@ export default function AdminDashboard() {
               { n: returnInvoiceDue, label: "İade faturası kesilecek", href: "/admin/orders?iade=return_invoice_due" },
               // Değişim talebinden sonuçlanana kadar (kullanıcı 2026-11-07: süreç bitince fatura kesilecek; işi burada izlenir)
               { n: exchangeOpen, label: "Süren değişim", href: "/admin/orders?iade=exchange_open" },
-              // Kargolanmış, faturası kesilmemiş — 7 günü geçen varsa kırmızı not (VUK)
-              { n: uninvoiced.n, label: "Faturası kesilmemiş", href: "/admin/orders?iade=uninvoiced_shipped", late: uninvoiced.late },
               // Paraşüt'e gelen e-fatura: panelde kabul edilip kurala göre kaydedilir (kullanıcı 2026-11-22)
               { n: inboundCount, label: "Paraşüt gelen e-fatura", href: "/admin/parasut/gelen" },
               // Ay bitti, ortakların hakedişi işlenmedi (Satış Ortaklığı › Hakediş; en eski dönem açılır)

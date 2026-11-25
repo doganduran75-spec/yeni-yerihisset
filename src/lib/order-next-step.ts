@@ -129,6 +129,27 @@ export function isGeneralOrderTodo(s: NextStep, hasOpenExchange: boolean, uninvo
   return s.needsAction && !isRefundDue(s) && !isReturnInvoiceDue(s) && !hasOpenExchange && !(uninvoicedShipped && isInvoiceOnlyStep(s));
 }
 
+// İŞ TÜRÜ (kullanıcı 2026-11-25: "Bekleyen sipariş işi"nde ödeme bekleyen, sevk edilecek ve faturası kesilemeyen siparişler
+// aynı grupta duruyordu). Pano satırları + liste süzgeci (?todo=odeme|sevk|fatura|diger) + listedeki "yapılacak iş" yazısı.
+// Fatura satırı: bu türdeki genel işler + kargolanmış faturası kesilmemiş (isUninvoicedShipped) — eski "Faturası kesilmemiş" satırı.
+export type TodoKind = "payment" | "ship" | "invoice" | "other";
+export const TODO_KINDS: { kind: TodoKind; label: string; param: string }[] = [
+  { kind: "payment", label: "Ödeme beklenen", param: "odeme" },
+  { kind: "ship", label: "Sevk edilecek", param: "sevk" },
+  { kind: "invoice", label: "Fatura kesilecek", param: "fatura" },
+  { kind: "other", label: "İade / talep / diğer", param: "diger" },
+];
+const PAY_KEYS: string[] = ["mark_paid", "cancel_transfer_refunded", "cancel_transfer_none"];
+const PREP_KEYS: string[] = ["packed", "ship_kargonomi", "ship_manual", "hb_package", "mp_picking"];
+export function todoKind(s: NextStep): TodoKind {
+  const k = s.actions.map((a) => a.key as string);
+  if (k.some((x) => PAY_KEYS.includes(x))) return "payment";
+  // Paket hazır, fatura kesilemedi ("Kurye aldı" yanında olsa da önce fatura) → fatura; paketleme / kargo işi varsa sevk
+  if (k.some((x) => INVOICE_KEYS.includes(x)) && !k.some((x) => PREP_KEYS.includes(x))) return "invoice";
+  if (k.some((x) => PREP_KEYS.includes(x) || x === "picked_up")) return "ship";
+  return "other";
+}
+
 export function isMarketplaceOrder(o: OrderLike) {
   return (o.channel || "site") !== "site" && !o.import_source;
 }
@@ -187,6 +208,12 @@ export function orderNextStep(o: OrderLike): NextStep {
   // Paraşüt faturası kesiliyor / hata verdi (fatura adımı sırasında) — eski siteden aktarılan siparişte de görünür
   const ps = o.parasut_status;
   if (ps && ps !== "done" && (o.invoice_status || "pending") === "pending" && r.actions.some((a) => a.key === "invoice")) {
+    // Paraşüt bakımda / ulaşılamıyor (src/lib/parasut-invoice.ts PARASUT_RETRY_HOURS): sistem kendiliğinden yeniden dener →
+    // yöneticiden iş yok (kullanıcı 2026-11-25: bakım sırasında "yapabileceğim bir şey yok" işleri listede duruyordu)
+    if (ps === "retry") {
+      return { ...r, stage: `${r.stage} — Paraşüt'e ulaşılamıyor`, hint: o.parasut_error || "Paraşüt bakımda; fatura 10 dakikada bir kendiliğinden yeniden deneniyor.",
+        actions: r.actions.map((a) => (a.key === "invoice_parasut" ? { ...a, label: "Şimdi yeniden dene" } : a)), needsAction: false };
+    }
     return ps === "error"
       ? { ...r, stage: `${r.stage} — Paraşüt faturası kesilemedi`, hint: o.parasut_error || r.hint,
           actions: r.actions.map((a) => (a.key === "invoice_parasut" ? { ...a, label: "Paraşüt — yeniden dene" } : a)), needsAction: true }

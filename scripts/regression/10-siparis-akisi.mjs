@@ -1197,7 +1197,7 @@ export default {
               "Değişim bitince ücret iadesi işi açılmıyor; tutulan çift de iade gelince “Ücret iadesi yap” açılıyor", `${done.stage} / ${later.stage}`);
             // Pano: "Ücret iadesi yapılacak" ayrı satır (Bekleyen sipariş işinden düşülür) — kullanıcı 2026-11-14
             const dash = (await import("node:fs")).readFileSync(new URL("../../src/app/admin/page.tsx", import.meta.url), "utf8");
-            ok(nx.isRefundDue(later) && !nx.isRefundDue(done) && /label: "Ücret iadesi yapılacak", href: "\/admin\/orders\?iade=refund_due"/.test(dash) && !nx.isGeneralOrderTodo(later, false) && /label: "Bekleyen sipariş işi", href: "\/admin\/orders\?todo=diger"/.test(dash),
+            ok(nx.isRefundDue(later) && !nx.isRefundDue(done) && /label: "Ücret iadesi yapılacak", href: "\/admin\/orders\?iade=refund_due"/.test(dash) && !nx.isGeneralOrderTodo(later, false) && /\.\.\.todoRows,/.test(dash),
               "Pano: “Ücret iadesi yapılacak” ayrı satırda (sipariş listesinde aynı filtre), bekleyen sipariş işinde ikinci kez sayılmıyor", "pano satırı eksik");
             // KISMİ İADE (2026-11-14, YH24721): iki farklı ürünün biri iade geldi, kargo "Teslim edildi"de kaldı → pano ve liste
             // ürün satırlarını (ret_items) okuyup "Ücret iadesi yapılacak" saymalı; öneri yalnız iade gelen ürünün bedeli
@@ -2135,9 +2135,10 @@ export default {
             "Aynı siparişte iki iş: kısmi iade + fatura → hem “Ücret iadesi yapılacak” hem “Faturası kesilmemiş”; yalnız fatura işi → yalnız “Faturası kesilmemiş” (“Bekleyen sipariş işi”nde ikinci kez yok)",
             `${inv1.stage} / ${two.stage} / ${pay.stage}`);
         }
-        ok(/label: "Bekleyen sipariş işi", href: "\/admin\/orders\?todo=diger"/.test(dash) && /fTodo === "other" && !isGeneralOrderTodo\(nx\(o\), hasOpenExchange\(o\), isUninvoicedShipped\(o\)\)/.test(list)
-          && /v === "diger" \? "other"/.test(list),
-          "Panodan “Bekleyen sipariş işi”ne tıklayınca liste yalnız o işleri açıyor (pano sayısıyla aynı kural)", "pano bağlantısı / liste süzgeci eksik");
+        // 2026-11-25: "Bekleyen sipariş işi" iş türüne bölündü (Ödeme beklenen / Sevk edilecek / Fatura kesilecek / İade-talep-diğer)
+        ok(/\.\.\.todoRows,/.test(dash) && /href: `\/admin\/orders\?todo=\$\{t\.param\}`/.test(dash) && /fTodo && fTodo !== "all" && !inTodoKind\(o, fTodo\)/.test(list)
+          && /TODO_KINDS\.find\(\(t\) => t\.param === v\)/.test(list),
+          "Panodan iş türü satırına (ödeme / sevk / fatura / diğer) tıklayınca liste yalnız o işleri açıyor (pano sayısıyla aynı kural)", "pano bağlantısı / liste süzgeci eksik");
         // Satırın saydığı: açık değişim talebi (kapanan sayılmaz) — geri alınan işlemle
         const r = await order([MAIN(1)]);
         const id = r.json?.orderId;

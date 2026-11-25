@@ -2,7 +2,7 @@
 
 import { orderLabel } from "@/lib/order-label";
 import { useEffect, useState, useCallback } from "react";
-import { orderNextStep, isReturnInvoiceDue, isRefundDue, isGeneralOrderTodo, isUninvoicedShipped, paidReturnedUnits, type NextActionKey, UNINVOICED_SINCE, INVOICE_DAYS, caseReasonLabel } from "@/lib/order-next-step";
+import { orderNextStep, isReturnInvoiceDue, isRefundDue, isGeneralOrderTodo, isUninvoicedShipped, paidReturnedUnits, type NextActionKey, UNINVOICED_SINCE, INVOICE_DAYS, caseReasonLabel, todoKind, TODO_KINDS, type TodoKind } from "@/lib/order-next-step";
 import { returnRefundSuggestion, exchangeReturnDefaults } from "@/lib/exchange-return";
 import { commissionPeriod, periodLabel } from "@/lib/affiliate-commission";
 import { useSearchParams, useRouter } from "next/navigation";
@@ -94,6 +94,10 @@ const openCaseOf = (o: any) => ((o?.order_cases as any[]) || []).find((c) => !c.
 const nx = (o: any) => orderNextStep({ ...o, order_items: o.order_items ?? o.ret_items ?? null, open_case: openCaseOf(o) });
 // Süren değişim panoda kendi satırında ("Bekleyen sipariş işi"nde sayılmaz)
 const hasOpenExchange = (o: any) => (o.order_cases || []).some((c: any) => !c.closed_at && c.kind === "exchange");
+// Panodaki iş türü satırı (Ödeme beklenen / Sevk edilecek / Fatura kesilecek / İade-talep-diğer) — panoyla AYNI kural
+// (kullanıcı 2026-11-25). Fatura satırı: bu türdeki işler + kargolanmış faturası kesilmemiş (eski "Faturası kesilmemiş").
+const inTodoKind = (o: any, k: TodoKind) =>
+  (isGeneralOrderTodo(nx(o), hasOpenExchange(o), isUninvoicedShipped(o)) && todoKind(nx(o)) === k) || (k === "invoice" && isUninvoicedShipped(o));
 
 // Siparişin geldiği reklam/kampanya (orders.attribution.source — src/lib/ad-context.ts)
 function adSourceLabel(o: { attribution?: { source?: Record<string, unknown> } | null }): string | null {
@@ -356,10 +360,10 @@ export default function OrdersPage() {
   const [fInv, setFInv] = useState("all");
   const [fRet, setFRet] = useState(() => searchParams.get("iade") || "all"); // iade/iptal hazır filtreleri (panodan ?iade=return_expected)
   const [showAbandoned, setShowAbandoned] = useState(false); // yarım kalan kart denemelerini göster
-  // "Bekleyen işlerim" (order-next-step): "all" = tüm işler (düğme); "other" = panodaki "Bekleyen sipariş işi" satırı
-  // (?todo=diger — ücret iadesi / iade faturası / süren değişim kendi satırlarında, burada yok; kullanıcı 2026-11-14)
-  const todoParam = (v: string | null): "" | "all" | "other" => (v === "diger" ? "other" : v === "1" ? "all" : "");
-  const [fTodo, setFTodo] = useState<"" | "all" | "other">(() => todoParam(searchParams.get("todo")));
+  // "Bekleyen işlerim" (order-next-step): "all" = tüm işler (düğme); iş türü = panodaki satır (?todo=odeme|sevk|fatura|diger;
+  // ücret iadesi / iade faturası / süren değişim kendi satırlarında, burada yok; kullanıcı 2026-11-14, türler 2026-11-25)
+  const todoParam = (v: string | null): "" | "all" | TodoKind => (v === "1" ? "all" : TODO_KINDS.find((t) => t.param === v)?.kind ?? "");
+  const [fTodo, setFTodo] = useState<"" | "all" | TodoKind>(() => todoParam(searchParams.get("todo")));
   // Panodan gelen hazır filtre (?iade=…, ?todo=1): sayfa açıkken ya da ilk çizimde parametre geç gelirse de uygula
   useEffect(() => {
     const iade = searchParams.get("iade");
@@ -929,7 +933,7 @@ export default function OrdersPage() {
   // Sıradaki adım panelindeki düğmeler → mevcut işlemler (kurallar src/lib/order-next-step.ts)
   // Paraşüt faturası: kes / kaldığı yerden devam / durum (src/lib/parasut-invoice.ts)
   async function invoiceParasut(o: Order, acceptDiff = false, carrier?: string) {
-    const busy = (o as any).parasut_status && !["error", "done"].includes((o as any).parasut_status);
+    const busy = (o as any).parasut_status && !["error", "done", "retry"].includes((o as any).parasut_status);
     if (!busy && !acceptDiff && !carrier && !(await siteConfirm({ title: "Fatura Paraşüt'te kesilsin mi?", message: "Müşteri, satış faturası, tahsilat (kanal ayarındaki hesap) ve e-Arşiv / e-Fatura oluşturulur. e-Belge resmîleşince geri alınamaz.", confirmText: "Faturayı kes" }))) return;
     setUpdatingId(o.id);
     try {
@@ -1337,7 +1341,7 @@ Siparişte “Paraşüt — yeniden dene” ile tekrar dene.`, tone: "danger" })
       }
       if (fMethod !== "all" && (o.payment_method || "credit_card") !== fMethod) return false;
       if (fTodo === "all" && !nx(o).needsAction) return false;
-      if (fTodo === "other" && !isGeneralOrderTodo(nx(o), hasOpenExchange(o), isUninvoicedShipped(o))) return false;
+      if (fTodo && fTodo !== "all" && !inTodoKind(o, fTodo)) return false;
       if (fChannel !== "all" && (o.channel || "site") !== fChannel) return false;
       if (!needle) return true;
       const hay = trNorm([
@@ -1448,10 +1452,18 @@ Siparişte “Paraşüt — yeniden dene” ile tekrar dene.`, tone: "danger" })
                 className={`h-9 px-3 rounded-lg border text-sm font-bold transition ${fTodo ? "bg-olive-600 text-white border-olive-600" : "bg-background text-slate-700 hover:bg-slate-50"}`}
                 title="Sıradaki adımı sende olan siparişler (ödeme onayı, kargoya verme, iade, fatura…)"
               >
-                {fTodo === "other" ? "Bekleyen sipariş işi" : "Bekleyen işlerim"} ({fTodo === "other"
-                  ? orders.filter((o) => isGeneralOrderTodo(nx(o), hasOpenExchange(o), isUninvoicedShipped(o))).length
-                  : orders.filter((o) => nx(o).needsAction).length})
+                Bekleyen işlerim ({orders.filter((o) => nx(o).needsAction).length})
               </button>
+              {/* İş türleri (panodaki satırlar): tıklayınca yalnız o iş */}
+              {fTodo && TODO_KINDS.map((t) => {
+                const n = orders.filter((o) => inTodoKind(o, t.kind)).length;
+                return (
+                  <button key={t.kind} onClick={() => { setFTodo((v) => (v === t.kind ? "all" : t.kind)); setListPage(0); }}
+                    className={`h-9 px-2.5 rounded-lg border text-xs font-bold transition ${fTodo === t.kind ? "bg-olive-600 text-white border-olive-600" : n ? "bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100" : "bg-background text-slate-400"}`}>
+                    {t.label} ({n})
+                  </button>
+                );
+              })}
               <div className="relative flex-1 min-w-[220px]">
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <input
@@ -1593,6 +1605,16 @@ ${courierQueue.slice(0, 20).map((o) => orderLabel(o)).join(", ")}${courierQueue.
                               <Landmark size={9} /> Havale/EFT
                             </span>
                           )}
+                          {/* Yapılacak iş (kullanıcı 2026-11-25): detaya girmeden ne yapılacağı görünsün */}
+                          {(() => {
+                            const st = nx(order);
+                            if (!st.needsAction) return null;
+                            return (
+                              <span data-todo-stage title={st.hint || st.stage} className="mt-1 text-[10px] font-bold rounded px-1.5 py-0.5 w-fit max-w-[260px] truncate bg-amber-100 text-amber-900">
+                                → {st.stage}
+                              </span>
+                            );
+                          })()}
                         </div>
                       </TableCell>
 
@@ -1681,6 +1703,7 @@ ${courierQueue.slice(0, 20).map((o) => orderLabel(o)).join(", ")}${courierQueue.
                               const m: Record<string, [string, string]> = {
                                 created: ["Faturalanıyor", "bg-sky-50 text-sky-700"], job_pending: ["Faturalanıyor", "bg-sky-50 text-sky-700"],
                                 pdf_pending: ["PDF bekleniyor", "bg-slate-50 text-slate-500"], error: ["Paraşüt hatası", "bg-red-50 text-red-700"],
+                                retry: ["Paraşüt bakımda — tekrar denenecek", "bg-amber-50 text-amber-700"],
                               };
                               const [t, c] = m[ps] || [ps, "bg-slate-50 text-slate-500"];
                               return <span title={(order as any).parasut_error || ""} className={`text-[10px] font-bold rounded px-1.5 py-0.5 w-fit ${c}`}>{t}</span>;

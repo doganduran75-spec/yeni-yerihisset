@@ -11,7 +11,7 @@
 // İade faturası: refundInvoiceOrder (aşağıda) — siparişte "İade faturasını kes (Paraşüt)".
 
 import { createAdminClient } from "@/lib/supabase-admin";
-import { parasutCall, parasutConfig, ParasutError } from "@/lib/parasut";
+import { parasutCall, parasutConfig, ParasutError, isParasutUnavailable } from "@/lib/parasut";
 import { pushInvoiceToMarketplace } from "@/lib/marketplace-invoice";
 import { sendInvoiceEmail } from "@/lib/invoice-mail";
 import { isTestOrder } from "@/lib/notifications";
@@ -155,7 +155,35 @@ async function findOrCreateContact(sb: Sb, x: Awaited<ReturnType<typeof prepare>
 }
 
 /** Faturayı kes / kaldığı yerden devam et */
+/** Paraşüt bakımda / ulaşılamıyorken kesilemeyen fatura bu kadar saat kendiliğinden yeniden denenir (pollParasut, 10 dk'da bir);
+ *  süre dolunca "error" olur → sipariş yöneticinin işine düşer (kullanıcı 2026-11-25). */
+export const PARASUT_RETRY_HOURS = 12;
+/** Fatura Paraşüt kesintisi yüzünden kesilemedi; sipariş "retry" durumunda, sistem kendiliğinden yeniden deneyecek */
+export class ParasutRetry extends ParasutError {
+  constructor(message: string) { super(503, message); }
+}
+
 export async function invoiceOrder(sb: Sb, orderId: string, opts: { acceptDiff?: boolean; carrier?: string } = {}) {
+  try {
+    const r = await invoiceOrderSteps(sb, orderId, opts);
+    await (sb as any).from("orders").update({ parasut_retry_since: null }).eq("id", orderId).not("parasut_retry_since", "is", null);
+    return r;
+  } catch (e: any) {
+    if (!isParasutUnavailable(e)) throw e;
+    // Paraşüt bakımda / ulaşılamıyor: istek işlenmedi → "retry" (yöneticiden iş yok), süre dolunca "error"
+    const { data: cur } = await (sb as any).from("orders").select("parasut_retry_since").eq("id", orderId).maybeSingle();
+    const since = cur?.parasut_retry_since || new Date().toISOString();
+    const expired = Date.now() - new Date(since).getTime() > PARASUT_RETRY_HOURS * 3600_000;
+    const why = String(e?.message || e).slice(0, 160);
+    const msg = expired
+      ? `Paraşüt ${PARASUT_RETRY_HOURS} saattir yanıt vermiyor (bakım / kesinti) — Paraşüt açılınca “yeniden dene”. Son yanıt: ${why}`
+      : `Paraşüt şu an bakımda / ulaşılamıyor — fatura 10 dakikada bir kendiliğinden yeniden denenecek, senden iş yok. (${why})`;
+    await save(sb, orderId, { parasut_status: expired ? "error" : "retry", parasut_error: msg, parasut_retry_since: expired ? null : since });
+    throw expired ? new ParasutError(503, msg) : new ParasutRetry(msg);
+  }
+}
+
+async function invoiceOrderSteps(sb: Sb, orderId: string, opts: { acceptDiff?: boolean; carrier?: string }) {
   const c = await parasutConfig(sb);
   if (!c.enabled) throw new ParasutError(400, "Paraşüt kapalı (Ayarlar › Entegrasyonlar).");
   let o = await loadOrder(sb, orderId);
@@ -190,7 +218,8 @@ export async function invoiceOrder(sb: Sb, orderId: string, opts: { acceptDiff?:
   if (o.parasut_invoice_id && !o.parasut_e_doc_id) {
     try { await parasutCall(sb, "GET", `/sales_invoices/${o.parasut_invoice_id}`); }
     catch (e: any) {
-      if (!(e instanceof ParasutError && e.status === 404)) throw e;
+      // Bakım sayfası da 404 dönebiliyor (2026-11-25) → o durumda fatura SİLİNMİŞ sayılmaz (baştan kesilirse çift fatura)
+      if (!(e instanceof ParasutError && e.status === 404 && !isParasutUnavailable(e))) throw e;
       const reset = { parasut_invoice_id: null, parasut_status: null, parasut_job_id: null, parasut_paid: false, parasut_error: null };
       await save(sb, orderId, reset);
       await (sb as any).from("order_events").insert({ order_id: orderId, type: "note", note: `Paraşüt faturası (${o.parasut_invoice_id}) Paraşüt'te silinmiş — baştan kesiliyor` });
@@ -276,7 +305,7 @@ export async function invoiceOrder(sb: Sb, orderId: string, opts: { acceptDiff?:
     }
   } catch (e: any) {
     if (e instanceof ParasutError && e.status === 422) throw e;
-    await save(sb, orderId, { parasut_status: "error", parasut_error: e?.message || String(e) });
+    if (!isParasutUnavailable(e)) await save(sb, orderId, { parasut_status: "error", parasut_error: e?.message || String(e) }); // kesintide: invoiceOrder "retry" yazar
     throw e;
   }
   return checkInvoice(sb, orderId);
@@ -452,6 +481,7 @@ export async function autoInvoiceSiteOrder(sb: Sb, orderId: string, why: string)
     return { status: String(r.status || "") };
   } catch (e: any) {
     const msg = String(e?.message || e);
+    if (e instanceof ParasutRetry) return { status: "retry", error: msg }; // invoiceOrder "retry" yazdı; cron yeniden dener
     try { await save(sb, orderId, { parasut_status: "error", parasut_error: msg.slice(0, 500) }); } catch { /* yut */ }
     return { status: "error", error: msg };
   }
@@ -514,7 +544,7 @@ export async function checkInvoice(sb: Sb, orderId: string) {
   return { status: "done", invoiceNo };
 }
 
-/** Cron (10 dakikada bir): e-belge / PDF bekleyen siparişler */
+/** Cron (10 dakikada bir): e-belge / PDF bekleyen siparişler + Paraşüt kesintisinde kesilemeyen faturalar ("retry") */
 export async function pollParasut(sb: Sb = createAdminClient()) {
   const { data } = await (sb as any).from("orders").select("id")
     .in("parasut_status", ["job_pending", "pdf_pending"]).gte("updated_at", new Date(Date.now() - 3 * 86400_000).toISOString()).limit(20);
@@ -523,9 +553,28 @@ export async function pollParasut(sb: Sb = createAdminClient()) {
   let done = 0;
   for (const r of rows) {
     try { if ((await checkInvoice(sb, r.id)).status === "done") done++; }
-    catch (e: any) { errors.push(e?.message || String(e)); if (e instanceof ParasutError && [0, 401].includes(e.status)) break; }
+    catch (e: any) { errors.push(e?.message || String(e)); if (e instanceof ParasutError && ([0, 401].includes(e.status) || isParasutUnavailable(e))) break; }
   }
-  return { checked: rows.length, done, errors };
+  const retried = await retryUnavailable(sb).catch((e: any) => { errors.push(e?.message || String(e)); return 0; });
+  return { checked: rows.length + retried, done, errors };
+}
+
+/** Paraşüt kesintisinde kesilemeyen faturaları yeniden dene (sırayla; Paraşüt hâlâ kapalıysa ilkinde durur — yük bindirme).
+ *  Sipariş bu arada iptal edildiyse / fatura elle kesildiyse yeniden denenmez, durum temizlenir. */
+async function retryUnavailable(sb: Sb) {
+  const { data } = await (sb as any).from("orders").select("id, status, invoice_status")
+    .eq("parasut_status", "retry").order("parasut_retry_since").limit(10);
+  let n = 0;
+  for (const o of (data as any[]) || []) {
+    if (o.status === "cancelled" || (o.invoice_status || "pending") !== "pending") {
+      await save(sb, o.id, { parasut_status: null, parasut_error: null, parasut_retry_since: null });
+      continue;
+    }
+    n++;
+    try { await invoiceOrder(sb, o.id); }
+    catch (e: any) { if (e instanceof ParasutRetry) break; /* başka hata siparişe "error" olarak yazıldı */ }
+  }
+  return n;
 }
 
 /** Yöneticiye 10 dk geçerli PDF bağlantısı */

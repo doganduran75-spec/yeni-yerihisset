@@ -25,10 +25,22 @@ const RECONNECT = "Paraşüt bağlantısı sona erdi ya da izin geri alındı �
 
 export class ParasutError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  unavailable: boolean; // Paraşüt bakım / hata SAYFASI döndü (JSON değil) — istek işlenmedi
+  constructor(status: number, message: string, unavailable = false) {
     super(message);
     this.status = status;
+    this.unavailable = unavailable;
   }
+}
+
+/** Paraşüt bakımda / ulaşılamıyor: istek İŞLENMEDİ, sonra aynen tekrar denenebilir (kullanıcı 2026-11-25: Paraşüt "Teknik Bakım"
+ *  sayfasını 404 ile döndü). Bakım / hata sayfası (HTML), 429 / 502 / 503 / 504, bağlantı kurulamadı. ZAMAN AŞIMI SAYILMAZ:
+ *  istek Paraşüt'e ulaşıp işlenmiş olabilir (kendiliğinden tekrar → çift fatura riski). */
+export function isParasutUnavailable(e: unknown): boolean {
+  if (!(e instanceof ParasutError)) return false;
+  if (e.unavailable) return true;
+  if (e.status === 0) return !/timeout|timed out|abort/i.test(e.message);
+  return [429, 502, 503, 504].includes(e.status);
 }
 
 export async function parasutConfig(sb: Sb) {
@@ -69,6 +81,8 @@ async function tokenRequest(form: Record<string, string>, issuer: string | null 
   if (!res.ok || !j?.access_token) {
     // Paraşüt'ün kendi açıklaması da yazılsın (neden düştüğünü görmek için: süre / oturum kapandı / yeniden kullanım)
     if (j?.error === "invalid_grant" && form.grant_type === "refresh_token") throw new ParasutError(401, `${RECONNECT}${j?.error_description ? ` (Paraşüt: ${j.error_description})` : ""}`);
+    // Yanıt JSON değil (bakım / hata sayfası): oturum sorunu değil, Paraşüt'e ulaşılamıyor → sonra tekrar denenir
+    if (!j) throw new ParasutError(res.status, `Paraşüt oturum sunucusu şu an yanıt vermiyor (HTTP ${res.status}) — bakım / kesinti olabilir`, true);
     throw new ParasutError(401, `Paraşüt oturumu alınamadı: ${j?.error_description || j?.error || res.status}`);
   }
   return j as Tokens;
@@ -263,6 +277,11 @@ async function rawCall(token: string, method: string, path: string, body?: unkno
   let json: any = null;
   try { json = text ? JSON.parse(text) : null; } catch { /* düz metin */ }
   if (!res.ok) {
+    // Bakım / hata SAYFASI (HTML): ham HTML yerine sayfa başlığı (sipariş ekranında okunur; 2026-11-25)
+    if (!json && /<!DOCTYPE|<html/i.test(text || "")) {
+      const title = (/<title>([^<]{1,120})<\/title>/i.exec(text) || [])[1]?.trim();
+      throw new ParasutError(res.status, `Paraşüt ${res.status}: Paraşüt şu an hizmet vermiyor${title ? ` (“${title}”)` : ""}`, true);
+    }
     const errs = Array.isArray(json?.errors) ? json.errors.map((e: any) => [e?.title, e?.detail].filter(Boolean).join(": ")).join("; ") : "";
     throw new ParasutError(res.status, `Paraşüt ${res.status}: ${errs || text?.slice(0, 300) || res.statusText}`);
   }
