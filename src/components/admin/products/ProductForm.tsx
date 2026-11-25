@@ -13,6 +13,7 @@ import { siteAlert, siteConfirm } from "@/components/ui/site-dialog";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { sortByVariantValue } from "@/lib/variant-sort";
+import ImageInfo from "@/components/admin/products/ImageInfo";
 
 interface ProductFormProps {
   productId?: string;
@@ -742,6 +743,7 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
                                 {v.image_url ? (
                                   <>
                                     <img src={v.image_url} alt={v.value} className="w-full h-full object-cover" />
+                                    <ImageInfo url={v.image_url} className="z-10" />
                                     <button
                                       type="button"
                                       onClick={() => handleVariantChange(idx, "image_url", "")}
@@ -905,6 +907,7 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={url} alt="" className="w-full h-full object-cover pointer-events-none" />
+                  <ImageInfo url={url} />
 
                   {/* Kapak rozeti */}
                   {idx === 0 && (
