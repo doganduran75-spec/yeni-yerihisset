@@ -86,10 +86,17 @@ async function call(c: TrendyolConfig, method: "GET" | "POST" | "PUT", path: str
 }
 
 /** Müşteri faturasını DOSYA olarak yükle (seller-invoice-file; PDF ≤ 10 MB). Yurt içi pakette fatura no / tarih
- *  istenmez. Aynı pakete ikinci kez: "The invoice for the package number … has already been sent." */
-export async function sendInvoiceFile(c: TrendyolConfig, shipmentPackageId: string, pdf: Buffer, filename: string): Promise<void> {
+ *  istenmez. Aynı pakete ikinci kez: "The invoice for the package number … has already been sent."
+ *  Mikro ihracatta invoiceNumber (3 alfanumerik + yıl + 9 hane, ör. KA02026000000329) + invoiceDateTime (Unix ms)
+ *  ZORUNLU — yoksa "Micro export type'lari icin fatura bilgisi zorunludur" (2026-11-26). */
+export async function sendInvoiceFile(c: TrendyolConfig, shipmentPackageId: string, pdf: Buffer, filename: string,
+  micro?: { invoiceNumber: string; invoiceDateTime: number }): Promise<void> {
   const form = new FormData();
   form.append("shipmentPackageId", shipmentPackageId);
+  if (micro) {
+    form.append("invoiceNumber", micro.invoiceNumber);
+    form.append("invoiceDateTime", String(micro.invoiceDateTime));
+  }
   form.append("file", new Blob([new Uint8Array(pdf)], { type: "application/pdf" }), filename);
   const { "Content-Type": _ct, ...h } = headers(c); // çok parçalı gövdenin sınırını fetch yazar
   void _ct;

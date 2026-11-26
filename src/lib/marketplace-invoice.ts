@@ -24,7 +24,7 @@ export class MarketplaceInvoiceError extends Error {
 export async function pushInvoiceToMarketplace(sb: Sb, orderId: string): Promise<{ sent: boolean; already?: boolean }> {
   const s = sb as any;
   const { data: o } = await s.from("orders")
-    .select("id, channel, import_source, external_package_id, mp_package_number, parasut_pdf_path, parasut_invoice_no, parasut_invoiced_at, mp_invoice_sent_at, packed_at")
+    .select("id, channel, import_source, external_package_id, mp_package_number, parasut_pdf_path, parasut_invoice_no, parasut_invoiced_at, mp_invoice_sent_at, packed_at, mx_micro:external_raw->micro")
     .eq("id", orderId).maybeSingle();
   if (!o) throw new MarketplaceInvoiceError(404, "Sipariş bulunamadı.");
   if (!(INVOICE_UPLOAD_CHANNELS as readonly string[]).includes(o.channel) || o.import_source)
@@ -52,7 +52,14 @@ export async function pushInvoiceToMarketplace(sb: Sb, orderId: string): Promise
       if (!o.external_package_id) return await fail("Trendyol paket numarası yok.", 400);
       const { data: file, error } = await s.storage.from("invoices").download(o.parasut_pdf_path);
       if (error || !file) return await fail(`Fatura PDF'i okunamadı: ${error?.message || "dosya yok"}`, 500);
-      await sendInvoiceFile(cfg, String(o.external_package_id), Buffer.from(await file.arrayBuffer()), `${o.external_package_id}.pdf`);
+      // Mikro ihracat: fatura no + tarih de gider (tarih ileri olamaz → kesildiği an, yoksa şimdi)
+      let micro: { invoiceNumber: string; invoiceDateTime: number } | undefined;
+      if (o.mx_micro === true) {
+        const no = String(o.parasut_invoice_no || "");
+        if (!/^[A-Z0-9]{3}20\d{2}\d{9}$/.test(no)) return await fail(`Mikro ihracat: fatura numarası yok ya da biçimi uygun değil (${no || "boş"}).`, 400);
+        micro = { invoiceNumber: no, invoiceDateTime: Math.min(new Date(o.parasut_invoiced_at || Date.now()).getTime(), Date.now()) };
+      }
+      await sendInvoiceFile(cfg, String(o.external_package_id), Buffer.from(await file.arrayBuffer()), `${o.external_package_id}.pdf`, micro);
     } else {
       const cfg = await getHepsiburadaConfig(sb);
       if (!hbHasCredentials(cfg)) return await fail("Hepsiburada bağlantı bilgileri eksik (Ayarlar › Entegrasyonlar).", 400);

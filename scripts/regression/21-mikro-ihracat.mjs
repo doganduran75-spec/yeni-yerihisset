@@ -36,6 +36,13 @@ export default {
         && /is_abroad: true, country: x\.abroad\.country/.test(inv)
         && /vat_exemption_reason_code: MICRO_EXPORT_VAT_EXEMPTION/.test(inv);
       t.add(okInv ? "ok" : "fail", "Mikro ihracatta Paraşüt faturası %0 KDV + yurtdışı alıcı + e-Arşiv 301 istisna");
+      // Trendyol mikro ihracat fatura yüklemesi: invoiceNumber + invoiceDateTime zorunlu (yoksa 400 "Micro export type'lari icin fatura bilgisi zorunludur")
+      const ty = rd("src/lib/marketplace/trendyol.ts"), mi = rd("src/lib/marketplace-invoice.ts");
+      const re = /\^\[A-Z0-9\]\{3\}20\\d\{2\}\\d\{9\}\$/;
+      const reOk = new RegExp("^[A-Z0-9]{3}20\\d{2}\\d{9}$").test("KA02026000000329");
+      t.add(/form\.append\("invoiceNumber", micro\.invoiceNumber\)/.test(ty) && /form\.append\("invoiceDateTime"/.test(ty)
+        && /mx_micro:external_raw->micro/.test(mi) && re.test(mi) && reOk && /`\$\{o\.external_package_id\}\.pdf`, micro\)/.test(mi) ? "ok" : "fail",
+        "Mikro ihracatta Trendyol'a fatura no (KA02026000000329 biçimi) + tarih ile yüklenir");
       const ui = rd("src/app/admin/orders/page.tsx");
       t.add(/microExportOf\(order\.external_raw\)/.test(ui) && /Mikro ihracat · \{mx\.country\}/.test(ui) ? "ok" : "fail",
         "Sipariş panelinde “Mikro ihracat · ülke” bilgisi");
