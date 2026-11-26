@@ -39,6 +39,11 @@ export default {
       const ui = rd("src/app/admin/orders/page.tsx");
       t.add(/microExportOf\(order\.external_raw\)/.test(ui) && /Mikro ihracat · \{mx\.country\}/.test(ui) ? "ok" : "fail",
         "Sipariş panelinde “Mikro ihracat · ülke” bilgisi");
+      // Yurtdışı faturası telafi edilemez → listede + detayda ayrı etiket, Paket hazır / elle faturada açık onay
+      const badge = (ui.match(/<MicroExportBadge order=\{/g) || []).length;
+      const conf = (ui.match(/Yurtdışı faturası sonradan düzeltilemez/g) || []).length;
+      t.add(/function MicroExportBadge/.test(ui) && /Mikro İhracat · \{mx\.countryCode\}/.test(ui) && badge >= 2 && conf >= 2 ? "ok" : "fail",
+        "Listede + detayda “Mikro İhracat” etiketi; Paket hazır ve elle faturada onay", `etiket ${badge}, onay ${conf}`);
     });
   },
 };

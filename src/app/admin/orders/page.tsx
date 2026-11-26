@@ -259,6 +259,18 @@ function ChannelBadge({ code, channels, size = "sm" }: { code?: string | null; c
   );
 }
 
+/** Mikro ihracat (Trendyol yurtdışı) etiketi — yurtiçinden ayrı dursun: fatura hatası telafi edilemez (kullanıcı 2026-11-26) */
+function MicroExportBadge({ order, size = "sm" }: { order?: Order | null; size?: "sm" | "md" }) {
+  const mx = microExportOf(order?.external_raw);
+  if (!mx) return null;
+  return (
+    <span title={`Yurtdışı sipariş (${mx.country}) — fatura %0 KDV, 301 istisna`}
+      className={`font-sans font-black uppercase rounded bg-sky-600 text-white ${size === "md" ? "text-[10px] px-2 py-0.5" : "text-[9px] px-1.5 py-0.5"}`}>
+      Mikro İhracat · {mx.countryCode}
+    </span>
+  );
+}
+
 // ─── Fatura Durumu ────────────────────────────────────────────────────────────
 
 const invoiceColors: Record<string, string> = {
@@ -936,6 +948,7 @@ export default function OrdersPage() {
   // Paraşüt faturası: kes / kaldığı yerden devam / durum (src/lib/parasut-invoice.ts)
   async function invoiceParasut(o: Order, acceptDiff = false, carrier?: string) {
     const busy = (o as any).parasut_status && !["error", "done", "retry"].includes((o as any).parasut_status);
+    if (!busy && !acceptDiff && !carrier && microExportOf(o.external_raw) && !(await siteConfirm({ title: `Mikro ihracat · ${microExportOf(o.external_raw)!.country}`, message: "Yurtdışı siparişi: fatura e-Arşiv, %0 KDV, 301 istisna koduyla kesilecek. Yurtdışı faturası sonradan düzeltilemez — ürün, adet ve tutarı kontrol ettiysen devam et.", confirmText: "Kontrol ettim, devam" }))) return;
     if (!busy && !acceptDiff && !carrier && !(await siteConfirm({ title: "Fatura Paraşüt'te kesilsin mi?", message: "Müşteri, satış faturası, tahsilat (kanal ayarındaki hesap) ve e-Arşiv / e-Fatura oluşturulur. e-Belge resmîleşince geri alınamaz.", confirmText: "Faturayı kes" }))) return;
     setUpdatingId(o.id);
     try {
@@ -970,6 +983,9 @@ export default function OrdersPage() {
 
   // Paket hazır: pazaryerinde fatura hemen kesilir (→ yükleme → Trendyol "İşleme al"); sitede "Kargo bekliyor"
   async function markPacked(o: Order) {
+    // Mikro ihracat (yurtdışı): fatura sonradan düzeltilemez → her seferinde açık onay (kullanıcı 2026-11-26)
+    const mx = microExportOf(o.external_raw);
+    if (mx && !(await siteConfirm({ title: `Mikro ihracat · ${mx.country}`, message: `Yurtdışı siparişi: fatura e-Arşiv, %0 KDV, 301 istisna koduyla, alıcı yurtdışı (${mx.country}) olarak kesilecek. Yurtdışı faturası sonradan düzeltilemez — ürün, adet ve tutarı kontrol ettiysen devam et.`, confirmText: "Kontrol ettim, devam" }))) return;
     const site = !isMarketplace(o);
     const code = o.cargo_tracking_number || o.kargonomi_tracking_code;
     if (site && !code && !(await siteConfirm({ title: "Kargo kodu yok", message: "Bu siparişin kargo kodu (etiketi) yok. Yine de “Paket hazır” denilsin mi?", confirmText: "Paket hazır" }))) return;
@@ -1591,6 +1607,7 @@ ${courierQueue.slice(0, 20).map((o) => orderLabel(o)).join(", ")}${courierQueue.
                           <span className="font-mono text-[11px] font-bold text-blue-600 flex items-center gap-1.5">
                             {orderLabel(order)}
                             <ChannelBadge code={order.channel} channels={channels} />
+                            <MicroExportBadge order={order} />
                             {isMarketplace(order) && order.mp_warning && !order.mp_warning_ack && (
                               <span title={order.mp_warning} className="text-red-600"><AlertCircle size={12} /></span>
                             )}
@@ -1768,6 +1785,7 @@ ${courierQueue.slice(0, 20).map((o) => orderLabel(o)).join(", ")}${courierQueue.
                 {orderLabel(selectedOrder)}
               </span>
               <ChannelBadge code={selectedOrder?.channel} channels={channels} size="md" />
+              <MicroExportBadge order={selectedOrder} size="md" />
             </DialogTitle>
           </DialogHeader>
 
