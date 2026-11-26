@@ -16,8 +16,11 @@ export const MICRO_EXPORT_ORIGIN = "Türkiye";
 const DAP_COUNTRIES = ["AZ", "UA", "MD", "RS"];
 export const deliveryTermFor = (countryCode: string): "DAP" | "DDP" => (DAP_COUNTRIES.includes(String(countryCode).toUpperCase()) ? "DAP" : "DDP");
 /** Fatura notu: Trendyol listesindeki mikro ihracat bilgileri (menşei, GTİP, teslim şartı) — PDF'te her durumda görünsün */
-export const microExportNote = (m: MicroExport) =>
-  `Mikro ihracat · Alıcı ülke: ${m.country} · Menşei: ${MICRO_EXPORT_ORIGIN} · GTİP: ${MICRO_EXPORT_GTIP} · Teslim şartı: ${deliveryTermFor(m.countryCode)} · Gönderim: ${MICRO_EXPORT_SHIPPING}`;
+// e-Arşiv PDF'inde kalem adı Paraşüt ÜRÜN adından gelir (tanım / GTİP / teslim sütunu basılmaz — KA02026000000331),
+// bu yüzden ürün kodu (tam SKU) + Türkçe tanım da nota yazılır.
+export const microExportNote = (m: MicroExport, items: { title: string; sku?: string; qty: number }[] = []) =>
+  `Mikro ihracat · Alıcı ülke: ${m.country} · Menşei: ${MICRO_EXPORT_ORIGIN} · GTİP: ${MICRO_EXPORT_GTIP} · Teslim şartı: ${deliveryTermFor(m.countryCode)} · Gönderim: ${MICRO_EXPORT_SHIPPING}`
+  + items.map((i) => `\nÜrün: ${i.title}${i.sku ? ` · Ürün kodu: ${i.sku}` : ""} · ${i.qty} adet`).join("");
 
 const COUNTRY_TR: Record<string, string> = {
   AZ: "Azerbaycan", DE: "Almanya", NL: "Hollanda", BE: "Belçika", FR: "Fransa", AT: "Avusturya", GB: "Birleşik Krallık",

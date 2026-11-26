@@ -248,7 +248,7 @@ async function invoiceOrderSteps(sb: Sb, orderId: string, opts: { acceptDiff?: b
         issue_date: day(), due_date: day(), currency: "TRL", shipment_included: c.shipmentIncluded,
         billing_address: x.bill.address, billing_phone: x.phone ? String(x.phone) : undefined, city: x.bill.city, district: x.bill.district || undefined,
         tax_number: x.abroad ? FOREIGN_TAX_NUMBER : x.taxNo || "11111111111", ...(x.bill.tax_office ? { tax_office: x.bill.tax_office } : {}),
-        ...(x.abroad ? { is_abroad: true, country: x.abroad.country, invoice_note: microExportNote(x.abroad) } : {}),
+        ...(x.abroad ? { is_abroad: true, country: x.abroad.country, invoice_note: microExportNote(x.abroad, x.lines.map((l) => ({ title: l.title, sku: l.sku, qty: l.qty }))) } : {}),
         order_no: no, order_date: pastDay(o.created_at),
       }, relationships: {
         contact: { data: { id: contactId, type: "contacts" } },
