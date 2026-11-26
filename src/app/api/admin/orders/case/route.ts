@@ -5,9 +5,7 @@ import { afterSaleAdminUrl, exchangeOptions } from "@/lib/after-sale";
 import { sendAltDeliveredEmail, sendReturnLabelEmail, sendAltShippedEmail, RETURN_METHOD_LABEL } from "@/lib/after-sale-mail";
 import { kickMarketplaceSync } from "@/lib/marketplace/sync";
 import { autoInvoiceSiteOrder } from "@/lib/parasut-invoice";
-import { createAltShipment, checkAltShipment, cancelAltShipment } from "@/lib/exchange-shipping";
-import { KargonomiError } from "@/lib/kargonomi";
-import { BasitKargoError } from "@/lib/basitkargo";
+import { cancelAltShipment } from "@/lib/exchange-shipping";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -19,7 +17,7 @@ import { BasitKargoError } from "@/lib/basitkargo";
 //                   ayrılan geri alınır. Müşteriye "yeni numaran yola çıktı" e-postası (kullanıcı 2026-11-26).
 //                   Stok girince ayrılmışsa (reserved, MIG 20261202) kalem zaten ekli → yeniden eklenmez; başka ürün seçilirse
 //                   ayrılan geri alınır. Müşteriye "yeni numaran yola çıktı" e-postası (kullanıcı 2026-11-26)
-//   alt_ship_create / alt_ship_check / alt_ship_cancel : değişim gönderisinin kargo kodu entegrasyondan (src/lib/exchange-shipping.ts)
+//   (değişim gönderisinin kargo kodu: "Kargoya ver" penceresi değişim modunda → /api/kargonomi/ship exchange:true)
 //   options       : değişim için seçenekler (aynı ürünün numaraları + aynı modelin diğer renkleri) — item
 //   alt_delivered : alternatif teslim edildi → müşteriye "hangisi oldu?" e-postası
 //   send_label    : iade / değişim geri gönderim kargo kodu → müşteriye e-posta (yöntem değiştirilebilir)
@@ -45,19 +43,6 @@ export async function POST(req: NextRequest) {
   const note = (t: string) => sb.from("order_events").insert({ order_id: orderId, type: "note", note: t });
 
   switch (body.op) {
-    case "alt_ship_create":
-    case "alt_ship_check":
-    case "alt_ship_cancel": {
-      try {
-        const r = body.op === "alt_ship_create" ? await createAltShipment(sb, orderId)
-          : body.op === "alt_ship_check" ? await checkAltShipment(sb, orderId) : await cancelAltShipment(sb, orderId);
-        return NextResponse.json({ ok: true, ...r });
-      } catch (e: any) {
-        if (e instanceof KargonomiError || e instanceof BasitKargoError) return NextResponse.json({ error: e.message }, { status: e.status >= 400 && e.status < 500 ? e.status : 502 });
-        throw e;
-      }
-    }
-
     case "link":
       return NextResponse.json({ ok: true, url: afterSaleAdminUrl(orderId) }); // süre sınırsız yönetici bağlantısı (24 saat geçerli)
 

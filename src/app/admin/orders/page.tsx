@@ -3031,6 +3031,7 @@ const CASE_STATUS: Record<string, string> = {
   reserved: "Stok ayrıldı — gönderilecek", none_fit: "İkisi de olmadı",
   refund_pending: "Ücret iadesi bekliyor", check_transfer: "Havale kontrol edilecek",
 };
+const NOOP = () => {};
 function CaseBox({ order, kase, canSendLabel, canShipAlt, onDone }: {
   order: Order; kase: any; canSendLabel: boolean; canShipAlt: boolean; onDone: () => void;
 }) {
@@ -3041,6 +3042,7 @@ function CaseBox({ order, kase, canSendLabel, canShipAlt, onDone }: {
   // Gönderilecek ürünü değiştir (kullanıcı 2026-11-20: müşteri numarayla birlikte rengi de değiştirmek istedi)
   const [swap, setSwap] = useState<Record<string, { variant_id: string; label: string }>>({});
   const [swapFor, setSwapFor] = useState<{ item: string; opts: any } | null>(null);
+  const [shipOpen, setShipOpen] = useState(false); // değişim gönderisi penceresi
   const items: any[] = (order as any).order_items || [];
   const label = (id: string) => { const i = items.find((x) => x.id === id); return i ? `${i.products?.title ?? i.title ?? "Ürün"}${i.variant_name ? ` (${i.variant_name})` : ""}` : "—"; };
 
@@ -3135,15 +3137,11 @@ function CaseBox({ order, kase, canSendLabel, canShipAlt, onDone }: {
         // DEĞİŞİM GÖNDERİSİ (kullanıcı 2026-11-26): 1) Kargo kodu oluştur (entegrasyon, ilk gönderinin firması) 2) Etiketi yazdır
         // 3) Alternatifi gönder (ürün eklenir, stok düşer, müşteriye takip numaralı e-posta). Elle kod girmek de mümkün.
         <div data-alt-ship className="flex flex-wrap items-center gap-2 pt-1 border-t">
-          {!kase.alt_shipment_id && !kase.alt_tracking && (
-            <Button size="sm" variant="outline" disabled={busy} onClick={() => call({ op: "alt_ship_create" })}>Kargo kodu oluştur</Button>
-          )}
-          {kase.alt_shipment_id && !kase.alt_label_code && (
-            <>
-              <span className="text-amber-700 font-semibold">Kargo kodu bekleniyor ({kase.alt_kargo_api === "basitkargo" ? "Basit Kargo" : "Kargonomi"})…</span>
-              <Button size="sm" variant="outline" disabled={busy} onClick={() => call({ op: "alt_ship_check" })}>Şimdi sorgula</Button>
-              <Button size="sm" variant="ghost" disabled={busy} onClick={async () => { if (await siteConfirm({ title: "Değişim gönderisi iptal edilsin mi?", message: "Kargo firmasındaki gönderi iptal edilir; yeniden “Kargo kodu oluştur” diyebilirsin.", confirmText: "İptal et", tone: "danger" })) call({ op: "alt_ship_cancel" }); }}>İptal</Button>
-            </>
+          {/* Kargo kodu: ilk gönderideki "Kargoya ver" penceresi değişim modunda (desi + teklifler + firma seçimi) */}
+          {!kase.alt_label_code && !(kase.alt_tracking && !kase.alt_shipment_id) && (
+            <Button size="sm" variant="outline" disabled={busy} onClick={() => setShipOpen(true)}>
+              {kase.alt_confirmed_at ? "Kargo kodu bekleniyor…" : kase.alt_shipment_id ? "Kargo kodu oluştur (teklifler)" : "Kargo kodu oluştur"}
+            </Button>
           )}
           {(kase.alt_label_code || kase.alt_tracking) && (
             <Button size="sm" variant={kase.alt_label_printed_at ? "outline" : "default"} disabled={busy} onClick={async () => {
@@ -3164,6 +3162,7 @@ function CaseBox({ order, kase, canSendLabel, canShipAlt, onDone }: {
           }}>Alternatifi gönder</Button>
         </div>
       )}
+      <KargonomiDialog exchange order={shipOpen ? order : null} onClose={() => { setShipOpen(false); onDone(); }} onChanged={NOOP} />
       {canSendLabel && (
         <div className="flex flex-wrap items-center gap-2 pt-1 border-t">
           <select value={method} onChange={(e) => setMethod(e.target.value)} className="h-8 rounded-md border px-2 bg-white">

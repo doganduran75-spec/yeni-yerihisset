@@ -1,5 +1,6 @@
 // DEĞİŞİM GÖNDERİSİ KARGO ENTEGRASYONUNDAN (kullanıcı 2026-11-26): müşteri adına açılan değişimde kargo kodu yoktu.
-// "Kargo kodu oluştur" → ilk gönderinin sağlayıcısı + desisi + aynı kargo firması (Sürat Kargo), yoksa en ucuz → kod
+// "Kargo kodu oluştur" → ilk gönderideki "Kargoya ver" penceresi değişim modunda (kullanıcı: "başka kargo firmasıyla çalışmak
+// isteyebilirim"): desi (ilk gönderininki gelir) → teklifler → firma (ilk gönderinin firması önerilir) → kod
 // (Kargonomi'de 5 dk'da bir sorgu) → "Değişim kargo etiketini yazdır" → "Alternatifi gönder" (takip no talepten, e-posta) →
 // kargo "teslim edildi" → talep "alternatif teslim edildi" + "hangisi oldu?" e-postası. Gönderi talepte (order_cases.alt_*),
 // siparişin kendi gönderisine dokunmaz (MIG 20261203). Açılamazsa / sorunluysa panoda "Hata aldı".
@@ -34,16 +35,23 @@ export default {
     await t.part("Sunucu + ekran", async () => {
       const lib = rd("src/lib/exchange-shipping.ts"), route = rd("src/app/api/admin/orders/case/route.ts"), lab = rd("src/app/api/admin/orders/labels/route.ts");
       const cron = rd("src/app/api/cron/marketplace-sync/route.ts"), ui = rd("src/app/admin/orders/page.tsx"), sl = rd("src/lib/shipping-label.ts");
-      const okLib = /export async function createAltShipment/.test(lib) && /\.is\("alt_confirmed_at", null\)/.test(lib) // çift tık kilidi
-        && /Number\(o\.kargonomi_desi\) > 0 \? Number\(o\.kargonomi_desi\) : 2/.test(lib) && /pickOffer\(await getOffers/.test(lib)
+      const okLib = /export async function quoteAltShipment/.test(lib) && /export async function confirmAltShipment/.test(lib)
+        && /\.is\("alt_confirmed_at", null\)/.test(lib) // çift tık kilidi
+        && /Number\(c\.alt_desi\) !== desi \|\| c\.alt_kargo_api !== p/.test(lib) // desi / sağlayıcı değişince taslak yenilenir
+        && /Number\(o\.kargonomi_desi\) > 0 \? Number\(o\.kargonomi_desi\) : 2/.test(lib) && /suggested: pickOffer\(offers, o\.kargonomi_provider\)/.test(lib)
+        && /\(c\.alt_offers as any\[\]\) \|\| \[\]\)\.find\(\(x\) => x\.id === String\(providerId\)\)/.test(lib)
         && /status: "alt_delivered"/.test(lib) && /sendAltDeliveredEmail\(orderId\)/.test(lib) && /\.eq\("status", "alt_shipped"\)/.test(lib)
         && !/from\("orders"\)\.update/.test(lib); // siparişin kendi gönderisine dokunmaz
-      t.add(okLib ? "ok" : "fail", "Kod oluştur (kilitli, ilk gönderinin desisi), teslimde “hangisi oldu?”, siparişin gönderisine dokunmaz");
-      t.add(/case "alt_ship_create":/.test(route) && /c\.alt_tracking \|\| null/.test(route) && /cancelAltShipment\(sb, orderId\)\.catch/.test(route) ? "ok" : "fail",
-        "Alternatifi gönder takip no'yu talepten alır; talep kapanınca gönderilmemiş kod iptal edilir");
+      t.add(okLib ? "ok" : "fail", "Desi + teklif + firma seçimi (ilk gönderinin desisi / firması önerilir, kilitli), teslimde “hangisi oldu?”, siparişin gönderisine dokunmaz");
+      const ship = rd("src/app/api/kargonomi/ship/route.ts"), dlg = rd("src/components/admin/KargonomiDialog.tsx");
+      t.add(/if \(body\.exchange\)/.test(ship) && /quoteAltShipment\(sb, id, Number\(body\.desi\), body\.provider\)/.test(ship) && /confirmAltShipment\(sb, id/.test(ship)
+        && /c\.alt_tracking \|\| null/.test(route) && /cancelAltShipment\(sb, orderId\)\.catch/.test(route) ? "ok" : "fail",
+        "Pencere değişimde talebin gönderisiyle çalışır; Alternatifi gönder takip no'yu talepten alır; talep kapanınca gönderilmemiş kod iptal");
+      t.add(/function asExchange/.test(dlg) && /exchange \? \{ \.\.\.body, exchange: true \}/.test(dlg) && /printExchangeLabel\(o\.id\)/.test(dlg) && /op: "alt_info"/.test(dlg) ? "ok" : "fail",
+        "“Kargoya ver” penceresi değişim modunda (desi, teklifler, değişim etiketi)");
       t.add(/if \(body\.exchange\)/.test(lab) && /alt_label_printed_at/.test(lab) && /· DEĞİŞİM/.test(lab) ? "ok" : "fail", "Değişim kargo etiketi (değişim ürünleriyle, siparişin etiket alanlarına dokunmadan)");
       t.add(/pollAltShipments\(supabase\)/.test(cron) ? "ok" : "fail", "Değişim gönderisi 5 dakikada bir sorgulanıyor (kod + teslim)");
-      t.add(/data-alt-ship/.test(ui) && /Kargo kodu oluştur/.test(ui) && /Değişim kargo etiketini yazdır/.test(ui) && /printExchangeLabel\(order\.id\)/.test(ui)
+      t.add(/data-alt-ship/.test(ui) && /Kargo kodu oluştur/.test(ui) && /<KargonomiDialog exchange order=\{shipOpen \? order : null\}/.test(ui) && /Değişim kargo etiketini yazdır/.test(ui) && /printExchangeLabel\(order\.id\)/.test(ui)
         && /export async function printExchangeLabel/.test(sl) && /ya da kargo takip no \(elle\)/.test(ui) ? "ok" : "fail",
         "Talepte “Kargo kodu oluştur” → “Değişim kargo etiketini yazdır”; elle kod girmek de mümkün");
     });

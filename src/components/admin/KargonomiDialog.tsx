@@ -4,6 +4,9 @@
 // Siparişte "Kargoya ver" penceresi (Kargonomi / Basit Kargo — ayarlardan) — akış src/lib/kargonomi-flow.ts:
 //   desi → "Teklifleri getir" → firma seç → "Bu firmayla gönder" → kod bekleniyor (pencere açıkken 30 sn'de bir,
 //   kapalıyken sunucu 5 dakikada bir sorgular) → kod gelince siparişe yazılır (etiket → kendiliğinden "Kargo hazırlandı" → firma paketi okutunca Kargoda + e-posta).
+// exchange: DEĞİŞİM gönderisi (kullanıcı 2026-11-26: "ilk gönderim gibi desi yazma ve teklif isteme ekranı") — aynı pencere,
+//   gönderi talepte (order_cases.alt_*, src/lib/exchange-shipping.ts); desi ilk gönderininki gelir, ilk gönderinin firması
+//   önerilir ama başka firma seçilebilir; etiket değişim etiketi (printExchangeLabel).
 import { useEffect, useState, useCallback } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -12,7 +15,7 @@ import { siteConfirm } from "@/components/ui/site-dialog";
 import { supabase } from "@/lib/supabase";
 import { orderLabel } from "@/lib/order-label";
 import { printBasitLabel } from "@/lib/basit-label-print";
-import { printShippingLabels } from "@/lib/shipping-label";
+import { printShippingLabels, printExchangeLabel } from "@/lib/shipping-label";
 import { Truck, Loader2, AlertCircle, CheckCircle, Copy, RefreshCw, Send, Printer } from "lucide-react";
 
 type Offer = { id: string; name: string; price: string | null; amount: number | null };
@@ -29,10 +32,20 @@ async function call(body: Record<string, unknown>) {
   return j;
 }
 
-export default function KargonomiDialog({ order, onClose, onChanged }: {
+// Değişim modunda talepteki gönderi alanları siparişin kargo alanları gibi okunur (pencere aynı kalır)
+function asExchange(ord: any): any {
+  const c = ((ord?.order_cases as any[]) || []).find((x) => !x.closed_at) || {};
+  return { ...ord, kargonomi_shipment_id: c.alt_shipment_id ?? null, kargo_api: c.alt_kargo_api ?? null, kargonomi_confirmed_at: c.alt_confirmed_at ?? null,
+    kargonomi_tracking_code: c.alt_label_code ?? null, kargonomi_provider: c.alt_kargo_provider ?? null, kargonomi_status: c.alt_kargo_status ?? null,
+    kargonomi_error: c.alt_kargo_error ?? null, kargonomi_offers: c.alt_offers ?? null, kargonomi_desi: c.alt_desi ?? null,
+    kargonomi_checked_at: c.alt_checked_at ?? null, label_printed_at: c.alt_label_printed_at ?? null, shipment_status: "waiting" };
+}
+
+export default function KargonomiDialog({ order, onClose, onChanged, exchange = false }: {
   order: any | null;
   onClose: () => void;
   onChanged: (row: any) => void;
+  exchange?: boolean;
 }) {
   const [o, setO] = useState<any | null>(order);
   const [desi, setDesi] = useState("2");
@@ -41,42 +54,56 @@ export default function KargonomiDialog({ order, onClose, onChanged }: {
   const [err, setErr] = useState<string | null>(null);
   const [active, setActive] = useState<{ provider: string; name: string; available: { provider: string; name: string }[] } | null>(null);
   const [want, setWant] = useState<string | null>(null); // ikisi de hazırsa seçilen sağlayıcı
+  const [hint, setHint] = useState<string | null>(null); // değişim: ilk gönderinin kargo firması (öneri)
+  const api = useCallback((body: Record<string, unknown>) => call(exchange ? { ...body, exchange: true } : body), [exchange]);
   useEffect(() => { if (order && !active) call({ op: "info" }).then((j) => setActive({ provider: j.provider, name: j.name, available: j.available || [] })).catch(() => {}); }, [order, active]);
 
-  // Pencere açılınca siparişin güncel Kargonomi alanlarını oku
+  // Pencere açılınca siparişin (değişimde talebin) güncel kargo alanlarını oku
+  const fetchRow = useCallback(async (id: string) => {
+    const { data } = await supabase.from("orders").select(exchange ? "*, order_cases(*)" : "*").eq("id", id).single();
+    return data ? (exchange ? asExchange(data) : data) : null;
+  }, [exchange]);
   const reload = useCallback(async (id: string) => {
-    const { data } = await supabase.from("orders").select("*").eq("id", id).single();
+    const data = await fetchRow(id);
     if (data) { setO(data); onChanged(data); }
     return data as any;
-  }, [onChanged]);
+  }, [onChanged, fetchRow]);
 
   useEffect(() => {
     if (!order) return;
     let off = false;
-    supabase.from("orders").select("*").eq("id", order.id).single().then(({ data }) => {
+    fetchRow(order.id).then(async (data) => {
       if (off) return;
       const d: any = data ?? order;
       setO(d);
       setDesi(d.kargonomi_desi ? String(d.kargonomi_desi) : "2");
       setPick("");
       setErr(null);
+      if (exchange) {
+        // Desi taslakta yoksa ilk gönderininki; teklif önerisi ilk gönderinin firması
+        const j = await call({ op: "alt_info", order_id: order.id, exchange: true }).catch(() => null);
+        if (!off && j) { if (!d.kargonomi_desi) setDesi(String(j.desi)); setHint(j.firstCarrier); if (j.suggested) setPick(j.suggested); }
+      }
     });
     return () => { off = true; };
-  }, [order]);
+  }, [order, exchange, fetchRow]);
 
   const waiting = !!(o?.kargonomi_confirmed_at && !o?.kargonomi_tracking_code && !o?.kargonomi_error);
 
   // Kod beklerken pencere açıksa 30 sn'de bir sorgula (sunucu ayrıca 5 dakikada bir sorgular)
   useEffect(() => {
     if (!o?.id || !waiting) return;
-    const t = setInterval(() => { call({ op: "check", order_id: o.id }).then(() => reload(o.id)).catch(() => {}); }, 30_000);
+    const t = setInterval(() => { api({ op: "check", order_id: o.id }).then(() => reload(o.id)).catch(() => {}); }, 30_000);
     return () => clearInterval(t);
-  }, [o?.id, waiting, reload]);
+  }, [o?.id, waiting, reload, api]);
 
   async function run(kind: string, body: Record<string, unknown>) {
     if (!o) return;
     setBusy(kind); setErr(null);
-    try { await call({ ...body, order_id: o.id }); }
+    try {
+      const j = await api({ ...body, order_id: o.id });
+      if (exchange && kind === "quote" && j?.suggested) setPick(j.suggested); // ilk gönderinin firması seçili gelir
+    }
     catch (e: any) { setErr(e?.message || "Hata"); }
     finally { await reload(o.id); setBusy(null); }
   }
@@ -96,8 +123,8 @@ export default function KargonomiDialog({ order, onClose, onChanged }: {
     <Dialog open={!!order} onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent className="sm:max-w-[460px]">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2"><Truck size={18} className="text-purple-600" /> Kargoya ver{pname ? ` (${pname})` : ""}</DialogTitle>
-          <DialogDescription>Sipariş {o ? orderLabel(o) : ""}</DialogDescription>
+          <DialogTitle className="flex items-center gap-2"><Truck size={18} className="text-purple-600" /> {exchange ? "Değişim gönderisi" : "Kargoya ver"}{pname ? ` (${pname})` : ""}</DialogTitle>
+          <DialogDescription>Sipariş {o ? orderLabel(o) : ""}{exchange ? " — yeni numara müşteriye" : ""}{exchange && hint ? ` · ilk gönderi: ${hint}` : ""}</DialogDescription>
         </DialogHeader>
 
         {o && (
@@ -112,14 +139,23 @@ export default function KargonomiDialog({ order, onClose, onChanged }: {
               <div className="space-y-2">
                 <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-xl p-3">
                   <CheckCircle size={20} className="text-green-600 shrink-0" />
-                  <p className="text-sm font-semibold text-green-800">Kargo kodu geldi — etiketi bas; sipariş kendiliğinden “Kargo hazırlandı” olur, kurye alınca “Kargoda”.</p>
+                  <p className="text-sm font-semibold text-green-800">{exchange ? "Kargo kodu geldi — değişim etiketini bas, paketi hazırla, sonra talepte “Alternatifi gönder”." : "Kargo kodu geldi — etiketi bas; sipariş kendiliğinden “Kargo hazırlandı” olur, kurye alınca “Kargoda”."}</p>
                 </div>
                 <div className="flex items-center justify-between bg-slate-50 border rounded-lg p-3">
                   <span><span className="text-xs text-muted-foreground">{o.kargonomi_provider || o.cargo_provider || "Kargo"} kodu</span>
                     <code className="block font-mono font-bold">{o.kargonomi_tracking_code}</code></span>
                   <button onClick={() => navigator.clipboard.writeText(o.kargonomi_tracking_code)} className="text-blue-500 text-xs flex items-center gap-1"><Copy size={12} /> Kopyala</button>
                 </div>
-                {!basit && (
+                {exchange && (
+                  <Button className="w-full gap-1.5" variant={o.label_printed_at ? "outline" : "default"} disabled={!!busy} onClick={async () => {
+                    setBusy("label"); setErr(null);
+                    const r = await printExchangeLabel(o.id);
+                    if (!r.ok) setErr(r.error || "Etiket hazırlanamadı");
+                    await reload(o.id);
+                    setBusy(null);
+                  }}>{busy === "label" ? <Loader2 size={14} className="animate-spin" /> : <Printer size={14} />} {o.label_printed_at ? "Değişim etiketini yeniden yazdır" : "Değişim etiketini yazdır"}</Button>
+                )}
+                {!exchange && !basit && (
                   // Etiket buradan da basılır (kullanıcı 2026-11-05) — sipariş detayındaki "Etiket yazdır" ile aynı (src/lib/shipping-label.ts);
                   // basılınca sipariş kendiliğinden "Kargo hazırlandı" (MIG 20261165). Teslimat notu sipariş detayındaki etiket kutusunda.
                   <Button className="w-full gap-1.5" variant={o.label_printed_at ? "outline" : "default"} disabled={!!busy} onClick={async () => {
@@ -131,7 +167,7 @@ export default function KargonomiDialog({ order, onClose, onChanged }: {
                     setBusy(null);
                   }}>{busy === "label" ? <Loader2 size={14} className="animate-spin" /> : <Printer size={14} />} {o.label_printed_at ? "Etiketi yeniden yazdır" : "Etiketi yazdır"}</Button>
                 )}
-                {basit && (
+                {!exchange && basit && (
                   <div className="flex gap-2">
                     <Button className="flex-1 gap-1.5" disabled={!!busy} onClick={async () => {
                       setBusy("label"); setErr(null);
