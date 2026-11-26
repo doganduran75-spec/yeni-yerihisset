@@ -10,14 +10,21 @@ export const FOREIGN_TAX_NUMBER = "2222222222";
  *  GTİP Paraşüt'te ÜRÜN kaydındadır → ürünün GTİP'i boşsa fatura kesilmeden önce yazılır (doluysa dokunulmaz). */
 export const MICRO_EXPORT_GTIP = "640399930000";
 export const MICRO_EXPORT_SHIPPING = "Havayolu";
-export const MICRO_EXPORT_DELIVERY = "DDP";
+export const MICRO_EXPORT_ORIGIN = "Türkiye";
+/** Teslim şartı ülkeye göre (Trendyol Akademi "Mikro İhracat Faturası için Yapılacaklar", 2026-11-26):
+ *  Azerbaycan, Ukrayna, Moldova, Sırbistan → DAP; Körfez ve Avrupa → DDP. Listede olmayan ülke → DDP. */
+const DAP_COUNTRIES = ["AZ", "UA", "MD", "RS"];
+export const deliveryTermFor = (countryCode: string): "DAP" | "DDP" => (DAP_COUNTRIES.includes(String(countryCode).toUpperCase()) ? "DAP" : "DDP");
+/** Fatura notu: Trendyol listesindeki mikro ihracat bilgileri (menşei, GTİP, teslim şartı) — PDF'te her durumda görünsün */
+export const microExportNote = (m: MicroExport) =>
+  `Mikro ihracat · Alıcı ülke: ${m.country} · Menşei: ${MICRO_EXPORT_ORIGIN} · GTİP: ${MICRO_EXPORT_GTIP} · Teslim şartı: ${deliveryTermFor(m.countryCode)} · Gönderim: ${MICRO_EXPORT_SHIPPING}`;
 
 const COUNTRY_TR: Record<string, string> = {
   AZ: "Azerbaycan", DE: "Almanya", NL: "Hollanda", BE: "Belçika", FR: "Fransa", AT: "Avusturya", GB: "Birleşik Krallık",
   BG: "Bulgaristan", RO: "Romanya", GR: "Yunanistan", CZ: "Çekya", HU: "Macaristan", PL: "Polonya", SK: "Slovakya",
   SA: "Suudi Arabistan", AE: "Birleşik Arap Emirlikleri", KW: "Kuveyt", QA: "Katar", BH: "Bahreyn", OM: "Umman",
   GE: "Gürcistan", KZ: "Kazakistan", UZ: "Özbekistan", KG: "Kırgızistan", TM: "Türkmenistan", UA: "Ukrayna",
-  IQ: "Irak", CY: "Kıbrıs", US: "Amerika Birleşik Devletleri",
+  IQ: "Irak", CY: "Kıbrıs", US: "Amerika Birleşik Devletleri", MD: "Moldova", RS: "Sırbistan",
 };
 
 /* eslint-disable @typescript-eslint/no-explicit-any */

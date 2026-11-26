@@ -16,7 +16,7 @@ import { pushInvoiceToMarketplace } from "@/lib/marketplace-invoice";
 import { sendInvoiceEmail } from "@/lib/invoice-mail";
 import { isTestOrder } from "@/lib/notifications";
 import { autoInvoiceHere } from "@/lib/order-next-step";
-import { microExportOf, MICRO_EXPORT_VAT_EXEMPTION, FOREIGN_TAX_NUMBER, MICRO_EXPORT_GTIP, MICRO_EXPORT_SHIPPING, MICRO_EXPORT_DELIVERY } from "@/lib/micro-export";
+import { microExportOf, MICRO_EXPORT_VAT_EXEMPTION, FOREIGN_TAX_NUMBER, MICRO_EXPORT_GTIP, MICRO_EXPORT_SHIPPING, MICRO_EXPORT_ORIGIN, deliveryTermFor, microExportNote } from "@/lib/micro-export";
 
 type Sb = ReturnType<typeof createAdminClient>;
 const MARKETPLACES = ["trendyol", "hepsiburada", "amazon"];
@@ -43,7 +43,7 @@ async function loadOrder(sb: Sb, id: string) {
 }
 const save = (sb: Sb, id: string, f: Record<string, unknown>) => (sb as any).from("orders").update(f).eq("id", id);
 
-type Line = { productId: string; vat: number; qty: number; gross: number; title: string };
+type Line = { productId: string; vat: number; qty: number; gross: number; title: string; sku?: string };
 
 /** Faturadan önce her şeyi denetle (Paraşüt'e bir şey yazmadan): eşleşme, KDV, tutar, kargo firması, hesap */
 async function prepare(sb: Sb, o: any) {
@@ -73,7 +73,7 @@ async function prepare(sb: Sb, o: any) {
     if (!pid) { errs.push(`Paraşüt ürünüyle eşleşmemiş: ${title} (Paraşüt ürün eşleştirme sayfası)`); continue; }
     const v = vat.get(pid);
     if (v == null) { errs.push(`Paraşüt'te KDV oranı yok: ${title} — ürünleri yeniden çek`); continue; }
-    lines.push({ productId: pid, vat: abroad ? 0 : v, qty, gross: r2(Number(i.unit_price) * qty), title });
+    lines.push({ productId: pid, vat: abroad ? 0 : v, qty, gross: r2(Number(i.unit_price) * qty), title, sku: i.sku || undefined });
   }
 
   // Kupon + kredi (yalnız site) → ürün kalemlerine orantılı; kuruş farkı en büyük kaleme.
@@ -248,15 +248,17 @@ async function invoiceOrderSteps(sb: Sb, orderId: string, opts: { acceptDiff?: b
         issue_date: day(), due_date: day(), currency: "TRL", shipment_included: c.shipmentIncluded,
         billing_address: x.bill.address, billing_phone: x.phone ? String(x.phone) : undefined, city: x.bill.city, district: x.bill.district || undefined,
         tax_number: x.abroad ? FOREIGN_TAX_NUMBER : x.taxNo || "11111111111", ...(x.bill.tax_office ? { tax_office: x.bill.tax_office } : {}),
-        ...(x.abroad ? { is_abroad: true, country: x.abroad.country } : {}),
+        ...(x.abroad ? { is_abroad: true, country: x.abroad.country, invoice_note: microExportNote(x.abroad) } : {}),
         order_no: no, order_date: pastDay(o.created_at),
       }, relationships: {
         contact: { data: { id: contactId, type: "contacts" } },
         // Kanalın fatura kategorisi (Ayarlar › Paraşüt › Satış kanalına göre); seçilmemişse kategorisiz
         ...(x.ch?.category_id ? { category: { data: { id: String(x.ch.category_id), type: "item_categories" } } } : {}),
         details: { data: x.lines.map((l) => ({ type: "sales_invoice_details", attributes: {
-          quantity: l.qty, vat_rate: l.vat, unit_price: r4(l.gross / l.qty / (1 + l.vat / 100)), description: l.title,
-          ...(x.abroad ? { shipping_method: MICRO_EXPORT_SHIPPING, delivery_method: MICRO_EXPORT_DELIVERY } : {}),
+          quantity: l.qty, vat_rate: l.vat, unit_price: r4(l.gross / l.qty / (1 + l.vat / 100)),
+          // Mikro ihracat: Türkçe tanım + ürün kodu + menşei (Trendyol listesi), gönderim şekli + ülkeye göre teslim şartı
+          description: x.abroad ? `${l.title}${l.sku ? ` · Ürün kodu ${l.sku}` : ""} · Menşei: ${MICRO_EXPORT_ORIGIN}` : l.title,
+          ...(x.abroad ? { shipping_method: MICRO_EXPORT_SHIPPING, delivery_method: deliveryTermFor(x.abroad.countryCode) } : {}),
         }, relationships: { product: { data: { id: l.productId, type: "products" } } } })) },
       } } });
       const inv = j?.data;

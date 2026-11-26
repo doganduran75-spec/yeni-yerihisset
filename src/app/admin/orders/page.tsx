@@ -1,7 +1,7 @@
 "use client";
 
 import { orderLabel } from "@/lib/order-label";
-import { microExportOf } from "@/lib/micro-export";
+import { microExportOf, deliveryTermFor } from "@/lib/micro-export";
 import { useEffect, useState, useCallback } from "react";
 import { orderNextStep, isReturnInvoiceDue, isRefundDue, isGeneralOrderTodo, isUninvoicedShipped, paidReturnedUnits, type NextActionKey, UNINVOICED_SINCE, INVOICE_DAYS, caseReasonLabel, todoKind, TODO_KINDS, type TodoKind } from "@/lib/order-next-step";
 import { returnRefundSuggestion, exchangeReturnDefaults, refundSplit } from "@/lib/exchange-return";
@@ -2687,7 +2687,7 @@ function MarketplaceOrderPanel({ order, onChange, onRestocked }: {
         return mx && (
           <div className="rounded-lg border border-sky-200 bg-sky-50 p-2.5 text-xs text-sky-900">
             <b>Mikro ihracat · {mx.country}</b>{mx.hsCode ? <span className="text-sky-700"> · GTİP {mx.hsCode}</span> : null}
-            <p className="mt-0.5">Fatura yurtdışı olarak kesilir: e-Arşiv, %0 KDV, 301 istisna kodu, GTİP 6403.99.93, Havayolu, DDP. Paket hazır'da otomatik.</p>
+            <p className="mt-0.5">Fatura yurtdışı olarak kesilir: e-Arşiv, %0 KDV, 301 istisna kodu, GTİP 6403.99.93, menşei Türkiye, Havayolu, teslim şartı {deliveryTermFor(mx.countryCode)}. Paket hazır'da otomatik.</p>
             {(order as any).parasut_invoice_id && (
               <Button size="sm" variant="outline" className="mt-2 h-7 text-xs" disabled={busy} onClick={redoInvoice}>Faturayı yeniden kes</Button>
             )}

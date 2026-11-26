@@ -23,6 +23,11 @@ export default {
       ];
       const bad = cases.filter(([, ok]) => !ok).map(([l]) => l);
       t.add(!bad.length ? "ok" : "fail", "Mikro ihracat yalnız micro + yurtdışı ülkede tanınır", bad.join(" · "));
+      // Teslim şartı ülkeye göre (Trendyol Akademi): AZ/UA/MD/RS → DAP, Körfez + Avrupa → DDP
+      const dt = ["AZ", "UA", "MD", "RS"].every((c) => mx.deliveryTermFor(c) === "DAP") && ["AE", "SA", "DE", "NL"].every((c) => mx.deliveryTermFor(c) === "DDP") && mx.deliveryTermFor("az") === "DAP";
+      const note = mx.microExportNote(az);
+      t.add(dt && /Menşei: Türkiye/.test(note) && /GTİP: 640399930000/.test(note) && /Teslim şartı: DAP/.test(note) && /Alıcı ülke: Azerbaycan/.test(note) ? "ok" : "fail",
+        "Teslim şartı Azerbaycan / Ukrayna / Moldova / Sırbistan DAP, Körfez + Avrupa DDP; fatura notunda menşei + GTİP + teslim şartı", note);
       t.add(mx.MICRO_EXPORT_VAT_EXEMPTION === "301" && mx.FOREIGN_TAX_NUMBER === "2222222222" ? "ok" : "fail",
         "İstisna kodu 301, yurtdışı alıcı vergi no 2222222222");
     });
@@ -45,10 +50,11 @@ export default {
         "Mikro ihracatta Trendyol'a fatura no (KA02026000000329 biçimi) + tarih ile yüklenir");
       // Kalem: GTİP (Paraşüt ürün kaydı, boşsa 6403.99.93) + Havayolu + DDP; yanlış kesilen faturayı yeniden kesme (Paraşüt'te geçerliyse ret)
       const mxs = rd("src/lib/micro-export.ts"), route = rd("src/app/api/admin/parasut/route.ts");
-      t.add(/MICRO_EXPORT_GTIP = "640399930000"/.test(mxs) && /MICRO_EXPORT_SHIPPING = "Havayolu"/.test(mxs) && /MICRO_EXPORT_DELIVERY = "DDP"/.test(mxs)
+      t.add(/MICRO_EXPORT_GTIP = "640399930000"/.test(mxs) && /MICRO_EXPORT_SHIPPING = "Havayolu"/.test(mxs) && /MICRO_EXPORT_ORIGIN = "Türkiye"/.test(mxs)
         && /if \(x\.abroad\) await ensureGtip\(/.test(inv) && /if \(a\.gtip\) continue;/.test(inv)
-        && /shipping_method: MICRO_EXPORT_SHIPPING, delivery_method: MICRO_EXPORT_DELIVERY/.test(inv) ? "ok" : "fail",
-        "Mikro ihracat kalemi: GTİP 6403.99.93 (ürün kaydı boşsa), Havayolu, DDP");
+        && /shipping_method: MICRO_EXPORT_SHIPPING, delivery_method: deliveryTermFor\(x\.abroad\.countryCode\)/.test(inv)
+        && /Ürün kodu \$\{l\.sku\}/.test(inv) && /Menşei: \$\{MICRO_EXPORT_ORIGIN\}/.test(inv) && /invoice_note: microExportNote\(x\.abroad\)/.test(inv) ? "ok" : "fail",
+        "Mikro ihracat kalemi: GTİP 6403.99.93 (ürün kaydı boşsa), ürün kodu + menşei, Havayolu, ülkeye göre teslim şartı, fatura notu");
       t.add(/export async function redoInvoiceOrder/.test(inv) && /hâlâ geçerli — önce Paraşüt'te e-Arşiv'i iptal et/.test(inv)
         && /invoice_status: "pending", mp_invoice_sent_at: null/.test(inv) && /case "redo_invoice"/.test(route) ? "ok" : "fail",
         "Faturayı yeniden kes: Paraşüt'te iptal / silinmediyse reddeder, sonra sıfırlayıp baştan keser");
