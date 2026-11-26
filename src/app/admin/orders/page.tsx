@@ -2626,6 +2626,22 @@ function MarketplaceOrderPanel({ order, onChange, onRestocked }: {
     setBusy(false);
     if (!error) onChange({ mp_warning_ack: true });
   }
+  // Mikro ihracat faturası eksik / hatalı kesildiyse: Paraşüt'te iptal + sil, pazaryerinde sil → baştan kes + yeniden yükle
+  async function redoInvoice() {
+    if (!(await siteConfirm({ title: "Faturayı yeniden kes",
+      message: "Önce: 1) Paraşüt'te e-Arşiv'i iptal et ve faturayı sil, 2) Trendyol'da “Fatura İşlemleri › Faturayı Sil”. İkisini de yaptıysan devam et — yeni fatura kesilir ve Trendyol'a yüklenir.",
+      confirmText: "İkisini de yaptım, yeniden kes" }))) return;
+    setBusy(true); setMsg(null);
+    try {
+      const r = await parasutApi({ op: "redo_invoice", order_id: order.id });
+      setMsg(r.status === "done" ? `Yeni fatura kesildi${r.invoiceNo ? `: ${r.invoiceNo}` : ""}; Trendyol'a yükleniyor.` : "Yeni fatura hazırlanıyor (e-belge); bitince Trendyol'a kendiliğinden yüklenir.");
+      onRestocked();
+    } catch (e: any) {
+      setMsg(String(e?.message || e));
+    } finally {
+      setBusy(false);
+    }
+  }
   async function restock() {
     setBusy(true); setMsg(null);
     try {
@@ -2671,7 +2687,10 @@ function MarketplaceOrderPanel({ order, onChange, onRestocked }: {
         return mx && (
           <div className="rounded-lg border border-sky-200 bg-sky-50 p-2.5 text-xs text-sky-900">
             <b>Mikro ihracat · {mx.country}</b>{mx.hsCode ? <span className="text-sky-700"> · GTİP {mx.hsCode}</span> : null}
-            <p className="mt-0.5">Fatura yurtdışı olarak kesilir: e-Arşiv, %0 KDV, 301 istisna kodu (Trendyol böyle istiyor). Paket hazır'da otomatik.</p>
+            <p className="mt-0.5">Fatura yurtdışı olarak kesilir: e-Arşiv, %0 KDV, 301 istisna kodu, GTİP 6403.99.93, Havayolu, DDP. Paket hazır'da otomatik.</p>
+            {(order as any).parasut_invoice_id && (
+              <Button size="sm" variant="outline" className="mt-2 h-7 text-xs" disabled={busy} onClick={redoInvoice}>Faturayı yeniden kes</Button>
+            )}
           </div>
         );
       })()}

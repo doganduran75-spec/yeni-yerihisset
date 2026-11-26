@@ -7,7 +7,7 @@ import {
   listCategories, listTags,
 } from "@/lib/parasut";
 import { enableWebhook, matchRule, processInbound, refreshPending, webhookStatus, type InboundRule } from "@/lib/parasut-inbound";
-import { invoiceOrder, checkInvoice, invoicePdfUrl, refundInvoiceOrder } from "@/lib/parasut-invoice";
+import { invoiceOrder, checkInvoice, invoicePdfUrl, refundInvoiceOrder, redoInvoiceOrder } from "@/lib/parasut-invoice";
 import { pushInvoiceToMarketplace, MarketplaceInvoiceError } from "@/lib/marketplace-invoice";
 
 // Paraşüt (yalnız yönetici) — src/lib/parasut.ts
@@ -68,6 +68,10 @@ export async function POST(req: NextRequest) {
         if (pkg) await (sb as any).from("orders").update({ mp_package_number: pkg, mp_invoice_error: null }).eq("id", body.order_id).eq("channel", "hepsiburada");
         try { return NextResponse.json({ ok: true, ...(await pushInvoiceToMarketplace(sb, body.order_id)) }); }
         catch (e: any) { if (e instanceof MarketplaceInvoiceError) return NextResponse.json({ error: e.message }, { status: e.status }); throw e; }
+      }
+      case "redo_invoice": {
+        if (!uuid(body.order_id)) return NextResponse.json({ error: "order_id" }, { status: 400 });
+        return NextResponse.json({ ok: true, ...(await redoInvoiceOrder(sb, body.order_id)) });
       }
       case "invoice":
       case "check_invoice":

@@ -43,6 +43,15 @@ export default {
       t.add(/form\.append\("invoiceNumber", micro\.invoiceNumber\)/.test(ty) && /form\.append\("invoiceDateTime"/.test(ty)
         && /mx_micro:external_raw->micro/.test(mi) && re.test(mi) && reOk && /`\$\{o\.external_package_id\}\.pdf`, micro\)/.test(mi) ? "ok" : "fail",
         "Mikro ihracatta Trendyol'a fatura no (KA02026000000329 biçimi) + tarih ile yüklenir");
+      // Kalem: GTİP (Paraşüt ürün kaydı, boşsa 6403.99.93) + Havayolu + DDP; yanlış kesilen faturayı yeniden kesme (Paraşüt'te geçerliyse ret)
+      const mxs = rd("src/lib/micro-export.ts"), route = rd("src/app/api/admin/parasut/route.ts");
+      t.add(/MICRO_EXPORT_GTIP = "640399930000"/.test(mxs) && /MICRO_EXPORT_SHIPPING = "Havayolu"/.test(mxs) && /MICRO_EXPORT_DELIVERY = "DDP"/.test(mxs)
+        && /if \(x\.abroad\) await ensureGtip\(/.test(inv) && /if \(a\.gtip\) continue;/.test(inv)
+        && /shipping_method: MICRO_EXPORT_SHIPPING, delivery_method: MICRO_EXPORT_DELIVERY/.test(inv) ? "ok" : "fail",
+        "Mikro ihracat kalemi: GTİP 6403.99.93 (ürün kaydı boşsa), Havayolu, DDP");
+      t.add(/export async function redoInvoiceOrder/.test(inv) && /hâlâ geçerli — önce Paraşüt'te e-Arşiv'i iptal et/.test(inv)
+        && /invoice_status: "pending", mp_invoice_sent_at: null/.test(inv) && /case "redo_invoice"/.test(route) ? "ok" : "fail",
+        "Faturayı yeniden kes: Paraşüt'te iptal / silinmediyse reddeder, sonra sıfırlayıp baştan keser");
       const ui = rd("src/app/admin/orders/page.tsx");
       t.add(/microExportOf\(order\.external_raw\)/.test(ui) && /Mikro ihracat · \{mx\.country\}/.test(ui) ? "ok" : "fail",
         "Sipariş panelinde “Mikro ihracat · ülke” bilgisi");

@@ -5,6 +5,12 @@
 
 export const MICRO_EXPORT_VAT_EXEMPTION = "301";
 export const FOREIGN_TAX_NUMBER = "2222222222";
+/** Kalem satırı (eski elle kesilen mikro ihracat faturasıyla aynı): GTİP, gönderim şekli, teslim şartı.
+ *  GTİP 6403.99.93 = üst yüzü deri ayakkabı (kullanıcı 2026-11-26; Trendyol'un gönderdiği 6402 kauçuk/plastik üst yüz).
+ *  GTİP Paraşüt'te ÜRÜN kaydındadır → ürünün GTİP'i boşsa fatura kesilmeden önce yazılır (doluysa dokunulmaz). */
+export const MICRO_EXPORT_GTIP = "640399930000";
+export const MICRO_EXPORT_SHIPPING = "Havayolu";
+export const MICRO_EXPORT_DELIVERY = "DDP";
 
 const COUNTRY_TR: Record<string, string> = {
   AZ: "Azerbaycan", DE: "Almanya", NL: "Hollanda", BE: "Belçika", FR: "Fransa", AT: "Avusturya", GB: "Birleşik Krallık",

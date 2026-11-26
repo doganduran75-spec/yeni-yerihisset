@@ -16,7 +16,7 @@ import { pushInvoiceToMarketplace } from "@/lib/marketplace-invoice";
 import { sendInvoiceEmail } from "@/lib/invoice-mail";
 import { isTestOrder } from "@/lib/notifications";
 import { autoInvoiceHere } from "@/lib/order-next-step";
-import { microExportOf, MICRO_EXPORT_VAT_EXEMPTION, FOREIGN_TAX_NUMBER } from "@/lib/micro-export";
+import { microExportOf, MICRO_EXPORT_VAT_EXEMPTION, FOREIGN_TAX_NUMBER, MICRO_EXPORT_GTIP, MICRO_EXPORT_SHIPPING, MICRO_EXPORT_DELIVERY } from "@/lib/micro-export";
 
 type Sb = ReturnType<typeof createAdminClient>;
 const MARKETPLACES = ["trendyol", "hepsiburada", "amazon"];
@@ -240,6 +240,7 @@ async function invoiceOrderSteps(sb: Sb, orderId: string, opts: { acceptDiff?: b
     // 1) Satış faturası
     if (!o.parasut_invoice_id) {
       await save(sb, orderId, { parasut_status: "creating", parasut_error: null });
+      if (x.abroad) await ensureGtip(sb, orderId, x.lines.map((l) => l.productId));
       const contactId = await findOrCreateContact(sb, x);
       const no = o.channel === "site" || !o.channel ? (o.order_number ? `YH${o.order_number}` : o.id.slice(0, 8)) : String(o.external_order_number || o.order_number || o.id.slice(0, 8));
       const j = await parasutCall(sb, "POST", "/sales_invoices", { data: { type: "sales_invoices", attributes: {
@@ -255,6 +256,7 @@ async function invoiceOrderSteps(sb: Sb, orderId: string, opts: { acceptDiff?: b
         ...(x.ch?.category_id ? { category: { data: { id: String(x.ch.category_id), type: "item_categories" } } } : {}),
         details: { data: x.lines.map((l) => ({ type: "sales_invoice_details", attributes: {
           quantity: l.qty, vat_rate: l.vat, unit_price: r4(l.gross / l.qty / (1 + l.vat / 100)), description: l.title,
+          ...(x.abroad ? { shipping_method: MICRO_EXPORT_SHIPPING, delivery_method: MICRO_EXPORT_DELIVERY } : {}),
         }, relationships: { product: { data: { id: l.productId, type: "products" } } } })) },
       } } });
       const inv = j?.data;
@@ -317,6 +319,50 @@ async function invoiceOrderSteps(sb: Sb, orderId: string, opts: { acceptDiff?: b
     throw e;
   }
   return checkInvoice(sb, orderId);
+}
+
+/** Mikro ihracat: Paraşüt ürün kaydında GTİP boşsa yaz (faturada GTİP sütunu ürün kaydından gelir). Hata faturayı durdurmaz. */
+async function ensureGtip(sb: Sb, orderId: string, productIds: string[]) {
+  const done: string[] = [];
+  for (const id of [...new Set(productIds)]) {
+    try {
+      const j = await parasutCall(sb, "GET", `/products/${id}`);
+      const a = j?.data?.attributes || {};
+      if (a.gtip) continue;
+      await parasutCall(sb, "PUT", `/products/${id}`, { data: { id: String(id), type: "products", attributes: { name: a.name, gtip: MICRO_EXPORT_GTIP } } });
+      done.push(String(a.name || id));
+    } catch (e: any) {
+      if (isParasutUnavailable(e)) throw e;
+      await (sb as any).from("order_events").insert({ order_id: orderId, type: "note", note: `Paraşüt ürününe GTİP yazılamadı (${id}): ${String(e?.message || e).slice(0, 160)}` });
+    }
+  }
+  if (done.length) await (sb as any).from("order_events").insert({ order_id: orderId, type: "note", note: `Paraşüt ürününe GTİP ${MICRO_EXPORT_GTIP} yazıldı: ${done.join(", ")}` });
+}
+
+/** FATURAYI YENİDEN KES (kullanıcı 2026-11-26, mikro ihracat ilk faturası eksik bilgiyle kesildi): yönetici Paraşüt'te
+ *  e-belgeyi iptal edip faturayı siler (ya da iptal eder), pazaryerinde eski faturayı siler → burada kayıt sıfırlanır,
+ *  fatura güncel kurallarla baştan kesilir ve pazaryerine yeniden yüklenir. Paraşüt'te fatura hâlâ geçerliyse REDDEDİLİR
+ *  (çift fatura olmasın). */
+export async function redoInvoiceOrder(sb: Sb, orderId: string) {
+  const o = await loadOrder(sb, orderId);
+  if (!o.parasut_invoice_id) throw new ParasutError(409, "Bu siparişin sistemden kesilmiş Paraşüt faturası yok.");
+  let gone = false;
+  try {
+    const j = await parasutCall(sb, "GET", `/sales_invoices/${o.parasut_invoice_id}`);
+    const a = j?.data?.attributes || {};
+    gone = a.item_type === "cancelled" || a.archived === true;
+  } catch (e: any) {
+    if (!(e instanceof ParasutError && e.status === 404 && !isParasutUnavailable(e))) throw e;
+    gone = true;
+  }
+  if (!gone) throw new ParasutError(409, `Paraşüt'te fatura (${o.parasut_invoice_no || o.parasut_invoice_id}) hâlâ geçerli — önce Paraşüt'te e-Arşiv'i iptal et ve faturayı sil, sonra yeniden dene.`);
+  await save(sb, orderId, {
+    parasut_invoice_id: null, parasut_status: null, parasut_job_id: null, parasut_e_doc_id: null, parasut_e_doc_type: null,
+    parasut_invoice_no: null, parasut_pdf_path: null, parasut_paid: false, parasut_diff_ok: false, parasut_error: null,
+    parasut_invoiced_at: null, invoice_status: "pending", mp_invoice_sent_at: null, mp_invoice_error: null,
+  });
+  await (sb as any).from("order_events").insert({ order_id: orderId, type: "note", note: `Fatura ${o.parasut_invoice_no || o.parasut_invoice_id} Paraşüt'te iptal / silinmiş — yeniden kesiliyor` });
+  return invoiceOrder(sb, orderId);
 }
 
 // ── İADE FATURASI (kullanıcı 2026-11-04) ─────────────────────────────────────────────────────────────────────────
