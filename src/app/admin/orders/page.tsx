@@ -13,7 +13,7 @@ import KargonomiDialog from "@/components/admin/KargonomiDialog";
 import CarrierPickDialog from "@/components/admin/CarrierPickDialog";
 import ReturnExpectedDialog from "@/components/admin/ReturnExpectedDialog";
 import ShippingLabelBox from "@/components/admin/ShippingLabelBox";
-import { printShippingLabels, labelOutdated, labelCode } from "@/lib/shipping-label";
+import { printShippingLabels, printExchangeLabel, labelOutdated, labelCode } from "@/lib/shipping-label";
 import { CANCEL_REASONS, cancelReason } from "@/lib/cancel-reasons";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -3125,14 +3125,35 @@ function CaseBox({ order, kase, canSendLabel, canShipAlt, onDone }: {
         return <p><span className="text-muted-foreground">Müşteride kalacak:</span> <b>{label(kase.keep_item_id)}</b>{back.length ? <> · <span className="text-muted-foreground">Geri gelecek:</span> <b>{back.map((i) => label(i.id)).join(", ")}</b></> : null}</p>;
       })()}
       {kase.return_method && <p><span className="text-muted-foreground">Kargo:</span> {RETURN_METHOD_SHOW[kase.return_method] ?? kase.return_method}{kase.return_code ? <> · kod <code className="font-mono">{kase.return_code}</code></> : null}</p>}
-      {kase.alt_tracking && <p><span className="text-muted-foreground">Alternatif takip:</span> <code className="font-mono">{kase.alt_tracking}</code></p>}
+      {kase.alt_tracking && <p><span className="text-muted-foreground">Alternatif takip:</span> <code className="font-mono">{kase.alt_tracking}</code>{kase.alt_kargo_provider ? ` · ${kase.alt_kargo_provider}` : ""}</p>}
+      {kase.alt_kargo_error && <p data-alt-kargo-error className="font-bold text-red-700 bg-red-50 rounded px-2 py-1">{kase.alt_kargo_error}</p>}
       {kase.iban && <p><span className="text-muted-foreground">IBAN (havale iadesi):</span> <code className="font-mono select-all">{kase.iban}</code>{kase.iban_name ? <> · <b className="select-all">{kase.iban_name}</b></> : null}</p>}
       {kase.iban && kase.iban_name_mismatch && <p className="font-bold text-red-700 bg-red-50 rounded px-2 py-1">IBAN sahibi siparişteki adla uyuşmuyor — iadeyi göndermeden önce müşteriyle doğrula.</p>}
       {kase.customer_note && <p className="whitespace-pre-wrap"><span className="text-muted-foreground">Müşteri notu:</span> {kase.customer_note}</p>}
 
       {canShipAlt && (
-        <div className="flex flex-wrap items-center gap-2 pt-1 border-t">
-          <input value={tracking} onChange={(e) => setTracking(e.target.value)} placeholder="Kargo takip no (opsiyonel)" className="h-8 flex-1 min-w-[160px] rounded-md border px-2" />
+        // DEĞİŞİM GÖNDERİSİ (kullanıcı 2026-11-26): 1) Kargo kodu oluştur (entegrasyon, ilk gönderinin firması) 2) Etiketi yazdır
+        // 3) Alternatifi gönder (ürün eklenir, stok düşer, müşteriye takip numaralı e-posta). Elle kod girmek de mümkün.
+        <div data-alt-ship className="flex flex-wrap items-center gap-2 pt-1 border-t">
+          {!kase.alt_shipment_id && !kase.alt_tracking && (
+            <Button size="sm" variant="outline" disabled={busy} onClick={() => call({ op: "alt_ship_create" })}>Kargo kodu oluştur</Button>
+          )}
+          {kase.alt_shipment_id && !kase.alt_label_code && (
+            <>
+              <span className="text-amber-700 font-semibold">Kargo kodu bekleniyor ({kase.alt_kargo_api === "basitkargo" ? "Basit Kargo" : "Kargonomi"})…</span>
+              <Button size="sm" variant="outline" disabled={busy} onClick={() => call({ op: "alt_ship_check" })}>Şimdi sorgula</Button>
+              <Button size="sm" variant="ghost" disabled={busy} onClick={async () => { if (await siteConfirm({ title: "Değişim gönderisi iptal edilsin mi?", message: "Kargo firmasındaki gönderi iptal edilir; yeniden “Kargo kodu oluştur” diyebilirsin.", confirmText: "İptal et", tone: "danger" })) call({ op: "alt_ship_cancel" }); }}>İptal</Button>
+            </>
+          )}
+          {(kase.alt_label_code || kase.alt_tracking) && (
+            <Button size="sm" variant={kase.alt_label_printed_at ? "outline" : "default"} disabled={busy} onClick={async () => {
+              const r = await printExchangeLabel(order.id);
+              if (!r.ok) siteAlert({ message: r.error || "Etiket hazırlanamadı", tone: "danger" }); else onDone();
+            }}>{kase.alt_label_printed_at ? "Etiketi yeniden yazdır" : "Değişim kargo etiketini yazdır"}</Button>
+          )}
+          {!kase.alt_label_code && (
+            <input value={tracking} onChange={(e) => setTracking(e.target.value)} placeholder="ya da kargo takip no (elle)" className="h-8 flex-1 min-w-[160px] rounded-md border px-2" />
+          )}
           <Button size="sm" disabled={busy} onClick={async () => {
             const picks = Object.keys(swap).length
               ? (kase.items || []).map((x: any) => ({ order_item_id: x.order_item_id, variant_id: swap[x.order_item_id]?.variant_id || x.want_variant_id }))

@@ -104,5 +104,29 @@ export async function printShippingLabels(ids: string[], notes?: Record<string, 
   }
 }
 
+/** Değişim gönderisinin etiketi (talepteki kod + değişim ürünleri; kullanıcı 2026-11-26). Pencere tıklamayla hemen açılır. */
+export async function printExchangeLabel(orderId: string): Promise<{ ok: boolean; error?: string }> {
+  const w = window.open("", "_blank");
+  if (!w) return { ok: false, error: "Tarayıcı yeni pencereyi engelledi — bu site için açılır pencerelere izin ver." };
+  w.document.write("<p style='font-family:Arial;padding:24px'>Etiket hazırlanıyor…</p>");
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await fetch("/api/admin/orders/labels", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
+      body: JSON.stringify({ exchange: orderId, mark: true }),
+    });
+    const d: any = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(d.error || `HTTP ${res.status}`);
+    w.document.open();
+    w.document.write(buildLabelsHtml(d.labels, d.sender, d.size === "100x150" ? "100x150" : "a5"));
+    w.document.close();
+    return { ok: true };
+  } catch (e: any) {
+    w.close();
+    return { ok: false, error: e?.message || "Etiket hazırlanamadı" };
+  }
+}
+
 // Etiket kodu kuralı ayrı dosyada (sunucu ucu da kullanır): src/lib/label-code.ts
 export { labelCode, labelOutdated } from "@/lib/label-code";

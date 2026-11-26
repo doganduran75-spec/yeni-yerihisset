@@ -8,6 +8,7 @@ import { processMarketplacePrices } from "@/lib/marketplace/price-sync";
 import { syncMarketplaceListings } from "@/lib/marketplace/listings";
 import { evaluateHealthAlerts } from "@/lib/server-health-alerts";
 import { pollKargonomi } from "@/lib/kargonomi-flow";
+import { pollAltShipments } from "@/lib/exchange-shipping";
 import { pollParasut } from "@/lib/parasut-invoice";
 import { parasutKeepAlive } from "@/lib/parasut";
 import { refreshPending as refreshInboundInvoices } from "@/lib/parasut-inbound";
@@ -72,6 +73,11 @@ async function run(req: NextRequest) {
     ? await pollKargonomi(supabase).catch((e: any) => ({ checked: 0, shipped: 0, errors: [e?.message || String(e)] }))
     : { checked: 0, shipped: 0, errors: [] as string[] };
   if (kargo.errors.length) console.error("[cron/kargonomi]", kargo.errors.join(" | "));
+  // 4a) Değişim gönderileri (talepteki ayrı gönderi, MIG 20261203): kod + teslim → "hangisi oldu?" e-postası
+  const alt = m % 5 === 2
+    ? await pollAltShipments(supabase).catch((e: any) => ({ checked: 0, errors: [e?.message || String(e)] }))
+    : { checked: 0, errors: [] as string[] };
+  if (alt.errors.length) console.error("[cron/exchange-shipping]", alt.errors.join(" | "));
   // 5) Paraşüt: e-Arşiv / e-Fatura işi + PDF bekleyen faturalar (bitince sipariş "Faturalandı") — 10 dakikada bir
   const fatura = m % 10 === 2
     ? await pollParasut(supabase).catch((e: any) => ({ checked: 0, done: 0, errors: [e?.message || String(e)] }))

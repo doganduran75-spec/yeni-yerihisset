@@ -38,6 +38,40 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, size: body.size });
   }
 
+  // DEĞİŞİM GÖNDERİSİ etiketi (kullanıcı 2026-11-26; src/lib/exchange-shipping.ts): kod talepte (order_cases.alt_label_code),
+  // içerik değişimle giden ürünler. Siparişin kendi etiket / "Kargo hazırlandı" alanlarına dokunmaz.
+  if (body.exchange) {
+    const id = String(body.exchange);
+    if (!/^[0-9a-f-]{36}$/i.test(id)) return NextResponse.json({ error: "Sipariş seçilmedi" }, { status: 400 });
+    const [{ data: st }, { data: o }, { data: c }] = await Promise.all([
+      sb.from("settings").select("store_name, address, contact_phone, label_size").limit(1).maybeSingle(),
+      sb.from("orders").select("id, order_number, channel, import_source, external_order_number, created_at, shipping_address, customer_name, customer_phone, profiles(first_name, last_name, phone)").eq("id", id).maybeSingle(),
+      sb.from("order_cases").select("*").eq("order_id", id).is("closed_at", null).maybeSingle(),
+    ]);
+    if (!o || !c || c.kind !== "exchange") return NextResponse.json({ error: "Açık değişim talebi yok" }, { status: 404 });
+    const code = c.alt_label_code || c.alt_tracking;
+    if (!code) return NextResponse.json({ error: "Değişim gönderisinin kargo kodu yok — önce “Kargo kodu oluştur”." }, { status: 400 });
+    const want = ((c.items as any[]) || []).map((x) => x.want_variant_id).filter(Boolean);
+    const { data: vs } = want.length ? await sb.from("product_variants").select("id, sku, variant_options(value), products(title)").in("id", want) : { data: [] };
+    let a: any = {};
+    try { a = typeof o.shipping_address === "string" ? JSON.parse(o.shipping_address) : (o.shipping_address || {}); } catch { a = { address: String(o.shipping_address || "") }; }
+    const label = {
+      id, order: `${orderLabel(o)} · DEĞİŞİM`, channel: o.channel || "site", date: c.created_at, code, carrier: c.alt_kargo_provider || "",
+      to: { name: a.name || o.customer_name || [o.profiles?.first_name, o.profiles?.last_name].filter(Boolean).join(" ") || "—", company: a.company || "",
+        address: a.address || "", district: a.district || "", city: a.city || "", phone: a.phone || o.customer_phone || o.profiles?.phone || "" },
+      items: ((c.items as any[]) || []).map((x) => {
+        const v = ((vs as any[]) || []).find((y) => y.id === x.want_variant_id);
+        return { qty: 1, title: v?.products?.title || x.want_label || "Değişim ürünü", variant: v?.variant_options?.value || "", sku: v?.sku || "" };
+      }),
+    };
+    if (body.mark) await sb.from("order_cases").update({ alt_label_printed_at: new Date().toISOString() }).eq("id", c.id);
+    return NextResponse.json({
+      size: st?.label_size || "a5",
+      sender: { name: st?.store_name || "YeriHisset", address: st?.address || "", phone: st?.contact_phone || "" },
+      labels: [label], skipped: [],
+    });
+  }
+
   const ids: string[] = (Array.isArray(body.ids) ? body.ids : []).map(String).filter((s: string) => /^[0-9a-f-]{36}$/i.test(s)).slice(0, 200);
   if (!ids.length) return NextResponse.json({ error: "Sipariş seçilmedi" }, { status: 400 });
 

@@ -48,9 +48,11 @@ export async function cargoConfig(sb: Sb) {
 }
 /** Eski ad (geriye uyum) */
 export const kargonomiConfig = async (sb: Sb) => (await cargoConfig(sb)).kargonomi;
+// Değişim gönderisi (src/lib/exchange-shipping.ts) aynı kontrolleri kullanır
+export { ready as cargoReady, recipient as cargoRecipient };
 
 type Cfg = Awaited<ReturnType<typeof cargoConfig>>;
-function ready(c: Cfg, p: Provider) {
+export function ready(c: Cfg, p: Provider) {
   if (p === "basitkargo") {
     if (!c.basit.enabled) throw new KargonomiError(400, "Basit Kargo kapalı (Ayarlar › Entegrasyonlar › Basit Kargo).");
     if (!c.basit.token) throw new KargonomiError(400, "Basit Kargo API token girilmemiş (Ayarlar › Entegrasyonlar › Basit Kargo).");
@@ -93,7 +95,7 @@ export async function testKargonomi(sb: Sb) {
 }
 
 /** Alıcı bilgileri (iki sağlayıcıda aynı kontroller) */
-function recipient(o: any) {
+export function recipient(o: any) {
   let addr: any = {};
   try { addr = typeof o.shipping_address === "string" ? JSON.parse(o.shipping_address) : o.shipping_address || {}; } catch { /* boş */ }
   const p = o.profiles || {};

@@ -5,6 +5,9 @@ import { afterSaleAdminUrl, exchangeOptions } from "@/lib/after-sale";
 import { sendAltDeliveredEmail, sendReturnLabelEmail, sendAltShippedEmail, RETURN_METHOD_LABEL } from "@/lib/after-sale-mail";
 import { kickMarketplaceSync } from "@/lib/marketplace/sync";
 import { autoInvoiceSiteOrder } from "@/lib/parasut-invoice";
+import { createAltShipment, checkAltShipment, cancelAltShipment } from "@/lib/exchange-shipping";
+import { KargonomiError } from "@/lib/kargonomi";
+import { BasitKargoError } from "@/lib/basitkargo";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -16,6 +19,7 @@ import { autoInvoiceSiteOrder } from "@/lib/parasut-invoice";
 //                   ayrılan geri alınır. Müşteriye "yeni numaran yola çıktı" e-postası (kullanıcı 2026-11-26).
 //                   Stok girince ayrılmışsa (reserved, MIG 20261202) kalem zaten ekli → yeniden eklenmez; başka ürün seçilirse
 //                   ayrılan geri alınır. Müşteriye "yeni numaran yola çıktı" e-postası (kullanıcı 2026-11-26)
+//   alt_ship_create / alt_ship_check / alt_ship_cancel : değişim gönderisinin kargo kodu entegrasyondan (src/lib/exchange-shipping.ts)
 //   options       : değişim için seçenekler (aynı ürünün numaraları + aynı modelin diğer renkleri) — item
 //   alt_delivered : alternatif teslim edildi → müşteriye "hangisi oldu?" e-postası
 //   send_label    : iade / değişim geri gönderim kargo kodu → müşteriye e-posta (yöntem değiştirilebilir)
@@ -41,6 +45,19 @@ export async function POST(req: NextRequest) {
   const note = (t: string) => sb.from("order_events").insert({ order_id: orderId, type: "note", note: t });
 
   switch (body.op) {
+    case "alt_ship_create":
+    case "alt_ship_check":
+    case "alt_ship_cancel": {
+      try {
+        const r = body.op === "alt_ship_create" ? await createAltShipment(sb, orderId)
+          : body.op === "alt_ship_check" ? await checkAltShipment(sb, orderId) : await cancelAltShipment(sb, orderId);
+        return NextResponse.json({ ok: true, ...r });
+      } catch (e: any) {
+        if (e instanceof KargonomiError || e instanceof BasitKargoError) return NextResponse.json({ error: e.message }, { status: e.status >= 400 && e.status < 500 ? e.status : 502 });
+        throw e;
+      }
+    }
+
     case "link":
       return NextResponse.json({ ok: true, url: afterSaleAdminUrl(orderId) }); // süre sınırsız yönetici bağlantısı (24 saat geçerli)
 
@@ -82,13 +99,15 @@ export async function POST(req: NextRequest) {
       }
       kickMarketplaceSync(500);
       const items = changed.size ? ((c.items as any[]) || []).map((x) => (changed.has(x.order_item_id) ? { ...x, ...changed.get(x.order_item_id) } : x)) : c.items;
-      await sb.from("order_cases").update({ status: "alt_shipped", items, alt_tracking: String(body.tracking || "").trim() || null, updated_at: now }).eq("id", c.id);
+      // Takip no: elle girilen ya da "Kargo kodu oluştur"dan gelen (talepteki alt_tracking)
+      const tracking = String(body.tracking || "").trim() || c.alt_tracking || null;
+      await sb.from("order_cases").update({ status: "alt_shipped", items, alt_tracking: tracking, updated_at: now }).eq("id", c.id);
       const swapped = [...changed.values()].map((x) => x.want_label).join(", ");
       // Müşteriye "yeni numaran yola çıktı" (kullanıcı 2026-11-26)
       const { data: its } = await sb.from("order_items").select("variant_name, products(title)").in("id", added);
       const lines = ((its as any[]) || []).map((i) => `${i.products?.title ?? "Ürün"}${i.variant_name ? ` (${i.variant_name})` : ""}`);
-      const r = await sendAltShippedEmail(orderId, lines, String(body.tracking || "").trim() || null).catch((e) => ({ status: "failed", error: e?.message }));
-      await note(`Değişim: alternatif gönderildi${swapped ? ` (yönetici değiştirdi: ${swapped})` : ""}${body.tracking ? ` (takip: ${String(body.tracking).trim()})` : ""} — müşteriye e-posta ${r.status === "sent" ? "gönderildi" : "gönderilemedi"}`);
+      const r = await sendAltShippedEmail(orderId, lines, tracking).catch((e) => ({ status: "failed", error: e?.message }));
+      await note(`Değişim: alternatif gönderildi${swapped ? ` (yönetici değiştirdi: ${swapped})` : ""}${tracking ? ` (takip: ${tracking})` : ""} — müşteriye e-posta ${r.status === "sent" ? "gönderildi" : "gönderilemedi"}`);
       return NextResponse.json({ ok: true, added, email: r.status });
     }
 
@@ -157,6 +176,10 @@ export async function POST(req: NextRequest) {
 
     case "close":
       if (!c) return NextResponse.json({ error: "Açık talep yok" }, { status: 400 });
+      // Gönderilmemiş değişim gönderisi (kargo kodu alınmış) → iptal edilmeye çalışılır; olmazsa not (panelden iptal)
+      if (c.kind === "exchange" && c.alt_shipment_id && ["requested", "reserved"].includes(c.status)) {
+        await cancelAltShipment(sb, orderId).catch((e: any) => note(`Değişim gönderisi iptal edilemedi (#${c.alt_shipment_id}): ${String(e?.message || e).slice(0, 160)} — kargo panelinden iptal et`));
+      }
       await sb.from("order_cases").update({ closed_at: now, updated_at: now, status: c.status + ":kapatildi" }).eq("id", c.id);
       // Stok girince ayrılmış ama gönderilmemiş alternatif → stoğa geri (başka bekleyen varsa ona ayrılır)
       if (c.kind === "exchange" && ["reserved", "waiting_stock"].includes(c.status)) {

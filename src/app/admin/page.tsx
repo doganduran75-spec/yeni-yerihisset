@@ -70,7 +70,7 @@ export default function AdminDashboard() {
         // Sipariş listesiyle AYNI alanlar (*): sıradaki adım kuralı packed_at, mp_picking_at vb. okur — eksik alan panoda
         // farklı sayı veriyordu (2026-11-04: paket hazır sipariş panoda "Paket hazır" bekliyor görünüyordu)
         // ret_items: kısmi iade (kargo "Teslim edildi"de kalır) yalnız ürün satırlarından görünür — 2026-11-14
-        .select('*, profiles (first_name, last_name), order_cases (kind, status, return_method, label_sent_at, closed_at), ret_items:order_items(id, quantity, returned_qty, exchange_of, unit_price)')
+        .select('*, profiles (first_name, last_name), order_cases (kind, status, return_method, label_sent_at, closed_at, alt_kargo_error), ret_items:order_items(id, quantity, returned_qty, exchange_of, unit_price)')
         .eq('is_closed', false)
         .order('created_at', { ascending: false })
         .limit(1000);

@@ -58,7 +58,7 @@ export type OrderLike = {
   created_at?: string | null;
   fit_status?: string | null;      // trial · ok · exchange · return
   delivered_at?: string | null;
-  open_case?: { kind: string; status: string; return_method?: string | null; label_sent_at?: string | null; iban?: string | null; iban_name?: string | null; iban_name_mismatch?: boolean | null } | null;
+  open_case?: { kind: string; status: string; return_method?: string | null; label_sent_at?: string | null; iban?: string | null; iban_name?: string | null; iban_name_mismatch?: boolean | null; alt_kargo_error?: string | null } | null;
 };
 
 export const TRIAL_DAYS = 14;
@@ -227,6 +227,8 @@ export function orderErrors(o: OrderLike): string[] {
     out.push(o.mp_picking_error);
   if (o.kargonomi_error && !SHIPPED.includes(ship) && !o.cargo_tracking_number && !o.kargonomi_tracking_code)
     out.push(`Kargo entegrasyonu: ${o.kargonomi_error}`);
+  // Değişim gönderisi (talepteki ayrı gönderi, src/lib/exchange-shipping.ts) açılamadı / sorunlu
+  if (o.open_case?.kind === "exchange" && o.open_case.alt_kargo_error) out.push(`Değişim gönderisi: ${o.open_case.alt_kargo_error}`);
   return out;
 }
 
