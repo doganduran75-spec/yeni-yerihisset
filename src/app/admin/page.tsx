@@ -182,6 +182,7 @@ export default function AdminDashboard() {
   const todoRows = TODO_KINDS.map((t) => ({
     n: kindCount(t.kind) + (t.kind === "invoice" ? uninvoiced.n : 0), label: t.label, href: `/admin/orders?todo=${t.param}`,
     late: t.kind === "invoice" ? uninvoiced.late : 0,
+    danger: t.kind === "error", // "Hata aldı" (siparişte entegrasyon hatası — kullanıcı 2026-11-26) kırmızı
   }));
 
   return (
@@ -217,10 +218,10 @@ export default function AdminDashboard() {
               // Ay bitti, ortakların hakedişi işlenmedi (Satış Ortaklığı › Hakediş; en eski dönem açılır)
               { n: payoutDue.n, label: payoutDue.period ? `Hakediş işlenecek (${periodLabel(payoutDue.period)})` : "Hakediş işlenecek",
                 href: `/admin/affiliates?view=payout${payoutDue.period ? `&period=${payoutDue.period}` : ""}` },
-            ].map((x: { n: number; label: string; href: string; info?: boolean; late?: number }) => (
+            ].map((x: { n: number; label: string; href: string; info?: boolean; late?: number; danger?: boolean }) => (
               <Link key={x.label} href={x.href} className={`flex items-center justify-between rounded-lg px-2 py-1 hover:bg-slate-50 ${x.n ? "font-semibold text-slate-800" : "text-muted-foreground"}`}>
                 <span>{x.label}{x.late ? <span className="ml-1.5 text-[11px] font-bold text-red-600">· {x.late} tanesi {INVOICE_DAYS} günü geçti</span> : null}</span>
-                <span className={`min-w-[26px] text-center rounded-full px-2 py-0.5 text-xs font-black ${x.n ? (x.info ? "bg-sky-500 text-white" : "bg-amber-500 text-white") : "bg-slate-100 text-slate-400"}`}>{x.n}</span>
+                <span className={`min-w-[26px] text-center rounded-full px-2 py-0.5 text-xs font-black ${x.n ? (x.danger ? "bg-red-600 text-white" : x.info ? "bg-sky-500 text-white" : "bg-amber-500 text-white") : "bg-slate-100 text-slate-400"}`}>{x.n}</span>
               </Link>
             ))}
           </div>

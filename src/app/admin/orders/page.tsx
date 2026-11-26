@@ -1058,6 +1058,7 @@ Siparişte “Paraşüt — yeniden dene” ile tekrar dene.`, tone: "danger" })
       case "invoice_parasut": return invoiceParasut(o);
       case "return_invoice_parasut": return refundParasut(o);
       case "packed": return markPacked(o);
+      case "mp_invoice_push": return pushTrendyolInvoice(o);
       case "picked_up":
         if (await siteConfirm({ title: "Kurye aldı mı?", message: "Sipariş “Kargoda” olur ve müşteriye takip numaralı kargo e-postası gider.", confirmText: "Kurye aldı" })) await pickedUp([o.id]);
         return;
@@ -1628,6 +1629,11 @@ ${courierQueue.slice(0, 20).map((o) => orderLabel(o)).join(", ")}${courierQueue.
                           {(() => {
                             const st = nx(order);
                             if (!st.needsAction) return null;
+                            if (st.errors?.length) return (
+                              <span data-todo-error title={st.errors.join("\n")} className="mt-1 text-[10px] font-bold rounded px-1.5 py-0.5 w-fit max-w-[260px] truncate bg-red-100 text-red-800">
+                                ⚠ Hata: {st.errors[0]}
+                              </span>
+                            );
                             return (
                               <span data-todo-stage title={st.hint || st.stage} className="mt-1 text-[10px] font-bold rounded px-1.5 py-0.5 w-fit max-w-[260px] truncate bg-amber-100 text-amber-900">
                                 → {st.stage}
@@ -1977,6 +1983,12 @@ ${courierQueue.slice(0, 20).map((o) => orderLabel(o)).join(", ")}${courierQueue.
                       )}
                     </div>
                     {step.hint && <p className="text-xs text-slate-600">{step.hint}</p>}
+                    {!!step.errors?.length && (
+                      <div data-order-errors className="rounded-lg border border-red-200 bg-red-50 p-2 text-xs text-red-800 space-y-1">
+                        <p className="font-bold flex items-center gap-1.5"><AlertCircle size={13} /> Hata aldı</p>
+                        {step.errors.map((e, i) => <p key={i} className="whitespace-pre-line">{e}</p>)}
+                      </div>
+                    )}
                     {openCaseOf(o) && (
                       <CaseBox
                         order={o}

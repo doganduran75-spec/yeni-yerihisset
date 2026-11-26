@@ -19,7 +19,8 @@ export default {
       const cases = [
         ["Havale bekleyen sipariş → Ödeme beklenen", { ...site, payment_status: "pending", payment_method: "bank_transfer" }, "payment"],
         ["Ödendi, hazırlanacak → Sevk edilecek", site, "ship"],
-        ["Paket hazır, Paraşüt hatası → Fatura kesilecek", { ...site, packed_at: now, parasut_status: "error", parasut_error: "x" }, "invoice"],
+        // 2026-11-26: siparişte hata kalırsa "Hata aldı" satırına düşer (22-siparis-hatalari.mjs)
+        ["Paket hazır, Paraşüt hatası → Hata aldı", { ...site, packed_at: now, parasut_status: "error", parasut_error: "x" }, "error"],
         ["Pazaryeri paket hazır, fatura kesilmedi → Fatura kesilecek", { ...site, channel: "trendyol", packed_at: now }, "invoice"],
         ["Teslim edildi, oldu, fatura kesilmedi → Fatura kesilecek", { ...site, shipment_status: "delivered", fit_status: "ok", delivered_at: now }, "invoice"],
         ["Trendyol iadesi depoya ulaştı → İade / talep / diğer", { ...site, channel: "trendyol", shipment_status: "delivered", invoice_status: "invoiced", mp_claim_state: "arrived" }, "other"],
@@ -32,7 +33,7 @@ export default {
       }
       t.add(!bad.length ? "ok" : "fail", "Her iş doğru satıra düşüyor (ödeme / sevk / fatura / iade-talep-diğer)", bad.join(" · "));
       const labels = (g.TODO_KINDS || []).map((x) => `${x.label}=${x.param}`).join(",");
-      t.add(labels === "Ödeme beklenen=odeme,Sevk edilecek=sevk,Fatura kesilecek=fatura,İade / talep / diğer=diger" ? "ok" : "fail", "Pano satırları ve liste adresleri", labels);
+      t.add(labels === "Hata aldı=hata,Ödeme beklenen=odeme,Sevk edilecek=sevk,Fatura kesilecek=fatura,İade / talep / diğer=diger" ? "ok" : "fail", "Pano satırları ve liste adresleri", labels);
       // Paraşüt kesintisi: "retry" → yöneticiden iş yok, düğme "Şimdi yeniden dene"
       const r = g.orderNextStep({ ...site, packed_at: now, parasut_status: "retry", parasut_error: "Paraşüt şu an bakımda" });
       const okR = !r.needsAction && /ulaşılamıyor/.test(r.stage) && r.actions.some((a) => a.key === "invoice_parasut" && a.label === "Şimdi yeniden dene");

@@ -20,7 +20,9 @@ export type NextActionKey =
   // Trendyol iade talebi: onayla + işle (src/lib/marketplace/trendyol-claims.ts)
   | "mp_claim"
   // Müşteri iptali, "ödeme yaptım" ama havale onaylanmamıştı (src/lib/customer-cancel.ts)
-  | "cancel_transfer_refunded" | "cancel_transfer_none";
+  | "cancel_transfer_refunded" | "cancel_transfer_none"
+  // Faturası kesilmiş, pazaryerine yüklenemedi → yeniden yükle (src/lib/marketplace-invoice.ts)
+  | "mp_invoice_push";
 
 export type NextAction = { key: NextActionKey; label: string; kind: "primary" | "danger" };
 
@@ -44,6 +46,9 @@ export type OrderLike = {
   packed_at?: string | null;               // "Paket hazır"
   mp_picking_at?: string | null;           // Trendyol "İşleme al" yapıldı
   mp_picking_error?: string | null;
+  mp_invoice_error?: string | null;        // fatura pazaryerine yüklenemedi
+  mp_invoice_sent_at?: string | null;
+  parasut_pdf_path?: string | null;
   cargo_tracking_number?: string | null;
   mp_package_number?: string | null;       // Hepsiburada paket no (paketlenince)
   mp_claim_state?: string | null;          // Trendyol iade talebi: in_transit / arrived / accepted / disputed / done
@@ -86,6 +91,7 @@ export type NextStep = {
   hint?: string;          // kısa açıklama (neyi bekliyoruz)
   actions: NextAction[];
   needsAction: boolean;   // "Bekleyen işlerim"de görünsün mü (sıra yöneticide mi)
+  errors?: string[];      // siparişte entegrasyon hatası (orderErrors) → panoda "Hata aldı"
 };
 
 const SHIPPED = ["shipped", "delivered", "undelivered", "returned"];
@@ -126,6 +132,7 @@ export function isInvoiceOnlyStep(s: NextStep) {
 // kargolanmış siparişin faturası — o "Faturası kesilmemiş" satırında; 2026-11-14 YH24765 iki satırda birden sayılıyordu).
 // Pano sayısı ve sipariş listesindeki ?todo=diger aynı kuralı kullanır: tıklayınca yalnız o işler açılır (kullanıcı 2026-11-14).
 export function isGeneralOrderTodo(s: NextStep, hasOpenExchange: boolean, uninvoicedShipped = false) {
+  if (s.errors?.length) return true; // hata alan sipariş her durumda "Hata aldı"da
   return s.needsAction && !isRefundDue(s) && !isReturnInvoiceDue(s) && (!hasOpenExchange || isExchangeShipDue(s)) && !(uninvoicedShipped && isInvoiceOnlyStep(s));
 }
 /** Değişimde gönderilecek ürün var (talep geldi / stok girince ayrıldı) → sipariş gibi "Sevk edilecek" işi (kullanıcı 2026-11-26) */
@@ -136,8 +143,9 @@ export function isExchangeShipDue(s: NextStep) {
 // İŞ TÜRÜ (kullanıcı 2026-11-25: "Bekleyen sipariş işi"nde ödeme bekleyen, sevk edilecek ve faturası kesilemeyen siparişler
 // aynı grupta duruyordu). Pano satırları + liste süzgeci (?todo=odeme|sevk|fatura|diger) + listedeki "yapılacak iş" yazısı.
 // Fatura satırı: bu türdeki genel işler + kargolanmış faturası kesilmemiş (isUninvoicedShipped) — eski "Faturası kesilmemiş" satırı.
-export type TodoKind = "payment" | "ship" | "invoice" | "other";
+export type TodoKind = "error" | "payment" | "ship" | "invoice" | "other";
 export const TODO_KINDS: { kind: TodoKind; label: string; param: string }[] = [
+  { kind: "error", label: "Hata aldı", param: "hata" },
   { kind: "payment", label: "Ödeme beklenen", param: "odeme" },
   { kind: "ship", label: "Sevk edilecek", param: "sevk" },
   { kind: "invoice", label: "Fatura kesilecek", param: "fatura" },
@@ -146,6 +154,7 @@ export const TODO_KINDS: { kind: TodoKind; label: string; param: string }[] = [
 const PAY_KEYS: string[] = ["mark_paid", "cancel_transfer_refunded", "cancel_transfer_none"];
 const PREP_KEYS: string[] = ["packed", "ship_kargonomi", "ship_manual", "hb_package", "mp_picking"];
 export function todoKind(s: NextStep): TodoKind {
+  if (s.errors?.length) return "error"; // hata her işin önünde (siparişe tıklayınca hata sıradaki adımda)
   const k = s.actions.map((a) => a.key as string);
   if (k.some((x) => PAY_KEYS.includes(x))) return "payment";
   // Paket hazır, fatura kesilemedi ("Kurye aldı" yanında olsa da önce fatura) → fatura; paketleme / kargo işi varsa sevk
@@ -201,7 +210,37 @@ export function paidReturnedUnits(items: OrderLike["order_items"]): number {
   return n;
 }
 
+// SİPARİŞTEKİ HATALAR (kullanıcı 2026-11-26: Trendyol fatura yükleme hatası siparişin içinde kaldı, panoda görünmedi).
+// Bir entegrasyon adımı hata verip öyle kaldıysa sipariş panoda / listede "Hata aldı" işine düşer; hata düzelince
+// (alan temizlenince / adım tamamlanınca) kendiliğinden çıkar. Paraşüt "retry" (bakım, kendiliğinden yeniden dener)
+// ve Hepsiburada "paket numarası henüz yok" (bekleme) hata sayılmaz.
+const HB_WAIT = "Hepsiburada paket numarası henüz yok";
+export function orderErrors(o: OrderLike): string[] {
+  const out: string[] = [];
+  if (o.status === "cancelled") return out;
+  const ship = o.shipment_status || "waiting";
+  if (o.parasut_status === "error") out.push(`Paraşüt faturası: ${o.parasut_error || "kesilemedi"}`);
+  const mp = o.channel === "hepsiburada" ? "Hepsiburada" : "Trendyol";
+  if (o.mp_invoice_error && !o.mp_invoice_sent_at && o.parasut_pdf_path && !o.mp_invoice_error.startsWith(HB_WAIT))
+    out.push(`${mp}'a fatura yüklenemedi: ${o.mp_invoice_error}`);
+  if (o.channel === "trendyol" && o.mp_picking_error && !o.mp_picking_at && !SHIPPED.includes(ship))
+    out.push(o.mp_picking_error);
+  if (o.kargonomi_error && !SHIPPED.includes(ship) && !o.cargo_tracking_number && !o.kargonomi_tracking_code)
+    out.push(`Kargo entegrasyonu: ${o.kargonomi_error}`);
+  return out;
+}
+
 export function orderNextStep(o: OrderLike): NextStep {
+  const step = baseNextStep(o);
+  const errors = orderErrors(o);
+  if (!errors.length) return step;
+  // Fatura pazaryerine yüklenemediyse "yeniden yükle" düğmesi sıradaki adıma eklenir
+  const push = o.mp_invoice_error && !o.mp_invoice_sent_at && o.parasut_pdf_path && !step.actions.some((a) => a.key === "mp_invoice_push")
+    ? [{ key: "mp_invoice_push" as const, label: `${o.channel === "hepsiburada" ? "Hepsiburada" : "Trendyol"}'a yeniden yükle`, kind: "primary" as const }] : [];
+  return { ...step, actions: [...push, ...step.actions], needsAction: true, errors };
+}
+
+function baseNextStep(o: OrderLike): NextStep {
   const r = coreNextStep(o);
   // Eski siteden (WooCommerce) aktarılan siparişler: kargolanmışsa ya da 30 günden eskiyse geçmiş kayıttır →
   // bekleyen işlere düşmez (aktarım geçiş döneminde gelen, yeni ve henüz kargolanmamış olanlar düşer).
