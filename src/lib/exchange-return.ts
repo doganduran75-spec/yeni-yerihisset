@@ -43,6 +43,23 @@ export function exchangeReturnDefaults(items: RetItem[], keepItemId?: string | n
   return new Set(items.filter((i) => i.id !== keepItemId && (i.id === root || i.exchange_of === root)).map((i) => i.id));
 }
 
+/** DEĞİŞİMDE GERİ GELEN ÜRÜN SONRASI (kullanıcı 2026-11-26: geri gelecek ürün müşteri seçmeden de gelebilir — YH25047).
+ *  roots = talepteki asıl kalemler. Her çiftte (asıl + yerine giden) müşteride ödediği kadar adet kaldıysa değişim TAMAM
+ *  (keepId = müşteride kalan kalem); çiftlerin tamamı geri geldiyse değişim İADEYE döndü (ücret iadesi sırası). */
+export function exchangeBackResult(items: RetItem[], roots: string[]): { done: boolean; allBack: boolean; keepId: string | null } {
+  let done = roots.length > 0, allBack = roots.length > 0, keepId: string | null = null;
+  for (const root of roots) {
+    const g = items.filter((i) => i.id === root || i.exchange_of === root);
+    const rootItem = g.find((i) => i.id === root);
+    if (!rootItem) { done = false; allBack = false; continue; }
+    const held = g.reduce((a, i) => a + n(i.quantity) - n(i.returned_qty), 0);
+    if (held > n(rootItem.quantity)) done = false;
+    if (held > 0) allBack = false;
+    if (!keepId) keepId = g.find((i) => n(i.quantity) - n(i.returned_qty) > 0)?.id ?? null;
+  }
+  return { done: done && !allBack, allBack, keepId };
+}
+
 // İADE TUTARI — PARA + KREDİ (kullanıcı 2026-11-26): iade kargosu bizde. Siparişin TÜMÜ geri geldiyse kalan her şey iade
 // edilir (kargo dahil; kullanılan YeriHisset Kredisi de cüzdana döner). Bir kısmı geldiyse yalnız o ürünlerin bedeli: kupon
 // payı düşülür, kalan tutar siparişin ödeme oranında bölünür (para → karta / hesaba, kredi → cüzdana).

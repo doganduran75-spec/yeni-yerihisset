@@ -44,6 +44,7 @@ function Inner() {
   const params = useSearchParams();
   const r = params.get("r") || "";
   const orderParam = params.get("siparis") || "";
+  const y = params.get("y") || ""; // yönetici "müşteri adına" bağlantısı (süre sınırı yok)
   const [state, setState] = useState<"loading" | "ready" | "error" | "done">(r || orderParam ? "loading" : "error");
   const [doneMsg, setDoneMsg] = useState("");
   const [v, setV] = useState<any>(null);
@@ -65,13 +66,14 @@ function Inner() {
   const [reason, setReason] = useState("");
   const [note, setNote] = useState("");
   const [keep, setKeep] = useState("");
+  const [none, setNone] = useState(false); // "İkisi de olmadı"
 
   const auth = useCallback(async (): Promise<Record<string, string>> => {
     if (r) return {};
     const { data: { session } } = await supabase.auth.getSession();
     return session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
   }, [r]);
-  const q = r ? `r=${encodeURIComponent(r)}` : `order=${encodeURIComponent(orderParam)}`;
+  const q = (r ? `r=${encodeURIComponent(r)}` : `order=${encodeURIComponent(orderParam)}`) + (y ? `&y=${encodeURIComponent(y)}` : "");
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/after-sale?${q}`, { headers: await auth(), cache: "no-store" });
@@ -95,7 +97,7 @@ function Inner() {
   async function post(payload: any, msg: string) {
     setBusy(true); setErr(null);
     try {
-      const res = await fetch("/api/after-sale", { method: "POST", headers: { "Content-Type": "application/json", ...(await auth()) }, body: JSON.stringify({ ...(r ? { r } : { order: orderParam }), ...payload }) });
+      const res = await fetch("/api/after-sale", { method: "POST", headers: { "Content-Type": "application/json", ...(await auth()) }, body: JSON.stringify({ ...(r ? { r } : { order: orderParam }), ...(y ? { y } : {}), ...payload }) });
       const j = await res.json().catch(() => ({}));
       if (!res.ok) { setErr(j.error || "Gönderilemedi, tekrar dener misin?"); return; }
       setDoneMsg(msg); setState("done");
@@ -131,13 +133,28 @@ function Inner() {
   // ── Açık talep ──
   if (c) {
     if (c.kind === "exchange" && c.status === "alt_delivered") {
+      // Yalnız değişim çifti (asıl ürün + yerine giden) — siparişteki diğer ürünler seçilmez
+      const pair = new Set((c.items || []).map((x: any) => x.order_item_id));
+      const pairItems = itemsActive.filter((i: any) => pair.has(i.id) || pair.has(i.exchange_of));
+      if (none) return (
+        <Shell>
+          {head}
+          <h1 className="text-xl font-black text-slate-900 mb-1">İkisi de olmadı</h1>
+          <p className="text-sm text-slate-500 mb-3">Üzgünüz 😔 Kısaca ne olduğunu yaz (ör. “ikisi de küçük”, “43 deneyebilir miyim?”, “iade etmek istiyorum”); seninle iletişime geçelim.</p>
+          <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} placeholder="Ne oldu?" className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" />
+          {err && <p className="text-sm text-red-600 mt-3">{err}</p>}
+          <button disabled={busy || note.trim().length < 3} onClick={() => post({ action: "none", note }, "Notunu aldık; kısa süre içinde seninle iletişime geçeceğiz.")}
+            className="mt-4 w-full h-12 rounded-xl bg-olive-600 text-white font-bold text-sm disabled:opacity-50">Gönder</button>
+          <button type="button" onClick={() => { setNone(false); setErr(null); }} className="mt-3 w-full text-sm text-slate-500 underline underline-offset-2">Geri dön</button>
+        </Shell>
+      );
       return (
         <Shell>
           {head}
           <h1 className="text-xl font-black text-slate-900 mb-1">Hangisi oldu?</h1>
           <p className="text-sm text-slate-500 mb-4">Tuttuğunu seç; diğerini nasıl göndereceğini söyle, kargo kodunu e-postayla gönderelim.</p>
           <div className="space-y-2 mb-4">
-            {itemsActive.map((i: any) => (
+            {(pairItems.length ? pairItems : itemsActive).map((i: any) => (
               <label key={i.id} className={`flex items-center gap-3 rounded-xl border p-3 cursor-pointer ${keep === i.id ? "border-olive-500 bg-olive-50" : "border-slate-200"}`}>
                 <input type="radio" checked={keep === i.id} onChange={() => setKeep(i.id)} className="accent-olive-600" />
                 <span className="text-sm font-bold text-slate-800">{i.title}{i.size ? ` — ${i.size}` : ""}</span>
@@ -149,13 +166,15 @@ function Inner() {
           {err && <p className="text-sm text-red-600 mt-3">{err}</p>}
           <button disabled={busy || !keep} onClick={() => post({ action: "keep", keep_item_id: keep, method }, "Seçimini aldık. Geri gönderim kargo kodunu kısa süre içinde e-postayla göndereceğiz.")}
             className="mt-4 w-full h-12 rounded-xl bg-olive-600 text-white font-bold text-sm disabled:opacity-50">Kaydet</button>
-          <p className="text-xs text-slate-400 mt-3 text-center">İkisi de olmadıysa Hesabım › Siparişlerim’den bize mesaj yaz.</p>
+          <button type="button" onClick={() => { setNone(true); setErr(null); }} className="mt-3 w-full text-sm font-bold text-slate-500 underline underline-offset-2">İkisi de olmadı</button>
         </Shell>
       );
     }
     const msg: Record<string, string> = {
       "exchange:requested": "Değişim talebini aldık; istediğin numarayı kısa süre içinde kargoya veriyoruz.",
-      "exchange:waiting_stock": "İstediğin numara stoğa girince gönderiyoruz; seni e-postayla haberdar edeceğiz.",
+      "exchange:waiting_stock": "İstediğin numara stoğa girer girmez sana ayırıp kargoya veriyoruz; kargoya verince e-postayla haber vereceğiz.",
+      "exchange:reserved": "İstediğin numara stoğa girdi ve sana ayrıldı; kısa süre içinde kargoya veriyoruz.",
+      "exchange:none_fit": "Notunu aldık; kısa süre içinde seninle iletişime geçeceğiz.",
       "exchange:alt_shipped": "Yeni numaran kargoda. Ulaşınca ikisini de dene, hangisinin olduğunu bize söyle.",
       "exchange:keep_chosen": "Seçimini aldık; geri gönderim kargo kodunu e-postayla göndereceğiz.",
       "exchange:label_sent": "Kargo kodunu e-postayla gönderdik. Tutmadığın ürünü bize ulaştırınca değişimin tamamlanır.",
@@ -175,7 +194,7 @@ function Inner() {
     );
   }
 
-  if (v.fitStatus === "ok") return (
+  if (v.fitStatus === "ok" && !v.canAnswer) return (
     <Shell>{head}<div className="text-center space-y-3"><Smile className="text-olive-600 mx-auto" size={44} /><h1 className="text-xl font-black text-slate-900">Ayakkabın sana uydu 🎉</h1><p className="text-sm text-slate-600">İyi günlerde giy! Bir sorun olursa Hesabım’dan bize yazabilirsin.</p></div></Shell>
   );
   if (!v.canAnswer) return (

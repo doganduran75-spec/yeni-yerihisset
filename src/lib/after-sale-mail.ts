@@ -103,6 +103,50 @@ export async function sendReturnCompletedEmail(orderId: string, r: { cash: numbe
   return send(c.email, `${c.label} — iaden tamamlandı`, body, undefined, "return_completed");
 }
 
+/** Müşteriye: değişim talebin alındı (kullanıcı 2026-11-26) */
+export async function sendExchangeRequestedEmail(orderId: string, lines: string[], waiting: boolean) {
+  const c = await orderCustomer(orderId);
+  if (!c?.email) return { status: "failed" as const, error: "e-posta yok" };
+  const body = `
+    <h1 style="font-size:21px;font-weight:800;color:#111827;margin:0 0 12px">Değişim talebini aldık</h1>
+    ${p15(`Merhaba${c.name ? ` ${c.name}` : ""}, <b>${c.label}</b> siparişin için değişim talebin bize ulaştı:`)}
+    ${ul(lines.map((l) => escapeHtml(l)))}
+    ${p15(waiting
+      ? "İstediğin numara şu an stokta yok. Stoğa girer girmez sana ayırıp kargoya veriyoruz; kargoya verince e-postayla haber vereceğiz."
+      : "Yeni numaranı kısa süre içinde kargoya veriyoruz; kargoya verince e-postayla haber vereceğiz.")}
+    ${p15("Elindeki ürünü şimdi göndermene gerek yok: yeni numara gelince ikisini de dene, hangisinin olduğunu bize söyle. Kargo ücretleri bize aittir.", ";color:#6b7280;font-size:13px")}
+    <p style="font-size:12px;color:#9ca3af;line-height:1.6;margin:0;text-align:center">Talebini dilediğin zaman <a href="${afterSaleUrl(orderId)}" style="color:#6b7280">buradan</a> görüntüleyebilirsin.</p>`;
+  return send(c.email, `${c.label} — değişim talebin alındı`, body, undefined, "exchange_requested");
+}
+
+/** Müşteriye: değişimdeki yeni numara kargoya verildi (kullanıcı 2026-11-26) */
+export async function sendAltShippedEmail(orderId: string, lines: string[], tracking: string | null) {
+  const c = await orderCustomer(orderId);
+  if (!c?.email) return { status: "failed" as const, error: "e-posta yok" };
+  const body = `
+    <h1 style="font-size:21px;font-weight:800;color:#111827;margin:0 0 12px">Yeni numaran yola çıktı 🚚</h1>
+    ${p15(`Merhaba${c.name ? ` ${c.name}` : ""}, <b>${c.label}</b> siparişin için değişim ürünün kargoya verildi:`)}
+    ${ul(lines.map((l) => escapeHtml(l)))}
+    ${tracking ? `<div style="margin:0 0 16px;padding:12px 16px;border:1px dashed #84cc16;border-radius:12px;background:#f7fee7;text-align:center">
+      <div style="font-size:12px;color:#4d7c0f">Kargo takip no</div>
+      <div style="font-size:18px;font-weight:800;letter-spacing:1px;color:#1a2e05;margin-top:4px">${escapeHtml(tracking)}</div>
+    </div>` : ""}
+    ${p15("Ulaşınca ikisini de evde, günün farklı saatlerinde dene. Hangisini tuttuğunu sormak için sana ayrıca e-posta göndereceğiz.")}`;
+  return send(c.email, `${c.label} — yeni numaran yola çıktı`, body, undefined, "alt_shipped");
+}
+
+/** Müşteriye: değişimin tamamlandı — geri gönderdiği ürün bize ulaştı (kullanıcı 2026-11-26) */
+export async function sendExchangeCompletedEmail(orderId: string, keptLabel: string | null) {
+  const c = await orderCustomer(orderId);
+  if (!c?.email) return { status: "failed" as const, error: "e-posta yok" };
+  const body = `
+    <h1 style="font-size:21px;font-weight:800;color:#111827;margin:0 0 12px">Değişimin tamamlandı ✅</h1>
+    ${p15(`Merhaba${c.name ? ` ${c.name}` : ""}, <b>${c.label}</b> siparişin için geri gönderdiğin ürün bize ulaştı; değişimin tamamlandı.`)}
+    ${keptLabel ? p15(`Sende kalan: <b>${escapeHtml(keptLabel)}</b>`) : ""}
+    ${p15("İyi günlerde giy! Bir sorun olursa bu e-postayı yanıtlaman yeterli.", ";color:#6b7280;font-size:13px")}`;
+  return send(c.email, `${c.label} — değişimin tamamlandı`, body, undefined, "exchange_completed");
+}
+
 /** Yöneticiye: müşteri değişim / iade istedi */
 export async function sendAdminCaseEmail(orderId: string, title: string, lines: string[]) {
   const sb = createAdminClient() as any;

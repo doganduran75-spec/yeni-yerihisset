@@ -2094,8 +2094,9 @@ export default {
         const keys = (o) => m.orderNextStep(o).actions.map((a) => a.key);
         ok(keys({ ...base, kargonomi_tracking_code: "KSURTEST" }).includes("case_link") && keys(base).includes("case_link") && !keys(old).includes("case_link"),
           "Cevapsız teslim edilmiş siparişte “Müşteri adına değişim / iade aç” var (aktarımdan önce teslim edilende yok)", JSON.stringify(keys(base)));
-        ok(!keys({ ...base, kargonomi_tracking_code: "KSURTEST", delivered_at: new Date(Date.now() - 20 * 86400_000).toISOString() }).includes("case_link"),
-          "14 günlük deneme süresi geçince müşteri adına değişim açılmaz (İade gelecek / İade al kalır)");
+        // 2026-11-26: yönetici "müşteri adına" süre sınırı olmadan açabilir (müşteri e-postayla ulaşsa da yardım)
+        ok(keys({ ...base, kargonomi_tracking_code: "KSURTEST", delivered_at: new Date(Date.now() - 20 * 86400_000).toISOString() }).includes("case_link"),
+          "14 günlük deneme süresi geçse de yönetici müşteri adına değişim / iade açabiliyor");
         ok(!keys({ ...old, fit_status: "trial" }).includes("case_link") && keys({ ...base, fit_status: "trial" }).includes("case_link"),
           "“Müşteri deniyor” durumunda da düğme yalnız sayfası açılabilen siparişte (aktarımdan önce teslim edilende yok)");
         const as = await api("/api/after-sale?r=00000000-0000-0000-0000-000000000000.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", { method: "GET" }).catch(() => null);

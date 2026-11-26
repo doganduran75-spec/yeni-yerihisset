@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { getAuthUserFromRequest } from "@/lib/auth-from-request";
-import { afterSaleUrl, exchangeOptions } from "@/lib/after-sale";
-import { sendAltDeliveredEmail, sendReturnLabelEmail, RETURN_METHOD_LABEL } from "@/lib/after-sale-mail";
+import { afterSaleAdminUrl, exchangeOptions } from "@/lib/after-sale";
+import { sendAltDeliveredEmail, sendReturnLabelEmail, sendAltShippedEmail, RETURN_METHOD_LABEL } from "@/lib/after-sale-mail";
 import { kickMarketplaceSync } from "@/lib/marketplace/sync";
 import { autoInvoiceSiteOrder } from "@/lib/parasut-invoice";
 
@@ -11,7 +11,11 @@ import { autoInvoiceSiteOrder } from "@/lib/parasut-invoice";
 // SATIŞ SONRASI — yönetici işlemleri (sipariş detayı › Sıradaki adım). POST { orderId, op, … }
 //   fit_ok        : müşteri "oldu" dedi (telefon vb.) → fatura sırası
 //   ship_alt      : değişim — alternatif numarayı siparişe ekle (stok düşer) + kargo kodu (opsiyonel);
-//                   items [{order_item_id, variant_id}] ile yönetici gönderilecek ürünü değiştirebilir (başka renk dahil)
+//                   items [{order_item_id, variant_id}] ile yönetici gönderilecek ürünü değiştirebilir (başka renk dahil).
+//                   Stok girince ayrılmışsa (reserved, MIG 20261202) kalem zaten ekli → yeniden eklenmez; başka ürün seçilirse
+//                   ayrılan geri alınır. Müşteriye "yeni numaran yola çıktı" e-postası (kullanıcı 2026-11-26).
+//                   Stok girince ayrılmışsa (reserved, MIG 20261202) kalem zaten ekli → yeniden eklenmez; başka ürün seçilirse
+//                   ayrılan geri alınır. Müşteriye "yeni numaran yola çıktı" e-postası (kullanıcı 2026-11-26)
 //   options       : değişim için seçenekler (aynı ürünün numaraları + aynı modelin diğer renkleri) — item
 //   alt_delivered : alternatif teslim edildi → müşteriye "hangisi oldu?" e-postası
 //   send_label    : iade / değişim geri gönderim kargo kodu → müşteriye e-posta (yöntem değiştirilebilir)
@@ -38,7 +42,7 @@ export async function POST(req: NextRequest) {
 
   switch (body.op) {
     case "link":
-      return NextResponse.json({ ok: true, url: afterSaleUrl(orderId) });
+      return NextResponse.json({ ok: true, url: afterSaleAdminUrl(orderId) }); // süre sınırsız yönetici bağlantısı (24 saat geçerli)
 
     case "options": {
       const opts = await exchangeOptions(orderId, String(body.item || ""), "same");
@@ -52,30 +56,40 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, invoice: await autoInvoiceSiteOrder(sb, orderId, "“oldu say”") });
 
     case "ship_alt": {
-      if (!c || c.kind !== "exchange" || !["requested", "waiting_stock"].includes(c.status)) return NextResponse.json({ error: "Gönderilecek değişim talebi yok" }, { status: 400 });
+      if (!c || c.kind !== "exchange" || !["requested", "waiting_stock", "reserved"].includes(c.status)) return NextResponse.json({ error: "Gönderilecek değişim talebi yok" }, { status: 400 });
       // İstenen numaralar (yönetici değiştirebilir: body.items [{order_item_id, variant_id}])
       const picks: { order_item_id: string; variant_id: string }[] = (Array.isArray(body.items) && body.items.length ? body.items : c.items)
         .map((x: any) => ({ order_item_id: x.order_item_id, variant_id: x.variant_id || x.want_variant_id }))
         .filter((x: any) => x.order_item_id && x.variant_id);
       if (!picks.length) return NextResponse.json({ error: "Gönderilecek numarayı seç" }, { status: 400 });
       const added: string[] = [];
-      const wantOf = new Map<string, string>(((c.items as any[]) || []).map((x) => [x.order_item_id, x.want_variant_id]));
+      const byItem = new Map<string, any>(((c.items as any[]) || []).map((x) => [x.order_item_id, x]));
       const changed = new Map<string, any>(); // yöneticinin değiştirdiği satırlar → talepte de güncellenir
       for (const p of picks) {
+        const ci = byItem.get(p.order_item_id);
+        // Stok girince ayrılmış: aynı ürünse kalem zaten ekli (stok düştü); başka ürün seçildiyse ayrılanı geri al (stoğa döner)
+        if (ci?.reserved_item_id) {
+          if (ci.want_variant_id === p.variant_id) { added.push(ci.reserved_item_id); continue; }
+          await sb.rpc("exchange_release_item", { p_item: ci.reserved_item_id });
+        }
         const { data: id, error } = await sb.rpc("exchange_add_item", { p_order: orderId, p_from_item: p.order_item_id, p_variant: p.variant_id });
         if (error) return NextResponse.json({ error: `Eklenemedi: ${error.message}` }, { status: 400 });
         added.push(id);
-        if (wantOf.get(p.order_item_id) !== p.variant_id) {
+        if (ci?.want_variant_id !== p.variant_id || ci?.reserved_item_id) {
           const { data: v } = await sb.from("product_variants").select("id, product_id, variant_options(value), products(title)").eq("id", p.variant_id).maybeSingle();
-          if (v) changed.set(p.order_item_id, { want_variant_id: v.id, want_product_id: v.product_id, want_label: `${v.products?.title ?? ""} (${v.variant_options?.value ?? ""})`, wait: false });
+          if (v) changed.set(p.order_item_id, { want_variant_id: v.id, want_product_id: v.product_id, want_label: `${v.products?.title ?? ""} (${v.variant_options?.value ?? ""})`, wait: false, reserved_item_id: null });
         }
       }
       kickMarketplaceSync(500);
       const items = changed.size ? ((c.items as any[]) || []).map((x) => (changed.has(x.order_item_id) ? { ...x, ...changed.get(x.order_item_id) } : x)) : c.items;
       await sb.from("order_cases").update({ status: "alt_shipped", items, alt_tracking: String(body.tracking || "").trim() || null, updated_at: now }).eq("id", c.id);
       const swapped = [...changed.values()].map((x) => x.want_label).join(", ");
-      await note(`Değişim: alternatif gönderildi${swapped ? ` (yönetici değiştirdi: ${swapped})` : ""}${body.tracking ? ` (takip: ${String(body.tracking).trim()})` : ""}`);
-      return NextResponse.json({ ok: true, added });
+      // Müşteriye "yeni numaran yola çıktı" (kullanıcı 2026-11-26)
+      const { data: its } = await sb.from("order_items").select("variant_name, products(title)").in("id", added);
+      const lines = ((its as any[]) || []).map((i) => `${i.products?.title ?? "Ürün"}${i.variant_name ? ` (${i.variant_name})` : ""}`);
+      const r = await sendAltShippedEmail(orderId, lines, String(body.tracking || "").trim() || null).catch((e) => ({ status: "failed", error: e?.message }));
+      await note(`Değişim: alternatif gönderildi${swapped ? ` (yönetici değiştirdi: ${swapped})` : ""}${body.tracking ? ` (takip: ${String(body.tracking).trim()})` : ""} — müşteriye e-posta ${r.status === "sent" ? "gönderildi" : "gönderilemedi"}`);
+      return NextResponse.json({ ok: true, added, email: r.status });
     }
 
     case "alt_delivered": {
@@ -89,7 +103,7 @@ export async function POST(req: NextRequest) {
     case "send_label": {
       const code = String(body.code || "").trim().slice(0, 60);
       const method = body.method || c?.return_method;
-      if (!c || !((c.kind === "return" && ["requested", "label_sent"].includes(c.status)) || (c.kind === "exchange" && ["keep_chosen", "label_sent"].includes(c.status)))) {
+      if (!c || !((c.kind === "return" && ["requested", "label_sent"].includes(c.status)) || (c.kind === "exchange" && ["keep_chosen", "label_sent", "none_fit"].includes(c.status)))) {
         return NextResponse.json({ error: "Kargo kodu gönderilecek talep yok" }, { status: 400 });
       }
       if (!code) return NextResponse.json({ error: "Kargo kodunu gir" }, { status: 400 });
@@ -144,6 +158,12 @@ export async function POST(req: NextRequest) {
     case "close":
       if (!c) return NextResponse.json({ error: "Açık talep yok" }, { status: 400 });
       await sb.from("order_cases").update({ closed_at: now, updated_at: now, status: c.status + ":kapatildi" }).eq("id", c.id);
+      // Stok girince ayrılmış ama gönderilmemiş alternatif → stoğa geri (başka bekleyen varsa ona ayrılır)
+      if (c.kind === "exchange" && ["reserved", "waiting_stock"].includes(c.status)) {
+        const rel = ((c.items as any[]) || []).filter((x) => x.reserved_item_id);
+        for (const x of rel) await sb.rpc("exchange_release_item", { p_item: x.reserved_item_id });
+        if (rel.length) kickMarketplaceSync(500);
+      }
       if (c.kind !== "cancel") await sb.from("orders").update({ fit_status: "trial" }).eq("id", orderId);
       await note(`${c.kind === "exchange" ? "Değişim" : "İade"} talebi kapatıldı (yönetici)`);
       return NextResponse.json({ ok: true });

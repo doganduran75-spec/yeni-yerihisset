@@ -28,6 +28,7 @@ type StockRow = {
   search: string;
   waiting: number; // bu ürün/varyant için stok bekleyen (pending) kişi sayısı
   notified: number; // stoğa girince haber verilmiş kişi sayısı (talep geçmişi — üretim kararı için)
+  exchWaiting: number; // değişimde bu numarayı bekleyen müşteri — stok girince ilk isteyene 1 adet kendiliğinden ayrılır (MIG 20261202)
   modelId: string | null; // kategorinin alt kırılımı (Bot › 01) — aynı modelin renklerini gruplar
   modelLabel: string;     // "Bot · 01" ("" yoksa)
 };
@@ -54,6 +55,8 @@ export default function StockPage() {
   const [prodSaving, setProdSaving] = useState<string | null>(null);
   const [prodSaved, setProdSaved] = useState<string | null>(null);
   // Stok gelince: bu ürünü bekleyenler uyarısı
+  // Stok girince değişim bekleyene ayrılan (kullanıcı 2026-11-26)
+  const [reservedMsg, setReservedMsg] = useState<string | null>(null);
   const [restockAlert, setRestockAlert] = useState<{ product: string; total: number; sent: number; manual: number; failed: number; error?: string } | null>(null);
   // Model süzgeci ("" = tümü) — seçilince numara bazında renklerin toplamı gösterilir
   const [models, setModels] = useState<{ id: string; label: string }[]>([]);
@@ -91,6 +94,10 @@ export default function StockPage() {
       waitMap.get(`${productId}::${variantId ?? ""}`) ?? 0;
     const notifiedOf = (productId: string, variantId: string | null) =>
       notifMap.get(`${productId}::${variantId ?? ""}`) ?? 0;
+    // Değişimde stok bekleyen müşteriler (üretim planı için ayrı sütun)
+    const exMap = new Map<string, number>();
+    const { data: exc } = await (supabase as any).from("order_cases").select("items").eq("kind", "exchange").eq("status", "waiting_stock").is("closed_at", null);
+    for (const c of (exc as any[]) || []) for (const x of c.items || []) if (x.wait && x.want_variant_id) exMap.set(x.want_variant_id, (exMap.get(x.want_variant_id) ?? 0) + 1);
 
     // Taban/Saya option id'lerini değere çöz (variant_options'tan)
     const prods = (data as any[]) || [];
@@ -141,6 +148,7 @@ export default function StockPage() {
             search: norm([p.title, desc, groupName, value, v.sku, v.barcode, taban, saya, modelLabel].filter(Boolean).join(" ")),
             waiting: waitOf(p.id, v.id),
             notified: notifiedOf(p.id, v.id),
+            exchWaiting: exMap.get(v.id) ?? 0,
             modelId, modelLabel,
           });
         }
@@ -163,6 +171,7 @@ export default function StockPage() {
           search: norm([p.title, desc, taban, saya, modelLabel].filter(Boolean).join(" ")),
           waiting: waitOf(p.id, null),
           notified: notifiedOf(p.id, null),
+          exchWaiting: 0,
           modelId, modelLabel,
         });
       }
@@ -184,11 +193,11 @@ export default function StockPage() {
     if (!modelFilter) return null;
     const mr = rows.filter((r) => r.modelId === modelFilter);
     const colors = new Set(mr.map((r) => r.productId)).size;
-    const by = new Map<string, { size: string; stock: number; inProduction: number; waiting: number; notified: number }>();
+    const by = new Map<string, { size: string; stock: number; inProduction: number; waiting: number; exchWaiting: number; notified: number }>();
     for (const r of mr) {
       const k = r.sizeValue || "—";
-      const b = by.get(k) ?? { size: k, stock: 0, inProduction: 0, waiting: 0, notified: 0 };
-      b.stock += r.stock; b.inProduction += r.inProduction; b.waiting += r.waiting; b.notified += r.notified;
+      const b = by.get(k) ?? { size: k, stock: 0, inProduction: 0, waiting: 0, exchWaiting: 0, notified: 0 };
+      b.stock += r.stock; b.inProduction += r.inProduction; b.waiting += r.waiting; b.exchWaiting += r.exchWaiting; b.notified += r.notified;
       by.set(k, b);
     }
     return { colors, sizes: sortByVariantValue([...by.values()], (b) => b.size) };
@@ -206,7 +215,7 @@ export default function StockPage() {
     if (!(val >= 0) || val === r.stock) return false;
     setSavingKey(r.key);
     try {
-      const { error } = await (supabase as any).rpc("admin_set_stock", {
+      const { data: setRes, error } = await (supabase as any).rpc("admin_set_stock", {
         p_product_id: r.productId,
         p_variant_id: r.variantId,
         p_new_stock: val,
@@ -214,14 +223,17 @@ export default function StockPage() {
       });
       if (error) throw error;
       const wasOut = r.stock <= 0; // düşümden önceki stok
-      setRows((prev) => prev.map((x) => x.key === r.key ? { ...x, stock: val } : x));
+      // Değişim bekleyen müşteri öncelikli (kullanıcı 2026-11-26): girilen stoktan sırayla 1'er adet ayrıldı → son stok daha az
+      const final = Number(setRes?.final ?? val), reserved = Number(setRes?.reserved ?? 0);
+      setRows((prev) => prev.map((x) => x.key === r.key ? { ...x, stock: final, exchWaiting: Math.max(0, x.exchWaiting - reserved) } : x));
+      if (reserved > 0) setReservedMsg(`${r.title}${r.variantLabel ? ` · ${r.variantLabel}` : ""}: ${reserved} adet değişim bekleyen müşteriye ayrıldı, stok ${final} kaldı. Gönderim işi Siparişler › Sevk edilecek'te.`);
       setEdited((prev) => { const n = { ...prev }; delete n[r.key]; return n; });
       setSavedKey(r.key);
       setTimeout(() => setSavedKey((k) => (k === r.key ? null : k)), 2000);
 
       // Stok 0→artı olduysa: bekleyen e-postalılara OTOMATİK "stok geldi" maili
-      // gönder (+ notified işaretle); e-postasızlar elden bilgilendirilir.
-      if (wasOut && val > 0) {
+      // gönder (+ notified işaretle); e-postasızlar elden bilgilendirilir. Değişime ayrıldıktan sonra kalan yoksa gönderilmez.
+      if (wasOut && final > 0) {
         try {
           const { data: { session } } = await supabase.auth.getSession();
           const res = await fetch("/api/stock-notify/dispatch", {
@@ -278,7 +290,7 @@ export default function StockPage() {
   // Excel'e aktar — tüm satırlar + tüm kolonlar (.xls; Excel HTML tablosu olarak açar)
   function exportExcel() {
     const esc = (s: any) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    const headers = ["Ürün", "Model", "Numara", "Stok Kodu", "Barkod", "Taban", "Saya", "Bekleyen", "Bilgi verildi", "Stok", "Üretimde"];
+    const headers = ["Ürün", "Model", "Numara", "Stok Kodu", "Barkod", "Taban", "Saya", "Bekleyen", "Değişim bekleyen", "Bilgi verildi", "Stok", "Üretimde"];
     const body = rows.map((r) => `<tr>
       <td>${esc(r.title)}</td>
       <td>${esc(r.modelLabel)}</td>
@@ -288,6 +300,7 @@ export default function StockPage() {
       <td>${esc(r.taban)}</td>
       <td>${esc(r.saya)}</td>
       <td>${r.waiting}</td>
+      <td>${r.exchWaiting}</td>
       <td>${r.notified}</td>
       <td>${r.stock}</td>
       <td>${r.inProduction}</td>
@@ -338,6 +351,12 @@ export default function StockPage() {
       </div>
 
       {/* Stok gelince: bekleyenler uyarısı */}
+      {reservedMsg && (
+        <div className="flex items-center justify-between gap-3 rounded-2xl border border-olive-200 bg-olive-50 px-4 py-3 text-sm text-olive-900">
+          <span>🔁 {reservedMsg}</span>
+          <button type="button" onClick={() => setReservedMsg(null)} className="text-olive-700" aria-label="Kapat"><X size={16} /></button>
+        </div>
+      )}
       {restockAlert && (
         <div className={cn(
           "flex items-center justify-between gap-3 rounded-2xl border px-4 py-3",
@@ -408,12 +427,12 @@ export default function StockPage() {
                 </tr>
               </thead>
               <tbody>
-                {([["Stok", "stock"], ["Üretimde", "inProduction"], ["Bekleyen", "waiting"], ["Bilgi verildi", "notified"]] as const).map(([label, k]) => (
+                {([["Stok", "stock"], ["Üretimde", "inProduction"], ["Bekleyen", "waiting"], ["Değişim bekleyen", "exchWaiting"], ["Bilgi verildi", "notified"]] as const).map(([label, k]) => (
                   <tr key={k} className="border-t border-blue-100">
                     <td className="pr-4 py-1 font-semibold text-slate-600 whitespace-nowrap">{label}</td>
                     {modelSummary.sizes.map((b) => (
                       <td key={b.size} className={cn("px-2 py-1 text-center font-bold",
-                        b[k] === 0 ? "text-slate-300" : k === "stock" ? "text-slate-800" : k === "inProduction" ? "text-blue-700" : k === "waiting" ? "text-amber-700" : "text-slate-600")}>
+                        b[k] === 0 ? "text-slate-300" : k === "stock" ? "text-slate-800" : k === "inProduction" ? "text-blue-700" : k === "waiting" || k === "exchWaiting" ? "text-amber-700" : "text-slate-600")}>
                         {b[k]}
                       </td>
                     ))}
@@ -446,6 +465,7 @@ export default function StockPage() {
                 <th className="px-3 py-2.5">Taban</th>
                 <th className="px-3 py-2.5">Saya</th>
                 <th className="px-3 py-2.5 text-center">Bekleyen</th>
+                <th className="px-3 py-2.5 text-center" title="Değişimde bu numarayı bekleyen müşteri — stok girince ilk isteyene 1 adet kendiliğinden ayrılır">Değişim</th>
                 <th className="px-3 py-2.5 text-center" title="Stoğa girince haber verilmiş kişi sayısı (alsın almasın) — talep geçmişi">Bilgi verildi</th>
                 <th className="px-3 py-2.5 text-center">Stok</th>
                 <th className="px-3 py-2.5 text-center">Üretimde</th>
@@ -502,6 +522,10 @@ export default function StockPage() {
                       ) : (
                         <span className="text-slate-300">—</span>
                       )}
+                    </td>
+                    {/* Değişim bekleyen (stok girince ona ayrılır) */}
+                    <td className="px-3 py-2 text-center" title={r.exchWaiting ? `${r.exchWaiting} müşteri değişimde bu numarayı bekliyor` : undefined}>
+                      {r.exchWaiting > 0 ? <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800">🔁 {r.exchWaiting}</span> : <span className="text-slate-300">—</span>}
                     </td>
                     {/* Bilgi verildi (talep geçmişi) */}
                     <td className="px-3 py-2 text-center text-xs" title={r.notified ? `${r.notified} kişiye “stoğa girdi” bilgisi verildi` : undefined}>

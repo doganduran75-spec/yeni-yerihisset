@@ -2969,6 +2969,7 @@ const RETURN_METHOD_SHOW: Record<string, string> = { ...RETURN_METHODS, self: "M
 const CASE_STATUS: Record<string, string> = {
   requested: "Talep alındı", waiting_stock: "Stok bekleniyor", alt_shipped: "Alternatif kargoda", alt_delivered: "Müşteri deniyor",
   keep_chosen: "Müşteri seçti", label_sent: "Kargo kodu gönderildi",
+  reserved: "Stok ayrıldı — gönderilecek", none_fit: "İkisi de olmadı",
   refund_pending: "Ücret iadesi bekliyor", check_transfer: "Havale kontrol edilecek",
 };
 function CaseBox({ order, kase, canSendLabel, canShipAlt, onDone }: {
@@ -3058,7 +3059,12 @@ function CaseBox({ order, kase, canSendLabel, canShipAlt, onDone }: {
           )}
         </div>
       ))}
-      {kase.keep_item_id && <p><span className="text-muted-foreground">Tuttuğu:</span> <b>{label(kase.keep_item_id)}</b> — diğeri geri gelecek</p>}
+      {kase.kind === "exchange" && kase.keep_item_id && (() => {
+        // Adlar (kullanıcı 2026-11-26): "Müşteride kalacak" / "Geri gelecek"
+        const roots = new Set((kase.items || []).map((x: any) => x.order_item_id));
+        const back = items.filter((i) => i.id !== kase.keep_item_id && (roots.has(i.id) || roots.has(i.exchange_of)) && Number(i.returned_qty || 0) < Number(i.quantity));
+        return <p><span className="text-muted-foreground">Müşteride kalacak:</span> <b>{label(kase.keep_item_id)}</b>{back.length ? <> · <span className="text-muted-foreground">Geri gelecek:</span> <b>{back.map((i) => label(i.id)).join(", ")}</b></> : null}</p>;
+      })()}
       {kase.return_method && <p><span className="text-muted-foreground">Kargo:</span> {RETURN_METHOD_SHOW[kase.return_method] ?? kase.return_method}{kase.return_code ? <> · kod <code className="font-mono">{kase.return_code}</code></> : null}</p>}
       {kase.alt_tracking && <p><span className="text-muted-foreground">Alternatif takip:</span> <code className="font-mono">{kase.alt_tracking}</code></p>}
       {kase.iban && <p><span className="text-muted-foreground">IBAN (havale iadesi):</span> <code className="font-mono select-all">{kase.iban}</code>{kase.iban_name ? <> · <b className="select-all">{kase.iban_name}</b></> : null}</p>}
@@ -3072,7 +3078,8 @@ function CaseBox({ order, kase, canSendLabel, canShipAlt, onDone }: {
             const picks = Object.keys(swap).length
               ? (kase.items || []).map((x: any) => ({ order_item_id: x.order_item_id, variant_id: swap[x.order_item_id]?.variant_id || x.want_variant_id }))
               : null;
-            if (await siteConfirm({ title: "Alternatif gönderilsin mi?", message: picks ? "Seçtiğin ürün siparişe eklenir ve stoğu düşer." : "İstenen numara siparişe eklenir ve stoğu düşer.", confirmText: "Gönder" }))
+            const reserved = kase.status === "reserved" && !picks;
+            if (await siteConfirm({ title: "Alternatif gönderilsin mi?", message: reserved ? "Stok girince ayrılan ürün gönderildi olarak işaretlenir (stok yeniden düşmez). Müşteriye “yeni numaran yola çıktı” e-postası gider." : `${picks ? "Seçtiğin ürün" : "İstenen numara"} siparişe eklenir ve stoğu düşer. Müşteriye “yeni numaran yola çıktı” e-postası gider.`, confirmText: "Gönder" }))
               call({ op: "ship_alt", tracking, ...(picks ? { items: picks } : {}) });
           }}>Alternatifi gönder</Button>
         </div>

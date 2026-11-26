@@ -126,7 +126,11 @@ export function isInvoiceOnlyStep(s: NextStep) {
 // kargolanmış siparişin faturası — o "Faturası kesilmemiş" satırında; 2026-11-14 YH24765 iki satırda birden sayılıyordu).
 // Pano sayısı ve sipariş listesindeki ?todo=diger aynı kuralı kullanır: tıklayınca yalnız o işler açılır (kullanıcı 2026-11-14).
 export function isGeneralOrderTodo(s: NextStep, hasOpenExchange: boolean, uninvoicedShipped = false) {
-  return s.needsAction && !isRefundDue(s) && !isReturnInvoiceDue(s) && !hasOpenExchange && !(uninvoicedShipped && isInvoiceOnlyStep(s));
+  return s.needsAction && !isRefundDue(s) && !isReturnInvoiceDue(s) && (!hasOpenExchange || isExchangeShipDue(s)) && !(uninvoicedShipped && isInvoiceOnlyStep(s));
+}
+/** Değişimde gönderilecek ürün var (talep geldi / stok girince ayrıldı) → sipariş gibi "Sevk edilecek" işi (kullanıcı 2026-11-26) */
+export function isExchangeShipDue(s: NextStep) {
+  return s.needsAction && s.actions.some((a) => a.key === "ship_alt");
 }
 
 // İŞ TÜRÜ (kullanıcı 2026-11-25: "Bekleyen sipariş işi"nde ödeme bekleyen, sevk edilecek ve faturası kesilemeyen siparişler
@@ -146,7 +150,7 @@ export function todoKind(s: NextStep): TodoKind {
   if (k.some((x) => PAY_KEYS.includes(x))) return "payment";
   // Paket hazır, fatura kesilemedi ("Kurye aldı" yanında olsa da önce fatura) → fatura; paketleme / kargo işi varsa sevk
   if (k.some((x) => INVOICE_KEYS.includes(x)) && !k.some((x) => PREP_KEYS.includes(x))) return "invoice";
-  if (k.some((x) => PREP_KEYS.includes(x) || x === "picked_up")) return "ship";
+  if (k.some((x) => PREP_KEYS.includes(x) || x === "picked_up" || x === "ship_alt")) return "ship";
   return "other";
 }
 
@@ -380,13 +384,18 @@ function coreNextStep(o: OrderLike): NextStep {
         { key: "send_label", label: c.return_method === "self" ? "Kargo kodu gönder" : "Kodu değiştir / yeniden gönder", kind: "primary" }, close,
       ], needsAction: false };
     }
+    // Adlar (kullanıcı 2026-11-26): "Müşteride kalacak" / "Geri gelecek" ürün; geri gönderilen ürün gelince "Geri gelen ürün ulaştı"
+    // — müşteri seçmeden de gelebilir (YH25047), kargodaki / denenen aşamada da çıkar. İkisi de geri gelirse değişim iadeye döner.
+    const back: NextAction = { key: "return", label: "Geri gelen ürün ulaştı", kind: "danger" };
     switch (c.status) {
       case "requested": return { stage: "Değişim talebi", hint: "İstenen numarayı gönder.", actions: [{ key: "ship_alt", label: "Alternatifi gönder", kind: "primary" }, close], needsAction: true };
-      case "waiting_stock": return { stage: "Değişim — stok bekleniyor", hint: "Müşteri istediği numaranın gelmesini bekliyor.", actions: [{ key: "ship_alt", label: "Alternatifi gönder", kind: "primary" }, close], needsAction: false };
-      case "alt_shipped": return { stage: "Değişim — alternatif kargoda", actions: [{ key: "alt_delivered", label: "Alternatif teslim edildi", kind: "primary" }], needsAction: false };
-      case "alt_delivered": return { stage: "Değişim — müşteri deniyor", hint: "Müşteri hangisinin olduğunu seçecek (e-postayla soruldu).", actions: [{ key: "case_link", label: "Müşteri adına seç", kind: "primary" }], needsAction: false };
-      case "keep_chosen": return { stage: "Değişim — müşteri seçti", hint: "Tutulmayan ürün için kargo kodu gönder.", actions: [{ key: "send_label", label: "Geri gönderim kodunu gönder", kind: "primary" }], needsAction: true };
-      default: return { stage: "Değişim — tutulmayan ürün yolda", hint: upsHint ?? "Ürün gelince “İade geldi” (stoğa ekle, para iadesi yok).", actions: [{ key: "return", label: "İade geldi", kind: "danger" }, { key: "send_label", label: "Kodu değiştir / yeniden gönder", kind: "primary" }], needsAction: upsLate };
+      case "waiting_stock": return { stage: "Değişim — stok bekleniyor", hint: "Müşteri istediği numaranın gelmesini bekliyor. Stoğa girince 1 adet kendiliğinden bu değişime ayrılır ve “Sevk edilecek” işi düşer.", actions: [{ key: "ship_alt", label: "Alternatifi gönder", kind: "primary" }, close], needsAction: false };
+      case "reserved": return { stage: "Değişim gönderilecek — stok ayrıldı", hint: "İstenen numara stoğa girdi, 1 adet bu değişime ayrıldı (stoktan düştü). Kargola, takip numarasını yaz, “Alternatifi gönder” — müşteriye e-posta gider.", actions: [{ key: "ship_alt", label: "Alternatifi gönder", kind: "primary" }, close], needsAction: true };
+      case "alt_shipped": return { stage: "Değişim — alternatif kargoda", actions: [{ key: "alt_delivered", label: "Alternatif teslim edildi", kind: "primary" }, back], needsAction: false };
+      case "alt_delivered": return { stage: "Değişim — müşteri deniyor", hint: "Müşteri hangisinin olduğunu seçecek (e-postayla soruldu). Geri gönderdiği ürün seçimden önce geldiyse “Geri gelen ürün ulaştı”.", actions: [{ key: "case_link", label: "Müşteri adına seç", kind: "primary" }, back], needsAction: false };
+      case "none_fit": return { stage: "Değişim — ikisi de olmadı", hint: "Müşterinin notunu oku, müşteriyle konuş (iade mi, başka numara mı). Geri gönderim kodu gönder; ürünler gelince “Geri gelen ürün ulaştı” (ikisi de gelirse ücret iadesi sırası).", actions: [{ key: "send_label", label: "Geri gönderim kodunu gönder", kind: "primary" }, back, close], needsAction: true };
+      case "keep_chosen": return { stage: "Değişim — müşteri seçti", hint: "Geri gelecek ürün için kargo kodu gönder.", actions: [{ key: "send_label", label: "Geri gönderim kodunu gönder", kind: "primary" }, back], needsAction: true };
+      default: return { stage: "Değişim — geri gelecek ürün yolda", hint: upsHint ?? "Ürün gelince “Geri gelen ürün ulaştı” (stoğa ekle, para iadesi yok).", actions: [back, { key: "send_label", label: "Kodu değiştir / yeniden gönder", kind: "primary" }], needsAction: upsLate };
     }
   }
 
@@ -433,8 +442,9 @@ function coreNextStep(o: OrderLike): NextStep {
   const acts: NextAction[] = [];
   if (inv === "pending") acts.push(...invoiceActs);
   if (ship === "delivered") acts.push({ key: "return_expected", label: "İade gelecek", kind: "danger" });
-  // Müşteri (e-posta / telefon) değişim istedi: henüz cevap vermemiş ve deneme süresindeyse müşteri sayfasını onun adına doldur
-  if (ship === "delivered" && afterSaleHere(o) && !o.fit_status && (!o.delivered_at || daysSince(o.delivered_at) < TRIAL_DAYS))
+  // Müşteri (e-posta / telefon) değişim istedi → müşteri sayfasını onun adına doldur. Süre sınırı YOK (kullanıcı 2026-11-26:
+  // yardım için her zaman açık; "oldu" denmiş / değişimi bitmiş siparişte de) — yönetici bağlantısı (afterSaleAdminUrl)
+  if (ship === "delivered" && afterSaleHere(o))
     acts.push({ key: "case_link", label: "Müşteri adına değişim / iade aç", kind: "primary" });
   acts.push({ key: "return", label: "İade al", kind: "danger" });
   const silent = o.fit_status === "trial"; // 14 gün doldu, müşteri cevap vermedi → fatura otomatik DEĞİL, yönetici onaylar

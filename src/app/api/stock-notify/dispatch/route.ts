@@ -21,6 +21,12 @@ export async function POST(req: NextRequest) {
   const { productId, variantId } = (await req.json()) as { productId?: string; variantId?: string | null };
   if (!productId) return NextResponse.json({ error: "productId zorunlu" }, { status: 400 });
 
+  // Stok değişim bekleyen müşteriye ayrıldıysa ve kalan 0 ise "stok geldi" e-postası gitmez (kullanıcı 2026-11-26)
+  const { data: sv } = variantId
+    ? await (supabase as any).from("product_variants").select("stock").eq("id", variantId).maybeSingle()
+    : await (supabase as any).from("products").select("stock").eq("id", productId).maybeSingle();
+  if (Number(sv?.stock ?? 0) <= 0) return NextResponse.json({ ok: true, sent: 0, manual: 0, failed: 0, noStock: true });
+
   const storeUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://yerihisset.com";
 
   // Ürün bilgisi (başlık + link)

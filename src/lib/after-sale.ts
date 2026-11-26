@@ -26,6 +26,21 @@ export function afterSaleUrl(orderId: string, choice?: "oldu" | "degisim" | "iad
   return `${site}/deneme-sonucu?r=${afterSaleToken(orderId)}${choice ? `&secim=${choice}` : ""}`;
 }
 
+// YÖNETİCİ "MÜŞTERİ ADINA" (kullanıcı 2026-11-26: süre sınırı olmasın — müşteri e-postayla da ulaşsa yardım edebilmeli):
+// bağlantıya 24 saat geçerli yönetici imzası (y) eklenir → bu bağlantıda 14 gün ve "oldu dendi" kuralı uygulanmaz
+// (değişim tamamlanmış siparişte ikinci değişim de açılabilir). Müşteriye giden bağlantılarda y yok.
+const adminSig = (orderId: string, exp: number) => createHmac("sha256", key()).update(`admin:${orderId}:${exp}`).digest("base64url").slice(0, 32);
+export function afterSaleAdminUrl(orderId: string) {
+  const exp = Math.floor(Date.now() / 1000) + 86400;
+  return `${afterSaleUrl(orderId)}&y=${exp}.${adminSig(orderId, exp)}`;
+}
+export function verifyAfterSaleAdmin(orderId: string, y?: string | null): boolean {
+  const m = /^(\d{10})\.([A-Za-z0-9_-]{32})$/.exec(String(y || ""));
+  if (!m || Number(m[1]) * 1000 < Date.now()) return false;
+  const a = Buffer.from(adminSig(orderId, Number(m[1]))), b = Buffer.from(m[2]);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
 /** TR IBAN: TR + 24 hane, mod-97 kontrolü */
 export function validIban(raw: string): string | null {
   const s = String(raw || "").replace(/\s+/g, "").toUpperCase();
@@ -43,12 +58,13 @@ export type AfterSaleView = {
   paymentMethod: string;
   fitStatus: string | null;
   deliveredAt: string | null;
-  canAnswer: boolean;          // teslim edilmiş, site siparişi, 14 gün dolmamış, açık talep yok
+  canAnswer: boolean;          // teslim edilmiş, site siparişi, 14 gün dolmamış, açık talep yok (yönetici bağlantısında süre yok)
+  admin?: boolean;             // yönetici "müşteri adına" bağlantısıyla açtı
   openCase: any | null;
   items: { id: string; product_id: string; variant_id: string | null; title: string; image: string | null; size: string; price: number; returned: number; exchange_of: string | null; slug: string | null }[];
 };
 
-export async function loadAfterSale(orderId: string): Promise<AfterSaleView | null> {
+export async function loadAfterSale(orderId: string, admin = false): Promise<AfterSaleView | null> {
   const sb = createAdminClient() as any;
   const { data: o } = await sb.from("orders")
     .select("id, order_number, channel, import_source, kargonomi_shipment_id, kargonomi_tracking_code, status, payment_method, payment_status, shipment_status, fit_status, delivered_at")
@@ -66,7 +82,8 @@ export async function loadAfterSale(orderId: string): Promise<AfterSaleView | nu
     paymentMethod: o.payment_method,
     fitStatus: o.fit_status,
     deliveredAt: o.delivered_at,
-    canAnswer: delivered && inWindow && !c && (o.fit_status === "trial" || o.fit_status === null),
+    canAnswer: delivered && !c && (admin || (inWindow && (o.fit_status === "trial" || o.fit_status === null))),
+    admin,
     openCase: c ? { ...c, iban: c.iban ? `${String(c.iban).slice(0, 4)}…${String(c.iban).slice(-4)}` : null } : null,
     items: ((rows as any[]) || []).filter((i) => Number(i.unit_price) > 0).map((i) => ({
       id: i.id, product_id: i.product_id, variant_id: i.variant_id,

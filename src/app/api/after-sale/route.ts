@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { getAuthUserFromRequest } from "@/lib/auth-from-request";
 import { rateLimited, clientIp, TOO_MANY } from "@/lib/rate-limit";
-import { loadAfterSale, verifyAfterSaleToken, exchangeOptions, validIban } from "@/lib/after-sale";
+import { loadAfterSale, verifyAfterSaleToken, verifyAfterSaleAdmin, exchangeOptions, validIban } from "@/lib/after-sale";
 import { ibanNameMatches } from "@/lib/name-match";
 import { parseShip } from "@/lib/affiliate-commission";
-import { sendAdminCaseEmail, sendReturnRequestedEmail, RETURN_METHOD_LABEL } from "@/lib/after-sale-mail";
+import { sendAdminCaseEmail, sendReturnRequestedEmail, sendExchangeRequestedEmail, RETURN_METHOD_LABEL } from "@/lib/after-sale-mail";
 import { autoInvoiceSiteOrder } from "@/lib/parasut-invoice";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -14,7 +14,8 @@ import { autoInvoiceSiteOrder } from "@/lib/parasut-invoice";
 // Üye Hesabım'dan da gelebilir: ?order=<id> + oturum (kendi siparişi).
 //   GET  ?r=…                         → sipariş + açık talep
 //   GET  ?r=…&options=1&item=…&dir=up|down|same → değişim önerileri
-//   POST { r|order, action: "ok" | "exchange" | "return" | "keep", … }
+//   POST { r|order, action: "ok" | "exchange" | "return" | "keep" | "none", … }
+//   y = yönetici "müşteri adına" imzası (src/lib/after-sale.ts afterSaleAdminUrl) → süre sınırı yok
 async function resolveOrderId(req: NextRequest, r?: string | null, order?: string | null): Promise<string | null> {
   if (r) return verifyAfterSaleToken(r);
   if (!order) return null;
@@ -34,7 +35,7 @@ export async function GET(req: NextRequest) {
     const opts = await exchangeOptions(orderId, sp.get("item") || "", dir);
     return opts ? NextResponse.json({ ok: true, ...opts }) : NextResponse.json({ error: "Ürün bulunamadı" }, { status: 404 });
   }
-  const view = await loadAfterSale(orderId);
+  const view = await loadAfterSale(orderId, verifyAfterSaleAdmin(orderId, sp.get("y")));
   if (!view) {
     // Neden açılmadı (2026-11-09: yönetici "müşteri adına" açınca yalnız "bağlantı geçersiz" görüyordu)
     const { data: o } = await (createAdminClient() as any).from("orders").select("channel, import_source").eq("id", orderId).maybeSingle();
@@ -52,7 +53,7 @@ export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => ({}))) as any;
   const orderId = await resolveOrderId(req, body.r, body.order);
   if (!orderId) return NextResponse.json({ error: "Bağlantı geçersiz" }, { status: 400 });
-  const view = await loadAfterSale(orderId);
+  const view = await loadAfterSale(orderId, verifyAfterSaleAdmin(orderId, body.y));
   if (!view) return NextResponse.json({ error: "Sipariş bulunamadı" }, { status: 404 });
   const sb = createAdminClient() as any;
   const now = new Date().toISOString();
@@ -83,12 +84,8 @@ export async function POST(req: NextRequest) {
         if (!v || v.is_active === false) return NextResponse.json({ error: "Seçilen numara bulunamadı" }, { status: 400 });
         if (Number(v.stock || 0) < 1 && !x.wait) return NextResponse.json({ error: "Seçilen numara az önce tükendi, başka bir seçenek seç" }, { status: 409 });
         want = { want_variant_id: v.id, want_product_id: v.product_id, want_label: `${v.products?.title ?? ""} (${v.variant_options?.value ?? ""})` };
-        if (x.wait) {
-          // Stok gelince haber ver (müşterinin e-postasıyla)
-          const { data: o } = await sb.from("orders").select("user_id").eq("id", orderId).maybeSingle();
-          const { data: p } = await sb.from("profiles").select("email").eq("id", o?.user_id).maybeSingle();
-          await sb.from("stock_notifications").insert({ product_id: v.product_id, variant_id: v.id, status: "pending", user_id: o?.user_id ?? null, email: p?.email ?? null });
-        }
+        // Stok bekliyor (x.wait): "stok geldi" bildirimi AÇILMAZ (kullanıcı 2026-11-26: müşteri gereksiz tetikleniyordu) —
+        // stok girince 1 adet bu değişime kendiliğinden ayrılır (MIG 20261202), müşteri kargoya verilince e-posta alır
       }
       items.push({ order_item_id: x.order_item_id, wait: !!x.wait, ...(want || {}) });
     }
@@ -101,6 +98,8 @@ export async function POST(req: NextRequest) {
       ...items.map((i) => `${escapeLine(label(i.order_item_id))} → <b>${escapeLine(i.want_label || "—")}</b>${i.wait ? " (stok bekliyor)" : ""}`),
       ...(note ? [`Not: ${escapeLine(note)}`] : []),
     ]).catch(() => {});
+    // Müşteriye "değişim talebin alındı" (kullanıcı 2026-11-26)
+    sendExchangeRequestedEmail(orderId, items.map((i) => `${label(i.order_item_id)} → ${i.want_label || "—"}`), waiting).catch(() => {});
     return NextResponse.json({ ok: true, fitStatus: "exchange" });
   }
 
@@ -148,12 +147,29 @@ export async function POST(req: NextRequest) {
   if (body.action === "keep") {
     const c = view.openCase;
     if (!c || c.kind !== "exchange" || c.status !== "alt_delivered") return NextResponse.json({ error: "Şu an seçim yapılamıyor" }, { status: 400 });
-    if (!itemById.has(body.keep_item_id)) return NextResponse.json({ error: "Tuttuğun ürünü seç" }, { status: 400 });
+    // Yalnız değişim çiftinden biri (asıl ürün ya da yerine giden) seçilebilir
+    const roots = new Set(((c.items as any[]) || []).map((x) => x.order_item_id));
+    const kept = itemById.get(body.keep_item_id);
+    if (!kept || !(roots.has(kept.id) || (kept.exchange_of && roots.has(kept.exchange_of)))) return NextResponse.json({ error: "Tuttuğun ürünü seç" }, { status: 400 });
     if (!RETURN_METHOD_LABEL[body.method]) return NextResponse.json({ error: "Diğerini nasıl göndereceğini seç" }, { status: 400 });
     await sb.from("order_cases").update({ status: "keep_chosen", keep_item_id: body.keep_item_id, return_method: body.method, customer_note: note ?? c.customer_note, updated_at: now }).eq("id", c.id);
     sendAdminCaseEmail(orderId, "Değişim — müşteri seçti", [
       `Tuttuğu: <b>${escapeLine(label(body.keep_item_id))}</b>`,
       `Geri gönderecek: ${RETURN_METHOD_LABEL[body.method]} → iade kodunu al (Basit Kargo ile gönderildiyse siparişte “Basit Kargo'dan al”), kodu siparişe gir`,
+    ]).catch(() => {});
+    return NextResponse.json({ ok: true });
+  }
+
+  // ── Değişim sonrası: ikisi de olmadı (kullanıcı 2026-11-26) → yöneticiye iş; iade mi başka numara mı yönetici karar verir ──
+  if (body.action === "none") {
+    const c = view.openCase;
+    if (!c || c.kind !== "exchange" || c.status !== "alt_delivered") return NextResponse.json({ error: "Şu an bu seçim yapılamıyor" }, { status: 400 });
+    if (!note || note.length < 3) return NextResponse.json({ error: "Kısaca ne olduğunu yaz (ör. ikisi de küçük)" }, { status: 400 });
+    await sb.from("order_cases").update({ status: "none_fit", customer_note: [c.customer_note, `İkisi de olmadı: ${note}`].filter(Boolean).join("\n"), updated_at: now }).eq("id", c.id);
+    await sb.from("order_events").insert({ order_id: orderId, type: "note", note: `Değişim: müşteri “ikisi de olmadı” dedi — ${note}` });
+    sendAdminCaseEmail(orderId, "Değişim — ikisi de olmadı", [
+      `Müşteri notu: ${escapeLine(note)}`,
+      "Müşteriyle konuş: iade mi, başka numara mı? Ürünler gelince siparişte “Geri gelen ürün ulaştı”.",
     ]).catch(() => {});
     return NextResponse.json({ ok: true });
   }

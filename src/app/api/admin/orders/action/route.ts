@@ -6,7 +6,8 @@ import { iyzicoRefund } from "@/lib/iyzico-refund";
 import { restoreOrderCredit } from "@/lib/store-credit";
 import { kickMarketplaceSync } from "@/lib/marketplace/sync";
 import { autoInvoiceSiteOrder } from "@/lib/parasut-invoice";
-import { sendReturnCompletedEmail } from "@/lib/after-sale-mail";
+import { sendReturnCompletedEmail, sendExchangeCompletedEmail } from "@/lib/after-sale-mail";
+import { exchangeBackResult } from "@/lib/exchange-return";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -149,17 +150,30 @@ export async function POST(req: NextRequest) {
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
     if (Number(data?.restocked) > 0) kickMarketplaceSync(500);
     // Satış sonrası talep (src/lib/after-sale.ts): iade geldi → talep kapanır.
-    // Değişimde geri gelen (tutulmayan) ürün → değişim tamam, sipariş "oldu" (fatura sırası).
-    const { data: openCase } = await sb.from("order_cases").select("id, kind, status").eq("order_id", orderId).is("closed_at", null).maybeSingle();
+    // Değişimde geri gelen ürün ("Geri gelen ürün ulaştı"; müşteri seçmeden de gelebilir — YH25047, 2026-11-26):
+    // her çiftte müşteride ödediği kadar kaldıysa değişim tamam, sipariş "oldu" (fatura sırası) + müşteriye "değişimin tamamlandı";
+    // çiftin tamamı geri geldiyse değişim iadeye döner (ücret iadesi sırası). Kural: exchangeBackResult.
+    const { data: openCase } = await sb.from("order_cases").select("id, kind, status, items, keep_item_id").eq("order_id", orderId).is("closed_at", null).maybeSingle();
     if (openCase) {
       const done = new Date().toISOString();
-      const exchangeDone = openCase.kind === "exchange" && ["keep_chosen", "label_sent"].includes(openCase.status);
-      if (openCase.kind === "return" || exchangeDone) {
-        await sb.from("order_cases").update({ status: exchangeDone ? "resolved" : "received", closed_at: done, updated_at: done }).eq("id", openCase.id);
-        if (exchangeDone) {
+      if (openCase.kind === "return") {
+        await sb.from("order_cases").update({ status: "received", closed_at: done, updated_at: done }).eq("id", openCase.id);
+      } else if (openCase.kind === "exchange" && ["alt_shipped", "alt_delivered", "none_fit", "keep_chosen", "label_sent"].includes(openCase.status)) {
+        const { data: its } = await sb.from("order_items").select("id, quantity, returned_qty, unit_price, exchange_of, variant_name, products(title)").eq("order_id", orderId);
+        const all = (its as any[]) || [];
+        const res = exchangeBackResult(all, ((openCase.items as any[]) || []).map((x) => x.order_item_id));
+        if (res.allBack) {
+          await sb.from("order_cases").update({ status: "returned_all", closed_at: done, updated_at: done }).eq("id", openCase.id);
+          await sb.from("orders").update({ fit_status: "return" }).eq("id", orderId);
+          await sb.from("order_events").insert({ order_id: orderId, type: "note", note: "Değişim: ikisi de geri geldi — değişim iadeye döndü (ücret iadesi)" });
+        } else if (res.done) {
+          const keepId = openCase.keep_item_id || res.keepId;
+          await sb.from("order_cases").update({ status: "resolved", keep_item_id: keepId, closed_at: done, updated_at: done }).eq("id", openCase.id);
           await sb.from("orders").update({ fit_status: "ok" }).eq("id", orderId);
           // Değişim tamam: tutulan numarayla fatura kendiliğinden (geri gelen adet faturaya girmez)
           void autoInvoiceSiteOrder(sb, orderId, "değişim tamamlandı");
+          const k = all.find((i) => i.id === keepId);
+          sendExchangeCompletedEmail(orderId, k ? `${k.products?.title ?? "Ürün"}${k.variant_name ? ` (${k.variant_name})` : ""}` : null).catch(() => {});
         }
       }
     }

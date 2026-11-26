@@ -19,6 +19,7 @@ export const EMAIL_KIND_LABEL: Record<string, string> = {
   stock_notify_signup: "Stok talebi alındı", back_in_stock: "Stok geldi", affiliate_payout: "Satış ortağı hakedişi",
   crm_coupon: "CRM kampanya kuponu", invoice: "Fatura e-postası",
   return_requested: "İade talebi alındı", return_completed: "İade tamamlandı",
+  exchange_requested: "Değişim talebi alındı", alt_shipped: "Değişim ürünü kargoda", exchange_completed: "Değişim tamamlandı",
 };
 export const kindLabel = (kind: string) => EMAIL_KIND_LABEL[kind] ?? (kind.startsWith("konu:") ? `Diğer: ${kind.slice(5)}` : kind);
 /** Şablon ekranı olan türler (Ayarlar › CRM › E-posta şablonları) */
