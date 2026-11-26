@@ -16,6 +16,7 @@ import { pushInvoiceToMarketplace } from "@/lib/marketplace-invoice";
 import { sendInvoiceEmail } from "@/lib/invoice-mail";
 import { isTestOrder } from "@/lib/notifications";
 import { autoInvoiceHere } from "@/lib/order-next-step";
+import { microExportOf, MICRO_EXPORT_VAT_EXEMPTION, FOREIGN_TAX_NUMBER } from "@/lib/micro-export";
 
 type Sb = ReturnType<typeof createAdminClient>;
 const MARKETPLACES = ["trendyol", "hepsiburada", "amazon"];
@@ -31,7 +32,8 @@ const ORDER_COLS = `id, order_number, external_order_number, channel, status, sh
   parasut_refund_id, parasut_refund_paid,
   total_amount, shipping_cost, coupon_discount, credit_used, extra_fee, import_source, billing_address, shipping_address, customer_name, customer_email, customer_phone,
   cargo_provider, kargonomi_provider, shipping_method, parasut_invoice_id, parasut_status, parasut_job_id, parasut_e_doc_id, parasut_e_doc_type,
-  parasut_paid, parasut_diff_ok, refunded_amount, profiles(email, first_name, last_name, phone),
+  parasut_paid, parasut_diff_ok, refunded_amount, mx_micro:external_raw->micro, mx_country:external_raw->>orderCountryCode, mx_hs:external_raw->>hsCode,
+  profiles(email, first_name, last_name, phone),
   order_items(id, quantity, returned_qty, unit_price, exchange_of, product_id, variant_id, variant_name, title, sku, barcode, products(title, parasut_product_id), product_variants(parasut_product_id))`;
 
 async function loadOrder(sb: Sb, id: string) {
@@ -57,6 +59,8 @@ async function prepare(sb: Sb, o: any) {
   const { data: pps } = pids.length ? await s.from("parasut_products").select("parasut_id, vat_rate").in("parasut_id", pids) : { data: [] };
   const vat = new Map(((pps as any[]) || []).map((p) => [p.parasut_id, p.vat_rate == null ? null : Number(p.vat_rate)]));
 
+  // Mikro ihracat (Trendyol yurtdışı): tüm kalemler %0 KDV, e-Arşiv 301 istisna (kullanıcı 2026-11-26)
+  const abroad = MARKETPLACES.includes(channel) ? microExportOf({ micro: o.mx_micro, orderCountryCode: o.mx_country, hsCode: o.mx_hs }) : null;
   const lines: Line[] = [];
   for (const i of items) {
     // Geri gelen adet faturalanmaz (değişimde tutulmayan numara / kısmi iade — fatura karar netleşince kesilir)
@@ -69,7 +73,7 @@ async function prepare(sb: Sb, o: any) {
     if (!pid) { errs.push(`Paraşüt ürünüyle eşleşmemiş: ${title} (Paraşüt ürün eşleştirme sayfası)`); continue; }
     const v = vat.get(pid);
     if (v == null) { errs.push(`Paraşüt'te KDV oranı yok: ${title} — ürünleri yeniden çek`); continue; }
-    lines.push({ productId: pid, vat: v, qty, gross: r2(Number(i.unit_price) * qty), title });
+    lines.push({ productId: pid, vat: abroad ? 0 : v, qty, gross: r2(Number(i.unit_price) * qty), title });
   }
 
   // Kupon + kredi (yalnız site) → ürün kalemlerine orantılı; kuruş farkı en büyük kaleme.
@@ -113,7 +117,7 @@ async function prepare(sb: Sb, o: any) {
   // pazaryerinin gönderdiği TC kimlik (Hepsiburada identity_no); o da yoksa e-Arşiv'de 11111111111.
   const rawTax = String(bill.tax_number || "").replace(/\D/g, "");
   const rawId = String(bill.identity_no || "").replace(/\D/g, "");
-  const taxNo = rawTax.length === 10 || rawTax.length === 11 ? rawTax : rawId.length === 11 && rawId !== "11111111111" ? rawId : "";
+  const taxNo = abroad ? "" : rawTax.length === 10 || rawTax.length === 11 ? rawTax : rawId.length === 11 && rawId !== "11111111111" ? rawId : "";
   const corporate = taxNo.length === 10;
   // Şahıs şirketi (TCKN + vergi dairesi / ünvan): fatura ünvanla kesilir; e-fatura mükellefiyse e-fatura gider
   const business = corporate || (taxNo.length === 11 && !!(bill.is_corporate || bill.company_name || bill.tax_office));
@@ -136,7 +140,7 @@ async function prepare(sb: Sb, o: any) {
     else carrier = { name: c.name, vkn: c.vkn };
   }
 
-  return { errs, lines, total, bill, taxNo, corporate, business, name, email: o.customer_email || p.email || null, phone: bill.phone || o.customer_phone || p.phone || null, ch, carrier, channel };
+  return { errs, abroad, lines, total, bill, taxNo, corporate, business, name, email: o.customer_email || p.email || null, phone: bill.phone || o.customer_phone || p.phone || null, ch, carrier, channel };
 }
 
 async function findOrCreateContact(sb: Sb, x: Awaited<ReturnType<typeof prepare>>) {
@@ -150,6 +154,7 @@ async function findOrCreateContact(sb: Sb, x: Awaited<ReturnType<typeof prepare>
     name: x.name, contact_type: x.corporate ? "company" : "person", account_type: "customer",
     ...(x.email ? { email: x.email } : {}), ...(x.taxNo ? { tax_number: x.taxNo } : {}), ...(x.bill.tax_office ? { tax_office: x.bill.tax_office } : {}),
     city: x.bill.city, district: x.bill.district || undefined, address: x.bill.address, ...(x.phone ? { phone: String(x.phone) } : {}),
+    ...(x.abroad ? { is_abroad: true, country: x.abroad.country } : {}),
   } } });
   return String(j?.data?.id);
 }
@@ -241,7 +246,8 @@ async function invoiceOrderSteps(sb: Sb, orderId: string, opts: { acceptDiff?: b
         item_type: "invoice", description: no, // fatura adı yalnız sipariş numarası (ör. YH24127)
         issue_date: day(), due_date: day(), currency: "TRL", shipment_included: c.shipmentIncluded,
         billing_address: x.bill.address, billing_phone: x.phone ? String(x.phone) : undefined, city: x.bill.city, district: x.bill.district || undefined,
-        tax_number: x.taxNo || "11111111111", ...(x.bill.tax_office ? { tax_office: x.bill.tax_office } : {}),
+        tax_number: x.abroad ? FOREIGN_TAX_NUMBER : x.taxNo || "11111111111", ...(x.bill.tax_office ? { tax_office: x.bill.tax_office } : {}),
+        ...(x.abroad ? { is_abroad: true, country: x.abroad.country } : {}),
         order_no: no, order_date: pastDay(o.created_at),
       }, relationships: {
         contact: { data: { id: contactId, type: "contacts" } },
@@ -291,6 +297,8 @@ async function invoiceOrderSteps(sb: Sb, orderId: string, opts: { acceptDiff?: b
         if (!x.carrier) await fail(x.errs.find((e) => e.includes("argo")) || "Kargo firması / VKN eksik (e-Arşiv).");
         const card = o.payment_method !== "bank_transfer";
         job = await parasutCall(sb, "POST", "/e_archives", { data: { type: "e_archives", attributes: {
+          // Mikro ihracat: %0 KDV'nin istisna sebebi 301 (11/1-a mal ihracatı) — Trendyol bu kodla e-Arşiv ister
+          ...(x.abroad ? { vat_exemption_reason_code: MICRO_EXPORT_VAT_EXEMPTION } : {}),
           internet_sale: {
             url: x.ch?.internet_url || "https://yerihisset.com",
             payment_type: x.ch?.payment_type || (card ? "KREDIKARTI/BANKAKARTI" : "EFT/HAVALE"),

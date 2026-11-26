@@ -1,6 +1,7 @@
 "use client";
 
 import { orderLabel } from "@/lib/order-label";
+import { microExportOf } from "@/lib/micro-export";
 import { useEffect, useState, useCallback } from "react";
 import { orderNextStep, isReturnInvoiceDue, isRefundDue, isGeneralOrderTodo, isUninvoicedShipped, paidReturnedUnits, type NextActionKey, UNINVOICED_SINCE, INVOICE_DAYS, caseReasonLabel, todoKind, TODO_KINDS, type TodoKind } from "@/lib/order-next-step";
 import { returnRefundSuggestion, exchangeReturnDefaults, refundSplit } from "@/lib/exchange-return";
@@ -2647,6 +2648,15 @@ function MarketplaceOrderPanel({ order, onChange, onRestocked }: {
       <p className="text-[11px] text-muted-foreground">
         Ödeme ve sevkiyat durumu pazaryerinden otomatik güncellenir; müşteriye bizden e-posta gitmez. Faturayı aşağıdan yönetebilirsin.
       </p>
+      {(() => {
+        const mx = microExportOf(order.external_raw);
+        return mx && (
+          <div className="rounded-lg border border-sky-200 bg-sky-50 p-2.5 text-xs text-sky-900">
+            <b>Mikro ihracat · {mx.country}</b>{mx.hsCode ? <span className="text-sky-700"> · GTİP {mx.hsCode}</span> : null}
+            <p className="mt-0.5">Fatura yurtdışı olarak kesilir: e-Arşiv, %0 KDV, 301 istisna kodu (Trendyol böyle istiyor). Paket hazır'da otomatik.</p>
+          </div>
+        );
+      })()}
 
       {order.mp_warning && !order.mp_warning_ack && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800 space-y-2">
