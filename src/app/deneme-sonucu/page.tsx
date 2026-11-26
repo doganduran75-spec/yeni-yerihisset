@@ -57,6 +57,8 @@ function Inner() {
   const [dir, setDir] = useState<"up" | "down" | "same" | "">("");
   const [opts, setOpts] = useState<any>(null);
   const [pick, setPick] = useState<string>("");
+  const [browse, setBrowse] = useState(false);   // önerilen numara stokta ama müşteri tam listeyi açtı
+  const [altLook, setAltLook] = useState(false); // stokta yok → "başka renkte bakalım"
   // iade
   const [retItems, setRetItems] = useState<Set<string>>(new Set());
   const [method, setMethod] = useState("surat");
@@ -88,7 +90,7 @@ function Inner() {
   useEffect(() => { if (r || orderParam) load(); }, [load, r, orderParam]);
 
   async function loadOptions(item: string, d: "up" | "down" | "same") {
-    setDir(d); setOpts(null); setPick(""); setErr(null);
+    setDir(d); setOpts(null); setPick(""); setErr(null); setBrowse(false); setAltLook(false);
     const res = await fetch(`/api/after-sale?${q}&options=1&item=${item}&dir=${d}`, { headers: await auth() });
     const j = await res.json().catch(() => ({}));
     if (res.ok) { setOpts(j); if (j.suggested?.stock > 0) setPick(j.suggested.variant_id); }
@@ -244,64 +246,119 @@ function Inner() {
               </div>
             </div>
           )}
-          {opts && (
-            <div className="space-y-3">
-              {opts.target && opts.suggested && opts.suggested.stock > 0 && <p className="text-sm text-olive-700 font-bold">Önerimiz: {opts.target} numara ✓ stokta</p>}
-              {opts.target && (!opts.suggested || opts.suggested.stock < 1) && dir !== "same" && <p className="text-sm text-amber-700 font-bold">{opts.target} numara bu modelde şu an stokta yok.</p>}
+          {opts && (() => {
+            // SADE AKIŞ (kullanıcı 2026-11-26: önerilen 42 seçili geldiği hâlde numara ızgarası + renk görselleri dikkat dağıttı):
+            //  * önerilen numara stokta → yalnız "Harika, 42 numara stokta" + seçili kart (numara / renk yok); isteyen "başka
+            //    numara ya da renk" bağlantısıyla tam listeyi açar
+            //  * stokta yok → "beklerim" / "başka renkte 42'ye bakalım" (renkler o zaman açılır) / "iade edeyim, gelince haber verin"
+            //  * "Başka sebep" (hedef numara yok) → tam liste (numaralar + renkler)
+            const hasTarget = !!opts.target && dir !== "same";
+            const inStock = hasTarget && !!opts.suggested && opts.suggested.stock > 0;
+            const altColors = (opts.colors || []).filter((c: any) => c.target_variant_id);
+            const altCount = altColors.length + (opts.others?.length || 0);
+            const full = !hasTarget || browse; // tam liste (numaralar + renkler)
+            const showSubmit = full || inStock || (altLook && !!pick);
+            const sizeGrid = (
               <div className="flex flex-wrap gap-2">
                 {opts.same.map((s: any) => (
                   <button key={s.variant_id} disabled={s.stock < 1} onClick={() => setPick(s.variant_id)}
                     className={`min-w-12 h-10 px-3 rounded-lg border text-sm font-bold ${pick === s.variant_id ? "border-olive-600 bg-olive-600 text-white" : s.stock < 1 ? "border-slate-100 text-slate-300 line-through" : "border-slate-300 text-slate-700"}`}>{s.size}</button>
                 ))}
               </div>
-              {opts.others?.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-xs font-bold text-slate-500">Aynı kategoride {opts.target} numarası stokta olanlar:</p>
-                  {opts.others.map((o: any) => (
-                    <label key={o.variant_id} className={`flex items-center gap-3 rounded-xl border p-2 cursor-pointer ${pick === o.variant_id ? "border-olive-500 bg-olive-50" : "border-slate-200"}`}>
-                      <input type="radio" checked={pick === o.variant_id} onChange={() => setPick(o.variant_id)} className="accent-olive-600" />
-                      {o.image && <img src={o.image} alt="" className="w-10 h-10 rounded-lg object-cover" />}
-                      <span className="text-sm text-slate-800 flex-1">{o.title} — {o.size}</span>
-                    </label>
-                  ))}
-                </div>
-              )}
-              {opts.colors?.length > 0 && (
-                // Aynı modelin diğer renkleri (kullanıcı 2026-11-20: müşteri numarayla birlikte rengi de değiştirmek istedi)
-                <div className="space-y-2">
-                  <p className="text-xs font-bold text-slate-500">Rengini de değiştirmek ister misin?</p>
-                  {opts.colors.map((c: any) => (
-                    <div key={c.product_id} className={`flex items-center gap-3 rounded-xl border p-2 ${c.sizes.some((s: any) => s.variant_id === pick) ? "border-olive-500 bg-olive-50" : "border-slate-200"}`}>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      {c.image && <img src={c.image} alt="" className="w-12 h-12 rounded-lg object-cover shrink-0" />}
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-bold text-slate-800 truncate">{c.color}</p>
-                        <div className="flex flex-wrap gap-1.5 mt-1">
-                          {c.sizes.map((s: any) => (
-                            <button key={s.variant_id} type="button" onClick={() => setPick(s.variant_id)}
-                              className={`min-w-10 h-8 px-2 rounded-lg border text-xs font-bold ${pick === s.variant_id ? "border-olive-600 bg-olive-600 text-white" : s.variant_id === c.target_variant_id ? "border-olive-400 text-olive-800" : "border-slate-300 text-slate-700"}`}>{s.size}</button>
-                          ))}
-                        </div>
+            );
+            const othersBlock = opts.others?.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-bold text-slate-500">Aynı kategoride {opts.target} numarası stokta olanlar:</p>
+                {opts.others.map((o: any) => (
+                  <label key={o.variant_id} className={`flex items-center gap-3 rounded-xl border p-2 cursor-pointer ${pick === o.variant_id ? "border-olive-500 bg-olive-50" : "border-slate-200"}`}>
+                    <input type="radio" checked={pick === o.variant_id} onChange={() => setPick(o.variant_id)} className="accent-olive-600" />
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    {o.image && <img src={o.image} alt="" className="w-10 h-10 rounded-lg object-cover" />}
+                    <span className="text-sm text-slate-800 flex-1">{o.title} — {o.size}</span>
+                  </label>
+                ))}
+              </div>
+            );
+            const colorsBlock = (list: any[], title: string) => list.length > 0 && (
+              // Aynı modelin diğer renkleri (kullanıcı 2026-11-20: müşteri numarayla birlikte rengi de değiştirmek istedi)
+              <div className="space-y-2">
+                <p className="text-xs font-bold text-slate-500">{title}</p>
+                {list.map((c: any) => (
+                  <div key={c.product_id} className={`flex items-center gap-3 rounded-xl border p-2 ${c.sizes.some((s: any) => s.variant_id === pick) ? "border-olive-500 bg-olive-50" : "border-slate-200"}`}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    {c.image && <img src={c.image} alt="" className="w-12 h-12 rounded-lg object-cover shrink-0" />}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-slate-800 truncate">{c.color}</p>
+                      <div className="flex flex-wrap gap-1.5 mt-1">
+                        {c.sizes.map((s: any) => (
+                          <button key={s.variant_id} type="button" onClick={() => setPick(s.variant_id)}
+                            className={`min-w-10 h-8 px-2 rounded-lg border text-xs font-bold ${pick === s.variant_id ? "border-olive-600 bg-olive-600 text-white" : s.variant_id === c.target_variant_id ? "border-olive-400 text-olive-800" : "border-slate-300 text-slate-700"}`}>{s.size}</button>
+                        ))}
                       </div>
                     </div>
-                  ))}
+                  </div>
+                ))}
+              </div>
+            );
+            return (
+            <div className="space-y-3">
+              {hasTarget && inStock && !browse && (
+                <div data-exchange-instock className="rounded-xl border-2 border-olive-500 bg-olive-50 p-4 text-center space-y-1">
+                  <p className="text-lg font-black text-olive-800">Harika, {opts.target} numara stokta ✓</p>
+                  <p className="text-sm text-slate-700">{exItemObj?.title} — <b>{opts.target} numara</b> seçildi.</p>
+                  <button type="button" onClick={() => setBrowse(true)} className="text-xs text-slate-500 underline">Başka numara ya da renk istiyorum</button>
                 </div>
               )}
-              {opts.target && opts.suggested && opts.suggested.stock < 1 && (
-                <div className="grid gap-2">
-                  <button disabled={busy} onClick={() => post({ action: "exchange", reason, note, items: [{ order_item_id: exItem, variant_id: opts.suggested.variant_id, wait: true }] }, `${opts.target} numara stoğa girince gönderip seni haberdar edeceğiz.`)}
-                    className="h-11 rounded-xl border border-olive-300 text-olive-800 text-sm font-bold">{opts.target} numarayı beklerim, gelince gönderin</button>
-                  <button onClick={() => { setNotifyVariant(opts.suggested.variant_id); setMode("iade"); setRetItems(new Set([exItem])); }}
-                    className="h-11 rounded-xl border border-slate-200 text-slate-600 text-sm font-bold">İade edeyim, {opts.target} gelince haber verin</button>
+              {hasTarget && !inStock && !browse && (
+                <div data-exchange-nostock className="space-y-2">
+                  <p className="text-sm text-amber-700 font-bold">{opts.target} numara bu renkte şu an stokta yok.</p>
+                  {!altLook && (
+                    <div className="grid gap-2">
+                      {opts.suggested && (
+                        <button disabled={busy} onClick={() => post({ action: "exchange", reason, note, items: [{ order_item_id: exItem, variant_id: opts.suggested.variant_id, wait: true }] }, `${opts.target} numara stoğa girince gönderip seni haberdar edeceğiz.`)}
+                          className="h-11 rounded-xl border border-olive-300 text-olive-800 text-sm font-bold">{opts.target} numarayı beklerim, gelince gönderin</button>
+                      )}
+                      {altCount > 0 && (
+                        <button type="button" onClick={() => { setAltLook(true); setPick(""); }}
+                          className="h-11 rounded-xl border border-olive-300 text-olive-800 text-sm font-bold">Başka renkte {opts.target} numaraya bakalım</button>
+                      )}
+                      {opts.suggested && (
+                        <button onClick={() => { setNotifyVariant(opts.suggested.variant_id); setMode("iade"); setRetItems(new Set([exItem])); }}
+                          className="h-11 rounded-xl border border-slate-200 text-slate-600 text-sm font-bold">İade edeyim, {opts.target} gelince haber verin</button>
+                      )}
+                      <button type="button" onClick={() => setBrowse(true)} className="text-xs text-slate-500 underline">Başka numara seçmek istiyorum</button>
+                    </div>
+                  )}
+                  {altLook && (
+                    <>
+                      {colorsBlock(altColors, `${opts.target} numarası stokta olan renkler:`)}
+                      {othersBlock}
+                      <button type="button" onClick={() => { setAltLook(false); setPick(""); }} className="text-xs text-slate-500 underline">Geri dön</button>
+                    </>
+                  )}
                 </div>
               )}
-              <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder="Eklemek istediğin bir not (opsiyonel)" className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" />
-              {err && <p className="text-sm text-red-600">{err}</p>}
-              <button disabled={busy || !pick} onClick={() => post({ action: "exchange", reason, note, items: [{ order_item_id: exItem, variant_id: pick }] }, "Değişim talebini aldık; yeni numaranı kısa süre içinde kargoya veriyoruz. Elindekini, yeni numarayı denedikten sonra geri göndereceksin.")}
-                className="w-full h-12 rounded-xl bg-olive-600 text-white font-bold text-sm disabled:opacity-50">{!pick || opts.same.some((s: any) => s.variant_id === pick) ? "Bu numarayı gönderin" : "Seçtiğim ürünü gönderin"}</button>
-              <p className="text-xs text-slate-400 text-center">Yeni numarayı gönderiyoruz; ikisini de deneyip olmayanı geri gönderirsin.</p>
+              {full && (
+                <>
+                  {hasTarget && <p className="text-sm text-slate-700 font-bold">İstediğin numarayı seç:</p>}
+                  {sizeGrid}
+                  {othersBlock}
+                  {colorsBlock(opts.colors || [], "Rengini de değiştirmek ister misin?")}
+                </>
+              )}
+              {showSubmit && (
+                <>
+                  <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder="Eklemek istediğin bir not (opsiyonel)" className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" />
+                  {err && <p className="text-sm text-red-600">{err}</p>}
+                  <button disabled={busy || !pick} onClick={() => post({ action: "exchange", reason, note, items: [{ order_item_id: exItem, variant_id: pick }] }, "Değişim talebini aldık; yeni numaranı kısa süre içinde kargoya veriyoruz. Elindekini, yeni numarayı denedikten sonra geri göndereceksin.")}
+                    className="w-full h-12 rounded-xl bg-olive-600 text-white font-bold text-sm disabled:opacity-50">{!pick || opts.same.some((s: any) => s.variant_id === pick) ? "Bu numarayı gönderin" : "Seçtiğim ürünü gönderin"}</button>
+                  <p className="text-xs text-slate-400 text-center">Yeni numarayı gönderiyoruz; ikisini de deneyip olmayanı geri gönderirsin.</p>
+                </>
+              )}
+              {!showSubmit && err && <p className="text-sm text-red-600">{err}</p>}
             </div>
-          )}
+            );
+          })()}
         </div>
       )}
 

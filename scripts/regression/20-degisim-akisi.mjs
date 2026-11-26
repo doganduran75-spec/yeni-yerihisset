@@ -96,6 +96,13 @@ export default {
       const act = rd("src/app/api/admin/orders/action/route.ts");
       const okR = /exchangeBackResult\(all/.test(act) && /status: "returned_all"/.test(act) && /sendExchangeCompletedEmail\(orderId/.test(act) && /"alt_shipped", "alt_delivered", "none_fit", "keep_chosen", "label_sent"/.test(act);
       t.add(okR ? "ok" : "fail", "Geri gelen ürün ulaştı: müşteri seçmeden de değişim kapanıyor, ikisi de gelirse iade; “değişimin tamamlandı” e-postası", okR ? "" : "action route eksik");
+      // Sade değişim ekranı (kullanıcı 2026-11-26): önerilen numara stokta → yalnız "Harika, 42 numara stokta" (ızgara / renk yok,
+      // isteyen açar); stokta yok → beklerim / başka renkte bakalım / iade; renkler yalnız istenince
+      const ds = rd("src/app/deneme-sonucu/page.tsx");
+      t.add(/data-exchange-instock/.test(ds) && /Harika, \{opts\.target\} numara stokta ✓/.test(ds) && /const full = !hasTarget \|\| browse;/.test(ds)
+        && /Başka numara ya da renk istiyorum/.test(ds) && /data-exchange-nostock/.test(ds) && /Başka renkte \{opts\.target\} numaraya bakalım/.test(ds)
+        && /colorsBlock\(altColors,/.test(ds) && /setBrowse\(false\); setAltLook\(false\);/.test(ds) ? "ok" : "fail",
+        "Değişim ekranı sade: stoktaysa yalnız “Harika, stokta”, değilse bekle / başka renk / iade; renkler istenince açılır");
       const mail = rd("src/lib/after-sale-mail.ts"), kinds = rd("src/lib/email-approval.ts"), ui = rd("src/app/deneme-sonucu/page.tsx"), list = rd("src/app/admin/orders/page.tsx");
       const okM = ["exchange_requested", "alt_shipped", "exchange_completed"].every((k) => mail.includes(`"${k}");`) && kinds.includes(`${k}:`))
         && /İkisi de olmadı/.test(ui) && /pair\.has\(i\.exchange_of\)/.test(ui) && /Müşteride kalacak:/.test(list) && /Geri gelecek:/.test(list);
