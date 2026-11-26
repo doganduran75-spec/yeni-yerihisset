@@ -743,8 +743,8 @@ export default {
         await adminCase(E, { op: "close" });
         const fsE = (await import("node:fs")).readFileSync;
         const ui = fsE(new URL("../../src/app/deneme-sonucu/page.tsx", import.meta.url), "utf8"), libE = fsE(new URL("../../src/lib/after-sale.ts", import.meta.url), "utf8");
-        ok(/opts\.colors\?\.length > 0/.test(ui) && /Rengini de değiştirmek ister misin\?/.test(ui) && /suggested, same, others, colors \}/.test(libE),
-          "Müşteri değişim ekranında aynı modelin diğer renkleri sunuluyor", "deneme-sonucu / after-sale satırları eksik");
+        ok(/colorsBlock\(opts\.colors \|\| \[\], "Rengini de değiştirmek ister misin\?"\)/.test(ui) && /colorsBlock\(altColors,/.test(ui) && /suggested, same, others, colors \}/.test(libE),
+          "Müşteri değişim ekranında aynı modelin diğer renkleri sunuluyor (tam listede + stok yoksa “başka renkte bakalım”da)", "deneme-sonucu / after-sale satırları eksik");
 
         // ── İade (havale → IBAN) ──
         const C = await delivered();
