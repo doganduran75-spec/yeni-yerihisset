@@ -3,7 +3,7 @@
 import { orderLabel } from "@/lib/order-label";
 import { useEffect, useState, useCallback } from "react";
 import { orderNextStep, isReturnInvoiceDue, isRefundDue, isGeneralOrderTodo, isUninvoicedShipped, paidReturnedUnits, type NextActionKey, UNINVOICED_SINCE, INVOICE_DAYS, caseReasonLabel, todoKind, TODO_KINDS, type TodoKind } from "@/lib/order-next-step";
-import { returnRefundSuggestion, exchangeReturnDefaults } from "@/lib/exchange-return";
+import { returnRefundSuggestion, exchangeReturnDefaults, refundSplit } from "@/lib/exchange-return";
 import { commissionPeriod, periodLabel } from "@/lib/affiliate-commission";
 import { useSearchParams, useRouter } from "next/navigation";
 import AdminOpsTabs from "@/components/admin/AdminOpsTabs";
@@ -135,6 +135,7 @@ type Order = {
   shipping_cost?: number | null;
   coupon_discount?: number | null;
   credit_used?: number | null;
+  credit_restored_amount?: number | null;
   affiliate_profiles?: { code: string } | null;
   // Hakedişi işlenmiş komisyon (dönem = completed_at ayı; src/lib/affiliate-commission.ts)
   affiliate_conversions?: { commission_amount: number; affiliate_profiles?: { code: string } | null }[] | null;
@@ -2717,17 +2718,23 @@ function OrderActionDialog({ mode, order, onClose, onDone }: {
   // İptal nedeni (zorunlu) + müşteriye not — iptal e-postasında görünür (src/lib/cancel-reasons.ts, 2026-11-06)
   const [reason, setReason] = useState("");
   const [customerNote, setCustomerNote] = useState("");
-  // "Ücret iadesi yap" önerisi (2026-11-14): kısmi iadede yalnız geri gelen (ücretli) ürünlerin bedeli − önce iade edilen;
-  // her şey geldiyse / iade yoksa (iptal) kalan tutar (kargo dahil). Değişimde ücretsiz çift geri gelişi bedel doğurmaz.
+  // "Ücret iadesi yap" önerisi (2026-11-14, kredi 2026-11-26): kısmi iadede yalnız geri gelen (ücretli) ürünlerin bedeli
+  // (kupon payı düşülmüş; para / kredi oranında) − önce iade edilen; her şey geldiyse kalan tutar (kargo dahil, iade kargosu
+  // bizde) + kalan kredi; iade yoksa (iptal) kalan tutar. Değişimde ücretsiz çift geri gelişi bedel doğurmaz. src/lib/exchange-return.ts
   const refundSuggest = (() => {
     const its = ((order.order_items ?? []) as any[]);
     const back = its.some((i) => Number(i.returned_qty || 0) > 0);
     const allBack = order.shipment_status === "returned" || (its.length > 0 && its.every((i) => Number(i.returned_qty || 0) >= Number(i.quantity)));
-    if (!back || allBack) return remaining;
-    const v = returnRefundSuggestion(its.map((i) => ({ ...i, returned_qty: 0 })), Object.fromEntries(its.map((i) => [i.id, Number(i.returned_qty || 0)]))).amount;
-    return Math.max(0, Math.min(remaining, Math.round((v - refunded) * 100) / 100));
+    if (!back) return { cash: remaining, credit: 0 };
+    const fresh = its.map((i) => ({ ...i, returned_qty: 0 }));
+    const v = allBack ? 0 : returnRefundSuggestion(fresh, Object.fromEntries(its.map((i) => [i.id, Number(i.returned_qty || 0)]))).amount;
+    const all = refundSplit({ ...order, refunded_amount: 0, credit_restored_amount: 0 }, fresh, v, allBack);
+    return {
+      cash: Math.max(0, Math.min(remaining, Math.round((all.cash - refunded) * 100) / 100)),
+      credit: Math.max(0, Math.round((all.credit - Number(order.credit_restored_amount || 0)) * 100) / 100),
+    };
   })();
-  const [amount, setAmount] = useState(mode === "refund" ? String(refundSuggest) : "");
+  const [amount, setAmount] = useState(mode === "refund" ? String(refundSuggest.cash) : "");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -2744,14 +2751,19 @@ function OrderActionDialog({ mode, order, onClose, onDone }: {
   const invoiced = order.invoice_status === "invoiced";
   const [returnInvoiced, setReturnInvoiced] = useState(false);
   const retPlan = returnRefundSuggestion(items as any, selOf(ret));
-  const retSum = Math.min(remaining, retPlan.amount);
+  // Seçilenle siparişin tamamı geri gelmiş oluyor mu? → kalan her şey (kargo dahil) + kalan kredi iade edilir
+  const retAllBack = items.every((i) => i.left <= 0 || (ret[i.id]?.on && ret[i.id].qty >= i.left));
+  const retSplit = refundSplit(order, items as any, retPlan.amount, retAllBack);
+  const retSum = retSplit.cash;
   const [retAmount, setRetAmount] = useState<string | null>(null);
 
   // Para iadesi bu işlemde yapılıyor mu? (iptal/ücret iadesi: ödeme alınmışsa; iade al: işaretliyse)
   const refundNow = paidNow && (mode === "cancel" ? remaining > 0 : mode === "refund" ? true : withRefund);
   // iyzico (otomatik) dışındaki yöntemlerde parayı admin gönderir → "yaptım" onayı istenir;
   // müşteriye giden e-posta "iaden yapıldı" der, bu yüzden gerçekten yapılmış olmalı
-  const needsConfirm = refundNow && method !== "iyzico";
+  const cashNow = Number(String(mode === "refund" ? amount : mode === "return" ? (retAmount ?? retSum) : remaining).replace(",", ".")) || 0;
+  const creditNow = mode === "refund" ? refundSuggest.credit : mode === "return" && withRefund ? retSplit.credit : 0;
+  const needsConfirm = refundNow && method !== "iyzico" && cashNow > 0;
   const [confirmed, setConfirmed] = useState(false);
   const confirmText: Record<string, string> = {
     iyzico_manual: "Kart iadesini iyzico panelinden yaptım",
@@ -2766,7 +2778,7 @@ function OrderActionDialog({ mode, order, onClose, onDone }: {
     try {
       if (needsConfirm && !confirmed) throw new Error("Önce iadeyi yaptığını onayla.");
       const body: any = { action: mode, orderId: order.id, note: note.trim() || undefined, confirmed: needsConfirm ? true : undefined };
-      if (mode === "refund") { body.amount = Number(String(amount).replace(",", ".")); body.method = method; }
+      if (mode === "refund") { body.amount = Number(String(amount).replace(",", ".")); body.method = method; body.credit = creditNow || undefined; }
       if (mode === "cancel") {
         if (!reason) throw new Error("İptal nedenini seç.");
         if (reason === "other" && !customerNote.trim()) throw new Error("“Diğer” için müşteriye notu yaz (e-postada görünür).");
@@ -2775,7 +2787,7 @@ function OrderActionDialog({ mode, order, onClose, onDone }: {
       if (mode === "return") {
         body.items = items.filter((i) => ret[i.id]?.on && ret[i.id].qty > 0).map((i) => ({ item_id: i.id, qty: ret[i.id].qty, restock: ret[i.id].restock }));
         if (!body.items.length) throw new Error("İade gelen ürünü seç.");
-        if (withRefund && paidNow) body.refund = { amount: Number(String(retAmount ?? retSum).replace(",", ".")), method, note: note.trim() || undefined };
+        if (withRefund && paidNow) body.refund = { amount: Number(String(retAmount ?? retSum).replace(",", ".")), method, note: note.trim() || undefined, credit: creditNow || undefined };
       }
       if (invoiced && returnInvoiced && (mode === "refund" || (mode === "return" && withRefund && paidNow))) body.return_invoiced = true;
       const { data: { session } } = await supabase.auth.getSession();
@@ -2860,6 +2872,7 @@ function OrderActionDialog({ mode, order, onClose, onDone }: {
                 <span className="text-xs font-semibold">Tutar (en çok ₺{remaining.toFixed(2)})</span>
                 <input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" className={sel} />
               </label>
+              {creditNow > 0 && <p className="text-[11px] font-semibold text-olive-700 bg-olive-50 rounded px-2 py-1">+ ₺{creditNow.toFixed(2)} YeriHisset Kredisi müşterinin cüzdanına geri yüklenir (siparişte kredi kullanılmıştı).</p>}
               {methodSelect}
               {confirmBox}
               <p className="text-[11px] text-muted-foreground">Ücret iadesi stoğa ve kargoya dokunmaz. Tamamı iade edilirse ödeme “İade edildi”, bir kısmıysa “Kısmi iade” olur; ciro buna göre düşer.</p>
@@ -2910,9 +2923,10 @@ function OrderActionDialog({ mode, order, onClose, onDone }: {
                   {withRefund && (
                     <>
                       <label className="block space-y-1">
-                        <span className="text-xs">Tutar (seçilen ürünlere göre önerildi; en çok ₺{remaining.toFixed(2)})</span>
+                        <span className="text-xs">Tutar ({retAllBack ? "siparişin tamamı geri geldi — kargo dahil kalan tutar" : "yalnız geri gelen ürünlerin bedeli, kargo hariç"}; en çok ₺{remaining.toFixed(2)})</span>
                         <input value={retAmount ?? String(retSum)} onChange={(e) => setRetAmount(e.target.value)} inputMode="decimal" className={sel} />
                       </label>
+                      {creditNow > 0 && <p className="text-[11px] font-semibold text-olive-700 bg-olive-50 rounded px-2 py-1">+ ₺{creditNow.toFixed(2)} YeriHisset Kredisi müşterinin cüzdanına geri yüklenir (siparişte kredi kullanılmıştı).</p>}
                       {methodSelect}
                       {confirmBox}
                     </>

@@ -42,3 +42,27 @@ export function exchangeReturnDefaults(items: RetItem[], keepItemId?: string | n
   const root = keep.exchange_of || keep.id;
   return new Set(items.filter((i) => i.id !== keepItemId && (i.id === root || i.exchange_of === root)).map((i) => i.id));
 }
+
+// İADE TUTARI — PARA + KREDİ (kullanıcı 2026-11-26): iade kargosu bizde. Siparişin TÜMÜ geri geldiyse kalan her şey iade
+// edilir (kargo dahil; kullanılan YeriHisset Kredisi de cüzdana döner). Bir kısmı geldiyse yalnız o ürünlerin bedeli: kupon
+// payı düşülür, kalan tutar siparişin ödeme oranında bölünür (para → karta / hesaba, kredi → cüzdana).
+export type RefundOrder = {
+  total_amount: number | string; refunded_amount?: number | string | null;
+  credit_used?: number | string | null; credit_restored_amount?: number | string | null; coupon_discount?: number | string | null;
+};
+const r2 = (v: number) => Math.round(v * 100) / 100;
+
+/** productValue = geri gelen ücretli ürünlerin bedeli (returnRefundSuggestion.amount); allBack = sipariş tamamen geri geldi */
+export function refundSplit(o: RefundOrder, items: RetItem[], productValue: number, allBack: boolean): { cash: number; credit: number } {
+  const total = n(o.total_amount), used = n(o.credit_used);
+  const cashLeft = Math.max(0, r2(total - n(o.refunded_amount)));
+  const creditLeft = Math.max(0, r2(used - n(o.credit_restored_amount)));
+  if (allBack) return { cash: cashLeft, credit: creditLeft };
+  // Ürün toplamı: değişimde eklenen (ücretsiz) alternatifler sayılmaz
+  const itemsTotal = items.filter((i) => !i.exchange_of).reduce((a, i) => a + n(i.unit_price) * n(i.quantity), 0);
+  const net = productValue * (itemsTotal > 0 ? Math.max(0, 1 - n(o.coupon_discount) / itemsTotal) : 1);
+  const pool = total + used;
+  const cash = pool > 0 ? net * (total / pool) : net;
+  const credit = pool > 0 ? net * (used / pool) : 0;
+  return { cash: Math.min(cashLeft, r2(cash)), credit: Math.min(creditLeft, r2(credit)) };
+}

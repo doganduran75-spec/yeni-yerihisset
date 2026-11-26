@@ -1207,7 +1207,7 @@ export default {
             ok(nx.isRefundDue(part2) && emb.status === 200
               && /ret_items:order_items\(id, quantity, returned_qty, exchange_of, unit_price\)/.test(dash) && /order_items: o\.ret_items \?\? null/.test(dash)
               && (ordersPg.match(/ret_items:order_items\(id, quantity, returned_qty, exchange_of, unit_price\)/g) || []).length === 3 && /order_items: o\.order_items \?\? o\.ret_items \?\? null/.test(ordersPg)
-              && /mode === "refund" \? String\(refundSuggest\)/.test(ordersPg) && !/"Bekleyen İşlerim", openOrders\.length/.test(dash),
+              && /mode === "refund" \? String\(refundSuggest\.cash\)/.test(ordersPg) && !/"Bekleyen İşlerim", openOrders\.length/.test(dash),
               "Kısmi iade (kargo teslim edildi): pano ve sipariş listesi ürün satırlarından görüp “Ücret iadesi yapılacak” sayıyor; öneri iade gelen ürünün bedeli; panodaki “Bekleyen İşlerim” listesi kalktı",
               `${part2.stage} · embed HTTP ${emb.status}`);
             ok(/sStatus !== "returned" && paidReturnedUnits\(order\.order_items \?\? \(order as any\)\.ret_items \?\? null\) > 0/.test(ordersPg) && />Kısmi iade geldi<\/span>/.test(ordersPg)

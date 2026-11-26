@@ -6,6 +6,7 @@ import { iyzicoRefund } from "@/lib/iyzico-refund";
 import { restoreOrderCredit } from "@/lib/store-credit";
 import { kickMarketplaceSync } from "@/lib/marketplace/sync";
 import { autoInvoiceSiteOrder } from "@/lib/parasut-invoice";
+import { sendReturnCompletedEmail } from "@/lib/after-sale-mail";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -17,8 +18,10 @@ import { autoInvoiceSiteOrder } from "@/lib/parasut-invoice";
 //            (müşteriye "iaden yapıldı" e-postası gider).
 //   cancel : { method?, note } → kargodan ÖNCE iptal; ödeme alınmışsa kalan tutar önce iade edilir,
 //            stok geri eklenir, fatura kesilmediyse "Gerekmiyor"
-//   return : { items: [{item_id, qty, restock}], note, refund?: {amount, method, note} }
+//   return : { items: [{item_id, qty, restock}], note, refund?: {amount, method, note, credit} }
 //            → kargodan SONRA iade geldi; seçilen (sağlam) ürünler stoğa; istenirse ücret iadesi
+//   credit : kısmi iadede geri gelen ürünün YeriHisset Kredisi payı cüzdana (tam iadede kalan kredinin tamamı döner).
+//            İadenin ücreti (para / kredi) yapılınca müşteriye "iaden tamamlandı" e-postası gider (kullanıcı 2026-11-26).
 // iyzico seçilirse para iyzico'dan otomatik iade edilir; diğer yöntemlerde parayı admin gönderir,
 // sistem kaydeder. Durum değişiklikleri veritabanında tek işlemle (tutarsız birleşim olmaz).
 
@@ -44,6 +47,7 @@ export async function POST(req: NextRequest) {
 
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "127.0.0.1";
 
+  let refundedFull = false, fullCreditBack = 0;
   async function doRefund(amount: number, methodIn: string, note?: string): Promise<string | null> {
     const manual = methodIn === "iyzico_manual";
     const method = manual ? "iyzico" : methodIn;
@@ -59,14 +63,37 @@ export async function POST(req: NextRequest) {
       p_order: orderId, p_amount: amount, p_method: method, p_note: note || null, p_actor: user!.id,
     });
     if (error) return error.message;
+    refundedFull = !!data?.full;
     // Tam iade → siparişte kullanılan YeriHisset Kredisi cüzdana döner
-    if (data?.full) await restoreOrderCredit(sb, orderId!).catch(() => {});
+    if (data?.full) {
+      const { data: rc, error: rcErr } = await sb.rpc("restore_order_credit", { p_order: orderId });
+      if (rcErr) console.error("[order-action] kredi geri yüklenemedi", orderId, rcErr.message);
+      fullCreditBack = Number(rc?.restored || 0);
+    }
     // Müşteri iptalinin ücret iadesi işi (order_cases kind 'cancel', src/lib/customer-cancel.ts) tam iadeyle kapanır
     if (data?.full) {
       const done = new Date().toISOString();
       await sb.from("order_cases").update({ status: "refunded", closed_at: done, updated_at: done }).eq("order_id", orderId).eq("kind", "cancel").is("closed_at", null);
     }
     return null;
+  }
+
+  // Kısmi iade: geri gelen ürünün kredi payı cüzdana (tam iadede restoreOrderCredit kalanın tamamını zaten döndürdü)
+  async function doCredit(amount: number): Promise<number> {
+    if (!(amount > 0) || refundedFull) return 0;
+    const { data, error } = await sb.rpc("restore_order_credit_part", { p_order: orderId, p_amount: Math.round(amount * 100) / 100 });
+    if (error) { console.error("[order-action] kredi geri yüklenemedi", orderId, error.message); return 0; }
+    const back = Number(data?.restored || 0);
+    if (back > 0) {
+      await sb.from("order_events").insert({ order_id: orderId, type: "refund", note: `${back.toFixed(2).replace(".", ",")} TL YeriHisset Kredisi cüzdana geri yüklendi (kısmi iade)`, created_by: user!.id });
+    }
+    return back;
+  }
+  // Ücret iadesi bittiğinde müşteriye "iaden tamamlandı" (yalnız site siparişi; iptalin kendi e-postası var)
+  function mailCompleted(cash: number, method: string, credit: number) {
+    if (!order.user_id || (order.channel || "site") !== "site" || (cash <= 0 && credit <= 0)) return;
+    const m = method === "iyzico_manual" ? "iyzico" : method;
+    sendReturnCompletedEmail(orderId!, { cash, method: m, credit }).catch(() => {});
   }
 
   const paid = ["paid", "partial_refund"].includes(order.payment_status);
@@ -80,8 +107,13 @@ export async function POST(req: NextRequest) {
     if (order.status !== "cancelled" && !anyReturned) {
       return NextResponse.json({ error: "Ücret iadesi, ürün geri gelince “İade al” ile ya da kargodan önce “Siparişi iptal et” ile yapılır" }, { status: 400 });
     }
-    const err = await doRefund(Number(body.amount), String(body.method || ""), body.note);
-    if (err) return NextResponse.json({ error: err }, { status: 400 });
+    const cash = Number(body.amount) || 0, credit = Number(body.credit) || 0;
+    if (cash > 0 || !(credit > 0)) {
+      const err = await doRefund(cash, String(body.method || ""), body.note);
+      if (err) return NextResponse.json({ error: err }, { status: 400 });
+    }
+    const creditBack = await doCredit(credit);
+    if (order.status !== "cancelled") mailCompleted(cash, String(body.method || ""), refundedFull ? fullCreditBack : creditBack);
   } else if (action === "cancel") {
     // İptal edilemeyecek siparişte para İADE EDİLMEDEN dur (order_mark_cancelled'daki kuralların aynısı).
     // Eskiden önce ücret iadesi yapılıyor, iptal sonra reddediliyordu → para iade, sipariş iptal değil.
@@ -131,10 +163,13 @@ export async function POST(req: NextRequest) {
         }
       }
     }
-    if (body.refund && Number(body.refund.amount) > 0) {
-      const err = await doRefund(Number(body.refund.amount), String(body.refund.method || ""), body.refund.note || body.note);
+    const cash = Number(body.refund?.amount) || 0, credit = Number(body.refund?.credit) || 0;
+    if (body.refund && cash > 0) {
+      const err = await doRefund(cash, String(body.refund.method || ""), body.refund.note || body.note);
       if (err) return NextResponse.json({ error: `İade kaydedildi ama ücret iadesi yapılamadı: ${err}` }, { status: 400 });
     }
+    const creditBack = body.refund ? await doCredit(credit) : 0;
+    if (body.refund) mailCompleted(cash, String(body.refund.method || ""), refundedFull ? fullCreditBack : creditBack);
   } else {
     return NextResponse.json({ error: "Geçersiz işlem" }, { status: 400 });
   }

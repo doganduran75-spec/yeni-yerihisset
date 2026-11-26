@@ -57,6 +57,52 @@ export async function sendReturnLabelEmail(orderId: string, method: string, code
   return send(c.email, `${c.label} — ${exchange ? "değişim" : "iade"} kargo kodunuz`, body);
 }
 
+const p15 = (html: string, extra = "") => `<p style="font-size:15px;color:#374151;line-height:1.6;margin:0 0 12px${extra}">${html}</p>`;
+const tl = (v: number) => `₺${v.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const ul = (rows: string[]) => `<ul style="margin:0 0 14px;padding-left:20px;font-size:14px;color:#374151;line-height:1.7">${rows.map((r) => `<li>${r}</li>`).join("")}</ul>`;
+
+/** Müşteriye: iade talebin alındı (kullanıcı 2026-11-26) — kod e-postası ayrıca gelir */
+export async function sendReturnRequestedEmail(orderId: string, itemLabels: string[], method: string, bankTransfer: boolean) {
+  const c = await orderCustomer(orderId);
+  if (!c?.email) return { status: "failed" as const, error: "e-posta yok" };
+  const how = method === "ups"
+    ? "İade kargo kodunu kısa süre içinde e-postayla göndereceğiz; UPS görevlisi ürünü adresinden alacak."
+    : `İade kargo kodunu kısa süre içinde e-postayla göndereceğiz; ürünü kodla birlikte <b>${method === "surat" ? "Sürat Kargo" : "Aras Kargo"}</b> şubesine bırakman yeterli.`;
+  const body = `
+    <h1 style="font-size:21px;font-weight:800;color:#111827;margin:0 0 12px">İade talebini aldık</h1>
+    ${p15(`Merhaba${c.name ? ` ${c.name}` : ""}, <b>${c.label}</b> siparişin için iade talebin bize ulaştı:`)}
+    ${ul(itemLabels.map((l) => escapeHtml(l)))}
+    ${p15(`${how} Kargo ücreti bize aittir.`)}
+    ${p15(bankTransfer ? "Ürün bize ulaşınca ücret iaden yazdığın banka hesabına gönderilecek ve sana e-postayla haber vereceğiz." : "Ürün bize ulaşınca ücret iadeni yapıp sana e-postayla haber vereceğiz.", ";color:#6b7280;font-size:13px")}
+    <p style="font-size:12px;color:#9ca3af;line-height:1.6;margin:0;text-align:center">Talebini dilediğin zaman <a href="${afterSaleUrl(orderId)}" style="color:#6b7280">buradan</a> görüntüleyebilirsin.</p>`;
+  return send(c.email, `${c.label} — iade talebin alındı`, body, undefined, "return_requested");
+}
+
+/** Müşteriye: iade tamamlandı — ürün geldi, ücret (ve kredi) iade edildi (kullanıcı 2026-11-26) */
+export async function sendReturnCompletedEmail(orderId: string, r: { cash: number; method: string; credit: number }) {
+  const c = await orderCustomer(orderId);
+  if (!c?.email) return { status: "failed" as const, error: "e-posta yok" };
+  const sb = createAdminClient() as any;
+  const { data: its } = await sb.from("order_items").select("title, variant_name, returned_qty, products(title)").eq("order_id", orderId);
+  const back = ((its as any[]) || []).filter((i) => Number(i.returned_qty || 0) > 0)
+    .map((i) => escapeHtml(`${i.products?.title ?? i.title ?? "Ürün"}${i.variant_name ? ` (${i.variant_name})` : ""}${Number(i.returned_qty) > 1 ? ` × ${i.returned_qty}` : ""}`));
+  const lines: string[] = [];
+  if (r.cash > 0) {
+    if (["iyzico", "card"].includes(r.method)) lines.push(`<b>${tl(r.cash)}</b> kartına iade edildi. Bankana bağlı olarak genellikle <b>1–14 iş günü</b> içinde kart hesabında görünür.`);
+    else if (r.method === "bank_transfer") lines.push(`<b>${tl(r.cash)}</b> banka hesabına havale/EFT ile gönderildi. Genellikle <b>1–3 iş günü</b> içinde hesabında görünür.`);
+    else if (r.method === "cash") lines.push(`<b>${tl(r.cash)}</b> nakit olarak iade edildi.`);
+    else lines.push(`<b>${tl(r.cash)}</b> iade edildi.`);
+  }
+  if (r.credit > 0) lines.push(`<b>${tl(r.credit)}</b> YeriHisset Kredisi hesabına geri yüklendi; bir sonraki alışverişinde kullanabilirsin.`);
+  const body = `
+    <h1 style="font-size:21px;font-weight:800;color:#111827;margin:0 0 12px">İaden tamamlandı</h1>
+    ${p15(`Merhaba${c.name ? ` ${c.name}` : ""}, <b>${c.label}</b> siparişin için gönderdiğin ${back.length > 1 ? "ürünler" : "ürün"} bize ulaştı ve iade işlemlerin tamamlandı.`)}
+    ${back.length ? ul(back) : ""}
+    ${lines.map((l) => p15(l)).join("")}
+    ${p15("Bir sorun olursa bu e-postayı yanıtlaman yeterli. Seni yeniden görmeyi umuyoruz.", ";color:#6b7280;font-size:13px")}`;
+  return send(c.email, `${c.label} — iaden tamamlandı`, body, undefined, "return_completed");
+}
+
 /** Yöneticiye: müşteri değişim / iade istedi */
 export async function sendAdminCaseEmail(orderId: string, title: string, lines: string[]) {
   const sb = createAdminClient() as any;

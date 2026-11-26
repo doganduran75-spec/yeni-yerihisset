@@ -5,7 +5,7 @@ import { rateLimited, clientIp, TOO_MANY } from "@/lib/rate-limit";
 import { loadAfterSale, verifyAfterSaleToken, exchangeOptions, validIban } from "@/lib/after-sale";
 import { ibanNameMatches } from "@/lib/name-match";
 import { parseShip } from "@/lib/affiliate-commission";
-import { sendAdminCaseEmail, RETURN_METHOD_LABEL } from "@/lib/after-sale-mail";
+import { sendAdminCaseEmail, sendReturnRequestedEmail, RETURN_METHOD_LABEL } from "@/lib/after-sale-mail";
 import { autoInvoiceSiteOrder } from "@/lib/parasut-invoice";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -139,6 +139,8 @@ export async function POST(req: NextRequest) {
       ...(note ? [`Not: ${escapeLine(note)}`] : []),
       ...(ibanMismatch ? [`<b style="color:#b91c1c">Dikkat: IBAN sahibi (${escapeLine(ibanName || "")}) siparişteki adla uyuşmuyor — iadeyi göndermeden önce kontrol et.</b>`] : []),
     ]).catch(() => {});
+    // Müşteriye "iade talebin alındı" (kullanıcı 2026-11-26)
+    sendReturnRequestedEmail(orderId, ids.map(label), body.method, view.paymentMethod === "bank_transfer").catch(() => {});
     return NextResponse.json({ ok: true, fitStatus: "return", ibanMismatch });
   }
 
