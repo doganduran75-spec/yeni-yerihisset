@@ -13,7 +13,9 @@ import { join, relative, sep } from "node:path";
 
 const CRON_DIR = fileURLToPath(new URL("../../src/app/api/cron/", import.meta.url));
 const METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"];
-const SECRET_CHECK = /if\s*\(\s*!secret\s*\|\|/;                       // şifre tanımsızsa da reddet
+// şifre tanımsızsa da reddet: `if (!secret || …)` ya da ortak sabit süreli kontrol `if (!cronSecretOk(…))` (src/lib/cron-auth.ts,
+// şifre tanımsız / boşsa false — 25-kucuk-isler.mjs dener; 2026-11-27)
+const SECRET_CHECK = /if\s*\(\s*!secret\s*\|\||if\s*\(\s*!cronSecretOk\s*\(/;
 const WORK = /\.(insert|update|upsert|delete|rpc)\s*\(|\bfetch\s*\(|createAdminClient\s*\(/; // kontrolden önce gelmemeli
 
 function routeFiles(dir) {
@@ -51,7 +53,7 @@ export function auditCronSource(src) {
   for (const h of handlers) {
     const body = h.alias ? byName.get(h.alias)?.text ?? "" : h.text;
     const check = body.search(SECRET_CHECK);
-    if (check < 0 || !/process\.env\.CRON_SECRET/.test(body) || !/["']x-cron-secret["']/.test(body)) {
+    if (check < 0 || !(/process\.env\.CRON_SECRET/.test(body) || /cronSecretOk\s*\(/.test(body)) || !/["']x-cron-secret["']/.test(body)) {
       problems.push(`${h.name}: CRON_SECRET kontrolü yok (x-cron-secret başlığı + şifre tanımsızken red)`);
       continue;
     }
@@ -76,7 +78,10 @@ export default {
       const open = auditCronSource(`export async function POST(req) {\n  const secret = process.env.CRON_SECRET;\n  if (secret && req.headers.get("x-cron-secret") !== secret) return no;\n}\n`);
       const late = auditCronSource(`async function run(req) {\n  await createAdminClient().rpc("x");\n  const secret = process.env.CRON_SECRET;\n  if (!secret || req.headers.get("x-cron-secret") !== secret) return no;\n}\nexport const GET = run;\n`);
       const good = auditCronSource(`async function run(req) {\n  const secret = process.env.CRON_SECRET;\n  const provided = req.headers.get("x-cron-secret");\n  if (!secret || provided !== secret) return no;\n  await createAdminClient().rpc("x");\n}\nexport const POST = run;\nexport const GET = run; // kolaylık\n`);
-      add(none.problems.length === 1 && open.problems.length === 1 && late.problems.length === 1 && good.problems.length === 0 && good.methods.join() === "POST,GET" ? "ok" : "fail",
+      const good2 = auditCronSource(`export async function POST(req) {\n  if (!cronSecretOk(req.headers.get("x-cron-secret"))) return no;\n  await createAdminClient().rpc("x");\n}\n`);
+      const late2 = auditCronSource(`export async function POST(req) {\n  await createAdminClient().rpc("x");\n  if (!cronSecretOk(req.headers.get("x-cron-secret"))) return no;\n}\n`);
+      add(none.problems.length === 1 && open.problems.length === 1 && late.problems.length === 1 && good.problems.length === 0 && good.methods.join() === "POST,GET"
+        && good2.problems.length === 0 && late2.problems.length === 1 ? "ok" : "fail",
         "Cron denetimi kendini doğruluyor (şifresiz / tanımsızken açık / geç kontrollü örnek yakalanıyor)", JSON.stringify({ none: none.problems, open: open.problems, late: late.problems, good }));
       add(files.length >= 6 ? "ok" : "fail", `Cron uçları bulundu (${files.length})`, `beklenen en az 6 — klasör okunamadı mı? ${CRON_DIR}`);
       for (const r of files) r.problems.length ? add("fail", `${r.label}: şifre kontrolü eksik`, r.problems.join("; ")) : add("ok", r.label);
