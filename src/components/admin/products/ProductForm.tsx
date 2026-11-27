@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/lib/supabase";
+import { shrinkImage, fileExt } from "@/lib/image-shrink";
 import { Loader2, Upload, X, ChevronLeft, Save, Copy, ImagePlus, GripVertical, Trash2, Plus } from "lucide-react";
 import { siteAlert, siteConfirm } from "@/components/ui/site-dialog";
 import Link from "next/link";
@@ -149,12 +150,12 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
     setUploading(true);
     try {
       const newImages = [...formData.images];
-      for (const file of Array.from(files)) {
-        const fileExt = file.name.split(".").pop();
-        const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
+      for (const raw of Array.from(files)) {
+        const file = await shrinkImage(raw); // en çok 1600 px WebP (ilk hazırlama yavaşlığı — 2026-11-23)
+        const fileName = `${Math.random().toString(36).substring(2)}.${fileExt(file)}`;
         const filePath = `products/${fileName}`;
 
-        const { error: uploadError } = await supabase.storage.from("product-images").upload(filePath, file);
+        const { error: uploadError } = await supabase.storage.from("product-images").upload(filePath, file, { contentType: file.type });
         if (uploadError) throw uploadError;
 
         const { data: { publicUrl } } = supabase.storage.from("product-images").getPublicUrl(filePath);
@@ -170,13 +171,13 @@ export default function ProductForm({ productId, initialData }: ProductFormProps
   }
 
   async function handleVariantImageUpload(idx: number, e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const raw = e.target.files?.[0];
+    if (!raw) return;
     setUploadingVariantIdx(idx);
     try {
-      const ext = file.name.split(".").pop();
-      const filePath = `products/variants/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-      const { error } = await supabase.storage.from("product-images").upload(filePath, file);
+      const file = await shrinkImage(raw);
+      const filePath = `products/variants/${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt(file)}`;
+      const { error } = await supabase.storage.from("product-images").upload(filePath, file, { contentType: file.type });
       if (error) throw error;
       const { data: { publicUrl } } = supabase.storage.from("product-images").getPublicUrl(filePath);
       handleVariantChange(idx, "image_url", publicUrl);

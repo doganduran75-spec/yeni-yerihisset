@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from "next/server";
+import { cronSecretOk } from "@/lib/cron-auth";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { processMarketplaceStock } from "@/lib/marketplace/sync";
 import { importMarketplaceOrders } from "@/lib/marketplace/orders";
@@ -26,9 +27,8 @@ import { processTelegramOutbox } from "@/lib/telegram";
 // Sistem cron'u DAKİKADA BİR çağırır; yalnız x-cron-secret başlığıyla.
 // Ayrıca senkron geçmişinin 180 günden eskisini siler.
 async function run(req: NextRequest) {
-  const secret = process.env.CRON_SECRET;
   const provided = req.headers.get("x-cron-secret");
-  if (!secret || provided !== secret) {
+  if (!cronSecretOk(provided)) {
     return NextResponse.json({ error: "Yetkisiz" }, { status: 401 });
   }
   const supabase = createAdminClient();

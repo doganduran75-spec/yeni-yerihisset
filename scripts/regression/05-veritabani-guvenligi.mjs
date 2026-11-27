@@ -60,7 +60,7 @@ export default {
       check("Gizli ayarlar (SMTP, anahtarlar) dışarıya kapalı",
         list(`SELECT DISTINCT column_name AS c FROM information_schema.column_privileges
               WHERE table_schema = 'public' AND table_name = 'settings' AND privilege_type = 'SELECT'
-                AND grantee IN ('anon','authenticated','PUBLIC') AND column_name ~* '(password|secret|token|api_key|private)'`),
+                AND grantee IN ('anon','authenticated','PUBLIC') AND column_name ~* '(password|secret|token|api_key|apikey|private|_key$|webhook|credential|smtp_)'`), // 2026-11-27: _key / webhook (basitkargo_webhook_key, hepsiburada_service_key) da
         "okunabilir", (r) => r.c);
 
       check("Dosya deposunda girişsiz yükleme / silme yok",

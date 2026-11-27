@@ -6,6 +6,22 @@
 // Sipariş / giriş / Hesabım doğrulamadan bağımsızdır.
 import { createAdminClient } from "@/lib/supabase-admin";
 import { sendCouponAssignedNotification } from "@/lib/notifications";
+import { mailboxKey } from "@/lib/email-identity";
+
+/** Aynı posta kutusunun (Gmail +ek / nokta / googlemail) BAŞKA hesaplarının id'leri — hoş geldin kuponu bir kez */
+async function sameMailboxUsers(sb: any, userId: string, email: string | null): Promise<string[]> {
+  const key = mailboxKey(email);
+  const at = key.lastIndexOf("@");
+  if (at < 1) return [];
+  const local = key.slice(0, at), domain = key.slice(at + 1);
+  const esc = (s: string) => s.replace(/[\\%_]/g, (m) => `\\${m}`);
+  // Aday: Gmail'de ilk harf + alan adı (noktalar her yerde olabilir), diğerlerinde "ad" ile başlayan (ad+ek@…)
+  const pre = domain === "gmail.com" ? local.slice(0, 1) : local;
+  const domains = domain === "gmail.com" ? ["gmail.com", "googlemail.com"] : [domain];
+  const { data } = await sb.from("profiles").select("id, email")
+    .or(domains.map((d) => `email.ilike.${esc(pre)}*@${esc(d)}`).join(",")).neq("id", userId).limit(2000);
+  return ((data as any[]) || []).filter((p) => mailboxKey(p.email) === key).map((p) => p.id);
+}
 
 export type AccountState = "none" | "guest" | "unverified" | "member";
 
@@ -30,13 +46,19 @@ export async function assignSignupCoupons(userId: string): Promise<{ assigned: n
   const sb = createAdminClient() as any;
   const { state } = await getMemberStatus(userId);
   if (state !== "member") return { assigned: 0, emailed: 0, skipped: "doğrulama bekleniyor" };
-  const { data: prof } = await sb.from("profiles").select("import_source").eq("id", userId).maybeSingle();
+  const { data: prof } = await sb.from("profiles").select("import_source, email").eq("id", userId).maybeSingle();
   if (prof?.import_source) return { assigned: 0, emailed: 0, skipped: "aktarılan müşteri" };
 
   const { data: coupons } = await sb.from("coupons").select("id").eq("auto_assign_on_signup", true).eq("is_active", true);
   if (!coupons?.length) return { assigned: 0, emailed: 0 };
   const { data: existing } = await sb.from("user_coupons").select("coupon_id").eq("user_id", userId);
   const have = new Set(((existing as any[]) || []).map((e) => e.coupon_id));
+  // Aynı posta kutusunun başka hesabı bu kuponu aldıysa yeniden verilmez (ad+1@gmail.com ile çoğaltma)
+  const twins = await sameMailboxUsers(sb, userId, prof?.email ?? null).catch(() => [] as string[]);
+  if (twins.length) {
+    const { data: tw } = await sb.from("user_coupons").select("coupon_id").in("user_id", twins.slice(0, 50));
+    for (const e of (tw as any[]) || []) have.add(e.coupon_id);
+  }
 
   let assigned = 0;
   let emailed = 0;

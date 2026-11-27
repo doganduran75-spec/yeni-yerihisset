@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cronSecretOk } from "@/lib/cron-auth";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { evaluateHealthAlerts } from "@/lib/server-health-alerts";
 import { verifySmtp } from "@/lib/mail-health";
@@ -9,8 +10,7 @@ import { verifySmtp } from "@/lib/mail-health";
 // Uyarı mantığı: src/lib/server-health-alerts.ts (pazaryeri cron'u da 15 dk'da bir çağırır →
 // sağlık betiği durursa bile "Sağlık kontrolü çalışmıyor" e-postası gider).
 async function run(req: NextRequest) {
-  const secret = process.env.CRON_SECRET;
-  if (!secret || req.headers.get("x-cron-secret") !== secret) {
+  if (!cronSecretOk(req.headers.get("x-cron-secret"))) {
     return NextResponse.json({ error: "Yetkisiz" }, { status: 401 });
   }
   const sb = createAdminClient() as any;

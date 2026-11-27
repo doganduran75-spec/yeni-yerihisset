@@ -1078,6 +1078,12 @@ Siparişte “Paraşüt — yeniden dene” ile tekrar dene.`, tone: "danger" })
         if (await siteConfirm({ title: "Fatura kesildi mi?", message: "Faturayı kestiysen işaretle.", confirmText: "Fatura kesildi" })) updateField(o.id, { invoice_status: "invoiced" });
         return;
       case "return_invoice": return updateField(o.id, { invoice_status: "return_invoiced" });
+      case "expense_voucher":
+        if (await siteConfirm({ title: "Gider pusulası kesildi mi?", message: "Paraşüt'te e-Gider Pusulasını kestiysen işaretle (müşteri adı, TCKN 11111111111, iade gelen ürünler). Sipariş “İade belgesi kesildi” olur.", confirmText: "Gider pusulası kesildi" })) {
+          await updateField(o.id, { invoice_status: "return_invoiced" });
+          await (supabase as any).from("order_events").insert({ order_id: o.id, type: "note", note: "e-Gider Pusulası kesildi (Paraşüt'te elle)" });
+        }
+        return;
       case "fit_ok": await caseOp(o, { op: "fit_ok" }); return;
       case "return_expected": setReturnFor(o); return;
       case "return_in_transit":

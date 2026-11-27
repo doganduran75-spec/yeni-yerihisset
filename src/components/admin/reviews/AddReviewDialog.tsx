@@ -6,6 +6,7 @@
 // (yönetici giriyor) — ürün sayfasında hemen görünür; Yorumlar listesinde "Elle eklendi" etiketiyle.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { shrinkImage, fileExt } from "@/lib/image-shrink";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,12 +48,12 @@ export default function AddReviewDialog({ onClose, onSaved }: { onClose: () => v
     setUploading(true);
     try {
       const next = [...images];
-      for (const file of Array.from(files)) {
+      for (const raw of Array.from(files)) {
         if (next.length >= MAX_IMAGES) break;
-        if (!/^image\//.test(file.type)) throw new Error("Yalnız görsel dosyası yüklenebilir.");
-        if (file.size > MAX_SIZE) throw new Error(`${file.name} 5 MB'tan büyük.`);
-        const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
-        const path = `reviews/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+        if (!/^image\//.test(raw.type)) throw new Error("Yalnız görsel dosyası yüklenebilir.");
+        const file = await shrinkImage(raw);
+        if (file.size > MAX_SIZE) throw new Error(`${raw.name} 5 MB'tan büyük.`);
+        const path = `reviews/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${fileExt(file)}`;
         const { error } = await supabase.storage.from("site").upload(path, file, { contentType: file.type, upsert: false });
         if (error) throw error;
         next.push(supabase.storage.from("site").getPublicUrl(path).data.publicUrl);

@@ -48,7 +48,7 @@ export default {
       const hide = ["\"Onay bekleyen e-posta\"", "\"Pazaryeri stok görevi\"", "\"Değişim — senin adımın\""].every((l) => new RegExp(`${l}[^\\n]*hideZero: true`).test(dash))
         && /hideZero: !!t.rare/.test(dash) && /\.filter\(\(x\) => x\.n \|\| !x\.hideZero\)/.test(dash);
       t.add(hide ? "ok" : "fail", "Hata aldı / onay bekleyen e-posta / pazaryeri stok görevi / değişim — senin adımın yalnız iş varken görünüyor");
-      const iade = ['todoRow("return_request")', 'todoRow("return_arrived")', '"Ücret iadesi yapılacak"', '"İade faturası kesilecek"', 'todoRow("undelivered")'].map(at);
+      const iade = ['todoRow("return_request")', 'todoRow("return_arrived")', '"Ücret iadesi yapılacak"', '"İade faturası / gider pusulası"', 'todoRow("undelivered")'].map(at);
       t.add(iade.every((i, k) => i > at('title: "Bugün içinde"') && i < at('title: "Bekleyebilir"') && (k === 0 || i > iade[k - 1]))
         && !/İade \/ talep \/ diğer/.test(dash) && /if \(t\.rare && !n && fTodo !== t\.kind\) return null/.test(list) ? "ok" : "fail",
         "İade adım adım: talep → geldi → ücret iadesi → iade faturası (teslim edilemedi / diğer yalnız varken)");

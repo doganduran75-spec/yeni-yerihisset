@@ -211,7 +211,8 @@ export default function AdminDashboard() {
       todoRow("return_request"),
       todoRow("return_arrived"),
       { n: refundDue, label: "Ücret iadesi yapılacak", href: "/admin/orders?iade=refund_due" },
-      { n: returnInvoiceDue, label: "İade faturası kesilecek", href: "/admin/orders?iade=return_invoice_due" },
+      // bireysel (e-Arşiv) site satışında gider pusulası (src/lib/order-next-step.ts expense_voucher)
+      { n: returnInvoiceDue, label: "İade faturası / gider pusulası", href: "/admin/orders?iade=return_invoice_due" },
       todoRow("undelivered"),
       todoRow("other"),
       { n: manualStockCount, label: "Stok geldi — elden haber verilecek", href: "/admin/crm/stock-notifications?tab=manual" },

@@ -8,6 +8,7 @@ import Image from "@tiptap/extension-image";
 import Link from "@tiptap/extension-link";
 import Placeholder from "@tiptap/extension-placeholder";
 import { supabase } from "@/lib/supabase";
+import { shrinkImage, fileExt } from "@/lib/image-shrink";
 import {
   Bold,
   Italic,
@@ -82,12 +83,12 @@ export default function RichTextEditor({
   }
 
   // Görsel yükleme
-  const handleImageUpload = useCallback(async (file: File) => {
+  const handleImageUpload = useCallback(async (raw: File) => {
     if (!editor) return;
     setUploading(true);
     try {
-      const ext = file.name.split(".").pop();
-      const fileName = `kb/${Date.now()}.${ext}`;
+      const file = await shrinkImage(raw);
+      const fileName = `kb/${Date.now()}.${fileExt(file)}`;
       const { error } = await supabase.storage
         .from("site")
         .upload(fileName, file, { contentType: file.type, upsert: false });

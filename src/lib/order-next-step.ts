@@ -11,6 +11,8 @@
 export type NextActionKey =
   | "mark_paid" | "cancel" | "ship_kargonomi" | "ship_manual" | "mark_delivered"
   | "return" | "refund" | "invoice" | "invoice_parasut" | "return_invoice" | "return_invoice_parasut" | "mp_restock"
+  // e-Arşiv'li (bireysel) site satışının iadesi: iade faturası yerine e-Gider Pusulası (Paraşüt'te elle — API ucu yok)
+  | "expense_voucher"
   // satış sonrası (B aşaması — src/lib/after-sale.ts)
   | "fit_ok" | "case_link" | "ship_alt" | "alt_delivered" | "send_label" | "close_case"
   // "İade gelecek": müşteri iadeyi telefonla bildirdi → yönetici talep açar; kod gerekmiyorsa doğrudan yolda
@@ -49,6 +51,7 @@ export type OrderLike = {
   mp_invoice_error?: string | null;        // fatura pazaryerine yüklenemedi
   mp_invoice_sent_at?: string | null;
   parasut_pdf_path?: string | null;
+  parasut_e_doc_type?: string | null;      // satış belgesi: e_invoice (kurumsal) / e_archive (bireysel)
   cargo_tracking_number?: string | null;
   mp_package_number?: string | null;       // Hepsiburada paket no (paketlenince)
   mp_claim_state?: string | null;          // Trendyol iade talebi: in_transit / arrived / accepted / disputed / done
@@ -104,7 +107,7 @@ export function isRefundDue(s: NextStep) {
 }
 
 export function isReturnInvoiceDue(s: NextStep) {
-  return s.needsAction && s.actions.length > 0 && s.actions.every((a) => a.key === "return_invoice" || a.key === "return_invoice_parasut");
+  return s.needsAction && s.actions.length > 0 && s.actions.every((a) => a.key === "return_invoice" || a.key === "return_invoice_parasut" || a.key === "expense_voucher");
 }
 
 /** "Paket hazır"da fatura kendiliğinden kesilir mi: bu sistemde açılan site siparişi ya da Paraşüt'e geçişten (UNINVOICED_SINCE)
@@ -464,15 +467,21 @@ function coreNextStep(o: OrderLike): NextStep {
     const owes = allReturned ? remaining > 0 : target != null ? refunded + 1 < target : refunded === 0;
     if (paid && remaining > 0 && owes) acts.push({ key: "refund", label: "Ücret iadesi yap", kind: "danger" });
     if (!allReturned) acts.push({ key: "return", label: "İade al", kind: "danger" });
-    if (inv === "invoiced" && (pay === "refunded" || pay === "partial_refund")) acts.push(...returnInvoiceActs);
+    // Kendi sitemizin BİREYSEL (e-Arşiv) satışı → iade faturası değil e-Gider Pusulası (kullanıcı 2026-11-26; TCKN 11111111111).
+    // Paraşüt API'sinde pusula ucu yok → Paraşüt'te elle kesilir, burada "Gider pusulası kesildi". Kurumsal (e-Fatura) → iade faturası.
+    const voucher = o.parasut_e_doc_type === "e_archive";
+    if (inv === "invoiced" && (pay === "refunded" || pay === "partial_refund"))
+      acts.push(...(voucher ? [{ key: "expense_voucher", label: "Gider pusulası kesildi", kind: "primary" } as NextAction] : returnInvoiceActs));
     if (inv === "pending" && !allReturned) acts.push(...invoiceActs);
-    const due = acts.some((a) => a.key === "refund" || a.key === "return_invoice");
+    const due = acts.some((a) => a.key === "refund" || a.key === "return_invoice" || a.key === "expense_voucher");
     const refundDue = acts.some((a) => a.key === "refund");
-    // İadenin son adımı: faturası kesilmiş siparişte para iade edildiyse iade faturası kesilir
-    const onlyInvoice = !refundDue && acts.some((a) => a.key === "return_invoice");
+    // İadenin son adımı: faturası kesilmiş siparişte para iade edildiyse iade faturası (bireyselde gider pusulası) kesilir
+    const onlyInvoice = !refundDue && acts.some((a) => a.key === "return_invoice" || a.key === "expense_voucher");
     return {
-      stage: onlyInvoice ? "İade faturası kesilecek" : allReturned ? "İade geldi" : "Kısmi iade geldi",
-      hint: refundDue ? "İade gelen ürünün ücretini iade et." : onlyInvoice ? "Ücret iade edildi; “İade faturasını kes (Paraşüt)” — ya da Paraşüt'te elle kesip “İade faturası kesildi”." : undefined,
+      stage: onlyInvoice ? (voucher ? "Gider pusulası kesilecek" : "İade faturası kesilecek") : allReturned ? "İade geldi" : "Kısmi iade geldi",
+      hint: refundDue ? "İade gelen ürünün ücretini iade et." : onlyInvoice
+        ? (voucher ? "Ücret iade edildi. Bireysel (e-Arşiv) satış: Paraşüt'te e-Gider Pusulası kes (müşteri adı, TCKN 11111111111, iade gelen ürünler ve iade tutarı), sonra “Gider pusulası kesildi”."
+          : "Ücret iade edildi; “İade faturasını kes (Paraşüt)” — ya da Paraşüt'te elle kesip “İade faturası kesildi”.") : undefined,
       actions: acts, needsAction: due,
     };
   }

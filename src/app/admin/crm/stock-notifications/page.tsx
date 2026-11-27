@@ -90,6 +90,8 @@ export default function StockNotificationsPage() {
   // Akış: Bekleyenler (stok bekleniyor) → stok gelince e-postalıya otomatik e-posta → Bildirildi;
   // otomatik gidemeyen (e-postasız / gönderilemedi) → Manuel bildirim → "Haber Verdim" → Bildirildi.
   const [filter, setFilter] = useState<"pending" | "manual" | "notified">("pending");
+  // Listede arama (kullanıcı 2026-11-12: kayıt olanlar ürün adıyla aranamıyordu) — ürün / model / numara / SKU / kişi
+  const [lSearch, setLSearch] = useState("");
   const [marking, setMarking] = useState<string | null>(null);
 
   // Manuel ekleme
@@ -312,11 +314,20 @@ export default function StockNotificationsPage() {
 
   // Görünen liste — sekmeye göre istemci tarafı filtre.
   // Bekleyenler = stok henüz gelmedi. Manuel bildirim = stok geldi ama otomatik e-posta gitmedi (elden haber ver).
-  const shown = notifications.filter((n) => {
+  const lTokens = normTr(lSearch).split(/\s+/).filter(Boolean);
+  const matches = (n: Notification) => {
+    if (!lTokens.length) return true;
+    const p = units.find((u) => u.productId === n.product_id);
+    const hay = normTr([n.product_title, n.variant_value, n.sku, n.barcode, p?.modelId ? modelLabels[p.modelId] : "", n.contact_name,
+      n.email, n.phone, n.contact_phone, n.instagram, n.contact_instagram].filter(Boolean).join(" "));
+    return lTokens.every((t) => hay.includes(t));
+  };
+  const inTab = (n: Notification) => {
     if (filter === "pending")  return n.status === "pending" && !n.ready;
     if (filter === "manual")   return n.status === "pending" && n.ready;
     return n.status === "notified";
-  });
+  };
+  const shown = notifications.filter((n) => inTab(n) && matches(n));
 
   function contactDisplay(n: Notification) {
     if (n.contact_name) return n.contact_name;
@@ -518,6 +529,10 @@ export default function StockNotificationsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          <div className="relative mb-4 max-w-md" data-notify-search>
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Input value={lSearch} onChange={(e) => setLSearch(e.target.value)} placeholder='Ara: ürün, renk, numara, kişi… (ör. "bot kahve 42")' className="pl-8 h-9" />
+          </div>
           {loadError && (
             <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
               Liste yüklenemedi: {loadError}

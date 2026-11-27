@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cronSecretOk } from "@/lib/cron-auth";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { buildSmtpConfig } from "@/lib/smtp-config";
 import { createMailTransport, isEmailLockedError } from "@/lib/mail-guard";
@@ -21,9 +22,8 @@ const MAX_ATTEMPTS = 3;
 function delay(ms: number) { return new Promise((r) => setTimeout(r, ms)); }
 
 async function run(req: NextRequest) {
-  const secret = process.env.CRON_SECRET;
   const provided = req.headers.get("x-cron-secret") // yalnız başlık: adres satırındaki anahtar erişim loglarına düşer;
-  if (!secret || provided !== secret) return NextResponse.json({ error: "Yetkisiz" }, { status: 401 });
+  if (!cronSecretOk(provided)) return NextResponse.json({ error: "Yetkisiz" }, { status: 401 });
 
   const supabase = createAdminClient();
 

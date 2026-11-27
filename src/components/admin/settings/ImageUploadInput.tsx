@@ -6,6 +6,7 @@
 import { useRef, useState } from "react";
 import { Loader2, Upload } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { shrinkImage, fileExt } from "@/lib/image-shrink";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
@@ -16,14 +17,14 @@ export default function ImageUploadInput({ value, onChange, folder = "home" }: {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  async function upload(file: File) {
+  async function upload(raw: File) {
     setErr(null);
-    if (!/^image\//.test(file.type)) { setErr("Yalnız görsel dosyası yüklenebilir."); return; }
-    if (file.size > MAX) { setErr("Dosya 5 MB'tan büyük."); return; }
+    if (!/^image\//.test(raw.type)) { setErr("Yalnız görsel dosyası yüklenebilir."); return; }
     setBusy(true);
     try {
-      const ext = (file.name.split(".").pop() || "png").toLowerCase().replace(/[^a-z0-9]/g, "") || "png";
-      const path = `${folder}/${Date.now()}.${ext}`;
+      const file = await shrinkImage(raw); // en çok 1600 px WebP — büyük dosya önce küçülür, sınır küçülmüş dosyaya
+      if (file.size > MAX) { setErr("Dosya 5 MB'tan büyük."); return; }
+      const path = `${folder}/${Date.now()}.${fileExt(file, "png")}`;
       const { error } = await supabase.storage.from("site").upload(path, file, { contentType: file.type, upsert: false });
       if (error) throw error;
       onChange(supabase.storage.from("site").getPublicUrl(path).data.publicUrl);

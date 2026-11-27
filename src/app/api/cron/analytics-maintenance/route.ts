@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cronSecretOk } from "@/lib/cron-auth";
 import { createAdminClient } from "@/lib/supabase-admin";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -7,9 +8,8 @@ import { createAdminClient } from "@/lib/supabase-admin";
 // oturum 365g). Günde bir çalıştırılır. CRON_SECRET ile korunur.
 //   x-cron-secret: <CRON_SECRET>  →  GET/POST /api/cron/analytics-maintenance
 async function run(req: NextRequest) {
-  const secret = process.env.CRON_SECRET;
   const provided = req.headers.get("x-cron-secret") // yalnız başlık: adres satırındaki anahtar erişim loglarına düşer;
-  if (!secret || provided !== secret) {
+  if (!cronSecretOk(provided)) {
     return NextResponse.json({ error: "Yetkisiz" }, { status: 401 });
   }
   const supabase = createAdminClient();

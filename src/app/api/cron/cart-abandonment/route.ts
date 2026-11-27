@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cronSecretOk } from "@/lib/cron-auth";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { renderEmailTemplate } from "@/lib/notifications";
 
@@ -26,9 +27,8 @@ const HTML = (storeName: string, storeUrl: string, name: string, items: { name: 
 };
 
 async function run(req: NextRequest) {
-  const secret = process.env.CRON_SECRET;
   const provided = req.headers.get("x-cron-secret") // yalnız başlık: adres satırındaki anahtar erişim loglarına düşer;
-  if (!secret || provided !== secret) return NextResponse.json({ error: "Yetkisiz" }, { status: 401 });
+  if (!cronSecretOk(provided)) return NextResponse.json({ error: "Yetkisiz" }, { status: 401 });
 
   const supabase = createAdminClient();
   const nowMs = Date.now();
