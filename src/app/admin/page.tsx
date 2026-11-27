@@ -184,7 +184,7 @@ export default function AdminDashboard() {
     return { n: kindCount(k) + (k === "invoice" ? uninvoiced.n : 0), label: t.label, href: `/admin/orders?todo=${t.param}`,
       late: k === "invoice" ? uninvoiced.late : 0,
       danger: k === "error", // "Hata aldı" (siparişte entegrasyon hatası — kullanıcı 2026-11-26) kırmızı
-      hideZero: k === "error" }; // hata beklenmez → yoksa satır görünmez
+      hideZero: !!t.rare }; // hata / teslim edilemedi / diğer beklenmez → yoksa satır görünmez
   };
   // Değişim: sıra sende (geri gönderim kodu / ikisi de olmadı / UPS gecikti) ↔ müşteri / kargo bekleniyor ("Süreçte")
   const exchangeMine = openOrders.filter((o) => o.step && isExchangeMyStep(o.step, hasOpenExchange(o))).length;
@@ -207,15 +207,19 @@ export default function AdminDashboard() {
     { title: "Bugün içinde", rows: [
       // + kargolanmış faturası kesilmemiş (7 günü geçen kırmızı — VUK)
       todoRow("invoice"),
+      // İade adım adım (Yolda olan iade Süreçte'de): talep → geldi → ücret iadesi → iade faturası
+      todoRow("return_request"),
+      todoRow("return_arrived"),
       { n: refundDue, label: "Ücret iadesi yapılacak", href: "/admin/orders?iade=refund_due" },
       { n: returnInvoiceDue, label: "İade faturası kesilecek", href: "/admin/orders?iade=return_invoice_due" },
+      todoRow("undelivered"),
       todoRow("other"),
       { n: manualStockCount, label: "Stok geldi — elden haber verilecek", href: "/admin/crm/stock-notifications?tab=manual" },
-      { n: feedbackCount, label: "Talep", href: "/admin/feedback" },
     ] },
     { title: "Bekleyebilir", rows: [
       { n: reviewCount, label: "Onay bekleyen yorum", href: "/admin/reviews" },
-      { n: searchCount, label: "Sonuçsuz arama", href: "/admin/feedback#aramalar" },
+      // Ziyaretçinin istedikleri (aynı sayfa; kullanıcı 2026-11-27: birleşsin) — planlanınca düşer
+      { n: feedbackCount + searchCount, label: "Talep / sonuçsuz arama", href: feedbackCount || !searchCount ? "/admin/feedback" : "/admin/feedback#aramalar" },
       // Ay bitti, ortakların hakedişi işlenmedi (Satış Ortaklığı › Hakediş; en eski dönem açılır)
       { n: payoutDue.n, label: payoutDue.period ? `Hakediş işlenecek (${periodLabel(payoutDue.period)})` : "Hakediş işlenecek",
         href: `/admin/affiliates?view=payout${payoutDue.period ? `&period=${payoutDue.period}` : ""}` },
@@ -225,7 +229,7 @@ export default function AdminDashboard() {
       { n: stockTasks.length, label: "Pazaryeri stok görevi", href: "/admin/stock-sync", hideZero: true },
     ] },
     // Senden iş beklemiyor: müşteri / kargo bekleniyor. Sıra sana gelince iş üstteki satırlara geçer
-    // (Trendyol iadesi depoya ulaşınca "İade / talep / diğer"de "İadeyi onayla"; değişimde "Değişim — senin adımın").
+    // (Trendyol iadesi depoya ulaşınca "İade geldi — onayla / stoğa ekle"; değişimde "Değişim — senin adımın").
     { title: "Süreçte — müşteri / kargo bekleniyor", muted: true, rows: [
       { n: returnsOpen, label: "Yolda olan iade", href: "/admin/orders?iade=return_in_transit" },
       { n: exchangeWaiting, label: "Süren değişim", href: "/admin/orders?iade=exchange_waiting" },

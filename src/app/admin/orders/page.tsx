@@ -1479,6 +1479,7 @@ Siparişte “Paraşüt — yeniden dene” ile tekrar dene.`, tone: "danger" })
               {/* İş türleri (panodaki satırlar): tıklayınca yalnız o iş */}
               {fTodo && TODO_KINDS.map((t) => {
                 const n = orders.filter((o) => inTodoKind(o, t.kind)).length;
+                if (t.rare && !n && fTodo !== t.kind) return null; // hata / teslim edilemedi / diğer yalnız varken
                 return (
                   <button key={t.kind} onClick={() => { setFTodo((v) => (v === t.kind ? "all" : t.kind)); setListPage(0); }}
                     className={`h-9 px-2.5 rounded-lg border text-xs font-bold transition ${fTodo === t.kind ? "bg-olive-600 text-white border-olive-600" : n ? "bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100" : "bg-background text-slate-400"}`}>

@@ -2,7 +2,8 @@
 // görsem… işleri tepeden aşağıya doğru çözerek ilerlemek"): Acil → Bugün içinde → Bekleyebilir → Süreçte (müşteri / kargo
 // bekleniyor, soluk). Site mesajı + pazaryeri sorusu tek satır "Cevaplanacak mesaj / soru". "Hata aldı", "Onay bekleyen
 // e-posta", "Pazaryeri stok görevi", "Değişim — senin adımın" yalnız iş varken. Değişimde sıra yöneticiye gelince
-// (geri gönderim kodu, ikisi de olmadı) iş "Süreçte"den "Acil"e geçer.
+// (geri gönderim kodu, ikisi de olmadı) iş "Süreçte"den "Acil"e geçer. 2026-11-27 (2): "İade / talep / diğer" iade adımlarına
+// bölündü (İade talebi → İade geldi → Ücret iadesi → İade faturası; teslim edilemedi / diğer yalnız varken); Talep + Sonuçsuz arama tek satır.
 import { readFileSync } from "node:fs";
 
 const rd = (p) => readFileSync(new URL(`../../${p}`, import.meta.url), "utf8");
@@ -45,8 +46,14 @@ export default {
         && /threads\.filter\(\(t\) => t\.last_role === "user"\)\.length/.test(msg) ? "ok" : "fail",
         "Site mesajı + pazaryeri sorusu tek satır; Mesajlar'da iki sekmede de cevapsız sayısı");
       const hide = ["\"Onay bekleyen e-posta\"", "\"Pazaryeri stok görevi\"", "\"Değişim — senin adımın\""].every((l) => new RegExp(`${l}[^\\n]*hideZero: true`).test(dash))
-        && /hideZero: k === "error"/.test(dash) && /\.filter\(\(x\) => x\.n \|\| !x\.hideZero\)/.test(dash);
+        && /hideZero: !!t.rare/.test(dash) && /\.filter\(\(x\) => x\.n \|\| !x\.hideZero\)/.test(dash);
       t.add(hide ? "ok" : "fail", "Hata aldı / onay bekleyen e-posta / pazaryeri stok görevi / değişim — senin adımın yalnız iş varken görünüyor");
+      const iade = ['todoRow("return_request")', 'todoRow("return_arrived")', '"Ücret iadesi yapılacak"', '"İade faturası kesilecek"', 'todoRow("undelivered")'].map(at);
+      t.add(iade.every((i, k) => i > at('title: "Bugün içinde"') && i < at('title: "Bekleyebilir"') && (k === 0 || i > iade[k - 1]))
+        && !/İade \/ talep \/ diğer/.test(dash) && /if \(t\.rare && !n && fTodo !== t\.kind\) return null/.test(list) ? "ok" : "fail",
+        "İade adım adım: talep → geldi → ücret iadesi → iade faturası (teslim edilemedi / diğer yalnız varken)");
+      t.add(/n: feedbackCount \+ searchCount, label: "Talep \/ sonuçsuz arama"/.test(dash) && at('"Talep / sonuçsuz arama"') > at('title: "Bekleyebilir"')
+        && !/label: "Sonuçsuz arama"/.test(dash) && !/label: "Talep",/.test(dash) ? "ok" : "fail", "Talep + sonuçsuz arama tek satır (Bekleyebilir)");
       t.add(/fRet === "exchange_action" && !isExchangeMyStep/.test(list) && /fRet === "exchange_waiting"/.test(list)
         && /iade=exchange_action/.test(dash) && /iade=exchange_waiting/.test(dash) ? "ok" : "fail",
         "Değişim satırlarına tıklayınca liste yalnız o değişimleri açıyor");

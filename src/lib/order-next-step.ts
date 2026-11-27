@@ -148,14 +148,21 @@ export function isExchangeShipDue(s: NextStep) {
 // İŞ TÜRÜ (kullanıcı 2026-11-25: "Bekleyen sipariş işi"nde ödeme bekleyen, sevk edilecek ve faturası kesilemeyen siparişler
 // aynı grupta duruyordu). Pano satırları + liste süzgeci (?todo=odeme|sevk|fatura|diger) + listedeki "yapılacak iş" yazısı.
 // Fatura satırı: bu türdeki genel işler + kargolanmış faturası kesilmemiş (isUninvoicedShipped) — eski "Faturası kesilmemiş" satırı.
-export type TodoKind = "error" | "payment" | "ship" | "invoice" | "other";
-export const TODO_KINDS: { kind: TodoKind; label: string; param: string }[] = [
-  { kind: "error", label: "Hata aldı", param: "hata" },
+// 2026-11-27 (kullanıcı: "İade / talep / diğer" diğer satırlarla çakışıyor gibi): iade adım adım ayrı satırlarda —
+// İade talebi (kod gönder) → [Yolda olan iade — Süreçte] → İade geldi (Trendyol depoya ulaştı / pazaryeri iadesi stoğa)
+// → Ücret iadesi → İade faturası. rare: yalnız iş varken görünür (panoda + listedeki düğmelerde).
+export type TodoKind = "error" | "payment" | "ship" | "invoice" | "return_request" | "return_arrived" | "undelivered" | "other";
+export const TODO_KINDS: { kind: TodoKind; label: string; param: string; rare?: boolean }[] = [
+  { kind: "error", label: "Hata aldı", param: "hata", rare: true },
   { kind: "payment", label: "Ödeme beklenen", param: "odeme" },
   { kind: "ship", label: "Sevk edilecek", param: "sevk" },
   { kind: "invoice", label: "Fatura kesilecek", param: "fatura" },
-  { kind: "other", label: "İade / talep / diğer", param: "diger" },
+  { kind: "return_request", label: "İade talebi — kod gönderilecek", param: "iade-talebi" },
+  { kind: "return_arrived", label: "İade geldi — onayla / stoğa ekle", param: "iade-geldi" },
+  { kind: "undelivered", label: "Kargo teslim edilemedi", param: "teslim-edilemedi", rare: true },
+  { kind: "other", label: "Diğer", param: "diger", rare: true },
 ];
+const RETURN_ARRIVED_KEYS: string[] = ["mp_claim", "mp_restock", "mp_return"];
 const PAY_KEYS: string[] = ["mark_paid", "cancel_transfer_refunded", "cancel_transfer_none"];
 const PREP_KEYS: string[] = ["packed", "ship_kargonomi", "ship_manual", "hb_package", "mp_picking"];
 export function todoKind(s: NextStep): TodoKind {
@@ -165,6 +172,9 @@ export function todoKind(s: NextStep): TodoKind {
   // Paket hazır, fatura kesilemedi ("Kurye aldı" yanında olsa da önce fatura) → fatura; paketleme / kargo işi varsa sevk
   if (k.some((x) => INVOICE_KEYS.includes(x)) && !k.some((x) => PREP_KEYS.includes(x))) return "invoice";
   if (k.some((x) => PREP_KEYS.includes(x) || x === "picked_up" || x === "ship_alt")) return "ship";
+  if (k.some((x) => RETURN_ARRIVED_KEYS.includes(x))) return "return_arrived";
+  if (k.includes("send_label")) return "return_request";
+  if (k.includes("mark_delivered")) return "undelivered";
   return "other";
 }
 

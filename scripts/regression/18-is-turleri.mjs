@@ -23,7 +23,11 @@ export default {
         ["Paket hazır, Paraşüt hatası → Hata aldı", { ...site, packed_at: now, parasut_status: "error", parasut_error: "x" }, "error"],
         ["Pazaryeri paket hazır, fatura kesilmedi → Fatura kesilecek", { ...site, channel: "trendyol", packed_at: now }, "invoice"],
         ["Teslim edildi, oldu, fatura kesilmedi → Fatura kesilecek", { ...site, shipment_status: "delivered", fit_status: "ok", delivered_at: now }, "invoice"],
-        ["Trendyol iadesi depoya ulaştı → İade / talep / diğer", { ...site, channel: "trendyol", shipment_status: "delivered", invoice_status: "invoiced", mp_claim_state: "arrived" }, "other"],
+        // 2026-11-27: "İade / talep / diğer" iade adımlarına bölündü (24-pano-oncelik.mjs)
+        ["Trendyol iadesi depoya ulaştı → İade geldi — onayla", { ...site, channel: "trendyol", shipment_status: "delivered", invoice_status: "invoiced", mp_claim_state: "arrived" }, "return_arrived"],
+        ["Hepsiburada iadesi geldi → İade geldi — stoğa ekle", { ...site, channel: "hepsiburada", shipment_status: "returned", invoice_status: "invoiced" }, "return_arrived"],
+        ["Site iade talebi → İade talebi — kod gönderilecek", { ...site, shipment_status: "delivered", invoice_status: "invoiced", delivered_at: now, open_case: { kind: "return", status: "requested" } }, "return_request"],
+        ["Kargo teslim edilemedi → kendi satırı", { ...site, shipment_status: "undelivered", invoice_status: "invoiced" }, "undelivered"],
       ];
       const bad = [];
       for (const [label, o, want] of cases) {
@@ -31,9 +35,9 @@ export default {
         const got = st.needsAction ? g.todoKind(st) : "işi yok";
         if (got !== want) bad.push(`${label}: ${got} (${st.stage})`);
       }
-      t.add(!bad.length ? "ok" : "fail", "Her iş doğru satıra düşüyor (ödeme / sevk / fatura / iade-talep-diğer)", bad.join(" · "));
+      t.add(!bad.length ? "ok" : "fail", "Her iş doğru satıra düşüyor (ödeme / sevk / fatura / iade talebi / iade geldi / teslim edilemedi)", bad.join(" · "));
       const labels = (g.TODO_KINDS || []).map((x) => `${x.label}=${x.param}`).join(",");
-      t.add(labels === "Hata aldı=hata,Ödeme beklenen=odeme,Sevk edilecek=sevk,Fatura kesilecek=fatura,İade / talep / diğer=diger" ? "ok" : "fail", "Pano satırları ve liste adresleri", labels);
+      t.add(labels === "Hata aldı=hata,Ödeme beklenen=odeme,Sevk edilecek=sevk,Fatura kesilecek=fatura,İade talebi — kod gönderilecek=iade-talebi,İade geldi — onayla / stoğa ekle=iade-geldi,Kargo teslim edilemedi=teslim-edilemedi,Diğer=diger" ? "ok" : "fail", "Pano satırları ve liste adresleri", labels);
       // Paraşüt kesintisi: "retry" → yöneticiden iş yok, düğme "Şimdi yeniden dene"
       const r = g.orderNextStep({ ...site, packed_at: now, parasut_status: "retry", parasut_error: "Paraşüt şu an bakımda" });
       const okR = !r.needsAction && /ulaşılamıyor/.test(r.stage) && r.actions.some((a) => a.key === "invoice_parasut" && a.label === "Şimdi yeniden dene");
