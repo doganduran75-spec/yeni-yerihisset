@@ -50,3 +50,5 @@ zap-rapor.json
 /.temizlik-kalsin.txt
 /.temizlik-sil.txt
 /.regression-report/
+/.next-build/
+/.next-old/

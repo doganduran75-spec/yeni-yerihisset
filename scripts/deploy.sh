@@ -1,17 +1,19 @@
 #!/usr/bin/env bash
 # YeriHisset üretim dağıtımı (staging/prod sunucuda çalıştırılır).
 #
-# Neden bu sıralama:
-#  - pm2 önce DURDURULUR: build sırasında çalışan süreç yarı-yazılmış .next'i
-#    okuyup 502 vermesin diye. (Site build boyunca kısa süre kapalı.)
-#  - .next TAMAMEN silinmez: sadece derleme ÇIKTISI temizlenir, `.next/cache`
-#    korunur. Bu cache Next'in resmi artımlı derleme önbelleğidir; silmek
-#    çıktı doğruluğunu artırmaz, yalnızca her build'i sıfırdan yaptırır.
-#    Korumak ardışık build'leri belirgin hızlandırır, riski yoktur.
-#  - build BİTTİKTEN sonra pm2 yeniden başlatılır (taze .next ile).
-#  - Dağıtım süresince /run/yerihisset-deploying işareti durur: sağlık kontrolü
-#    (scripts/server-health.sh) bu sırada duran süreçleri "sorun" saymaz, e-posta atmaz.
-#    Dağıtım yarıda kalırsa işaret silinir → sonraki kontrol gerçek sorunu bildirir.
+# KESİNTİSİZ (2026-11-27 — kullanıcı: "deploy sırasında sunucu yorulmasın"; canlıda müşteri build boyunca bakım
+# sayfası görüyordu):
+#  - Yeni sürüm site AÇIKKEN ayrı klasörde hazırlanır (NEXT_DIST_DIR=.next-build — next.config.ts distDir), düşük
+#    öncelikle (nice / ionice): sitenin istekleri hep önde.
+#  - Build hata verirse yeni sürüm yayına alınmaz, site eski sürümle çalışmaya devam eder.
+#  - Build bitince klasörler yer değiştirir (.next → .next-old, .next-build → .next) ve pm2 süreçleri sırayla yenilenir
+#    (cluster reload) — geçiş birkaç saniye. Önceki sürüm .next-old'da bir sonraki deploy'a kadar durur.
+#  - Önbellek (.next/cache) yeni klasöre sabit bağlantıyla (cp -al) kopyalanır: ardışık build'ler hızlı kalır, çalışan
+#    site kendi önbelleğine yazmaya devam eder.
+#  - Yalnız bağımlılıklar değiştiyse (package-lock) site npm ci süresince durdurulur (node_modules çalışan sürecin altında
+#    değişmesin) — o deploy'da kısa kesinti olur.
+#  - Dağıtım süresince /run/yerihisset-deploying işareti durur: sağlık kontrolü (scripts/server-health.sh) bu sırada
+#    "sorun" saymaz, e-posta atmaz. Dağıtım yarıda kalırsa işaret silinir → sonraki kontrol gerçek sorunu bildirir.
 #
 # Kullanım:  bash scripts/deploy.sh
 set -euo pipefail
@@ -22,7 +24,11 @@ cd "$(dirname "$0")/.."
 DEPLOY_FLAG=/run/yerihisset-deploying
 date +%s > "$DEPLOY_FLAG"
 trap 'rm -f "$DEPLOY_FLAG"' EXIT
-trap 'echo; echo "✗ DAĞITIM YARIDA KALDI — site süreçleri durmuş olabilir (site kapalı)."; echo "  Hatayı düzeltip tekrar: bash scripts/deploy.sh   ·   durum: pm2 status"' ERR
+trap 'echo; echo "✗ DAĞITIM YARIDA KALDI — durum: pm2 status (site eski sürümle çalışıyor olabilir)."; echo "  Hatayı düzeltip tekrar: bash scripts/deploy.sh"' ERR
+
+# Düşük öncelik: build / regresyon / görsel ısıtma sitenin isteklerinin önüne geçmesin
+LOW="nice -n 10"
+if command -v ionice >/dev/null 2>&1; then LOW="$LOW ionice -c2 -n7"; fi
 
 echo "▸ git pull"
 git pull
@@ -32,36 +38,50 @@ LOCK_NOW="$(sha1sum package-lock.json 2>/dev/null | cut -d' ' -f1)"
 LOCK_STAMP_FILE=node_modules/.yh-lock-sha1
 LOCK_STAMP="$(cat "$LOCK_STAMP_FILE" 2>/dev/null || true)"
 
-echo "▸ pm2 stop (build sırasında 502 olmasın)"
-pm2 stop yerihisset || true
-
-# Bağımlılıklar son kurulumdan beri değiştiyse (package-lock.json) temiz kurulum — ör. Next sürüm yükseltmesi, yeni paket
+# Bağımlılıklar son kurulumdan beri değiştiyse (package-lock.json) temiz kurulum — ör. Next sürüm yükseltmesi, yeni paket.
+# node_modules çalışan sürecin altında değişmesin diye yalnız bu durumda site durdurulur.
 if [ "$LOCK_NOW" != "$LOCK_STAMP" ] || [ "${FORCE_NPM_CI:-0}" = "1" ]; then
-  echo "▸ bağımlılıklar değişmiş → npm ci"
+  echo "▸ bağımlılıklar değişmiş → site durduruluyor, npm ci (bu deploy'da kısa kesinti)"
+  pm2 stop yerihisset || true
   npm ci --no-audit --no-fund
   echo "$LOCK_NOW" > "$LOCK_STAMP_FILE"
 fi
 echo "  next $(node -p "require('next/package.json').version" 2>/dev/null || echo '?')"
 
-echo "▸ .next çıktısı temizleniyor (cache korunuyor)"
-if [ -d .next ]; then
-  find .next -mindepth 1 -maxdepth 1 ! -name cache -exec rm -rf {} +
-fi
-
 # Sürüm kimliği (kullanıcı 2026-11-18: deploy'dan önce açık kalan sekme "Failed to load chunk" ile çöktü): her build'e
 # commit kimliği verilir; tarayıcıdaki sayfa eski sürümdeyse Next gezinmede tam sayfa yenilemeye döner (yeni dosyalar gelir).
-# Kimlik .deployment-id dosyasına da yazılır: pm2 süreçleri ortam değişkenini görmüyor, next.config.ts dosyadan okur.
+# Kimlik .deployment-id dosyasına da yazılır (geçiş anında): pm2 süreçleri ortam değişkenini görmüyor, next.config.ts
+# dosyadan okur. Build'e ortam değişkeniyle verilir — dosya build sürerken eski sürümün kimliğinde kalır.
 export NEXT_DEPLOYMENT_ID="$(git rev-parse --short HEAD 2>/dev/null || date +%s)"
-echo "$NEXT_DEPLOYMENT_ID" > .deployment-id
-echo "▸ npm run build (sürüm $NEXT_DEPLOYMENT_ID)"
-npm run build
+BUILD_DIR=.next-build
+rm -rf "$BUILD_DIR"
+if [ -d .next/cache ]; then
+  mkdir -p "$BUILD_DIR"
+  cp -al .next/cache "$BUILD_DIR/cache" 2>/dev/null || cp -a .next/cache "$BUILD_DIR/cache"
+fi
+echo "▸ npm run build (sürüm $NEXT_DEPLOYMENT_ID — site açık, ayrı klasörde, düşük öncelik)"
+if ! NEXT_DIST_DIR="$BUILD_DIR" $LOW npm run build; then
+  rm -rf "$BUILD_DIR"
+  trap - ERR
+  echo
+  echo "✗ BUILD HATASI — yeni sürüm yayına ALINMADI; site eski sürümle çalışmaya devam ediyor (pm2 status)."
+  echo "  Hatayı Claude'a ilet; düzelince tekrar: bash scripts/deploy.sh"
+  exit 1
+fi
+[ -f "$BUILD_DIR/BUILD_ID" ] || { echo "✗ Build çıktısı eksik ($BUILD_DIR/BUILD_ID yok) — yeni sürüm yayına alınmadı."; rm -rf "$BUILD_DIR"; exit 1; }
 
-echo "▸ pm2 başlat/yükle (cluster — ecosystem.config.js)"
+echo "▸ yeni sürüme geçiş (klasör değişimi + pm2 sırayla yenileme)"
+echo "$NEXT_DEPLOYMENT_ID" > .deployment-id
+rm -rf .next-old
+if [ -d .next ]; then mv .next .next-old; fi
+mv "$BUILD_DIR" .next
 # İlk geçişte tek-instance süreçten cluster'a geçmek için bir kez:
 #   pm2 delete yerihisset && pm2 start ecosystem.config.js && pm2 save
-# Sonrasında startOrReload cluster'ı 0-kesinti güncelleyerek yeniden başlatır.
+# startOrReload cluster'ı sırayla yenileyerek (0-kesinti) yeniden başlatır; npm ci için durdurulduysa başlatır.
 pm2 startOrReload ecosystem.config.js --update-env
 pm2 save
+# Önceki sürüm (.next-old) elle geri dönüş için bir sonraki deploy'a kadar durur; önbelleği yer kaplamasın
+rm -rf .next-old/cache
 
 # ISR ISITMA: ana sayfaları bir kez çağırarak önbelleği önceden üret; böylece
 # deploy sonrası İLK ziyaretçi soğuk render'ı beklemez ("aniden yükleme" biter).
@@ -86,9 +106,9 @@ bash scripts/server-health.sh --quiet >/dev/null 2>&1 || true
 if [ "${SKIP_REGRESSION:-0}" != "1" ]; then
   echo
   # Regresyon TS dosyalarını (order-next-step, kargonomi) doğrudan yükler; Node'un "Module type not specified" uyarısı gürültü
-  node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/regression.mjs || true
+  $LOW node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/regression.mjs || true
 fi
 
 # GÖRSEL ISITMA (kullanıcı 2026-11-23): ana sayfa / ürün görsellerinin telefona uygun küçük hâli önceden üretilir; ilk
 # ziyaretçi (hikâye!) üretimi beklemez. Arka planda çalışır, sonucu /tmp/yh-warm-images.log içinde.
-nohup node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/warm-images.mjs > /tmp/yh-warm-images.log 2>&1 &
+nohup $LOW node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/warm-images.mjs > /tmp/yh-warm-images.log 2>&1 &

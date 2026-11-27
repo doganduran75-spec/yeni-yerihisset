@@ -71,5 +71,18 @@ export default {
       t.add(!miss.length && /SHRINK_MAX_PX = 1600/.test(lib) && /"image\/webp"/.test(lib) && /blob\.size >= file\.size\) return file/.test(lib) ? "ok" : "fail",
         "Panelden yüklenen görsel en çok 1600 px WebP'ye küçülüyor (ürün, site, Bilgi Bankası, yorum)", miss.join(", "));
     });
+
+    // KESİNTİSİZ DEPLOY (kullanıcı 2026-11-27: "deploy sırasında sunucu yorulmasın"): yeni sürüm site açıkken ayrı klasörde
+    // (.next-build), düşük öncelikle; build hata verirse eski sürüm çalışmaya devam eder; site yalnız npm ci gerekirse durur.
+    await t.part("Deploy", async () => {
+      const ds = rd("scripts/deploy.sh"), nc = rd("next.config.ts"), ts = rd("tsconfig.json"), gi = rd(".gitignore");
+      const stops = ds.split(/\r?\n/).filter((l) => /^\s*pm2 stop yerihisset/.test(l)).length;
+      const ok = /distDir: process\.env\.NEXT_DIST_DIR \|\| "\.next"/.test(nc)
+        && /if ! NEXT_DIST_DIR="\$BUILD_DIR" \$LOW npm run build; then/.test(ds) && /mv "\$BUILD_DIR" \.next/.test(ds)
+        && /cp -al \.next\/cache/.test(ds) && /LOW="nice -n 10"/.test(ds) && /\$LOW node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts\/regression\.mjs/.test(ds)
+        && stops === 1 && ds.indexOf("pm2 stop yerihisset") < ds.indexOf("npm ci --no-audit") && ds.indexOf("pm2 stop yerihisset") > ds.indexOf('if [ "$LOCK_NOW" != "$LOCK_STAMP" ]')
+        && /"\.next-build\/types\/\*\*\/\*\.ts"/.test(ts) && /\/\.next-build\//.test(gi) && /\/\.next-old\//.test(gi);
+      t.add(ok ? "ok" : "fail", "Deploy kesintisiz: yeni sürüm site açıkken ayrı klasörde, düşük öncelikle; hata olursa eski sürüm çalışır (site yalnız npm ci'de durur)");
+    });
   },
 };

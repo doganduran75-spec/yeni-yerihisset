@@ -45,6 +45,9 @@ const CSP = [
 
 const nextConfig: NextConfig = {
   deploymentId: DEPLOYMENT_ID,
+  // KESİNTİSİZ DEPLOY (2026-11-27): scripts/deploy.sh yeni sürümü site AÇIKKEN ayrı klasörde (NEXT_DIST_DIR=.next-build)
+  // hazırlar, bitince .next ile yer değiştirir. Çalışan süreçlerde değişken yok → her zaman .next.
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   // ─── Sunucu-harici paketler ──────────────────────────────────────────────
   // iyzipay dinamik require() kullanıyor; Turbopack derleyemiyor.
   // Bunu bundle'a dahil etmeyip çalışma anında Node ile yükletiyoruz.
