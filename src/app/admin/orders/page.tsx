@@ -3,7 +3,7 @@
 import { orderLabel } from "@/lib/order-label";
 import { microExportOf, deliveryTermFor } from "@/lib/micro-export";
 import { useEffect, useState, useCallback } from "react";
-import { orderNextStep, isReturnInvoiceDue, isRefundDue, isGeneralOrderTodo, isUninvoicedShipped, paidReturnedUnits, type NextActionKey, UNINVOICED_SINCE, INVOICE_DAYS, caseReasonLabel, todoKind, TODO_KINDS, type TodoKind } from "@/lib/order-next-step";
+import { orderNextStep, isReturnInvoiceDue, isRefundDue, isGeneralOrderTodo, isExchangeMyStep, isUninvoicedShipped, paidReturnedUnits, type NextActionKey, UNINVOICED_SINCE, INVOICE_DAYS, caseReasonLabel, todoKind, TODO_KINDS, type TodoKind } from "@/lib/order-next-step";
 import { returnRefundSuggestion, exchangeReturnDefaults, refundSplit } from "@/lib/exchange-return";
 import { commissionPeriod, periodLabel } from "@/lib/affiliate-commission";
 import { useSearchParams, useRouter } from "next/navigation";
@@ -1356,7 +1356,10 @@ Siparişte “Paraşüt — yeniden dene” ile tekrar dene.`, tone: "danger" })
         if (fRet === "uninvoiced_shipped" && !isUninvoicedShipped(o)) return false;
         if (fRet === "return_invoice_due" && !isReturnInvoiceDue(nx(o))) return false;
         if (fRet === "refund_due" && !isRefundDue(nx(o))) return false; // panodaki "Ücret iadesi yapılacak"
-        if (fRet === "exchange_open" && openCaseOf(o)?.kind !== "exchange") return false; // panodaki "Süren değişim"
+        if (fRet === "exchange_open" && openCaseOf(o)?.kind !== "exchange") return false;
+        // Panoda (kullanıcı 2026-11-27): "Değişim — senin adımın" / "Süren değişim" (Süreçte — müşteri / kargo bekleniyor)
+        if (fRet === "exchange_action" && !isExchangeMyStep(nx(o), openCaseOf(o)?.kind === "exchange")) return false;
+        if (fRet === "exchange_waiting" && !(openCaseOf(o)?.kind === "exchange" && !nx(o).needsAction)) return false;
       }
       if (fMethod !== "all" && (o.payment_method || "credit_card") !== fMethod) return false;
       if (fTodo === "all" && !nx(o).needsAction) return false;
@@ -1517,7 +1520,8 @@ Siparişte “Paraşüt — yeniden dene” ile tekrar dene.`, tone: "danger" })
                 <option value="any_refund">Ücret iadesi olanlar</option>
                 <option value="refund_due">Ücret iadesi yapılacak</option>
                 <option value="return_invoice_due">İade faturası kesilecek</option>
-                <option value="exchange_open">Süren değişim</option>
+                <option value="exchange_action">Değişim — senin adımın</option>
+                <option value="exchange_waiting">Süren değişim (müşteri / kargo bekleniyor)</option>
                 <option value="uninvoiced_shipped">Kargolanmış, faturası kesilmemiş</option>
               </select>
               <label className="inline-flex items-center gap-1.5 text-xs text-muted-foreground px-1" title="Kartla ödeme başlatılıp tamamlanmayan (iptal + ödeme alınmadı) siparişler">

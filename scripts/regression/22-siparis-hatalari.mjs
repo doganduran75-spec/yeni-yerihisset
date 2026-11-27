@@ -40,7 +40,7 @@ export default {
       const list = rd("src/app/admin/orders/page.tsx"), dash = rd("src/app/admin/page.tsx");
       t.add(/data-todo-error/.test(list) && /data-order-errors/.test(list) && /case "mp_invoice_push": return pushTrendyolInvoice\(o\)/.test(list) ? "ok" : "fail",
         "Listede kırmızı “⚠ Hata”, siparişte “Hata aldı” kutusu, “yeniden yükle” düğmesi");
-      t.add(/danger: t\.kind === "error"/.test(dash) && /x\.danger \? "bg-red-600 text-white"/.test(dash) ? "ok" : "fail", "Panoda “Hata aldı” satırı kırmızı");
+      t.add(/danger: k === "error"/.test(dash) && /x\.danger \? "bg-red-600 text-white"/.test(dash) ? "ok" : "fail", "Panoda “Hata aldı” satırı kırmızı");
     });
   },
 };

@@ -135,6 +135,11 @@ export function isGeneralOrderTodo(s: NextStep, hasOpenExchange: boolean, uninvo
   if (s.errors?.length) return true; // hata alan sipariş her durumda "Hata aldı"da
   return s.needsAction && !isRefundDue(s) && !isReturnInvoiceDue(s) && (!hasOpenExchange || isExchangeShipDue(s)) && !(uninvoicedShipped && isInvoiceOnlyStep(s));
 }
+/** Değişimde SIRA YÖNETİCİDE (kullanıcı 2026-11-27: "süren değişimde ben bir şey yapmıyorum" — müşteri / kargo beklenirken
+ *  "Süreçte"; senin adımın gelince üstte "Değişim — senin adımın"). Gönderilecek ürün "Sevk edilecek"te, hata "Hata aldı"da. */
+export function isExchangeMyStep(s: NextStep, hasOpenExchange: boolean) {
+  return hasOpenExchange && s.needsAction && !s.errors?.length && !isExchangeShipDue(s);
+}
 /** Değişimde gönderilecek ürün var (talep geldi / stok girince ayrıldı) → sipariş gibi "Sevk edilecek" işi (kullanıcı 2026-11-26) */
 export function isExchangeShipDue(s: NextStep) {
   return s.needsAction && s.actions.some((a) => a.key === "ship_alt");

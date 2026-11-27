@@ -42,7 +42,7 @@ export default {
     await t.part("Pano, liste ve Paraşüt kodu", async () => {
       const dash = rd("src/app/admin/page.tsx");
       const list = rd("src/app/admin/orders/page.tsx");
-      const okD = /\.\.\.todoRows,/.test(dash) && /t\.kind === "invoice" \? uninvoiced\.n : 0/.test(dash) && !/label: "Faturası kesilmemiş"/.test(dash) && !/label: "Bekleyen sipariş işi"/.test(dash);
+      const okD = /todoRow\("invoice"\)/.test(dash) && /k === "invoice" \? uninvoiced\.n : 0/.test(dash) && !/label: "Faturası kesilmemiş"/.test(dash) && !/label: "Bekleyen sipariş işi"/.test(dash);
       t.add(okD ? "ok" : "fail", "Panoda iş türü satırları; fatura satırı kargolanmış faturası kesilmemişleri de sayıyor", okD ? "" : "pano satırları eksik");
       const okL = /data-todo-stage/.test(list) && /fTodo && TODO_KINDS\.map/.test(list) && /retry: \["Paraşüt bakımda/.test(list) && /\["error", "done", "retry"\]/.test(list);
       t.add(okL ? "ok" : "fail", "Listede satırda yapılacak iş, iş türü düğmeleri, Paraşüt bakım rozeti", okL ? "" : "liste eksik");

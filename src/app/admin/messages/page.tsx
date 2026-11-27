@@ -197,7 +197,7 @@ function MessagesInner() {
 
   const tabs = (
     <div className="flex gap-2">
-      {([["site", "Sipariş mesajları", 0], ["trendyol", "Trendyol soruları", tyWaiting]] as const).map(([k, l, n]) => (
+      {([["site", "Sipariş mesajları", threads.filter((t) => t.last_role === "user").length], ["trendyol", "Trendyol soruları", tyWaiting]] as const).map(([k, l, n]) => (
         <button key={k} onClick={() => { setTab(k); router.replace(k === "trendyol" ? "/admin/messages?kanal=trendyol" : "/admin/messages", { scroll: false }); }}
           className={cn("h-9 px-4 rounded-xl text-sm font-bold border flex items-center gap-2", tab === k ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-600")}>
           {l}{n > 0 && <span className="bg-amber-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full">{n}</span>}

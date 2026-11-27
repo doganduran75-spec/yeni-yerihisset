@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { orderNextStep, isReturnInvoiceDue, isRefundDue, isGeneralOrderTodo, isUninvoicedShipped, todoKind, TODO_KINDS, type TodoKind, type NextStep } from "@/lib/order-next-step";
+import { orderNextStep, isReturnInvoiceDue, isRefundDue, isGeneralOrderTodo, isExchangeMyStep, isUninvoicedShipped, todoKind, TODO_KINDS, type TodoKind, type NextStep } from "@/lib/order-next-step";
 import { Card } from "@/components/ui/card";
 import { supabase } from "@/lib/supabase";
 import DashboardSummary from "@/components/admin/DashboardSummary";
@@ -179,11 +179,58 @@ export default function AdminDashboard() {
   // Kalan genel işler İŞ TÜRÜNE göre (kullanıcı 2026-11-25) — listede ?todo=odeme|sevk|fatura|diger aynı kuralla süzer
   // (tıklayınca yalnız bunlar açılır; bir sipariş iki satırda sayılmaz). Fatura satırına kargolanmış faturası kesilmemişler eklenir.
   const kindCount = (k: TodoKind) => openOrders.filter((o) => o.step && isGeneralOrderTodo(o.step, hasOpenExchange(o), isUninvoicedShipped(o)) && todoKind(o.step) === k).length;
-  const todoRows = TODO_KINDS.map((t) => ({
-    n: kindCount(t.kind) + (t.kind === "invoice" ? uninvoiced.n : 0), label: t.label, href: `/admin/orders?todo=${t.param}`,
-    late: t.kind === "invoice" ? uninvoiced.late : 0,
-    danger: t.kind === "error", // "Hata aldı" (siparişte entegrasyon hatası — kullanıcı 2026-11-26) kırmızı
-  }));
+  const todoRow = (k: TodoKind) => {
+    const t = TODO_KINDS.find((x) => x.kind === k)!;
+    return { n: kindCount(k) + (k === "invoice" ? uninvoiced.n : 0), label: t.label, href: `/admin/orders?todo=${t.param}`,
+      late: k === "invoice" ? uninvoiced.late : 0,
+      danger: k === "error", // "Hata aldı" (siparişte entegrasyon hatası — kullanıcı 2026-11-26) kırmızı
+      hideZero: k === "error" }; // hata beklenmez → yoksa satır görünmez
+  };
+  // Değişim: sıra sende (geri gönderim kodu / ikisi de olmadı / UPS gecikti) ↔ müşteri / kargo bekleniyor ("Süreçte")
+  const exchangeMine = openOrders.filter((o) => o.step && isExchangeMyStep(o.step, hasOpenExchange(o))).length;
+  const exchangeWaiting = Math.max(0, exchangeOpen - openOrders.filter((o) => hasOpenExchange(o)).length);
+  // Cevaplanacak mesaj / soru (kullanıcı 2026-11-27: site mesajı + pazaryeri sorusu tek satır) — cevapsız olan sekme açılır
+  const replyHref = !msgCount && qnaCount ? "/admin/messages?kanal=trendyol" : "/admin/messages";
+
+  // BUGÜNÜN İŞLERİ — önem sırasıyla gruplu (kullanıcı 2026-11-27: "işleri tepeden aşağıya doğru çözerek ilerlemek"):
+  // Acil → Bugün içinde → Bekleyebilir → Süreçte (senden iş beklemiyor, soluk). hideZero: istisna satırları yalnız iş varken.
+  type Row = { n: number; label: string; href: string; late?: number; danger?: boolean; hideZero?: boolean };
+  const groups: { title: string; muted?: boolean; rows: Row[] }[] = [
+    { title: "Acil", rows: [
+      todoRow("error"),
+      { n: msgCount + qnaCount, label: "Cevaplanacak mesaj / soru", href: replyHref },
+      { n: mailApprovalCount, label: "Onay bekleyen e-posta", href: "/admin/email-onay", hideZero: true },
+      todoRow("payment"),
+      todoRow("ship"),
+      { n: exchangeMine, label: "Değişim — senin adımın", href: "/admin/orders?iade=exchange_action", hideZero: true },
+    ] },
+    { title: "Bugün içinde", rows: [
+      // + kargolanmış faturası kesilmemiş (7 günü geçen kırmızı — VUK)
+      todoRow("invoice"),
+      { n: refundDue, label: "Ücret iadesi yapılacak", href: "/admin/orders?iade=refund_due" },
+      { n: returnInvoiceDue, label: "İade faturası kesilecek", href: "/admin/orders?iade=return_invoice_due" },
+      todoRow("other"),
+      { n: manualStockCount, label: "Stok geldi — elden haber verilecek", href: "/admin/crm/stock-notifications?tab=manual" },
+      { n: feedbackCount, label: "Talep", href: "/admin/feedback" },
+    ] },
+    { title: "Bekleyebilir", rows: [
+      { n: reviewCount, label: "Onay bekleyen yorum", href: "/admin/reviews" },
+      { n: searchCount, label: "Sonuçsuz arama", href: "/admin/feedback#aramalar" },
+      // Ay bitti, ortakların hakedişi işlenmedi (Satış Ortaklığı › Hakediş; en eski dönem açılır)
+      { n: payoutDue.n, label: payoutDue.period ? `Hakediş işlenecek (${periodLabel(payoutDue.period)})` : "Hakediş işlenecek",
+        href: `/admin/affiliates?view=payout${payoutDue.period ? `&period=${payoutDue.period}` : ""}` },
+      // Paraşüt'e gelen e-fatura: panelde kabul edilip kurala göre kaydedilir (kullanıcı 2026-11-22)
+      { n: inboundCount, label: "Paraşüt gelen e-fatura", href: "/admin/parasut/gelen" },
+      // Trendyol + Hepsiburada stoğu kendiliğinden güncelleniyor; görev yalnız elle takip edilen kanalda düşer
+      { n: stockTasks.length, label: "Pazaryeri stok görevi", href: "/admin/stock-sync", hideZero: true },
+    ] },
+    // Senden iş beklemiyor: müşteri / kargo bekleniyor. Sıra sana gelince iş üstteki satırlara geçer
+    // (Trendyol iadesi depoya ulaşınca "İade / talep / diğer"de "İadeyi onayla"; değişimde "Değişim — senin adımın").
+    { title: "Süreçte — müşteri / kargo bekleniyor", muted: true, rows: [
+      { n: returnsOpen, label: "Yolda olan iade", href: "/admin/orders?iade=return_in_transit" },
+      { n: exchangeWaiting, label: "Süren değişim", href: "/admin/orders?iade=exchange_waiting" },
+    ] },
+  ];
 
   return (
     <div className="space-y-3">
@@ -194,35 +241,17 @@ export default function AdminDashboard() {
       <DashboardSummary>
         <Card className="shadow-sm border-l-4 border-l-amber-500 gap-1 py-3">
           <div className="px-4 pb-1 font-semibold text-sm flex items-center gap-2"><Clock size={16} className="text-amber-500" /> Bugünün işleri</div>
-          <div className="px-2 text-sm">
-            {[
-              // Sipariş işleri türüne göre: Ödeme beklenen / Sevk edilecek / Fatura kesilecek (+ kargolanmış faturası kesilmemiş,
-              // 7 günü geçen kırmızı — VUK) / İade-talep-diğer. İade faturası, ücret iadesi, süren değişim ayrı satırlarda (aşağıda).
-              ...todoRows,
-              { n: mailApprovalCount, label: "Onay bekleyen e-posta", href: "/admin/email-onay" },
-              { n: msgCount, label: "Cevapsız müşteri mesajı", href: "/admin/messages" },
-              { n: qnaCount, label: "Cevapsız Trendyol sorusu", href: "/admin/messages?kanal=trendyol" },
-              { n: reviewCount, label: "Onay bekleyen yorum", href: "/admin/reviews" },
-              { n: feedbackCount, label: "Talep", href: "/admin/feedback" },
-              { n: searchCount, label: "Sonuçsuz arama", href: "/admin/feedback#aramalar" },
-              { n: stockTasks.length, label: "Pazaryeri stok görevi", href: "/admin/stock-sync" },
-              { n: manualStockCount, label: "Stok geldi — elden haber verilecek", href: "/admin/crm/stock-notifications?tab=manual" },
-              // Yoldaki iadeler (kullanıcı 2026-10-28: iş olarak burada takip; ürün gelince siparişte "İade geldi")
-              { n: returnsOpen, label: "Yolda olan iade", href: "/admin/orders?iade=return_in_transit" },
-              { n: refundDue, label: "Ücret iadesi yapılacak", href: "/admin/orders?iade=refund_due" },
-              { n: returnInvoiceDue, label: "İade faturası kesilecek", href: "/admin/orders?iade=return_invoice_due" },
-              // Değişim talebinden sonuçlanana kadar (kullanıcı 2026-11-07: süreç bitince fatura kesilecek; işi burada izlenir)
-              { n: exchangeOpen, label: "Süren değişim", href: "/admin/orders?iade=exchange_open" },
-              // Paraşüt'e gelen e-fatura: panelde kabul edilip kurala göre kaydedilir (kullanıcı 2026-11-22)
-              { n: inboundCount, label: "Paraşüt gelen e-fatura", href: "/admin/parasut/gelen" },
-              // Ay bitti, ortakların hakedişi işlenmedi (Satış Ortaklığı › Hakediş; en eski dönem açılır)
-              { n: payoutDue.n, label: payoutDue.period ? `Hakediş işlenecek (${periodLabel(payoutDue.period)})` : "Hakediş işlenecek",
-                href: `/admin/affiliates?view=payout${payoutDue.period ? `&period=${payoutDue.period}` : ""}` },
-            ].map((x: { n: number; label: string; href: string; info?: boolean; late?: number; danger?: boolean }) => (
-              <Link key={x.label} href={x.href} className={`flex items-center justify-between rounded-lg px-2 py-1 hover:bg-slate-50 ${x.n ? "font-semibold text-slate-800" : "text-muted-foreground"}`}>
-                <span>{x.label}{x.late ? <span className="ml-1.5 text-[11px] font-bold text-red-600">· {x.late} tanesi {INVOICE_DAYS} günü geçti</span> : null}</span>
-                <span className={`min-w-[26px] text-center rounded-full px-2 py-0.5 text-xs font-black ${x.n ? (x.danger ? "bg-red-600 text-white" : x.info ? "bg-sky-500 text-white" : "bg-amber-500 text-white") : "bg-slate-100 text-slate-400"}`}>{x.n}</span>
-              </Link>
+          <div className="px-2 text-sm" data-todo-groups>
+            {groups.map((g) => (
+              <div key={g.title} className={g.muted ? "mt-1 pt-1 border-t border-slate-100" : ""}>
+                <div className="px-2 pt-1 text-[10px] font-black uppercase tracking-wider text-slate-400">{g.title}</div>
+                {g.rows.filter((x) => x.n || !x.hideZero).map((x) => (
+                  <Link key={x.label} href={x.href} className={`flex items-center justify-between rounded-lg px-2 py-1 hover:bg-slate-50 ${x.n && !g.muted ? "font-semibold text-slate-800" : "text-muted-foreground"}`}>
+                    <span>{x.label}{x.late ? <span className="ml-1.5 text-[11px] font-bold text-red-600">· {x.late} tanesi {INVOICE_DAYS} günü geçti</span> : null}</span>
+                    <span className={`min-w-[26px] text-center rounded-full px-2 py-0.5 text-xs font-black ${x.n ? (x.danger ? "bg-red-600 text-white" : g.muted ? "bg-slate-300 text-white" : "bg-amber-500 text-white") : "bg-slate-100 text-slate-400"}`}>{x.n}</span>
+                  </Link>
+                ))}
+              </div>
             ))}
           </div>
         </Card>

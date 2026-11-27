@@ -1197,7 +1197,7 @@ export default {
               "Değişim bitince ücret iadesi işi açılmıyor; tutulan çift de iade gelince “Ücret iadesi yap” açılıyor", `${done.stage} / ${later.stage}`);
             // Pano: "Ücret iadesi yapılacak" ayrı satır (Bekleyen sipariş işinden düşülür) — kullanıcı 2026-11-14
             const dash = (await import("node:fs")).readFileSync(new URL("../../src/app/admin/page.tsx", import.meta.url), "utf8");
-            ok(nx.isRefundDue(later) && !nx.isRefundDue(done) && /label: "Ücret iadesi yapılacak", href: "\/admin\/orders\?iade=refund_due"/.test(dash) && !nx.isGeneralOrderTodo(later, false) && /\.\.\.todoRows,/.test(dash),
+            ok(nx.isRefundDue(later) && !nx.isRefundDue(done) && /label: "Ücret iadesi yapılacak", href: "\/admin\/orders\?iade=refund_due"/.test(dash) && !nx.isGeneralOrderTodo(later, false) && /todoRow\("ship"\)/.test(dash),
               "Pano: “Ücret iadesi yapılacak” ayrı satırda (sipariş listesinde aynı filtre), bekleyen sipariş işinde ikinci kez sayılmıyor", "pano satırı eksik");
             // KISMİ İADE (2026-11-14, YH24721): iki farklı ürünün biri iade geldi, kargo "Teslim edildi"de kaldı → pano ve liste
             // ürün satırlarını (ret_items) okuyup "Ücret iadesi yapılacak" saymalı; öneri yalnız iade gelen ürünün bedeli
@@ -1251,9 +1251,9 @@ export default {
         const cron = fs.readFileSync(new URL("../../src/app/api/cron/marketplace-sync/route.ts", import.meta.url), "utf8");
         const dash = fs.readFileSync(new URL("../../src/app/admin/page.tsx", import.meta.url), "utf8");
         const msg = fs.readFileSync(new URL("../../src/app/admin/messages/page.tsx", import.meta.url), "utf8");
-        ok(/getMinutes\(\) % 5 === 1\)[\s\S]{0,80}syncTrendyolQuestions\(supabase\)/.test(cron) && /label: "Cevapsız Trendyol sorusu", href: "\/admin\/messages\?kanal=trendyol"/.test(dash)
+        ok(/getMinutes\(\) % 5 === 1\)[\s\S]{0,80}syncTrendyolQuestions\(supabase\)/.test(cron) && /n: msgCount \+ qnaCount, label: "Cevaplanacak mesaj \/ soru"/.test(dash) && /"\/admin\/messages\?kanal=trendyol"/.test(dash)
           && /<MarketplaceQuestions \/>/.test(msg),
-          "Sorular 5 dk'da bir çekiliyor; panoda “Cevapsız Trendyol sorusu”; Mesajlar'da “Trendyol soruları” sekmesi", "cron / pano / sekme eksik");
+          "Sorular 5 dk'da bir çekiliyor; panoda “Cevaplanacak mesaj / soru”da sayılıyor; Mesajlar'da “Trendyol soruları” sekmesi", "cron / pano / sekme eksik");
         // Soru kartı fotoğrafı (2026-11-15): Trendyol adresi açılmıyordu → önce sitedeki ürün görseli, sonra Trendyol (yol ise CDN öneki), açılmazsa gri kutu
         const qc = fs.readFileSync(new URL("../../src/components/admin/MarketplaceQuestions.tsx", import.meta.url), "utf8");
         ok(/\[siteImg, trendyolImg\(r\.image_url\)\]/.test(qc) && /onError=\{\(\) => setImgIdx/.test(qc) && /from\("products"\)\.select\("id, image_url, images"\)/.test(qc)
@@ -2107,8 +2107,8 @@ export default {
         const fs = await import("node:fs");
         const dash = fs.readFileSync(new URL("../../src/app/admin/page.tsx", import.meta.url), "utf8");
         const list = fs.readFileSync(new URL("../../src/app/admin/orders/page.tsx", import.meta.url), "utf8");
-        ok(/label: "Süren değişim", href: "\/admin\/orders\?iade=exchange_open"/.test(dash) && /isGeneralOrderTodo\(o\.step, hasOpenExchange\(o\), isUninvoicedShipped\(o\)\)/.test(dash)
-          && /fRet === "exchange_open"/.test(list) && /value="exchange_open"/.test(list),
+        ok(/label: "Süren değişim", href: "\/admin\/orders\?iade=exchange_waiting"/.test(dash) && /isGeneralOrderTodo\(o\.step, hasOpenExchange\(o\), isUninvoicedShipped\(o\)\)/.test(dash)
+          && /fRet === "exchange_waiting"/.test(list) && /value="exchange_waiting"/.test(list),
           "Panoda “Süren değişim” satırı (açık değişim talepleri), sipariş listesinde aynı filtre; bekleyen sipariş işinde iki kez sayılmıyor");
         // 2026-11-14: panoda "Bekleyen sipariş işi" 1 diyordu, tıklayınca liste 4 açıyordu (ücret iadesi işleri de geliyordu) →
         // pano ve liste (?todo=diger) AYNI kural: ücret iadesi / iade faturası / süren değişim kendi satırında, burada yok
@@ -2137,7 +2137,7 @@ export default {
             `${inv1.stage} / ${two.stage} / ${pay.stage}`);
         }
         // 2026-11-25: "Bekleyen sipariş işi" iş türüne bölündü (Ödeme beklenen / Sevk edilecek / Fatura kesilecek / İade-talep-diğer)
-        ok(/\.\.\.todoRows,/.test(dash) && /href: `\/admin\/orders\?todo=\$\{t\.param\}`/.test(dash) && /fTodo && fTodo !== "all" && !inTodoKind\(o, fTodo\)/.test(list)
+        ok(/todoRow\("payment"\)/.test(dash) && /href: `\/admin\/orders\?todo=\$\{t\.param\}`/.test(dash) && /fTodo && fTodo !== "all" && !inTodoKind\(o, fTodo\)/.test(list)
           && /TODO_KINDS\.find\(\(t\) => t\.param === v\)/.test(list),
           "Panodan iş türü satırına (ödeme / sevk / fatura / diğer) tıklayınca liste yalnız o işleri açıyor (pano sayısıyla aynı kural)", "pano bağlantısı / liste süzgeci eksik");
         // Satırın saydığı: açık değişim talebi (kapanan sayılmaz) — geri alınan işlemle
