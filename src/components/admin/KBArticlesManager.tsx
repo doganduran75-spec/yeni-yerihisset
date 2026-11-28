@@ -16,6 +16,9 @@ import { toSlug } from "@/lib/slug";
 import { Plus, Edit, Trash2, Loader2, Video } from "lucide-react";
 import RichTextEditor from "@/components/admin/RichTextEditor";
 import SectionToggle from "@/components/admin/SectionToggle";
+import KbCoverPicker, { type KbCoverValue } from "@/components/admin/KbCoverPicker";
+import KbCover from "@/components/kb/KbCover";
+import { clampPos, kbCover } from "@/lib/kb-cover";
 
 type KBArticle = {
   id: string;
@@ -24,8 +27,13 @@ type KBArticle = {
   slug: string;
   content: string;
   video_url: string;
+  cover_image: string | null;
+  cover_fit: string | null;
+  cover_pos_y: number | null;
   kb_categories: { name: string } | null;
 };
+
+const NO_COVER: KbCoverValue = { cover_image: "", cover_fit: "cover", cover_pos_y: 50 };
 
 type KBCategory = {
   id: string;
@@ -46,6 +54,8 @@ export default function KBArticlesPage() {
     content: "",
     video_url: "",
   });
+  // Kapak görseli + kartta görünüm (src/lib/kb-cover.ts; 2026-11-28)
+  const [cover, setCover] = useState<KbCoverValue>(NO_COVER);
   // Sayfa adresi: yeni makalede başlıktan otomatik; elle değiştirilince ya da kayıtlı
   // makalede SABİT kalır (başlık düzeltmesi paylaşılmış bağlantıyı bozmasın)
   const [slug, setSlug] = useState("");
@@ -93,7 +103,8 @@ export default function KBArticlesPage() {
         if (!clash?.length) break;
         finalSlug = `${base}-${n}`;
       }
-      const payload = { ...formData, slug: finalSlug, updated_at: new Date().toISOString() };
+      const payload = { ...formData, cover_image: cover.cover_image.trim() || null, cover_fit: cover.cover_fit, cover_pos_y: clampPos(cover.cover_pos_y),
+        slug: finalSlug, updated_at: new Date().toISOString() };
 
       if (editingId) {
         await supabase.from("kb_articles").update(payload).eq("id", editingId);
@@ -112,6 +123,7 @@ export default function KBArticlesPage() {
 
   function resetForm() {
     setFormData({ title: "", category_id: "", content: "", video_url: "" });
+    setCover(NO_COVER);
     setSlug("");
     setSlugTouched(false);
     setEditingId(null);
@@ -131,6 +143,7 @@ export default function KBArticlesPage() {
       content: article.content,
       video_url: article.video_url,
     });
+    setCover({ cover_image: article.cover_image || "", cover_fit: article.cover_fit === "contain" ? "contain" : "cover", cover_pos_y: clampPos(article.cover_pos_y ?? 50) });
     setSlug(article.slug || "");
     setSlugTouched(true);
     setIsDialogOpen(true);
@@ -257,6 +270,16 @@ export default function KBArticlesPage() {
                 minHeight={320}
               />
             </div>
+
+            {/* Kapak görseli — sitedeki kartın canlı önizlemesiyle */}
+            <KbCoverPicker
+              value={cover}
+              onChange={setCover}
+              content={formData.content}
+              videoUrl={formData.video_url}
+              title={formData.title}
+              category={categories.find((c) => c.id === formData.category_id)?.name || ""}
+            />
           </div>
 
           <DialogFooter>
@@ -298,11 +321,16 @@ export default function KBArticlesPage() {
             Henüz bir makale eklenmemiş.
           </div>
         ) : (
-          articles.map((article) => (
+          articles.map((article) => {
+            const c = kbCover(article);
+            return (
             <Card
               key={article.id}
-              className="group relative overflow-hidden border-slate-200 hover:border-olive-400 transition-all hover:shadow-lg"
+              className="group relative overflow-hidden border-slate-200 hover:border-olive-400 transition-all hover:shadow-lg pt-0"
             >
+              <div className="aspect-[16/9] overflow-hidden bg-olive-50 relative">
+                {c ? <KbCover cover={c} alt={article.title} sizes="(max-width: 768px) 100vw, 33vw" /> : null}
+              </div>
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-[10px] font-bold uppercase tracking-widest text-olive-600 bg-olive-50 px-2 py-1 rounded">
@@ -340,7 +368,8 @@ export default function KBArticlesPage() {
                 </div>
               </CardContent>
             </Card>
-          ))
+            );
+          })
         )}
       </div>
     </div>

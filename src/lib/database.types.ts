@@ -809,6 +809,9 @@ export type Database = {
         Row: {
           category_id: string | null
           content: string | null
+          cover_fit: string
+          cover_image: string | null
+          cover_pos_y: number
           created_at: string | null
           id: string
           slug: string
@@ -819,6 +822,9 @@ export type Database = {
         Insert: {
           category_id?: string | null
           content?: string | null
+          cover_fit?: string
+          cover_image?: string | null
+          cover_pos_y?: number
           created_at?: string | null
           id?: string
           slug: string
@@ -829,6 +835,9 @@ export type Database = {
         Update: {
           category_id?: string | null
           content?: string | null
+          cover_fit?: string
+          cover_image?: string | null
+          cover_pos_y?: number
           created_at?: string | null
           id?: string
           slug?: string

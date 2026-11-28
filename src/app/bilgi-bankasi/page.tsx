@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import { getSectionFlags } from "@/lib/section-flags";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { BookOpen, Play, ChevronRight } from "lucide-react";
+import { kbCover } from "@/lib/kb-cover";
+import KbCover from "@/components/kb/KbCover";
 
 // Kapalıyken (Bilgi Bankası ekranındaki kutu) sayfa açılır ama Google'a kapalı — src/lib/section-flags.ts (2026-11-15)
 export async function generateMetadata(): Promise<Metadata> {
@@ -24,34 +25,6 @@ function getSupabase() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
-}
-
-// HTML içerikten ilk <img src> çıkar
-function extractFirstImage(html: string): string | null {
-  if (!html) return null;
-  const m = html.match(/<img[^>]+src=["']([^"']+)["']/i);
-  return m && isOptimizable(m[1]) ? m[1] : null;
-}
-
-// next/image yalnız next.config.ts'teki alan adlarını optimize eder; başka bir
-// adresten (ör. eski WordPress) gelen görsel 400 verir → kapakta kullanma.
-function isOptimizable(src: string): boolean {
-  if (src.startsWith("/")) return true;
-  try {
-    const u = new URL(src);
-    return u.protocol === "https:" && (
-      (/^supabase\.yerihisset\.com$|^ewnuurgmxhksbjixbian\.supabase\.co$/.test(u.hostname) &&
-        u.pathname.startsWith("/storage/v1/object/public/")) ||
-      u.hostname === "images.unsplash.com" || u.hostname === "img.youtube.com"
-    );
-  } catch { return false; }
-}
-
-// YouTube URL'sinden thumbnail al
-function youtubeThumbnail(url: string): string | null {
-  if (!url) return null;
-  const m = url.match(/(?:v=|youtu\.be\/)([A-Za-z0-9_-]{11})/);
-  return m ? `https://img.youtube.com/vi/${m[1]}/hqdefault.jpg` : null;
 }
 
 // HTML'den düz metin özet
@@ -88,7 +61,7 @@ export default async function KnowledgeBasePage({
   // Makaleler — seçili kategori varsa filtrele
   let query = supabase
     .from("kb_articles")
-    .select("id, title, slug, content, video_url, category_id, kb_categories(id, name, slug)")
+    .select("id, title, slug, content, video_url, cover_image, cover_fit, cover_pos_y, category_id, kb_categories(id, name, slug)")
     .order("created_at", { ascending: false });
 
   if (kategori) {
@@ -144,11 +117,8 @@ export default async function KnowledgeBasePage({
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {arts.map((article) => {
-              // Kapak görseli: içerikten ilk img → YouTube thumbnail → null
-              const cover =
-                extractFirstImage(article.content) ||
-                youtubeThumbnail(article.video_url) ||
-                null;
+              // Kapak: seçilen kapak → içerikten ilk görsel → YouTube önizlemesi (src/lib/kb-cover.ts)
+              const cover = kbCover(article);
 
               const catObj = article.kb_categories as {
                 id: string;
@@ -169,13 +139,7 @@ export default async function KnowledgeBasePage({
                   {/* Kapak görseli */}
                   <div className="aspect-[16/9] overflow-hidden bg-olive-50 relative">
                     {cover ? (
-                      <Image
-                        src={cover}
-                        alt={article.title}
-                        fill
-                        sizes="(max-width: 768px) 100vw, 33vw"
-                        className="object-cover group-hover:scale-105 transition-transform duration-500"
-                      />
+                      <KbCover cover={cover} alt={article.title} hover />
                     ) : (
                       /* Kapak görseli yoksa dekoratif placeholder */
                       <div className="w-full h-full bg-gradient-to-br from-olive-50 to-olive-100 flex items-center justify-center">
